@@ -1,15 +1,16 @@
 # Artemis WP-B — Canonical Evidence Contract + Agent Compatibility Discovery
 
-**Status:** DISCOVERY COMPLETE — READY FOR OWNER REVIEW — IMPLEMENTATION NOT STARTED  
+**Status:** B0 OWNER REVIEW COMPLETE — CONTRACT BASELINE APPROVED WITH CORRECTIONS — IMPLEMENTATION NOT STARTED  
 **Classification:** Shared Foundation discovery (Tier 0)  
-**Governing authority:** TitanGold Core Engineering Rules v4.5 §§45–54 (esp. §47–48)  
-**Rule 02:** ARTEMIS WP-B — CANONICAL EVIDENCE CONTRACT DISCOVERY  
+**Governing authority:** TitanGold Core Engineering Rules **v4.6** §§45–54 (esp. §47–48)  
+**Rule 02:** ARTEMIS WP-B — B0 OWNER-APPROVED EVIDENCE CONTRACT BASELINE  
 
 **Branch:** `feat/artemis-wp-b-evidence-contract-discovery`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-b-discovery`  
 **Discovery base `origin/main`:** `845ea0d35b75b1beca516be235f47d98c5703692`  
 **WP-A product baseline (FROZEN):** `7c13fe13015de1b44ab534dff8deb72c6e5f5668`  
 **WP-A docs closeout:** `845ea0d35b75b1beca516be235f47d98c5703692`  
+**Prior discovery HEAD:** `1f5cd787947af461394ebdb37b0693525c361312`
 
 **Runtime / product code changed:** **0**  
 **Migrations / deploy / Scheduler / worker / Live / orders / private provider:** **0**
@@ -17,13 +18,17 @@
 Frozen surfaces (do not reopen): WP-A UI · Data Hub · Trend · Arbitrage.
 
 Current Artemis maturity remains **ADVISORY ONLY** / `LEGACY_ADVISORY_ONLY` / `executionEligible=false`.  
-WP-B discovery does **not** authorize execution, Live, or control-chain activation.
+B0 Owner review does **not** authorize WP-B.1 implementation, execution, Live, or control-chain activation.
+
+**Contract versions (APPROVED through initial WP-B adapters):**  
+`schemaVersion = 1.0.0` · `contractVersion = artemis-evidence-1.0.0`  
+Adapter versions remain separate. Do not bump merely because Trend/Arbitrage/Volume adapters are added.
 
 ---
 
 ## 1. Executive finding
 
-Artemis today is a **legacy LLM Mixture-of-Experts advisory surface** plus WP-A containment. It is **not** a v4.5 evidence orchestrator.
+Artemis today is a **legacy LLM Mixture-of-Experts advisory surface** plus WP-A containment. It is **not** a v4.6 evidence orchestrator.
 
 Proven:
 
@@ -33,12 +38,29 @@ Proven:
 4. `AGENT_DEPENDENCIES` is keyed by `agent-1…15`; DB Agents use UUID `ai_agents.id` → dependency graph misses on the production path.
 5. Canonical EvidenceEnvelope exists **only as Foundation design + readiness constants** (`schemaVersion=1.0.0`, `contractVersion=artemis-evidence-1.0.0`, `implemented:false`, `compatibleAgentCount:0`).
 6. `ai_decisions` is Agent-run SoT (UUID `agent_id`). Artemis MoE logs to `system_logs.category='artemis_decision'`. These must stay separate.
-7. `/logs` and `/readiness` agent-run queries select `d.input` / `d.output` but the table columns are `input_data` / `output_data` → fail-soft `sourceError`. WP-B ingestion must read the real columns; this is **not** a WP-A UI reopen.
-8. Trend + Arbitrage have the only product-grade persisted DTOs suitable for **read-only adapters**. Volume/Pattern are next. Technical/Timing/Liquidity are mock/stub. Order is not an analytical producer. Risk/Portfolio/Optimization/Liquidity/Order must **not** be forced into a directional BUY/SELL envelope.
+7. `/logs` and `/readiness` agent-run queries select `d.input` / `d.output` but the table columns are `input_data` / `output_data` → fail-soft `sourceError`. **B7 is Owner-authorized** to correct these read-only column references only. This is **not** a WP-A UI reopen and must not leak raw blobs.
+8. Trend + Arbitrage have product-grade persisted DTOs suitable for **read-only adapters**. Volume is the third WP-B.1 adapter. **Pattern is deferred** (mock-OHLCV fallback). Technical/Timing/Liquidity are mock/stub. Order is not an analytical producer. Optimization is **NOT_APPLICABLE** for Artemis sizing/control. Risk/Portfolio/Liquidity/Order must **not** be forced into a directional BUY/SELL envelope.
 
-**WP-B goal (after Owner approval):** make analytical Agents **contract-compatible evidence producers** without promoting any Agent or Artemis to execution eligibility.
+**B0 Owner-approved WP-B.1 goal (implementation still not started):** make analytical Agents **contract-compatible evidence producers** via real read-only adapters, without promoting any Agent or Artemis to execution eligibility.
 
-**Recommended first implementation (not started):** shared envelope + identity normalizer + validators + read-only adapters for `trend` and `arbitrage` (then `volume`) from persisted runs, plus an on-read projection service. No migration in the first WP-B slice. No orchestration rewrite. No WP-A UI redesign.
+**Approved first implementation (not started, not authorized by B0):** shared envelope + identity normalizer + validators + read-only adapters for `trend` then `arbitrage` then `volume` from persisted runs, plus on-read projection + safe RBAC projection + readiness counts + B7 SQL column correction. No migration in WP-B.1. No orchestration rewrite. No WP-A UI redesign. No Pattern adapter in WP-B.1.
+
+### 1.1 B0 Owner decisions (RESOLVED)
+
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Canonical identity | `agentId` = stable backend `agent_key`. Trend = `trend`. `trend_detection` remains alias only. Frozen frontend keys unchanged. No `ai_decisions` migration. UUID = `agentRecordId`. |
+| 2 | WP-B must prove the contract | WP-B is **not** types-only. WP-B.1 includes real read-only adapters: Trend → Arbitrage → Volume. Adapters live **outside** frozen product owners. |
+| 3 | No migration in WP-B.1 | On-read generation from `ai_decisions` / product DTOs. B10 persist table remains a later gated decision. |
+| 4 | Artemis read SQL | B7 **may** change `d.input`/`d.output` → `input_data`/`output_data`. Scoped: no WP-A UI reopen, no raw blob exposure, no debug endpoints, no execution-semantic change. Regression tests required. |
+| 5 | Optimization authority | WP-B: `optimization = NOT_APPLICABLE` for sizing/control. Remains utility/backtest until a dedicated WP proves authority. **Portfolio** is the current sizing-role candidate. |
+| 6 | Pattern | Primary = **NEEDS OUTPUT CORRECTION**. Not in WP-B.1. Later adapter requires proven real-source provenance; fail unavailable on mock/unknown. `source != mock` is not sufficient by itself. |
+| 7 | Trend strength ≠ confidence | Snapshot `strength` comes from `raw.trend.confidence`. First Trend adapter: `conclusion.strength` = that truthful value; `confidence = UNAVAILABLE`. `_meta.confidence` is strength/100, not epistemic confidence. |
+| 8 | Generic 0.5 fallback | Do **not** treat every `0.5` as unavailable. Only when Agent output has **no explicit confidence field** and `ai_decisions.confidence=0.5` was supplied by `agentExecutionService`. Explicit documented 0.5 remains valid. Tests cover both. |
+| 9 | Freshness | Missing actual `sourceTimestamp`/`sourceCandleTimestamp` → `freshness.status=unknown`. Unknown timeframe → do not assume `1h`. Product DTO may keep display fallbacks; adapter owns stricter Artemis truth. |
+| 10 | Compatibility counts | Mutually exclusive primary classes totaling **15**. `UNAVAILABLE / DEFERRED` is a **secondary** Artemis readiness dimension. |
+| 11 | Contract version | Keep `1.0.0` / `artemis-evidence-1.0.0` through initial adapters. Adapter version ≠ contractVersion. |
+| 12 | WP-B/C/D boundary | Keep Discovery split with clarifications in §18. Dedicated Agent productization may be required before WP-C/D can consume Technical, Timing, Liquidity, Pattern, etc. |
 
 ---
 
@@ -154,8 +176,8 @@ Do **not** require the full 40-field Foundation list on every emit. Use a **base
 | `conclusion.signal` | enum \| unavailable | O | BUY/SELL/HOLD/NEUTRAL/WATCH or role-specific | measured/derived | no fake NEUTRAL for missing data |
 | `conclusion.direction` | enum \| unavailable | O | bullish/bearish/neutral/unavailable | measured/derived | |
 | `conclusion.regime` | string \| unavailable | O | e.g. Trend regime | measured | Trend has this |
-| `conclusion.strength` | number \| enum \| unavailable | O | **not** confidence | measured | |
-| `confidence` | object \| unavailable | R* | see §8 | see §8 | omit fake 0.5 defaults |
+| `conclusion.strength` | number \| enum \| unavailable | O | **not** confidence (v4.6: strength ≠ probability ≠ DQ ≠ confidence) | measured | Trend snapshot `strength` = `raw.trend.confidence` on original scale |
+| `confidence` | object \| unavailable | R* | see §8 | see §8 | Trend WP-B.1 = UNAVAILABLE; never coerce missing → 0.5; never treat every stored 0.5 as fake |
 | `evidence.items` | EvidenceItem[] | O | bounded, see §11 | measured | max count/size |
 | `evidence.counterItems` | EvidenceItem[] | O | conflicts | measured | |
 | `recommendedNextActionClass` | enum \| unavailable | O | `observe` \| `review` \| `insufficient` \| `not_applicable` | derived | **not an order** |
@@ -166,9 +188,10 @@ Do **not** flatten Risk/Liquidity/Order into `direction`.
 
 | Role | Sub-schema focus | WP-B emit? |
 |---|---|---|
-| `control_veto` (risk) | `verdict` allow/limit/block, `limitations`, `riskFlags`, exposure refs | Adapter **optional / deferred** — Risk Gate not Artemis-wired; classify NEEDS OUTPUT CORRECTION |
-| `control_sizing` (portfolio/optimization) | bounded allocation/size envelope, constraints, **no invented balances** | Deferred — not truthful SoT of account state |
-| `execution_feasibility` (liquidity) | spread, depth, slippage, max feasible size, book timestamp, expiry | **Not now** — stub |
+| `control_veto` (risk) | `verdict` allow/limit/block, `limitations`, `riskFlags`, exposure refs | Adapter **deferred** — Risk Gate not Artemis-wired; primary = NEEDS OUTPUT CORRECTION |
+| `control_sizing` (**portfolio only**) | bounded allocation/size envelope, constraints, **no invented balances** | Deferred — Portfolio is the sizing-role **candidate**, not yet truthful SoT |
+| `optimization` | backtest/utility params and results | **NOT_APPLICABLE** for Artemis sizing/control in WP-B. Do not label `control_sizing` from the name alone. |
+| `execution_feasibility` (liquidity) | spread, depth, slippage, max feasible size, book timestamp, expiry | **Not now** — stub; primary = NEEDS REAL IMPLEMENTATION; secondary feasibility = UNAVAILABLE / BLOCKED |
 | `execution` (order) | audit of execution intent only | **Not an evidence producer** |
 
 ### 4.4 EvidenceItem (bounded)
@@ -200,9 +223,11 @@ Do **not** flatten Risk/Liquidity/Order into `direction`.
 
 ## 5. Identity normalization
 
-**Approved direction (reconfirmed):** Artemis `agentId` = stable **`agent_key`**.  
-DB UUID = `agentRecordId` (instance/run provenance only).  
-Do **not** migrate `ai_decisions` now.
+**B0 APPROVED:** Artemis `agentId` = stable backend **`agent_key`**.  
+Trend canonical: **`trend`**. Legacy/frontend/self ids such as `trend_detection` remain **aliases only**.  
+Do **not** change frozen frontend keys in WP-B.  
+Do **not** migrate `ai_decisions`.  
+DB UUID remains **`agentRecordId`** (instance/run provenance only).
 
 `normalizeAgentKey()` already exists in `constants/artemisAgentCatalog.js` — WP-B should make **one backend owner** (same alias table) and stop inventing a second map.
 
@@ -222,7 +247,7 @@ Do **not** migrate `ai_decisions` now.
 | `arbitrage` | — | `arbitrage` | `arbitrage` (allowlisted) | `arbitrage` | UUID; `decision_type=arbitrage_scan` | forecast |
 | `risk` | `risk_management` | `risk` | `risk` | `risk` | UUID; Risk Gate also hardcoded UUID | veto |
 | `portfolio` | `portfolio_allocation`, `portfolio_management` | `portfolio` | `portfolio` | **`portfolio_allocation`** | UUID | sizing |
-| `optimization` | — | `optimization` | `optimization` | `agent: 'optimization'` | UUID | sizing (catalog) / utility impl |
+| `optimization` | — | `optimization` | `optimization` | `agent: 'optimization'` | UUID | **NOT_APPLICABLE** (utility/backtest; not sizing authority) |
 | `liquidity` | `liquidity_analysis` | `liquidity` | `liquidity` | `liquidity` | UUID | feasibility |
 | `order` | `order_management` | `order` | `order` | `agent: 'order_management'` | UUID | execution |
 
@@ -242,31 +267,42 @@ Registry verified: **15** `AGENT_MODULES` keys. Capability registry has **16** (
 | agentId | Maturity | Inputs | Output today | Persist | History | Confidence today | Timestamps | TF/symbol | Risk info | DQ | Algo/model | Limitations | Side-effect | Analytical evidence now? | Classification |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `arbitrage` | CLOSED product | public markets | scan contract v2 WP1A | `arbitrageRunService` → `ai_decisions` | yes | heuristic 0.1–0.85 by candidate count | scan ts | venue/symbol | not veto | partial | scan impl version | not executable multi-leg | EXTERNAL_READ | yes (opportunity) | **ADAPTER READY** |
-| `trend` | CLOSED product | OHLCV | snapshot DTO | `trendRunService` → `ai_decisions` | yes | dual 0–100 and 0–1 | analysis + `last_candle_timestamp` | yes | no | partial freshness | trend domain | identity alias | ANALYSIS | yes | **ADAPTER READY** |
-| `volume` | partial | OHLCV ≥20 | OBV/VWAP/spikes + rec 0–100 | generic writer (top-level confidence often missing → **0.5 fake**) | yes | heuristic 0–100 | analysis ts | yes | no | implicit via candle count | volumeAnalyzer | not calibrated | ANALYSIS | yes after flatten | **ADAPTER READY** |
-| `pattern` | partial | OHLCV or **mock OHLCV** | patterns + dominant_signal | generic | yes | avg top-3 0–1 | analysis ts | yes | no | mock path | pattern module | mock fallback | ANALYSIS | only if real OHLCV | **ADAPTER READY** (caveat) / else **NEEDS OUTPUT CORRECTION** |
+| `trend` | CLOSED product | OHLCV | snapshot DTO | `trendRunService` → `ai_decisions` | yes | `raw.trend.confidence` is **strength**, not confidence; `_meta.confidence` = strength/100 | analysis + `last_candle_timestamp` (product may fallback) | yes | no | product freshness may assume 1h / analysis time | trend domain | identity alias | ANALYSIS | yes (strength + freshness unknown if no source candle) | **ADAPTER READY** |
+| `volume` | partial | OHLCV ≥20 | OBV/VWAP/spikes + rec 0–100 | generic writer (top-level confidence often missing → writer fallback 0.5) | yes | heuristic 0–100 when explicit | analysis ts | yes | no | implicit via candle count | volumeAnalyzer | not calibrated | ANALYSIS | yes after flatten + fallback-provenance check | **ADAPTER READY** |
+| `pattern` | partial | OHLCV or **mock OHLCV** | patterns + dominant_signal | generic | yes | avg top-3 0–1 | analysis ts | yes | no | mock path | pattern module | mock fallback | ANALYSIS | no until real-source provenance is canonical | **NEEDS OUTPUT CORRECTION** |
 | `risk` | substantial + gate | portfolio/mock prices | risk_metrics + score | generic + risk_gate rows | yes | heuristic 0.3–0.95 | ts | symbol | **is** risk | mock prices | risk-agent | UUID debt; not on Artemis `/decision` | ANALYSIS (catalog veto) | control, not direction | **NEEDS OUTPUT CORRECTION** (control schema) |
 | `sentiment` | partial | twitter/reddit/news (often mock) | sentiment_label + rec | generic | yes | heuristic 0–1 by source count | ts; TF on input only | symbol; TF=`24h` default | no | mock sources | sentiment module | no direction enum | ANALYSIS | weak | **NEEDS OUTPUT CORRECTION** |
 | `price_prediction` | partial | price history | horizons + accuracy | generic → **0.5 if no top-level confidence** | yes | mixed 0–1 / 0–100 | ts | yes | no | uncalibrated | prediction module | not calibrated forecast | ANALYSIS | forecast only | **NEEDS OUTPUT CORRECTION** |
 | `portfolio` | partial | caller portfolio | allocation rec; **wrong self-id** | generic → 0.5 fake | yes | Sharpe heuristic | ts | N/A-ish | risk_metrics | invented if caller incomplete | optimizer random_search | liveCapable vs analysis mismatch | PORTFOLIO_MUTATION | no (sizing) | **NEEDS OUTPUT CORRECTION** |
 | `fundamental` | partial | Fear&Greed + placeholders | decision buy/sell/hold | generic | yes | heuristic 0–1 | ts + placeholders | TF default `1d` | no | funding/news/mcap fake | fundamental module | placeholders | ANALYSIS | not truthful | **NEEDS OUTPUT CORRECTION** |
 | `market_intelligence` | larger module | news/onchain/macro | rec + **confidence 0–100** | generic stores 0–100 in DECIMAL | yes | heuristic 0–100 | ts + data_freshness meta | TF default `24h` | no | null sources | MI module | scale inconsistency | EXTERNAL_READ | after scale fix | **NEEDS OUTPUT CORRECTION** |
-| `optimization` | partial | backtest params | best_strategy; **no confidence/signal** | generic → 0.5 fake | yes | unavailable | ts | yes | no | SMA default | optimizer | not evidence | ANALYSIS | no | **NOT AN ANALYTICAL EVIDENCE PRODUCER** |
+| `optimization` | partial | backtest params | best_strategy; **no confidence/signal** | generic writer may store fallback 0.5 | yes | unavailable unless explicit | ts | yes | no | SMA default | optimizer | not evidence; not sizing authority | ANALYSIS | no | **NOT AN ANALYTICAL EVIDENCE PRODUCER** |
 | `technical` | MVP mock | none real | RSI/MACD random | generic | yes | 0.55–0.7 random | ts only | yes | no | mock | mock indicators | `_meta.source=mock` | ANALYSIS | no | **NEEDS REAL IMPLEMENTATION** |
 | `timing` | MVP mock | mock series | timingScore + BUY/SELL/HOLD | generic | yes | 0–1 from mock | ts only | yes | no | mock | mock | TODO real data | ANALYSIS | no | **NEEDS REAL IMPLEMENTATION** |
-| `liquidity` | MVP stub | none | `result:'MVP analysis complete'`, **0.55 fake** | generic | yes | fake constant | ts only | symbol | no | none | stub; real analyzer unwired | Artemis BLOCKED | EXTERNAL_READ | no | **NEEDS REAL IMPLEMENTATION** / **UNAVAILABLE** |
+| `liquidity` | MVP stub | none | `result:'MVP analysis complete'`, **0.55 fake** | generic | yes | fake constant | ts only | symbol | no | none | stub; real analyzer unwired | Artemis BLOCKED | EXTERNAL_READ | no | **NEEDS REAL IMPLEMENTATION** |
 | `order` | real execution path | exchange (gated) | dry-run / order ops | generic audit | action history | none | ts | symbol | no | N/A | order module | liveCapable | ORDER_LIVE | no | **NOT AN ANALYTICAL EVIDENCE PRODUCER** |
 
-### Counts
+### Primary compatibility counts (MUTUALLY EXCLUSIVE — total = 15)
 
 | Classification | Count | Agents |
 |---|---|---|
 | CONTRACT READY | **0** | none emit canonical envelope today |
-| ADAPTER READY | **3–4** | `arbitrage`, `trend`, `volume`, `pattern` (real OHLCV only) |
-| NEEDS OUTPUT CORRECTION | **6** | `sentiment`, `price_prediction`, `portfolio`, `fundamental`, `market_intelligence`, `risk` |
+| ADAPTER READY | **3** | `arbitrage`, `trend`, `volume` |
+| NEEDS OUTPUT CORRECTION | **7** | `pattern`, `sentiment`, `price_prediction`, `portfolio`, `fundamental`, `market_intelligence`, `risk` |
 | NEEDS REAL IMPLEMENTATION | **3** | `technical`, `timing`, `liquidity` |
-| NOT AN ANALYTICAL EVIDENCE PRODUCER | **2** | `order`, `optimization` (+ `artemis_decision`) |
-| UNAVAILABLE / DEFERRED | **1** | `liquidity` as feasibility authority |
+| NOT AN ANALYTICAL EVIDENCE PRODUCER | **2** | `order`, `optimization` |
+| **TOTAL** | **15** | registry `AGENT_MODULES` |
+
+`artemis_decision` remains a capability/policy key only — **not** a 16th Agent in this count.
+
+### Secondary Artemis readiness (not another primary class)
+
+| Agent | Secondary dimension |
+|---|---|
+| `liquidity` | feasibility readiness = **UNAVAILABLE / BLOCKED** |
+| `pattern` | real-source evidence readiness = **BLOCKED** until provenance is proven canonical |
+| `optimization` | sizing/control authority = **NOT_APPLICABLE** |
+| `trend` / `arbitrage` / `volume` | WP-B.1 adapter-eligible; still `executionEligible=false` |
 
 ---
 
@@ -278,12 +314,12 @@ Registry verified: **15** `AGENT_MODULES` keys. Capability registry has **16** (
 | OPPORTUNITY / FORECAST | `opportunity_forecast` | price_prediction, timing, arbitrage | yes | opportunity extension | evidence; not execution |
 | RISK AUTHORITY / VETO | `control_veto` | risk (+ risk-gate service) | base + veto sub-schema | `verdict`, limits, flags | **authoritative**; beats analytical majority |
 | PORTFOLIO / ALLOCATION | `control_sizing` | portfolio | base + sizing sub-schema | constraints, proposed weights | sizing only; no direction |
-| OPTIMIZATION | `control_sizing` **or** `not_applicable` | optimization | **different** if kept as backtest utility | do not fake sizing authority | not a vote |
-| LIQUIDITY / FEASIBILITY | `execution_feasibility` | liquidity | base + feasibility sub-schema | book ts, spread, slippage, max size, expiry | feasibility only |
+| OPTIMIZATION | **`not_applicable`** | optimization | not a control envelope in WP-B | utility/backtest only until a dedicated WP proves inputs, truthful account state, bounded sizing, deterministic output, authority, tests | not a vote |
+| LIQUIDITY / FEASIBILITY | `execution_feasibility` | liquidity | base + feasibility sub-schema | book ts, spread, slippage, max size, expiry | feasibility only; currently UNAVAILABLE / BLOCKED |
 | ORDER EXECUTION | `execution` | order | execution audit schema, **not** market evidence | intent + gates | never chooses direction |
 | DATA / CONTEXT PROVIDER | n/a | Data Hub / Connections | not Agent envelope | context refs only | not votes |
 
-**Hard rules:** no equal-vote Agent model. Risk veto preserved. Order never decides direction. Liquidity never implies analytical direction. Portfolio/Optimization must not invent balances.
+**Hard rules:** no equal-vote Agent model. Risk veto preserved. Order never decides direction. Liquidity never implies analytical direction. Portfolio must not invent balances. Optimization is **not** `control_sizing` merely because of its name.
 
 ---
 
@@ -307,19 +343,31 @@ confidence: {
 
 | Agent | Today | Map to kind | WP-B adapter? |
 |---|---|---|---|
-| `trend` | `trend.confidence` 0–100 + `_meta.confidence` 0–1 | HEURISTIC / RULE_SCORE; scale explicit | yes — pick one scale, never double-convert silently |
-| `arbitrage` | 0.1–0.85 from candidate count | HEURISTIC | yes — not model probability |
-| `volume` | 0–100 heuristic; writer often stores 0.5 | HEURISTIC; **must not emit writer default 0.5** | yes if real score present else unavailable |
-| `pattern` | avg pattern scores 0–1 | HEURISTIC | only if not mock OHLCV |
+| `trend` | Snapshot `strength` = `raw.trend.confidence` (0–100). `trendRunService` persists `ai_decisions.confidence` as that value/100, else `_meta.confidence`. `_meta.confidence` is **normalized strength**, not epistemic/predictive confidence. | **UNAVAILABLE** for first adapter | yes for **strength** only. Do not emit `confidence.value` from strength or `_meta.confidence`. |
+| `arbitrage` | 0.1–0.85 from candidate count (explicit Agent field) | HEURISTIC | yes — not model probability; explicit 0.5 remains valid if produced |
+| `volume` | 0–100 heuristic when Agent emits it; generic writer may store 0.5 if missing | HEURISTIC if explicit; else UNAVAILABLE | yes after fallback-provenance check |
+| `pattern` | avg pattern scores 0–1 | HEURISTIC only after real-source provenance | **no** in WP-B.1 |
 | `sentiment` | 0–1 from source count | HEURISTIC | no until sources truthful |
 | `price_prediction` | mixed scales; uncalibrated | MODEL_PROBABILITY only if method documented; else HEURISTIC/UNAVAILABLE | no |
 | `market_intelligence` | 0–100 heuristic | HEURISTIC | after scale fix |
 | `fundamental` | 0–1 from placeholders | LEGACY / UNAVAILABLE | no |
 | `risk` | 0.3–0.95 from counts | RULE_SCORE (not veto strength) | control schema later |
 | `technical` / `timing` / `liquidity` | random / constant 0.55 | UNAVAILABLE (fake) | **never emit as confidence** |
-| `order` / `optimization` | none / fake 0.5 writer | UNAVAILABLE | n/a |
+| `order` / `optimization` | none / writer fallback possible | UNAVAILABLE | n/a |
 
-Generic `agentExecutionService` default **`confidence=0.5` when missing is a SoT poison**. WP-B adapters must treat stored `0.5` without explicit Agent confidence field as **UNAVAILABLE**, not 50%.
+### 8.1 Generic `0.5` fallback rule (B0 APPROVED)
+
+Writer: `agentExecutionService.js` inserts  
+`typeof result?.confidence === 'number' ? result.confidence : 0.5`.
+
+**Do not implement** `if confidence === 0.5 → unavailable`. That would destroy legitimate explicit 0.5 values.
+
+Canonical rule:
+
+- If the Agent output has **no explicit confidence field**, AND persisted `ai_decisions.confidence` is `0.5` because generic `agentExecutionService` supplied its missing-confidence fallback → `confidence.availability = unavailable`.
+- If the Agent **explicitly produced** a documented confidence of exactly `0.5` with valid provenance and semantics → it remains valid.
+
+Tests must cover both cases. Provenance must identify the writer (`agentExecutionService` fallback vs Agent emit).
 
 ---
 
@@ -347,15 +395,28 @@ freshness: {
 
 **Do not** hardcode one TTL.
 
+Canonical Artemis freshness is **stricter** than a product display convenience. The frozen Trend domain may:
+
+- fall back to analysis time when source-candle time is missing (`computeFreshness` uses `basisTs = candleTs || analysisTs`);
+- default unknown timeframe to `1h` (`TIMEFRAME_MS[timeframe] || TIMEFRAME_MS['1h']`; product DTO `timeframe || '1h'`).
+
+**The WP-B evidence adapter MUST NOT convert those product fallbacks into a fake `fresh` state.**
+
+For Artemis evidence:
+
+- missing **actual** `sourceTimestamp` / `sourceCandleTimestamp` → `freshness.status = unknown`
+- unknown timeframe → do **not** silently assume `1h` for canonical evidence freshness
+
+A product DTO may remain frozen and unchanged. The adapter owns the stricter Artemis truth projection.
+
 | Agent family | Realistic policy (design) |
 |---|---|
-| Trend / volume / pattern / technical (OHLCV) | relative to **closed candle** + timeframe (e.g. 1h candle stale after 2×TF) |
+| Trend / volume / technical (OHLCV) | relative to **actual closed candle** + **known** timeframe only; else `unknown` |
+| Pattern | not in WP-B.1; later: same OHLCV rule only after real-source provenance |
 | Arbitrage spreads | short wall-clock (seconds–minutes); scan timestamp |
 | Sentiment / MI / fundamental | source `publishedAt` if present; else unknown |
 | Risk / portfolio | account-state freshness; stale ≠ analytical stale |
 | Liquidity | order-book ts; stale feasibility **never** execution approval (WP-C/D) |
-
-If source time missing → `unknown`, not fake `fresh`.
 
 ---
 
@@ -439,9 +500,24 @@ Artemis `/decision` does **not** INSERT here.
 | G. Audit | PRODUCT-SAFE projection only; full envelope INTERNAL/DIAGNOSTIC |
 
 **Preserve `ai_decisions`.** Do not overwrite frozen Trend/Arbitrage `output_data`.  
-Proposed migration is **future gated artifact only** — **not implemented now**.
+**B0 APPROVED:** WP-B.1 uses **on-read** evidence generation only. **NO evidence table migration.** B10 remains a separate future gated decision after on-read evidence is proven end-to-end.
 
-Fix WP-B read SQL: `input_data` / `output_data` (not `input`/`output`).
+### 13.1 B7 read-SQL correction (Owner-authorized, scoped)
+
+Confirmed defect: Artemis `/logs` and readiness queries select `d.input` / `d.output` while canonical columns are `input_data` / `output_data`.
+
+B7 **MAY** correct these read-only column references.
+
+Do **not**:
+
+- reopen WP-A UI
+- expose raw `input_data` / `output_data`
+- weaken the existing safe projection
+- add debug/raw endpoints
+- change execution semantics
+
+Product routes must continue returning allowlisted safe projections only.  
+Regression tests must prove raw `input_data` / `output_data` never leak.
 
 ---
 
@@ -495,17 +571,22 @@ Advanced: contract fields. Diagnostics: INTERNAL only, never ordinary `user`.
 | INTERNAL ONLY | full `output_data`, provider error bodies, run SQL, mock flags | no | no | logs only |
 | SECRET / NEVER RETURN | JWT, API keys, signed URLs, credentials, chat IDs | never | never | never |
 
-Reuse WP-A `artemisAuditProjection` allowlist pattern. Same projection for all roles on product routes; do not reintroduce raw `metadata`/`input`/`output`.  
+Reuse WP-A `artemisAuditProjection` allowlist pattern. Same projection for all roles on product routes; do not reintroduce raw `metadata` / `input` / `output` / `input_data` / `output_data`.  
+B7 SQL correction must ship with regression tests proving those blobs never leak on product routes.  
 No user-ownership migration now.
 
 ---
 
 ## 17. Versioning / compatibility
 
-Confirm Foundation versions:
+**B0 APPROVED — keep through initial WP-B adapters:**
 
 - `schemaVersion = 1.0.0` (structure)
 - `contractVersion = artemis-evidence-1.0.0` (semantics + enums)
+
+Do **not** bump merely because Trend / Arbitrage / Volume adapters are added.  
+Version bump requires actual contract semantic/schema compatibility impact.  
+`adapterVersion` remains separate from `contractVersion`.
 
 Policy:
 
@@ -522,38 +603,42 @@ No implementation now.
 
 ## 18. WP-B / WP-C / WP-D boundary
 
-Foundation doc split (contract → migration → adapters → consumer UI) **delays proof** that any Agent can populate the envelope. User candidate (contract+adapters+ingestion in WP-B; orchestration in WP-C; maturity in WP-D) **fits the codebase better**.
+**B0 APPROVED** (Discovery split, with clarifications). Foundation’s types-only WP-B is rejected: WP-B must prove the contract with real read-only adapters.
 
-### IN WP-B (after Owner approval of this discovery — not started)
+### IN WP-B (Owner-approved scope — implementation still **not** started / not authorized by B0)
 
-- Canonical envelope + role extensions (Zod/JSON Schema + fixtures)
-- Backend identity normalizer (single alias table; `agentId`=`agent_key`)
-- Confidence / freshness / dataQuality types (no fake defaults)
-- Read-only adapters: **Trend**, **Arbitrage**, then **Volume** (Pattern only if real OHLCV)
-- On-read projection from `ai_decisions` (`input_data`/`output_data` fix)
-- Validation service + golden fixtures
-- PRODUCT-SAFE RBAC projection
-- Readiness: `compatibleAgentCount` / `evidenceCompatible` only when adapters actually return envelopes
-- Tests; **no** WP-A UI redesign; **no** migration in WP-B.1
+- Canonical envelope + identity normalization + validation
+- Truthful confidence / freshness / DQ semantics (Trend strength ≠ confidence; no fake 1h/fresh; fallback-provenance for 0.5)
+- Read-only adapters: **Trend → Arbitrage → Volume** (outside frozen product owners)
+- On-read projection from `ai_decisions` / product DTOs
+- Safe RBAC projection
+- Readiness `compatibleAgentCount` only when adapters actually return envelopes
+- Read-only SQL correction (`input`/`output` → `input_data`/`output_data`) with leak regression tests
+- **NO** orchestration replacement
+- **NO** migration in WP-B.1
+- **NO** Pattern adapter in WP-B.1
 
-Optional **WP-B.2 (gated):** append-only evidence table migration — separate Owner approval.
+Optional later **B10 / WP-B.2 (gated):** append-only evidence persistence — only after on-read evidence is proven end-to-end.
 
 ### DEFER WP-C
 
-- Replace mock `callAgentAPI` / `agent-N` graph with real envelope ingestion
-- Conflict resolution + correlation-aware synthesis (use WP-B tags)
-- Wire Risk veto / Portfolio sizing / Liquidity feasibility / runtime into `/decision`
-- TE → Artemis authenticated internal transport (fail-closed today; do not weaken `authenticateStrict`)
-- Decision lifecycle states beyond advisory
-- Any UI activation of Evidence/Decisions against real envelopes **without IA rewrite**
+- Real Artemis evidence consumption
+- Retirement of mock `callAgentAPI` / `agent-N` orchestration
+- Conflict resolution
+- Correlation-aware synthesis (use WP-B tags)
+- Risk / Portfolio / Liquidity / runtime control chain
+- Authenticated TE → Artemis transport
+- Advisory decision lifecycle integration
 
 ### DEFER WP-D
 
-- Lineage/replay/evaluation/calibration
-- Shadow / paper / promotion gates
-- Liquidity real feasibility product
-- Technical / Timing real market-data productization
-- Live / automated-trading stages 5–7
+- Lineage / replay / evaluation / calibration
+- Shadow
+- Paper
+- Promotion evidence
+- Operational maturity
+
+Dedicated Agent productization may be required before WP-C/D can use Agents such as Technical, Timing, Liquidity, Pattern, etc.
 
 ### OUT OF PROGRAM (this Artemis evidence program)
 
@@ -561,8 +646,9 @@ Optional **WP-B.2 (gated):** append-only evidence table migration — separate O
 - Equal-vote Agent model
 - Expanding scheduler allowlist
 - Enabling Live / orders / private credentials for “evidence testing”
-- Treating `optimization` as directional evidence
+- Treating `optimization` as `control_sizing` or directional evidence
 - Treating Order Management as market oracle
+- Implicit WP-B.1 authorization from this B0 round
 
 ---
 
@@ -570,32 +656,33 @@ Optional **WP-B.2 (gated):** append-only evidence table migration — separate O
 
 | ID | Outcome | Likely files | DB | FE | BE | Tests | Migration | Safety | Human QA | Deps | Rollback |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| B0 | Owner approves this discovery | docs only | 0 | 0 | 0 | n/a | no | n/a | review | — | n/a |
-| B1 | Shared contract module + Zod + fixtures | new `backend/services/artemisEvidenceContract.js` (or `contracts/`), schemas, unit tests | 0 | types-only optional | new module | unit golden | no | low | no | B0 | delete module |
-| B2 | Identity normalizer owner (backend) | catalog reuse / `agentIdentity.js`; tests for all aliases incl. `trend_detection` | 0 | 0 | yes | unit | no | low | no | B1 | revert module |
-| B3 | Confidence/freshness/DQ helpers; reject writer `0.5` poison | contract helpers + tests | 0 | 0 | yes | unit | no | med (truth) | no | B1 | revert |
-| B4 | Trend read-only adapter | new adapter **outside** `trendDomain.js`; reads `trendRunService` / `ai_decisions` | read | 0 | yes | unit + snapshot fixtures | no | med | no (frozen UI) | B1–B3 | disable adapter |
+| B0 | Owner review + baseline corrections | docs + Rule 02 only | 0 | 0 | 0 | n/a | no | n/a | **COMPLETE this round** | — | n/a |
+| B1 | Shared contract module + Zod + fixtures (`1.0.0` / `artemis-evidence-1.0.0`) | new `backend/services/artemisEvidenceContract.js` (or `contracts/`), schemas, unit tests | 0 | types-only optional | new module | unit golden | no | low | no | B0 + **WP-B.1 auth** | delete module |
+| B2 | Identity normalizer owner (backend) | catalog reuse / `agentIdentity.js`; tests for all aliases incl. `trend_detection` → `trend` | 0 | **frozen FE keys unchanged** | yes | unit | no | low | no | B1 | revert module |
+| B3 | Confidence/freshness/DQ helpers; fallback-provenance for 0.5; Trend strength ≠ confidence; unknown freshness if no source candle / TF | contract helpers + tests (explicit 0.5 vs writer fallback; missing candle → unknown) | 0 | 0 | yes | unit | no | med (truth) | no | B1 | revert |
+| B4 | Trend read-only adapter | new adapter **outside** `trendDomain.js`; reads persisted snapshot; `conclusion.strength` truthful; `confidence=UNAVAILABLE` | read | 0 | yes | unit + snapshot fixtures | no | med | no (frozen UI) | B1–B3 | disable adapter |
 | B5 | Arbitrage read-only adapter | new adapter outside arbitrage product DTOs | read | 0 | yes | unit | no | med | no | B1–B3 | disable adapter |
-| B6 | Volume adapter (flatten confidence) | new adapter | read | 0 | yes | unit | no | med | no | B1–B3 | disable |
-| B7 | On-read projection service + fix `/logs`+`/readiness` SQL columns | `artemis.js` read path, readiness evidence block | read | 0 | yes | API contract tests | no | med | light | B4–B6 | revert SQL + hide evidence |
+| B6 | Volume adapter (explicit confidence only; fallback-provenance) | new adapter; **Pattern not included** | read | 0 | yes | unit | no | med | no | B1–B3 | disable |
+| B7 | On-read projection + scoped SQL column fix | `artemis.js` read path, readiness evidence block; **leak regression tests** | read | 0 | yes | API contract + no-raw-blob tests | no | med | light | B4–B6 | revert SQL + hide evidence |
 | B8 | RBAC product projection for envelopes | extend audit-projection pattern | 0 | 0 | yes | unit | no | high (leak) | no | B1 | revert |
 | B9 | Readiness truthful counts | `artemisReadinessService.js` | 0 | frozen UI already displays fields | yes | unit | no | low | no | B7 | revert counts |
-| B10 | Optional persist table | new migration + writer | **yes — gated** | 0 | yes | db tests | **explicit Owner** | high | yes | B7 | down migration |
+| B10 | Optional persist table | new migration + writer | **yes — gated after on-read proof** | 0 | yes | db tests | **explicit Owner** | high | yes | B7 | down migration |
 
-**WP-B implementation is not authorized by this document.**
+**WP-B.1 implementation is not authorized by this B0 document.** Next gate: explicit **WP-B.1 IMPLEMENTATION AUTHORIZATION**.
 
 ---
 
-## 20. Open decisions (Owner)
+## 20. B0 Owner decisions (RESOLVED)
 
-1. Confirm `agentId=trend` with `trend_detection` as alias only (frontend key unchanged until a later product WP).
-2. Confirm WP-B includes **read-only Trend+Arbitrage adapters**, not contract-only (Foundation WP-B was contract-only).
-3. Confirm **no migration** in WP-B.1; persist table only as optional B10.
-4. Should `/logs` column-name fix ship inside B7 even though it touches Artemis routes? (Recommended: yes — read-only bugfix, not WP-A reopen.)
-5. Is `optimization` permanently `not_applicable` as sizing authority until a dedicated sizing WP?
-6. Pattern adapter: require `source≠mock` or skip entirely in WP-B?
-7. Dual confidence scales on Trend: which field is canonical for envelope `confidence.value`?
-8. When (if ever) to increment `contractVersion` vs keep `artemis-evidence-1.0.0` through WP-B adapters.
+All discovery open questions from HEAD `1f5cd78` are **closed**. See §1.1 for the full table.
+
+Remaining items are **not** open B0 questions; they are future gates:
+
+1. Explicit **WP-B.1 IMPLEMENTATION AUTHORIZATION** (required before any runtime code).
+2. Later Pattern adapter only after canonical real-source provenance (not `source != mock` alone).
+3. B10 persist table only after on-read evidence is proven end-to-end.
+4. Dedicated Optimization authority WP before any `control_sizing` label.
+5. Dedicated productization for Technical / Timing / Liquidity (and Pattern) before WP-C/D consumption.
 
 ---
 
@@ -603,14 +690,19 @@ Optional **WP-B.2 (gated):** append-only evidence table migration — separate O
 
 | Risk | Impact | Mitigation in WP-B |
 |---|---|---|
-| Fake confidence (0.5 writer default) enters envelope | false Artemis certainty | treat missing/poison 0.5 as UNAVAILABLE |
+| Naive `0.5 → unavailable` destroys legitimate scores | false unavailability | fallback-provenance only; tests for explicit vs writer 0.5 |
+| Trend strength mapped to `confidence.value` | false epistemic certainty | first adapter: strength stays strength; confidence UNAVAILABLE |
+| Product freshness fallback (analysis time / default 1h) copied into envelope | fake `fresh` | adapter emits `unknown` when source candle or TF missing |
 | Adapter mutates frozen Trend/Arbitrage | product regression | adapters **outside** frozen modules; read-only |
-| Unknown JSON in `evidence` leaks secrets | WP-A class leak | allowlist + size limits + RBAC projection |
+| B7 SQL fix leaks `input_data`/`output_data` | WP-A class leak | allowlist projection + leak regression tests |
+| Pattern mock OHLCV treated as evidence | false confirmation | Pattern not in WP-B.1; later fail unavailable without proven provenance |
+| Optimization labeled `control_sizing` by name | false authority | WP-B: NOT_APPLICABLE; Portfolio remains sizing candidate |
 | `agent-N` mapped to real agents | wrong identity | map to unavailable/legacy only |
 | WP-B silently reopens `/decision` semantics | execution creep | do not edit containment/TE gate |
 | Correlation ignored | double-counting later | emit family tags now; no scoring |
 | Migration without approval | SoT split / data loss | B10 gated; default on-read only |
 | UI redesign under “just show evidence” | WP-A freeze break | no FE IA work; optional later WP-C wiring |
+| B0 treated as WP-B.1 authorization | unapproved runtime | Rule 02 next gate is explicit WP-B.1 IMPLEMENTATION AUTHORIZATION |
 
 ---
 
@@ -626,7 +718,13 @@ Optional **WP-B.2 (gated):** append-only evidence table migration — separate O
 - Treat `approved:true` as execution
 - Implement Liquidity feasibility or Order direction
 - Shadow/paper/Live maturity stages
-- Any deploy or worker/Scheduler mutation in discovery or WP-B.0
+- Any deploy or worker/Scheduler mutation in discovery, B0, or before WP-B.1 authorization
+- Pattern adapter in WP-B.1
+- Mapping Trend strength / `_meta.confidence` to Artemis `confidence.value`
+- Naive `confidence === 0.5 → unavailable`
+- Copying Trend product freshness fallbacks (analysis-time / default `1h`) into canonical evidence
+- Labeling Optimization `control_sizing` in WP-B
+- Implicit WP-B.1 implementation from this B0 round
 
 ---
 
@@ -634,14 +732,19 @@ Optional **WP-B.2 (gated):** append-only evidence table migration — separate O
 
 | Item | Value |
 |---|---|
+| Rule 01 | TitanGold Core Engineering Rules **v4.6** |
 | origin/main used | `845ea0d35b75b1beca516be235f47d98c5703692` |
 | WP-A product baseline | `7c13fe13015de1b44ab534dff8deb72c6e5f5668` |
 | Discovery branch | `feat/artemis-wp-b-evidence-contract-discovery` |
+| Prior discovery HEAD | `1f5cd787947af461394ebdb37b0693525c361312` |
 | Runtime code changed | NO |
+| Migration | NO |
 | Implementation started | NO |
 | WP-A remains frozen | YES |
+| Rule 02 | ARTEMIS WP-B — B0 OWNER-APPROVED EVIDENCE CONTRACT BASELINE |
+| Next gate | WP-B.1 IMPLEMENTATION AUTHORIZATION |
 
-**Verdict target:**  
-**ARTEMIS WP-B — DISCOVERY COMPLETE**  
-**CANONICAL EVIDENCE CONTRACT READY FOR OWNER REVIEW**  
+**Verdict:**  
+**ARTEMIS WP-B — B0 OWNER REVIEW COMPLETE**  
+**CONTRACT BASELINE APPROVED WITH CORRECTIONS**  
 **IMPLEMENTATION NOT STARTED**

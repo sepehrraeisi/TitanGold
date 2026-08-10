@@ -1,25 +1,29 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-B canonical evidence contract discovery
+description: TitanGold Rule 02 — Artemis WP-B B0 owner-approved evidence contract baseline
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-B — CANONICAL EVIDENCE CONTRACT DISCOVERY**
+**ARTEMIS WP-B — B0 OWNER-APPROVED EVIDENCE CONTRACT BASELINE**
+
+Status:
+**OWNER REVIEW COMPLETE**  
+**IMPLEMENTATION NOT STARTED**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
 
 Current program slice:
-ARTEMIS-WP-B-EVIDENCE-CONTRACT-DISCOVERY
+ARTEMIS-WP-B-EVIDENCE-CONTRACT-DISCOVERY (B0 finalized)
 
 Risk tier:
-**DISCOVERY ONLY** (Tier 0 — documentation; no runtime implementation)
+**DISCOVERY / DOCUMENTATION ONLY** (Tier 0 — no runtime implementation)
 
 Frozen baselines (do not reopen):
 - **WP-A product:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668` — CLOSED AND FROZEN
-- **WP-A docs closeout:** `845ea0d35b75b1beca516be235f47d98c5703692`
+- **WP-A docs closeout / base main:** `845ea0d35b75b1beca516be235f47d98c5703692`
 - **Data Hub:** PASS / FROZEN
 - **Trend:** FROZEN
 - **Arbitrage:** FROZEN
@@ -32,12 +36,13 @@ Execution:
 `executionEligible = false` · legacy `approved:true` ≠ execution authorization
 
 Authorized in this round:
-- Read-only discovery
-- Living discovery document
+- B0 Owner-review documentation corrections only
+- Living discovery document update
 - Rule 02 update
-- Discovery-only git commit + push (no PR unless Owner requests)
+- Docs-only git commit + push (no PR)
 
 Not authorized:
+- WP-B.1 implementation (must not be inferred from B0)
 - Runtime / product code
 - Database migration
 - Staging/Production deploy
@@ -51,5 +56,5 @@ Branch / worktree:
 - `/home/ubuntu/worktrees/titangold-artemis-wp-b-discovery`
 
 Next gate:
-Owner review of `docs/ARTEMIS_WP_B_EVIDENCE_CONTRACT_DISCOVERY.md`.  
-Implementation of WP-B is **not** started and is **not** authorized by this discovery.
+**WP-B.1 IMPLEMENTATION AUTHORIZATION** (explicit Owner approval required).  
+Do not start implementation from this B0 baseline.
