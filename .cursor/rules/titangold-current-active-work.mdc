@@ -1,18 +1,21 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-B.1 canonical evidence foundation implementation
+description: TitanGold Rule 02 — Artemis WP-B.1 canonical evidence foundation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-B.1 — CANONICAL EVIDENCE FOUNDATION IMPLEMENTATION**
+**ARTEMIS WP-B.1 — CANONICAL EVIDENCE FOUNDATION**
 
 Status:
-**IMPLEMENTATION COMPLETE ON STAGING**  
-**AUTOMATED + BROWSER QA PASS**  
-**HUMAN QA PENDING**  
-**NOT CLOSED**
+**IMPLEMENTATION COMPLETE**  
+**AUTOMATED QA PASS**  
+**BROWSER QA PASS**  
+**OWNER HUMAN QA PASS**  
+**READY FOR PR FINAL REVIEW**  
+**NOT CLOSED**  
+**NOT FROZEN**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
@@ -42,12 +45,15 @@ Readiness terminology (do not overclaim):
 - Catalog: `ROLE_MAPPED` + `consumption=evidence_compatible` for Trend / Arbitrage / Volume
 - Evidence: `ON_READ_PARTIAL`
 - **NOT** `EVIDENCE_READY`
+- Compatible: Trend, Arbitrage, Volume
 - `artemisConsumable = false` · `decisionEligible = false` · `executionEligible = false`
+- Pattern excluded · Optimization `NOT_APPLICABLE`
 
 Provenance (Staging):
-- Backend runtimeCommit: semantic-hardening HEAD after guarded titan-backend deploy
-- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4` (unchanged this round)
-- Served bundle: `assets/index-DRB6fBxf.js` (frontend not redeployed)
+- Backend runtimeCommit: `48d7722b651e1d551bbbf128eaa30e1b1c136163`
+- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4`
+- Served bundle: `assets/index-DRB6fBxf.js`
+- Human QA PASS docs milestone is **NOT** the deployed runtime SHA
 
 Authorized in this round:
 - Canonical evidence contract 1.0.0 (strict identity + nested allowlists + role semantics)
@@ -60,8 +66,8 @@ Authorized in this round:
 - Scoped SQL column fix (`input_data` / `output_data`)
 - Safe RBAC projection + readiness compatibility counts
 - Pre-Human-QA validator/frontend remediation + final semantic hardening
-- Focused tests, guarded titan-backend Staging deploy, authenticated smoke
-- Bounded Browser QA only if frontend-visible semantics change (this round: no FE change)
+- Owner Human QA PASS recording + PR-prep documentation only (this update)
+- NO WP-C · NO B10 · NO migration · NO Live · NO orders
 
 Not authorized:
 - Database migration / B10 evidence table
@@ -72,12 +78,13 @@ Not authorized:
 - WP-A UI redesign
 - Data Hub / Trend / Arbitrage product owner edits
 - Pattern adapter
+- Merge without explicit Owner authorization
 
 Branch / worktree:
 - `feat/artemis-wp-b-evidence-foundation`
 - `/home/ubuntu/worktrees/titangold-artemis-wp-b-foundation`
 
 Next gate:
-Owner Human QA of Staging Artemis product truthfulness.  
-Do not create PR until Human QA is requested.  
+Owner merge decision after PR CI + independent review.  
+Do not merge without explicit Owner authorization.  
 Do not start WP-C or B10.
