@@ -1,28 +1,29 @@
 # Artemis WP-B — Canonical Evidence Contract + Agent Compatibility Discovery
 
-**Status:** B0 OWNER REVIEW COMPLETE — CONTRACT BASELINE APPROVED WITH CORRECTIONS — IMPLEMENTATION NOT STARTED  
-**Classification:** Shared Foundation discovery (Tier 0)  
+**Status:** WP-B.1 IMPLEMENTATION COMPLETE ON STAGING — CANONICAL EVIDENCE FOUNDATION VERIFIED — READY FOR OWNER HUMAN QA — **NOT CLOSED**  
+**Classification:** Shared Foundation implementation (Tier 2) after B0 discovery  
 **Governing authority:** TitanGold Core Engineering Rules **v4.6** §§45–54 (esp. §47–48)  
-**Rule 02:** ARTEMIS WP-B — B0 OWNER-APPROVED EVIDENCE CONTRACT BASELINE  
+**Rule 02:** ARTEMIS WP-B.1 — CANONICAL EVIDENCE FOUNDATION IMPLEMENTATION  
 
-**Branch:** `feat/artemis-wp-b-evidence-contract-discovery`  
-**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-b-discovery`  
+**Implementation branch:** `feat/artemis-wp-b-evidence-foundation`  
+**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-b-foundation`  
+**Discovery branch (intact):** `feat/artemis-wp-b-evidence-contract-discovery`  
 **Discovery base `origin/main`:** `845ea0d35b75b1beca516be235f47d98c5703692`  
 **WP-A product baseline (FROZEN):** `7c13fe13015de1b44ab534dff8deb72c6e5f5668`  
 **WP-A docs closeout:** `845ea0d35b75b1beca516be235f47d98c5703692`  
-**Prior discovery HEAD:** `1f5cd787947af461394ebdb37b0693525c361312`
+**B0 Owner-approved discovery:** `b2b42271d45260296e70b222293f33b1591562d9`
 
-**Runtime / product code changed:** **0**  
-**Migrations / deploy / Scheduler / worker / Live / orders / private provider:** **0**
+**Runtime / product code changed:** **YES** (WP-B.1 backend evidence foundation + additive i18n)  
+**Migrations / Scheduler / worker topology / Live / orders / private provider:** **0**
 
-Frozen surfaces (do not reopen): WP-A UI · Data Hub · Trend · Arbitrage.
+Frozen surfaces (do not reopen): WP-A UI IA · Data Hub · Trend product · Arbitrage product.
 
 Current Artemis maturity remains **ADVISORY ONLY** / `LEGACY_ADVISORY_ONLY` / `executionEligible=false`.  
-B0 Owner review does **not** authorize WP-B.1 implementation, execution, Live, or control-chain activation.
+WP-B.1 does **not** authorize WP-C orchestration, B10 persistence, execution, Live, or control-chain activation.
 
 **Contract versions (APPROVED through initial WP-B adapters):**  
 `schemaVersion = 1.0.0` · `contractVersion = artemis-evidence-1.0.0`  
-Adapter versions remain separate. Do not bump merely because Trend/Arbitrage/Volume adapters are added.
+Adapter versions remain separate: Trend `1.0.0` · Arbitrage `1.0.0` · Volume `1.0.0`.
 
 ---
 
@@ -747,4 +748,73 @@ Remaining items are **not** open B0 questions; they are future gates:
 **Verdict:**  
 **ARTEMIS WP-B — B0 OWNER REVIEW COMPLETE**  
 **CONTRACT BASELINE APPROVED WITH CORRECTIONS**  
-**IMPLEMENTATION NOT STARTED**
+**IMPLEMENTATION NOT STARTED** *(historical B0 closeout; superseded by §24 WP-B.1 ledger)*
+
+---
+
+## 24. WP-B.1 Evidence Ledger (current Source of Truth)
+
+| Item | Value |
+|---|---|
+| Outcome | Canonical Evidence Foundation 1.0.0 + on-read Trend/Arbitrage/Volume adapters |
+| Risk tier | Shared Foundation / Tier 2 |
+| B0 baseline | `b2b42271d45260296e70b222293f33b1591562d9` |
+| origin/main | `845ea0d35b75b1beca516be235f47d98c5703692` |
+| WP-A product (FROZEN) | `7c13fe13015de1b44ab534dff8deb72c6e5f5668` |
+| Commit A (contract + identity + truth) | `78a9c7d969f90e5dddd3ad5485b41406f102170f` |
+| Commit B (Trend/Arbitrage/Volume adapters) | `85b0b04c81bb36b3ab07d46fa312e0b885d0aacc` |
+| Commit C (on-read + SQL + readiness + i18n) | `11a178be97938b6113b1ab8565f616b9fa8a93d3` |
+| Documentation HEAD | *(this commit D)* |
+| Runtime implementation commit | `11a178be97938b6113b1ab8565f616b9fa8a93d3` |
+| schemaVersion / contractVersion | `1.0.0` / `artemis-evidence-1.0.0` |
+| Adapter versions | trend `1.0.0` · arbitrage `1.0.0` · volume `1.0.0` |
+| Compatible agents | 3 (`trend`, `arbitrage`, `volume`) |
+| Pattern | BLOCKED / excluded from WP-B.1 |
+| Optimization | `NOT_APPLICABLE` for sizing/control |
+| Artemis consumable | **false** |
+| Decision eligible | **false** |
+| executionEligible | **false** |
+| approvedForExecution | **false** |
+| Maturity | `LEGACY_ADVISORY` / `LEGACY_ADVISORY_ONLY` |
+| Persistence | On-read only · **no** `ai_decisions` migration · **no** B10 table |
+| SQL column fix | `/logs` + readiness use `d.input_data AS input`, `d.output_data AS output` |
+| Identity | `agentId` = stable `agent_key` · UUID = `agentRecordId` · `trend_detection` alias only |
+| Trend confidence | UNAVAILABLE · `conclusion.strength` from `raw.trend.confidence` (`percent_100`) |
+| Generic writer 0.5 | UNAVAILABLE unless explicit Agent confidence field exists |
+| Freshness | missing/ambiguous source or unknown TF → `unknown` · never assume `1h` |
+| Frozen diff vs B0 | Trend/Arbitrage/Data Hub/WP-A IA/containment/TE gate = **0** |
+| Backend unit | `npm run test:unit` → **100 passed / 100 total / 712 tests / EXIT 0** |
+| Frontend Artemis regression | `ArtemisWpA.test.tsx` → **35 passed / 35** |
+| Production build | `npm run build` → **PASS** |
+| Migration | **NO** |
+| Private/public provider calls | **0** |
+| Agent executions for testing | **0** |
+| Scheduler / allowlist / worker topology | **unchanged** |
+| Live / orders / transfers / withdrawals | **0** |
+| PR | **not created** |
+| Human QA | **PENDING** |
+| Closed / frozen | **NO** |
+
+### 24.1 Recovery from interrupted local work
+
+| Field | Value |
+|---|---|
+| Interrupted local HEAD before resume | `b2b42271d45260296e70b222293f33b1591562d9` |
+| Remote implementation branch HEAD before resume | `b2b42271d45260296e70b222293f33b1591562d9` |
+| Interrupted modified/untracked | Rule 02 WP-B.1 · `backend/contracts/artemisEvidenceContract.js` · catalog timing alias (partial) |
+| Partial file repaired | `artemisEvidenceContract.js` secret-key scan folded into `validateEvidenceEnvelope` |
+| Work lost | **NO** |
+| reset/stash/clean used | **NO** |
+
+### 24.2 Remaining gates
+
+- Owner Human QA of Staging Artemis product truthfulness
+- Do **not** create PR until Human QA is requested
+- Do **not** start WP-C orchestration or B10 persistence
+- Frontend bundle remains WP-A frozen; additive i18n is committed for later frontend alignment if Human QA requires served copy updates
+
+**Verdict:**  
+**ARTEMIS WP-B.1 — IMPLEMENTATION COMPLETE ON STAGING**  
+**CANONICAL EVIDENCE FOUNDATION VERIFIED**  
+**READY FOR OWNER HUMAN QA**  
+**NOT CLOSED**

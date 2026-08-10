@@ -1,29 +1,31 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-B B0 owner-approved evidence contract baseline
+description: TitanGold Rule 02 — Artemis WP-B.1 canonical evidence foundation implementation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-B — B0 OWNER-APPROVED EVIDENCE CONTRACT BASELINE**
+**ARTEMIS WP-B.1 — CANONICAL EVIDENCE FOUNDATION IMPLEMENTATION**
 
 Status:
-**OWNER REVIEW COMPLETE**  
-**IMPLEMENTATION NOT STARTED**
+**IMPLEMENTATION COMPLETE ON STAGING**  
+**HUMAN QA PENDING**  
+**NOT CLOSED**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
 
 Current program slice:
-ARTEMIS-WP-B-EVIDENCE-CONTRACT-DISCOVERY (B0 finalized)
+ARTEMIS-WP-B-1-EVIDENCE-FOUNDATION
 
 Risk tier:
-**DISCOVERY / DOCUMENTATION ONLY** (Tier 0 — no runtime implementation)
+**Shared Foundation / Tier 2** (strict security review for evidence projection)
 
 Frozen baselines (do not reopen):
 - **WP-A product:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668` — CLOSED AND FROZEN
 - **WP-A docs closeout / base main:** `845ea0d35b75b1beca516be235f47d98c5703692`
+- **B0 Owner-approved discovery:** `b2b42271d45260296e70b222293f33b1591562d9`
 - **Data Hub:** PASS / FROZEN
 - **Trend:** FROZEN
 - **Arbitrage:** FROZEN
@@ -36,25 +38,29 @@ Execution:
 `executionEligible = false` · legacy `approved:true` ≠ execution authorization
 
 Authorized in this round:
-- B0 Owner-review documentation corrections only
-- Living discovery document update
-- Rule 02 update
-- Docs-only git commit + push (no PR)
+- Canonical evidence contract 1.0.0
+- Identity normalization
+- Truthful confidence / strength / freshness / data-quality
+- Read-only Trend + Arbitrage + Volume adapters
+- On-read projection from `ai_decisions`
+- Scoped SQL column fix (`input_data` / `output_data`)
+- Safe RBAC projection + readiness compatibility counts
+- Focused tests, backend Staging deploy, read-only smoke
 
 Not authorized:
-- WP-B.1 implementation (must not be inferred from B0)
-- Runtime / product code
-- Database migration
-- Staging/Production deploy
+- Database migration / B10 evidence table
+- WP-C orchestration replacement
+- WP-D lineage / evaluation / shadow / paper
 - Live / orders / private provider calls
-- Scheduler / worker topology
+- Scheduler / worker topology mutation
 - WP-A UI redesign
-- Data Hub / Trend / Arbitrage product edits
+- Data Hub / Trend / Arbitrage product owner edits
+- Pattern adapter
 
 Branch / worktree:
-- `feat/artemis-wp-b-evidence-contract-discovery`
-- `/home/ubuntu/worktrees/titangold-artemis-wp-b-discovery`
+- `feat/artemis-wp-b-evidence-foundation`
+- `/home/ubuntu/worktrees/titangold-artemis-wp-b-foundation`
 
 Next gate:
-**WP-B.1 IMPLEMENTATION AUTHORIZATION** (explicit Owner approval required).  
-Do not start implementation from this B0 baseline.
+Owner Human QA of Staging Artemis product truthfulness.  
+Do not create PR until Human QA is requested.
