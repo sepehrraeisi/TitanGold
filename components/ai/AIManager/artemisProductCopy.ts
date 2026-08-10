@@ -14,6 +14,9 @@ const STATUS_KEYS: Record<string, string> = {
   LEGACY: 'artemis_status_legacy',
   UNAVAILABLE: 'artemis_status_unavailable',
   CONTRACT_FOUNDATION_APPROVED: 'artemis_status_contract_approved',
+  EVIDENCE_FOUNDATION_IMPLEMENTED: 'artemis_status_evidence_foundation',
+  ON_READ_PARTIAL: 'artemis_status_evidence_on_read',
+  NOT_APPLICABLE: 'artemis_status_not_applicable',
   LEGACY_ADVISORY: 'artemis_maturity_legacy_advisory',
   LEGACY_ADVISORY_ONLY: 'artemis_class_legacy_advisory',
   configured: 'artemis_op_configured',
@@ -21,6 +24,8 @@ const STATUS_KEYS: Record<string, string> = {
   unconfigured: 'artemis_op_unconfigured',
   disabled: 'artemis_op_disabled',
   contract_pending: 'artemis_op_contract_pending',
+  evidence_compatible: 'artemis_op_evidence_compatible',
+  not_applicable: 'artemis_status_not_applicable',
   not_consumable: 'artemis_op_not_consumable',
   not_execution_eligible: 'artemis_status_execution_unavailable',
   blocked: 'artemis_status_blocked',
@@ -39,6 +44,7 @@ const AUTHORITY_KEYS: Record<string, string> = {
   forecast: 'artemis_authority_forecast',
   control: 'artemis_authority_control',
   execution: 'artemis_authority_execution',
+  not_applicable: 'artemis_authority_not_applicable',
 };
 
 const GROUP_KEYS: Record<string, string> = {
@@ -58,6 +64,9 @@ const LIMITATION_KEYS: Record<string, string> = {
   artemis_risk_uuid_debt: 'artemis_blocker_risk_identity',
   artemis_evidence_contract_not_implemented: 'artemis_blocker_evidence_not_connected',
   artemis_contract_not_runtime_implemented: 'artemis_blocker_evidence_not_connected',
+  artemis_evidence_foundation_not_artemis_consumable: 'artemis_blocker_evidence_not_connected',
+  artemis_optimization_not_sizing_authority: 'artemis_blocker_optimization_not_applicable',
+  artemis_pattern_source_provenance_blocked: 'artemis_blocker_pattern_blocked',
   artemis_orchestration_mock_legacy: 'artemis_blocker_orchestration_legacy',
   artemis_agent_coordination_not_real: 'artemis_blocker_orchestration_legacy',
   artemis_om_execution_only_future: 'artemis_blocker_order_execution_only',
@@ -135,6 +144,9 @@ const NOVICE_STATUS_KEYS: Record<string, { key: string; fallback: string }> = {
   LEGACY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
   UNAVAILABLE: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
   CONTRACT_FOUNDATION_APPROVED: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
+  EVIDENCE_FOUNDATION_IMPLEMENTED: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
+  ON_READ_PARTIAL: { key: 'artemis_user_partial', fallback: 'Partially ready' },
+  NOT_APPLICABLE: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
   LEGACY_ADVISORY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
   LEGACY_ADVISORY_ONLY: { key: 'artemis_user_advisory', fallback: 'Advisory only' },
   configured: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
@@ -142,6 +154,8 @@ const NOVICE_STATUS_KEYS: Record<string, { key: string; fallback: string }> = {
   unconfigured: { key: 'artemis_user_needs_setup', fallback: 'Needs setup' },
   disabled: { key: 'artemis_user_blocked', fallback: 'Blocked' },
   contract_pending: { key: 'artemis_user_not_connected', fallback: 'Not connected' },
+  evidence_compatible: { key: 'artemis_user_partial', fallback: 'Partially ready' },
+  not_applicable: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
   not_consumable: { key: 'artemis_user_not_connected', fallback: 'Not connected' },
   not_execution_eligible: { key: 'artemis_user_unavailable', fallback: 'Unavailable' },
   blocked: { key: 'artemis_user_blocked', fallback: 'Blocked' },
@@ -229,6 +243,8 @@ function humanFallback(code: string): string {
     feasibility: 'Feasibility',
     runtime_safety: 'Runtime safety',
     execution_only: 'Execution authority',
+    NOT_APPLICABLE: 'Not applicable',
+    not_applicable: 'Not applicable',
   };
   return known[code] || known[code.toUpperCase()] || 'Unavailable';
 }

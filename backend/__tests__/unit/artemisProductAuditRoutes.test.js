@@ -170,6 +170,9 @@ describe('Artemis product audit HTTP projection', () => {
       expect(JSON.stringify(res.body)).not.toMatch(/portfolioValue/);
       expect(JSON.stringify(res.body)).not.toMatch(/dailyLoss/);
     }
+    const runSql = mockQuery.mock.calls.map((call) => String(call[0])).find((sql) => sql.includes('FROM ai_decisions d'));
+    expect(runSql).toMatch(/d\.input_data AS input/);
+    expect(runSql).toMatch(/d\.output_data AS output/);
   });
 
   it('admin/trader still receive the same sanitized product projection (no raw-debug endpoint)', async () => {

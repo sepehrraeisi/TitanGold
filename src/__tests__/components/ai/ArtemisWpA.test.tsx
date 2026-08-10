@@ -15,15 +15,41 @@ const catalogAgents = ARTEMIS_AGENT_CATALOG.map((agent) => ({
   registryKey: agent.registryKey,
   nameKey: agent.nameKey,
   group: agent.group,
-  authority: agent.authority,
-  readiness: agent.key === 'liquidity' ? 'BLOCKED' : agent.key === 'order' ? 'NOT_EXECUTION_ELIGIBLE' : 'ROLE_MAPPED',
+  authority: agent.key === 'optimization' ? 'not_applicable' : agent.authority,
+  readiness: agent.key === 'liquidity'
+    ? 'BLOCKED'
+    : agent.key === 'order'
+      ? 'NOT_EXECUTION_ELIGIBLE'
+      : agent.key === 'optimization'
+        ? 'NOT_APPLICABLE'
+        : agent.key === 'pattern'
+          ? 'BLOCKED'
+          : 'ROLE_MAPPED',
   operational: 'configured',
   exists: true,
   operationalNow: agent.key !== 'liquidity',
-  evidenceCompatible: false,
+  evidenceCompatible: ['trend', 'arbitrage', 'volume'].includes(agent.key),
   evidenceAvailable: false,
-  consumption: agent.key === 'liquidity' ? 'blocked' : 'contract_pending',
-  limitationKey: agent.key === 'liquidity' ? 'artemis_liquidity_stub' : agent.key === 'risk' ? 'artemis_risk_uuid_debt' : null,
+  consumption: agent.key === 'liquidity'
+    ? 'blocked'
+    : agent.key === 'order'
+      ? 'not_execution_eligible'
+      : agent.key === 'optimization'
+        ? 'not_applicable'
+        : agent.key === 'pattern'
+          ? 'blocked'
+          : ['trend', 'arbitrage', 'volume'].includes(agent.key)
+            ? 'evidence_compatible'
+            : 'contract_pending',
+  limitationKey: agent.key === 'liquidity'
+    ? 'artemis_liquidity_stub'
+    : agent.key === 'risk'
+      ? 'artemis_risk_uuid_debt'
+      : agent.key === 'optimization'
+        ? 'artemis_optimization_not_sizing_authority'
+        : agent.key === 'pattern'
+          ? 'artemis_pattern_source_provenance_blocked'
+          : null,
   truth: 'CONFIGURED',
 }));
 
@@ -35,17 +61,25 @@ const readinessFixture = {
   contract: {
     schemaVersion: '1.0.0',
     contractVersion: 'artemis-evidence-1.0.0',
-    readiness: 'CONTRACT_FOUNDATION_APPROVED',
-    implemented: false,
+    readiness: 'EVIDENCE_FOUNDATION_IMPLEMENTED',
+    implemented: true,
     adaptersRequired: true,
-    compatibleAgentCount: 0,
+    compatibleAgentCount: 3,
     catalogAgentCount: 15,
-    truth: 'CONFIGURED',
+    artemisConsumable: false,
+    decisionEligible: false,
+    executionEligible: false,
+    truth: 'MEASURED',
   },
   evidence: {
-    readiness: 'UNAVAILABLE',
-    reasonKey: 'artemis_evidence_contract_not_implemented',
-    truth: 'UNAVAILABLE',
+    readiness: 'ON_READ_PARTIAL',
+    reasonKey: 'artemis_evidence_foundation_not_artemis_consumable',
+    truth: 'MEASURED',
+    artemisConsumable: false,
+    decisionEligible: false,
+    executionEligible: false,
+    compatibleAgentCount: 3,
+    availableAgentCount: 0,
   },
   orchestration: {
     readiness: 'LEGACY',
@@ -56,7 +90,7 @@ const readinessFixture = {
   controlChain: {
     risk: { authority: 'veto', readiness: 'PARTIAL', truth: 'CONFIGURED', limitationKey: 'artemis_risk_uuid_debt', ownerNav: { view: 'ai', aiTab: 'agents', agentId: 'risk' } },
     portfolio: { authority: 'sizing', readiness: 'PARTIAL', truth: 'CONFIGURED' },
-    optimization: { authority: 'sizing', readiness: 'PARTIAL', truth: 'CONFIGURED' },
+    optimization: { authority: 'not_applicable', readiness: 'NOT_APPLICABLE', truth: 'CONFIGURED', limitationKey: 'artemis_optimization_not_sizing_authority' },
     liquidity: { authority: 'feasibility', readiness: 'BLOCKED', truth: 'CONFIGURED', limitationKey: 'artemis_liquidity_stub' },
     runtime: { authority: 'runtime_safety', readiness: 'AVAILABLE', truth: 'MEASURED' },
     order: { authority: 'execution_only', readiness: 'NOT_EXECUTION_ELIGIBLE', truth: 'CONFIGURED' },
@@ -94,7 +128,7 @@ const readinessFixture = {
   provenance: { truth: 'MEASURED', runtimeCommit: '32a65e4' },
   pipeline: [
     { id: 'data_foundation', labelKey: 'artemis_pipe_data', ownerKey: 'artemis_owner_data_hub', status: 'AVAILABLE', truth: 'PERSISTED', nav: { view: 'ai', aiTab: 'data_hub' } },
-    { id: 'evidence_contract', labelKey: 'artemis_pipe_evidence', ownerKey: 'artemis_nav_evidence', status: 'UNAVAILABLE', truth: 'UNAVAILABLE', nav: { artemisSection: 'evidence' }, blockerKey: 'artemis_blocker_evidence_not_connected' },
+    { id: 'evidence_contract', labelKey: 'artemis_pipe_evidence', ownerKey: 'artemis_nav_evidence', status: 'PARTIAL', truth: 'MEASURED', nav: { artemisSection: 'evidence' }, blockerKey: 'artemis_blocker_evidence_not_connected' },
   ],
   blockers: [
     { code: 'evidence_not_connected', severity: 'high', labelKey: 'artemis_blocker_evidence_not_connected' },
@@ -105,7 +139,7 @@ const readinessFixture = {
     decisionEngine: { view: 'settings', settingsTab: 'configuration', settingsSubtab: 'decision-engine' },
     connections: { view: 'settings', settingsTab: 'connections' },
   },
-  limitations: ['artemis_decision_legacy_advisory_only', 'artemis_no_live_automation'],
+  limitations: ['artemis_evidence_foundation_not_artemis_consumable', 'artemis_decision_legacy_advisory_only', 'artemis_optimization_not_sizing_authority', 'artemis_no_live_automation'],
   dualConfigLimitationKey: 'artemis_dual_decision_engine_config',
   generatedAt: '2026-08-07T00:00:00.000Z',
 };

@@ -92,10 +92,16 @@ describe('Artemis WP-A readiness aggregation', () => {
 
     expect(readiness.executionEligible).toBe(false);
     expect(readiness.maturityStage).toBe('LEGACY_ADVISORY');
-    expect(readiness.contract.implemented).toBe(false);
-    expect(readiness.evidence.readiness).toBe('UNAVAILABLE');
+    expect(readiness.contract.implemented).toBe(true);
+    expect(readiness.contract.compatibleAgentCount).toBe(3);
+    expect(readiness.contract.artemisConsumable).toBe(false);
+    expect(readiness.contract.executionEligible).toBe(false);
+    expect(readiness.evidence.readiness).toBe('ON_READ_PARTIAL');
+    expect(readiness.evidence.artemisConsumable).toBe(false);
     expect(readiness.orchestration.realAgentCoordination).toBe(false);
     expect(readiness.controlChain.liquidity.readiness).toBe('BLOCKED');
+    expect(readiness.controlChain.optimization.authority).toBe('not_applicable');
+    expect(readiness.controlChain.optimization.readiness).toBe('NOT_APPLICABLE');
     expect(readiness.controlChain.order.authority).toBe('execution_only');
     expect(readiness.limitations.length).toBeGreaterThan(0);
     expect(readiness.runtimeTruth).toBe('MEASURED');
@@ -122,6 +128,17 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.providers.activeUsableInstances).toBe(1);
     expect(readiness.providers.quorum).toBe(2);
     expect(readiness.providers.ready).toBe(false);
+    expect(readiness.catalog.agents.find((a) => a.key === 'trend').evidenceCompatible).toBe(true);
+    expect(readiness.catalog.agents.find((a) => a.key === 'arbitrage').evidenceCompatible).toBe(true);
+    expect(readiness.catalog.agents.find((a) => a.key === 'volume').evidenceCompatible).toBe(true);
+    expect(readiness.catalog.agents.find((a) => a.key === 'pattern').readiness).toBe('BLOCKED');
+    expect(readiness.catalog.agents.find((a) => a.key === 'optimization').readiness).toBe('NOT_APPLICABLE');
+    expect(readiness.catalog.agents.find((a) => a.key === 'optimization').authority).toBe('not_applicable');
+    expect(readiness.limitations).toContain('artemis_evidence_foundation_not_artemis_consumable');
+    expect(readiness.limitations).toContain('artemis_optimization_not_sizing_authority');
+    const runSql = mockQuery.mock.calls.map((call) => String(call[0])).find((sql) => sql.includes('FROM ai_decisions d'));
+    expect(runSql).toMatch(/d\.input_data AS input/);
+    expect(runSql).toMatch(/d\.output_data AS output/);
   });
 
   it('one usable provider with canonical quorum 2 is not ready', async () => {
