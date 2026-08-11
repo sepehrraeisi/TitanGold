@@ -1,81 +1,84 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-B.1 CLOSED AND FROZEN
+description: TitanGold Rule 02 — Artemis WP-C Orchestration Discovery
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-B.1 — CLOSED AND FROZEN**
+**ARTEMIS WP-C — ORCHESTRATION DISCOVERY**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
+Shared Foundation → Artemis Central Intelligence (orchestration / synthesis / control-chain architecture)
 
 Current program slice:
-ARTEMIS-WP-B-1-EVIDENCE-FOUNDATION
+ARTEMIS-WP-C-ORCHESTRATION-DISCOVERY
 
 Risk tier:
-Closed baseline (no active implementation). Future Artemis runtime maturity is WP-C / B10 only after explicit Owner authorization.
+Tier 0 — Read-Only / Documentation
 
 Engineering status:
-**DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
-**OWNER HUMAN QA = PASS**  
-**Independent code review = PASS**  
-**Final-head GitHub CI = PASS**  
-**Staging content alignment = PASS**  
-**Browser regression = PASS**  
-**WP-B.1 CLOSED AND FROZEN**
+**DISCOVERY ONLY**  
+**NO IMPLEMENTATION**  
+**NO MIGRATION**  
+**NO RUNTIME CHANGE**  
+**OWNER REVIEW REQUIRED**
 
-Canonical product merges:
-- **PR #20 (WP-B.1 product):** `26d0128d56f3babcd20d848331c096265e03f608`
-- **PR #21 (Telegram stabilization source alignment / current main at freeze prep):** `eee00a8bb93ecd9e29f30acbb69b355cb433c1c2`
+Canonical discovery document (exactly one):
+`docs/ARTEMIS_WP_C_ORCHESTRATION_DISCOVERY.md`
 
-Frozen baselines (do not reopen):
-- **WP-A product:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668` — CLOSED AND FROZEN
-- **WP-A docs closeout / prior main:** `845ea0d35b75b1beca516be235f47d98c5703692`
-- **B0 Owner-approved discovery:** `b2b42271d45260296e70b222293f33b1591562d9`
+Verified base:
+`origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`
+
+Discovery branch:
+`feat/artemis-wp-c-orchestration-discovery`
+
+Isolated worktree:
+`/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`
+
+Preserved frozen baselines (do not reopen):
+- **WP-B.1 CLOSED AND FROZEN**
+- **WP-A CLOSED AND FROZEN**
 - **Data Hub:** PASS / FROZEN
 - **Trend:** FROZEN
 - **Arbitrage:** FROZEN
 
-Current Artemis maturity:
-**ADVISORY ONLY** (`LEGACY_ADVISORY_ONLY`)
+Preserved Artemis safety flags (unchanged during discovery):
+- Maturity: **ADVISORY ONLY** (`LEGACY_ADVISORY_ONLY`)
+- `orchestration = LEGACY` during discovery
+- `artemisConsumable = false`
+- `decisionEligible = false`
+- `executionEligible = false`
+- Evidence readiness = **ON_READ_PARTIAL** — **NOT** `EVIDENCE_READY`
 
-Execution:
-**NOT ACTIVATED**  
-`executionEligible = false` · legacy `approved:true` ≠ execution authorization  
-`artemisConsumable = false` · `decisionEligible = false`
+Explicitly not started:
+- **B10 NOT STARTED**
+- **WP-D NOT STARTED**
+- **Shadow NOT STARTED**
+- **Paper NOT STARTED**
+- **Live NOT STARTED**
+- WP-C implementation NOT STARTED
 
-Evidence readiness:
-**ON_READ_PARTIAL** — **NOT** `EVIDENCE_READY`  
-Compatible on-read: Trend / Arbitrage / Volume  
-Pattern excluded · Optimization `NOT_APPLICABLE`  
-Orchestration = **LEGACY** / advisory-only
-
-Component provenance (product content alignment; docs SHA ≠ required runtime label):
-- Backend Human-QA implementation content: `48d7722b651e1d551bbbf128eaa30e1b1c136163` (content-equivalent to main WP-B.1 runtime paths)
-- Frontend Human-QA product tree: `4652c36f21039e7f99f2600751a007b73a0347c4` (content-equivalent to main WP-B.1 frontend paths)
-- Served frontend bundle: `assets/index-DRB6fBxf.js`
-- Telegram processor runtime: content-equivalent to main (PR #21); id11 online · id15 STOPPED (NO DELETE)
-- Backend `runtimeCommit` label may remain `48d7722` when no-op redeploy was correctly avoided
+Authorized in this Rule 02:
+- Isolated discovery worktree from exact `origin/main`
+- Static code / Git / docs inspection
+- Read-only schema/DB inspection when genuinely needed
+- One living discovery document
+- Docs-only commit on the discovery branch
 
 Not authorized:
-- Reopen WP-B.1
-- Start WP-C / B10 / WP-D without new explicit Owner authorization
-- Database migration / evidence persistence table
-- Live / orders / private provider calls
-- Scheduler / worker / collector topology mutation for Artemis
-- Start telegram-processor id15
-- Start stopped frontend Vite PM2 entries
-- Redesign Data Hub / Trend / Arbitrage
-- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
-
-Canonical Artemis section IDs:
-overview · evidence · decisions · orchestration · controls · lineage · system
-
-Closeout evidence recorded:
-- No migration · no provider calls · no Agent execution as part of validation · no financial side effects
-- No full-tree destructive deploy used solely to force Git metadata equality
+- Product / runtime / test / config implementation
+- Database migration / DDL / DML
+- PM2 mutation / deploy / restart / start / stop
+- Credentials / private provider calls / orders / withdrawals / transfers
+- Scheduler / worker / collector / Telegram mutation
+- Reopen WP-B.1 / WP-A / Data Hub / Trend / Arbitrage
+- Activate Shadow / Paper / Live
+- Create PR or merge without separate Owner instruction
+- Protected scripts:
+  - `scripts/backup-db.sh`
+  - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
+  - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
 Next authorized transition:
-WP-C or B10 only after explicit Rule 02 replacement by Owner. Do not begin either from this freeze.
+Owner architecture review of `docs/ARTEMIS_WP_C_ORCHESTRATION_DISCOVERY.md`, then explicit Rule 02 replacement before any WP-C implementation package.
