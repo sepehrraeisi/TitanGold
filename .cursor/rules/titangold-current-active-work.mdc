@@ -19,8 +19,10 @@ Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
 **WP-C.1 IMPLEMENTATION COMPLETE**  
-**FOCUSED TESTS PASS**  
-**BACKEND REGRESSION STATUS = Artemis unit suite PASS (96); broader unit suite reported in C.1 closeout notes**  
+**FOCUSED TESTS PASS** (`artemisDecisionContract.wpC1.test.js` — 32/32)  
+**BACKEND REGRESSION STATUS = PASS**  
+- Artemis unit suite: 12 suites / 96 tests PASS  
+- Full backend `__tests__/unit`: 101 suites / 760 tests PASS  
 **OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
@@ -32,6 +34,9 @@ Engineering status:
 **NO PROVIDER CALLS**  
 **NO AGENT EXECUTION**  
 **NO SHADOW / PAPER / LIVE**
+
+C.1 final HEAD:
+`a68168c8fa1cc3eb343998ba400f606c19cb013b`
 
 Branch:
 `feat/artemis-wp-c1-orchestration-contracts`
