@@ -1,17 +1,47 @@
 # ARTEMIS WP-C — Orchestration / Synthesis / Control-Chain Discovery
 
-**Status:** DISCOVERY HARDENED · OWNER ARCHITECTURE REVIEW REQUIRED · **NOT OWNER APPROVED**  
+**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**  
 **Base:** `origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
 **Branch:** `feat/artemis-wp-c-orchestration-discovery`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`  
-**Prior discovery commit:** `d292434a02bdccf1a0a5667e442c33d4bb72f3c3`  
-**Risk tier:** Tier 0 — Read-Only / Documentation  
-**Implementation started:** NO  
+**Hardened Discovery HEAD:** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
+**Risk tier:** Tier 0 — Documentation milestone  
+**Implementation started at Discovery approval:** **NO**  
 **Migration / runtime / provider / financial side effects:** NONE  
 
 This is the **single canonical** WP-C discovery document. Do not create parallel planning docs.
 
 **Correction pass scope:** diversity of initial evidence families · B/C/E reclassification · qualitative correlation containment · precise C.1→C.2→B10→control→Shadow-prep sequence · Optimization wording · Risk unavailable semantics.
+
+---
+
+## 0A. OWNER APPROVAL MILESTONE (LOCKED)
+
+**Verdict:** WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED  
+**Hardened SHA approved as architecture baseline:** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
+**Implementation had not begun at this milestone:** YES  
+
+### Owner-approved decisions
+
+1. **Target control chain:** Analytical Evidence → Artemis Synthesis → Risk veto → Portfolio bounded sizing/allocation → Liquidity feasibility → Runtime safety → Order Management via ExecutionIntent only
+2. **Risk:** hard veto/control authority; not an equal analytical vote; unavailable Risk may permit explicitly non-actionable advisory analysis only; `decisionEligible`/`executionEligible` fail closed; current Demo RiskGate fail-open MUST NOT be interpreted as Artemis approval
+3. **Portfolio:** bounded sizing/allocation only
+4. **Optimization:** outside initial Artemis control chain; NOT_APPLICABLE unless separately promoted later
+5. **Liquidity:** execution feasibility only; unavailable until real implementation; fail closed for execution
+6. **Order:** ExecutionIntent consumer only; never creates BUY/SELL direction
+7. **Correlation:** qualitative containment only; preserve all lineage; source/feature/signal correlation are distinct; correlated evidence cannot claim independent confirmation; no numeric de-correlation or invented coefficients without measurement
+8. **Current evidence intake:** trend + volume = one OHLCV directional/regime family; arbitrage = opportunity context only; NOT a directional analytical vote
+9. **Second independent family:** sentiment is the preferred future remediation candidate; sentiment is NOT currently Artemis-consumable; do NOT remediate sentiment in C.1
+10. **Approved sequence:** WP-C.1 → WP-C.2 → B10 → control/runtime integration → Shadow preparation → separate Owner gate for Shadow activation
+11. **B10:** NOT required before C.1/C.2; REQUIRED before meaningful Shadow; `system_logs` must NOT become Shadow SoT
+12. **WP-D:** replay / evaluation / backtesting / calibration later
+13. **Shadow / Paper / Live:** NOT STARTED; NOT AUTHORIZED
+14. **C.1/C.2:** may proceed as pure deterministic library work
+15. **Multi-family claim:** no meaningful multi-family synthesis claim until an independent family is remediated and validated
+
+**Sentiment status (explicit):** selected future remediation candidate · **NOT evidence-approved** · **NOT Artemis-consumable** · no C.1 remediation.
+
+After this milestone, C.1 must branch from the Owner-approval commit SHA (`WP_C_DISCOVERY_APPROVED_SHA`). Do not rewrite this Discovery architecture baseline after C.1 branches.
 
 ---
 
@@ -374,7 +404,7 @@ Until that remediation lands:
 
 ---
 
-## 8. Initial WP-C Agent buckets (CORRECTED — REQUIRES OWNER DECISION)
+## 8. Initial WP-C Agent buckets (OWNER APPROVED)
 
 Buckets replace the prior “INITIAL ANALYTICAL SET” wording. Arbitrage is **not** directional analytical evidence.
 
@@ -400,7 +430,7 @@ Buckets replace the prior “INITIAL ANALYTICAL SET” wording. Arbitrage is **n
 
 ### DEFERRED
 
-- **sentiment** — preferred independent-family remediation candidate (technically **C** today)
+- **sentiment** — selected future remediation candidate (technically **C** today); **NOT evidence-approved**; **NOT Artemis-consumable**; **do NOT remediate in C.1**
 - **market_intelligence** — technically **C**; deferred
 - **fundamental** — technically **C**; deferred from initial
 - **pattern** — **B** provenance; deferred for diversity (same OHLCV family)
@@ -412,16 +442,17 @@ Buckets replace the prior “INITIAL ANALYTICAL SET” wording. Arbitrage is **n
 
 | Question | Answer | Status |
 |---|---|---|
-| Is trend+volume+arbitrage the final smallest credible multi-family synthesis set? | **NO** | corrected |
-| Preferred path | **A** — remediate `sentiment` for a second family before claiming multi-family synthesis | PROPOSED |
-| Until sentiment remediation | Architecture-only / single-family synthesis over OHLCV + opportunity context | PROPOSED |
-| Final initial set | **REQUIRES OWNER DECISION** after this diversity review | REQUIRES OWNER DECISION |
+| Is trend+volume+arbitrage the final smallest credible multi-family synthesis set? | **NO** — one OHLCV family + opportunity context | OWNER APPROVED |
+| Preferred second family | **sentiment** after bounded remediation | OWNER APPROVED (future candidate only) |
+| Until sentiment remediation | Architecture-only / single-family synthesis over OHLCV + opportunity context; no multi-family claim | OWNER APPROVED |
+| Final initial intake for C.1/C.2 libraries | trend + volume (+ arbitrage opportunity context) | OWNER APPROVED |
+| Sentiment remediate in C.1? | **NO** | OWNER APPROVED |
 
-**Do not require all 15 Agents before WP-C starts.** C.1/C.2 may still proceed as contracts/deterministic libraries over current on-read evidence while clearly labeled insufficient for multi-family claims.
+**Do not require all 15 Agents before WP-C starts.** C.1/C.2 may proceed as pure contracts/deterministic libraries over current on-read evidence while clearly labeled insufficient for multi-family claims.
 
 ---
 
-## 9. WP-C vs B10 vs WP-D (LOCKED SEQUENCE — OWNER DIRECTION)
+## 9. WP-C vs B10 vs WP-D (OWNER APPROVED SEQUENCE)
 
 | Package | Belongs | Does not belong |
 |---|---|---|
@@ -431,7 +462,7 @@ Buckets replace the prior “INITIAL ANALYTICAL SET” wording. Arbitrage is **n
 | **WP-C Shadow prep** | Shadow wiring against B10; still `executionEligible=false` | Shadow activation without Owner gate |
 | **WP-D** | lineage/replay/evaluation/backtesting/calibration/performance/promotion | initial synthesis MVP |
 
-### Precise sequence (PROPOSED OWNER DIRECTION — Option A narrowed)
+### Precise sequence (OWNER APPROVED — Option A narrowed)
 
 ```
 PHASE 1 — WP-C.1
@@ -781,33 +812,33 @@ Without B10 (or equivalent approved persistence), Shadow activation is **BLOCKED
 
 ---
 
-## 19. Decision Register (UPDATED — Discovery NOT OWNER APPROVED)
+## 19. Decision Register (OWNER APPROVED ARCHITECTURE)
 
 | ID | Topic | Recommendation | Status |
 |---|---|---|---|
-| D1 | Synthesis strategy | Deterministic role-aware synthesis + optional LLM advisor; retire naive majority MoE as authority | PROPOSED |
-| D2 | Correlation policy | Qualitative containment: preserve lineage; identify families; no independent-confirmation claim; no flatten-to-one-vote; no invented coefficients | PROPOSED |
+| D1 | Synthesis strategy | Deterministic role-aware synthesis + optional LLM advisor; retire naive majority MoE as authority | OWNER APPROVED (architecture) |
+| D2 | Correlation policy | Qualitative containment: preserve lineage; identify families; no independent-confirmation claim; no flatten-to-one-vote; no invented coefficients | OWNER APPROVED |
 | D2b | Quantitative correlation scoring | Numeric influence / de-correlation | UNKNOWN / REQUIRES MEASUREMENT |
-| D3 | Initial Agent set | Buckets: directional/regime = trend+volume (one OHLCV family); opportunity = arbitrage; control = risk/portfolio/runtime/(liquidity later)/order; prefer add remediated sentiment for second family | **REQUIRES OWNER DECISION** |
-| D3b | Diversity recommendation | **A** — remediate `sentiment` before claiming meaningful multi-family synthesis; until then architecture-only / single-family | PROPOSED |
-| D4 | Risk authority | Hard veto/limit; not a vote; resolve UUID via `agent_key=risk` | PROPOSED |
-| D4b | Risk unavailable semantics | Advisory may continue as non-actionable with UNAVAILABLE; decisionEligible/executionEligible fail closed; Demo fail-open ≠ Artemis Risk approval | PROPOSED |
-| D5 | Portfolio / Optimization | Portfolio = bounded sizing; Optimization remains deferred / NOT_APPLICABLE to initial chain | PROPOSED |
-| D6 | Liquidity boundary | Feasibility only after real implementation; else unavailable fail-closed | PROPOSED |
-| D7 | Order boundary | ExecutionIntent consumer only; never invents direction | PROPOSED |
-| D8 | WP-C / B10 sequence | **PROPOSED OWNER DIRECTION:** C.1 → C.2 → B10 → control/runtime integration → Shadow prep → separate Shadow activation gate | PROPOSED OWNER DIRECTION |
-| D9 | Shadow persistence prerequisite | Append-only ArtemisDecision + evidence refs (B10); not `system_logs`; no durable audited lineage claim before B10 | PROPOSED |
-| D10 | ArtemisDecision contract | Fields in §10.1; always non-execution until later gates | PROPOSED |
-| D11 | ExecutionIntent boundary | Separate later contract; blocks legacy `approved:true` | PROPOSED |
-| D12 | LLM role | Advisor behind deterministic pre/post validation; Integrations remain secret owner | PROPOSED |
-| D13 | Degraded behavior | Advisory degrade truthful; execution eligibility always fail closed | PROPOSED |
+| D3 | Initial Agent set | Buckets: directional/regime = trend+volume (one OHLCV family); opportunity = arbitrage; control = risk/portfolio/runtime/(liquidity later)/order; sentiment = future remediation only | OWNER APPROVED |
+| D3b | Diversity recommendation | Prefer remediated `sentiment` before multi-family claims; until then architecture-only / single-family; **do NOT remediate sentiment in C.1** | OWNER APPROVED |
+| D4 | Risk authority | Hard veto/limit; not a vote; resolve UUID via `agent_key=risk` | OWNER APPROVED |
+| D4b | Risk unavailable semantics | Advisory may continue as non-actionable with UNAVAILABLE; decisionEligible/executionEligible fail closed; Demo fail-open ≠ Artemis Risk approval | OWNER APPROVED |
+| D5 | Portfolio / Optimization | Portfolio = bounded sizing; Optimization remains deferred / NOT_APPLICABLE to initial chain | OWNER APPROVED |
+| D6 | Liquidity boundary | Feasibility only after real implementation; else unavailable fail-closed | OWNER APPROVED |
+| D7 | Order boundary | ExecutionIntent consumer only; never invents direction | OWNER APPROVED |
+| D8 | WP-C / B10 sequence | C.1 → C.2 → B10 → control/runtime integration → Shadow prep → separate Shadow activation gate | OWNER APPROVED |
+| D9 | Shadow persistence prerequisite | Append-only ArtemisDecision + evidence refs (B10); not `system_logs`; no durable audited lineage claim before B10 | OWNER APPROVED |
+| D10 | ArtemisDecision contract | Fields in §10.1; always non-execution until later gates | OWNER APPROVED (shape for C.1) |
+| D11 | ExecutionIntent boundary | Separate later contract; blocks legacy `approved:true` | OWNER APPROVED |
+| D12 | LLM role | Advisor behind deterministic pre/post validation; Integrations remain secret owner | OWNER APPROVED (architecture) |
+| D13 | Degraded behavior | Advisory degrade truthful; execution eligibility always fail closed | OWNER APPROVED |
 | D14 | Expand initial set / Pattern etc. | Pattern B same-family; MI/fundamental/PP remain C/deferred | DEFERRED |
-| D15 | Activate Shadow/Paper/Live in WP-C | Forbidden by freeze; Shadow activation separate Owner gate after prep | BLOCKED BY EVIDENCE / POLICY |
-| D16 | B10 migration now | Not part of Discovery; required before Shadow, not before C.1/C.2 | REQUIRES OWNER DECISION (later) |
-| D17 | Replace Capability name `ARTEMIS_DECISION_EXECUTE` | Rename/clarify to reduce misread | PROPOSED |
-| D18 | Fix TE unauthenticated Artemis transport | Required in WP-C.6; keep fail-closed | PROPOSED |
+| D15 | Activate Shadow/Paper/Live in WP-C | Forbidden; Shadow activation separate Owner gate after prep | BLOCKED BY POLICY |
+| D16 | B10 migration now | Not part of C.1; required before Shadow, not before C.1/C.2 | OWNER APPROVED (timing) |
+| D17 | Replace Capability name `ARTEMIS_DECISION_EXECUTE` | Rename/clarify to reduce misread | PROPOSED (later package) |
+| D18 | Fix TE unauthenticated Artemis transport | Required in later UI/runtime package; keep fail-closed | PROPOSED (later package) |
 
-**This Discovery correction pass is NOT OWNER APPROVED.** No new choices are OWNER APPROVED.
+**Architecture is OWNER APPROVED. C.1 implementation is separately authorized on a new branch. This Discovery document remains the architecture baseline and must not be rewritten after C.1 branches except for factual C.1 status pointers.**
 
 ---
 
@@ -860,18 +891,20 @@ Changed files expected for Discovery commit only:
 
 ## 22. Final Discovery verdict
 
-**ARTEMIS WP-C DISCOVERY HARDENED**  
-**OWNER ARCHITECTURE REVIEW REQUIRED**  
-**NO IMPLEMENTATION STARTED**
+**ARTEMIS WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**  
+**IMPLEMENTATION HAD NOT BEGUN AT THIS MILESTONE**  
+**C.1 MUST BRANCH FROM THE OWNER-APPROVAL COMMIT SHA**  
+**NO RUNTIME ACTIVATION**  
+**C.2 / B10 / SHADOW / PAPER / LIVE NOT STARTED**
 
-Hardening summary:
+Hardening + approval summary:
 
 - trend+volume are one OHLCV directional family; arbitrage is opportunity context, not analytical vote
-- prefer bounded `sentiment` remediation before multi-family synthesis claims
+- sentiment is the selected future independent-family remediation candidate; not consumable; not remediated in C.1
 - B/C/E classes revalidated from source (B=1, C=7)
-- correlation policy downgraded to qualitative containment; quantitative scoring REQUIRES MEASUREMENT
+- correlation policy = qualitative containment; quantitative scoring REQUIRES MEASUREMENT
 - sequence locked: C.1 → C.2 → B10 → control/runtime → Shadow prep → separate Shadow gate
 - Optimization out of initial control chain
 - Risk unavailable ≠ approval; Demo fail-open must not be imported as Artemis Risk approval
 
-Current system remains a truthful advisory shell over legacy MoE, with WP-B.1 on-read evidence for trend/arbitrage/volume and a fail-closed execution gate. This Discovery is **not** Owner-approved yet.
+Current system remains a truthful advisory shell over legacy MoE, with WP-B.1 on-read evidence for trend/arbitrage/volume and a fail-closed execution gate.
