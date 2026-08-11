@@ -1,21 +1,12 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-B.1 canonical evidence foundation
+description: TitanGold Rule 02 — Artemis WP-B.1 CLOSED AND FROZEN
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-B.1 — CANONICAL EVIDENCE FOUNDATION**
-
-Status:
-**IMPLEMENTATION COMPLETE**  
-**AUTOMATED QA PASS**  
-**BROWSER QA PASS**  
-**OWNER HUMAN QA PASS**  
-**READY FOR PR FINAL REVIEW**  
-**NOT CLOSED**  
-**NOT FROZEN**
+**ARTEMIS WP-B.1 — CLOSED AND FROZEN**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (Agent → Artemis evidence layer)
@@ -24,11 +15,24 @@ Current program slice:
 ARTEMIS-WP-B-1-EVIDENCE-FOUNDATION
 
 Risk tier:
-**Shared Foundation / Tier 2** (strict security review for evidence projection)
+Closed baseline (no active implementation). Future Artemis runtime maturity is WP-C / B10 only after explicit Owner authorization.
+
+Engineering status:
+**DATA HUB HUMAN QA = PASS / FROZEN — DO NOT TOUCH**  
+**OWNER HUMAN QA = PASS**  
+**Independent code review = PASS**  
+**Final-head GitHub CI = PASS**  
+**Staging content alignment = PASS**  
+**Browser regression = PASS**  
+**WP-B.1 CLOSED AND FROZEN**
+
+Canonical product merges:
+- **PR #20 (WP-B.1 product):** `26d0128d56f3babcd20d848331c096265e03f608`
+- **PR #21 (Telegram stabilization source alignment / current main at freeze prep):** `eee00a8bb93ecd9e29f30acbb69b355cb433c1c2`
 
 Frozen baselines (do not reopen):
 - **WP-A product:** `7c13fe13015de1b44ab534dff8deb72c6e5f5668` — CLOSED AND FROZEN
-- **WP-A docs closeout / base main:** `845ea0d35b75b1beca516be235f47d98c5703692`
+- **WP-A docs closeout / prior main:** `845ea0d35b75b1beca516be235f47d98c5703692`
 - **B0 Owner-approved discovery:** `b2b42271d45260296e70b222293f33b1591562d9`
 - **Data Hub:** PASS / FROZEN
 - **Trend:** FROZEN
@@ -39,52 +43,39 @@ Current Artemis maturity:
 
 Execution:
 **NOT ACTIVATED**  
-`executionEligible = false` · legacy `approved:true` ≠ execution authorization
+`executionEligible = false` · legacy `approved:true` ≠ execution authorization  
+`artemisConsumable = false` · `decisionEligible = false`
 
-Readiness terminology (do not overclaim):
-- Catalog: `ROLE_MAPPED` + `consumption=evidence_compatible` for Trend / Arbitrage / Volume
-- Evidence: `ON_READ_PARTIAL`
-- **NOT** `EVIDENCE_READY`
-- Compatible: Trend, Arbitrage, Volume
-- `artemisConsumable = false` · `decisionEligible = false` · `executionEligible = false`
-- Pattern excluded · Optimization `NOT_APPLICABLE`
+Evidence readiness:
+**ON_READ_PARTIAL** — **NOT** `EVIDENCE_READY`  
+Compatible on-read: Trend / Arbitrage / Volume  
+Pattern excluded · Optimization `NOT_APPLICABLE`  
+Orchestration = **LEGACY** / advisory-only
 
-Provenance (Staging):
-- Backend runtimeCommit: `48d7722b651e1d551bbbf128eaa30e1b1c136163`
-- Frontend product tree: `4652c36f21039e7f99f2600751a007b73a0347c4`
-- Served bundle: `assets/index-DRB6fBxf.js`
-- Human QA PASS docs milestone is **NOT** the deployed runtime SHA
-
-Authorized in this round:
-- Canonical evidence contract 1.0.0 (strict identity + nested allowlists + role semantics)
-- UUID / unavailable identifier semantics
-- dataQuality / confidence / sampleWindow / nested EvidenceItem sub-schemas
-- Identity normalization
-- Truthful confidence / strength / freshness / data-quality
-- Read-only Trend + Arbitrage + Volume adapters
-- On-read projection from `ai_decisions`
-- Scoped SQL column fix (`input_data` / `output_data`)
-- Safe RBAC projection + readiness compatibility counts
-- Pre-Human-QA validator/frontend remediation + final semantic hardening
-- Owner Human QA PASS recording + PR-prep documentation only (this update)
-- NO WP-C · NO B10 · NO migration · NO Live · NO orders
+Component provenance (product content alignment; docs SHA ≠ required runtime label):
+- Backend Human-QA implementation content: `48d7722b651e1d551bbbf128eaa30e1b1c136163` (content-equivalent to main WP-B.1 runtime paths)
+- Frontend Human-QA product tree: `4652c36f21039e7f99f2600751a007b73a0347c4` (content-equivalent to main WP-B.1 frontend paths)
+- Served frontend bundle: `assets/index-DRB6fBxf.js`
+- Telegram processor runtime: content-equivalent to main (PR #21); id11 online · id15 STOPPED (NO DELETE)
+- Backend `runtimeCommit` label may remain `48d7722` when no-op redeploy was correctly avoided
 
 Not authorized:
-- Database migration / B10 evidence table
-- WP-C orchestration replacement
-- WP-D lineage / evaluation / shadow / paper
+- Reopen WP-B.1
+- Start WP-C / B10 / WP-D without new explicit Owner authorization
+- Database migration / evidence persistence table
 - Live / orders / private provider calls
-- Scheduler / worker topology mutation
-- WP-A UI redesign
-- Data Hub / Trend / Arbitrage product owner edits
-- Pattern adapter
-- Merge without explicit Owner authorization
+- Scheduler / worker / collector topology mutation for Artemis
+- Start telegram-processor id15
+- Start stopped frontend Vite PM2 entries
+- Redesign Data Hub / Trend / Arbitrage
+- Protected scripts: `scripts/backup-db.sh`, `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`, `scripts/phase2-monitoring/titangold-telegram-notify.sh`
 
-Branch / worktree:
-- `feat/artemis-wp-b-evidence-foundation`
-- `/home/ubuntu/worktrees/titangold-artemis-wp-b-foundation`
+Canonical Artemis section IDs:
+overview · evidence · decisions · orchestration · controls · lineage · system
 
-Next gate:
-Owner merge decision after PR CI + independent review.  
-Do not merge without explicit Owner authorization.  
-Do not start WP-C or B10.
+Closeout evidence recorded:
+- No migration · no provider calls · no Agent execution as part of validation · no financial side effects
+- No full-tree destructive deploy used solely to force Git metadata equality
+
+Next authorized transition:
+WP-C or B10 only after explicit Rule 02 replacement by Owner. Do not begin either from this freeze.

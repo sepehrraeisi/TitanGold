@@ -832,7 +832,7 @@ Remaining items are **not** open B0 questions; they are future gates:
 - Do **not** label Trend/Arbitrage/Volume as `EVIDENCE_READY` merely because on-read adapters exist
 - Keep `artemisConsumable` / `decisionEligible` / `executionEligible` = **false**
 - Keep Pattern excluded · Optimization `NOT_APPLICABLE`
-- Keep **NOT CLOSED** / **NOT FROZEN**
+- Superseded by §25 — WP-B.1 CLOSED AND FROZEN
 
 ### 24.3 Pre-Human-QA remediation
 
@@ -895,6 +895,59 @@ Remaining items are **not** open B0 questions; they are future gates:
 **BROWSER QA PASS**  
 **OWNER HUMAN QA PASS**  
 **READY FOR PR FINAL REVIEW**  
-**NOT CLOSED**  
-**NOT FROZEN**  
-**NOT MERGED**
+**SUPERSEDED BY §25 — WP-B.1 CLOSED AND FROZEN**
+
+
+## 25. WP-B.1 CLOSEOUT — CLOSED AND FROZEN
+
+| Item | Value |
+|---|---|
+| Final state | **ARTEMIS WP-B.1 — CLOSED AND FROZEN** |
+| PR #20 product merge | `26d0128d56f3babcd20d848331c096265e03f608` |
+| PR #21 Telegram/main source alignment | `eee00a8bb93ecd9e29f30acbb69b355cb433c1c2` |
+| Owner Human QA | **PASS** |
+| Final-head CI | **PASS** |
+| Independent review | **PASS** |
+| Staging content alignment | **PASS** (product content equivalence; no-op full-tree deploy avoided) |
+| Browser regression | **PASS** (bounded Staging smoke) |
+| Migration | **0** |
+| Provider calls (validation) | **0** |
+| Agent execution (validation) | **0** |
+| Financial side effects | **0** |
+| Artemis maturity | Advisory only (`LEGACY_ADVISORY_ONLY`) |
+| Evidence readiness | `ON_READ_PARTIAL` — **NOT** `EVIDENCE_READY` |
+| `artemisConsumable` | `false` |
+| `decisionEligible` | `false` |
+| `executionEligible` | `false` |
+| Orchestration | `LEGACY` / advisory-only |
+| Pattern | excluded |
+| Optimization | `NOT_APPLICABLE` |
+| WP-C started | **NO** |
+| B10 started | **NO** |
+
+### 25.1 Content-alignment provenance (do not conflate with docs SHA)
+
+| Component | Verdict |
+|---|---|
+| Backend WP-B.1 runtime paths vs main | content-equivalent (Human-QA baseline `48d7722` ≡ main) |
+| Frontend WP-B.1 runtime paths vs main | content-equivalent (Human-QA tree `4652c36` ≡ main) |
+| Served bundle | `assets/index-DRB6fBxf.js` |
+| Telegram processor vs main | content-equivalent (hotfix already production + PR #21) |
+| Backend redeploy / restart for closeout | **NOT REQUIRED** |
+| Frontend redeploy for closeout | **NOT REQUIRED** |
+| Telegram redeploy / restart for closeout | **NOT REQUIRED** |
+| Docs closeout SHA | documentation milestone only — **not** claimed as deployed product runtime SHA |
+
+### 25.2 Operational topology retained
+
+- `telegram-processor` id11 = online
+- `telegram-processor` id15 = STOPPED (NO DELETE)
+- collector id16 = online (untouched)
+- duplicate collector id12 = STOPPED (untouched)
+- frontend Vite PM2 ids 7/13 = STOPPED (untouched)
+- engine workers = untouched
+
+**Verdict:**  
+**ARTEMIS WP-B.1 — CLOSED AND FROZEN**  
+**WP-C NOT STARTED**  
+**B10 NOT STARTED**
