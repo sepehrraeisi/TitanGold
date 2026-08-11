@@ -18,11 +18,13 @@ Risk tier:
 Tier 0 — Read-Only / Documentation
 
 Engineering status:
+**DISCOVERY HARDENED**  
 **DISCOVERY ONLY**  
 **NO IMPLEMENTATION**  
 **NO MIGRATION**  
 **NO RUNTIME CHANGE**  
-**OWNER REVIEW REQUIRED**
+**OWNER ARCHITECTURE REVIEW REQUIRED**  
+**DISCOVERY NOT OWNER APPROVED**
 
 Canonical discovery document (exactly one):
 `docs/ARTEMIS_WP_C_ORCHESTRATION_DISCOVERY.md`
@@ -35,6 +37,16 @@ Discovery branch:
 
 Isolated worktree:
 `/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`
+
+Prior discovery commit:
+`d292434a02bdccf1a0a5667e442c33d4bb72f3c3`
+
+Hardening notes (docs-only; no implementation):
+- Initial synthesis set diversity under Owner review (prefer sentiment remediation for second family)
+- Correlation policy = qualitative containment only; quantitative scoring REQUIRES MEASUREMENT
+- Sequence direction: C.1 → C.2 → B10 → control/runtime → Shadow prep → separate Shadow gate
+- Optimization outside initial control chain
+- Risk unavailable ≠ Artemis approval
 
 Preserved frozen baselines (do not reopen):
 - **WP-B.1 CLOSED AND FROZEN**

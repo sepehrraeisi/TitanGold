@@ -1,14 +1,17 @@
 # ARTEMIS WP-C — Orchestration / Synthesis / Control-Chain Discovery
 
-**Status:** DISCOVERY ONLY · OWNER ARCHITECTURE REVIEW REQUIRED  
+**Status:** DISCOVERY HARDENED · OWNER ARCHITECTURE REVIEW REQUIRED · **NOT OWNER APPROVED**  
 **Base:** `origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
 **Branch:** `feat/artemis-wp-c-orchestration-discovery`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`  
+**Prior discovery commit:** `d292434a02bdccf1a0a5667e442c33d4bb72f3c3`  
 **Risk tier:** Tier 0 — Read-Only / Documentation  
 **Implementation started:** NO  
 **Migration / runtime / provider / financial side effects:** NONE  
 
 This is the **single canonical** WP-C discovery document. Do not create parallel planning docs.
+
+**Correction pass scope:** diversity of initial evidence families · B/C/E reclassification · qualitative correlation containment · precise C.1→C.2→B10→control→Shadow-prep sequence · Optimization wording · Risk unavailable semantics.
 
 ---
 
@@ -144,20 +147,26 @@ Analytical / Opportunity Agents
   → Canonical Evidence (WP-B.1 contract; on-read now)
   → Artemis Synthesis (role-aware; not equal voting)
   → Risk Veto / Limits
-  → Portfolio / Optimization bounded allocation-sizing
+  → Portfolio bounded sizing / allocation
   → Liquidity Feasibility
   → Runtime Safety / Emergency Stop / capability / mode
   → Order Management (ExecutionIntent only)
   → Provider (only when separately Tier-4 authorized)
 ```
 
+**Optimization wording (correction):**  
+Initial control chain uses **Portfolio bounded sizing/allocation only**.  
+An optional future Optimization service may participate **only if separately promoted/approved**.  
+Optimization remains **NOT_APPLICABLE** to the initial Artemis control chain.
+
 ### Authority boundaries (PROPOSED; not implemented)
 
 | Authority | May | Must not |
 |---|---|---|
 | **Artemis** | Admit evidence; resolve conflict; propose decisions; explain limitations | Bypass Risk/Portfolio/Liquidity/runtime; invent account state; place orders |
-| **Risk** | Veto / block / limit / require more evidence | Count as equal directional vote |
-| **Portfolio / Optimization** | Bounded sizing / allocation within canonical balances | Unrestricted directional signal; fabricate balance |
+| **Risk** | Veto / block / limit / require more evidence | Count as equal directional vote; treat Demo fail-open as approval |
+| **Portfolio** | Bounded sizing / allocation within canonical balances | Unrestricted directional signal; fabricate balance |
+| **Optimization** | Outside initial chain (`NOT_APPLICABLE`) | Imply current participation in Artemis control |
 | **Liquidity** | Feasibility / capacity / slippage / expiry | Directional vote; stale approval as Live auth |
 | **Runtime safety** | Authoritative Kill Switch / mode / capability gate | Be overridden by advisory synthesis |
 | **Order Management** | Execute only approved ExecutionIntent with revalidation | Invent BUY/SELL direction; skip gates |
@@ -231,7 +240,7 @@ Example conflict:
 5. Prefer **HOLD / ABSTAIN / insufficient_evidence** when:
    - required analytical coverage missing
    - contradictory high-strength evidence without higher-authority resolution
-   - Risk unavailable or vetoes
+   - Risk unavailable (for decisionEligible/executionEligible) or Risk vetoes
    - context incompatible (timeframe/horizon mismatch)
 6. Risk veto is authoritative for control — not averaged away.
 7. Propagate all supporting + conflicting evidence + limitations into the decision record.
@@ -242,17 +251,20 @@ Example conflict:
 1. Runtime safety / Kill Switch (hard stop)
 2. Risk veto / limits
 3. Compatibility + freshness + data-quality gates
-4. Analytical evidence synthesis with correlation dedup
+4. Analytical evidence synthesis with **qualitative correlation containment** (not numeric de-correlation)
 5. Opportunity forecasts as secondary context (not automatic direction)
-6. Portfolio/Optimization sizing only after a non-blocked analytical proposal
+6. Portfolio bounded sizing only after a non-blocked analytical proposal
 7. Liquidity feasibility only near execution-intent stage
 8. Order Management never participates in direction synthesis
+9. Optimization remains outside this order unless separately promoted
 
 ---
 
-## 6. Correlation / double-counting
+## 6. Correlation / double-counting (CORRECTED)
 
-Contract already defines correlation-family metadata (`CORRELATION_FAMILY` in `artemisEvidenceContract.js`) — **PROVEN BY CODE**. WP-B tags only; WP-C must score/dedup.
+Contract already defines correlation-family metadata (`CORRELATION_FAMILY` in `artemisEvidenceContract.js`) — **PROVEN BY CODE**. WP-B tags only.
+
+### 6.1 Findings (unchanged facts)
 
 | Relationship | Finding | Label |
 |---|---|---|
@@ -267,105 +279,205 @@ Contract already defines correlation-family metadata (`CORRELATION_FAMILY` in `a
 | Arbitrage | Separate `SPREAD_MONITOR` family | PROVEN BY CODE |
 | Legacy orchestrator `agent-N` graph | Artificial dependency — not correlation SoT | PROVEN BY CODE |
 
-**Strategy (PROPOSED):**
+### 6.2 Correlation kinds (must remain distinct)
 
-- Persist `correlationFamily` on every evidence item
-- Group same-family evidence before synthesis
-- Count correlated group once for confirmation strength
-- Preserve lineage of each member
-- No invented correlation coefficients — any numeric adjustment = REQUIRES MEASUREMENT / Owner-approved policy later
+| Kind | Meaning | Example |
+|---|---|---|
+| **SOURCE CORRELATION** | Same upstream raw feed / provider / candle series | Trend + Volume both read MEXC OHLCV |
+| **FEATURE CORRELATION** | Derived features overlap even if interpretation differs | SMA/EMA used by multiple Agents |
+| **SIGNAL CORRELATION** | Final directional/regime conclusions move together | Two Agents both emit bullish for same window |
+
+These are **not equivalent**. Same source family does **not** prove evidence items are identical.
+
+### 6.3 Discovery-level correlation policy (CORRECTED — PROPOSED)
+
+**Rejected prior wording:** “count correlated group once / flatten same-family into one identical vote” — **TOO STRONG**.
+
+**Corrected policy:**
+
+1. Preserve every admitted evidence item and its lineage
+2. Identify `correlationFamily` (and later source/feature/signal tags when available)
+3. Group same / upstream-related families for diagnostics
+4. Do **not** claim independent confirmation from correlated members
+5. Do **not** flatten all same-family evidence into one identical vote
+6. Apply a **bounded family-level influence policy later** only after measurement
+7. Do **not** invent numeric coefficients in Discovery or in initial WP-C deterministic engine
+8. Initial WP-C may use **qualitative correlation containment** only (e.g., “correlated — not independent confirmation”)
+9. Quantitative influence / scoring / de-correlation = **UNKNOWN / REQUIRES MEASUREMENT**
 
 ---
 
-## 7. All 15 Agent dependency matrix
+## 7. All 15 Agent dependency matrix (REVALIDATED)
 
 **consumable now** = adapter/on-read can build a truthful envelope for *future* WP-C intake. System-level `artemisConsumable` remains `false`.
 
+**Class definitions (enforced):**
+
+- **A** = READY FOR WP-C CONSUMPTION (truthful path exists today)
+- **B** = SMALL OUTPUT / ADAPTER / PROVENANCE CORRECTION BEFORE WP-C
+- **C** = REAL AGENT IMPLEMENTATION / DATA-PATH WORK REQUIRED BEFORE RELIANCE
+- **D** = CONTROL-CHAIN SPECIALIST — SEPARATE WP-C INTEGRATION
+- **E** = DEFERRED / NOT REQUIRED FOR INITIAL WP-C
+
+An Agent may be technically **C** and still **operationally deferred** from the initial set. Both are recorded.
+
 | agentId | role | maturity | evidence | real/mock/stub | WP-C relevance | consumable now | class | blocker | remediation | stage |
 |---|---|---|---|---|---|---|---|---|---|---|
-| trend | analytical_evidence | frozen real product | adapter YES | real OHLCV | high | YES | **A** | identity alias / freshness unknown gaps | keep adapter; normalize identity | WP-C intake |
-| arbitrage | opportunity_forecast | frozen real product | adapter YES | real public spread | high (opportunity) | YES | **A** | must not become directional vote | keep opportunity schema | WP-C intake |
-| volume | analytical_evidence | real path | adapter YES | real OHLCV volume | high | YES | **A** | correlated with trend | dedup ohlcv family | WP-C intake |
-| pattern | analytical_evidence | partial | excluded | mock fallback risk | medium | NO | **B** | mock provenance dishonest | fail closed on mock; then adapter | before reliance |
-| sentiment | analytical_evidence | partial | no adapter | mock-heavy without keys | medium | NO | **B** | mock sources; no adapter | provenance + adapter | later |
-| price_prediction | opportunity_forecast | partial | no adapter | mixed / mock fallback | medium | NO | **B** | uncalibrated / mock | provenance + adapter | later |
-| fundamental | analytical_evidence | partial | no adapter | placeholders | low initial | NO | **B** | placeholder news/funding | mark unavailable; later adapter | later |
-| market_intelligence | analytical_evidence | larger partial | no adapter | real-ish + degradation | medium | NO | **B** | scale/confidence debt; no adapter | adapter + scale fix | later |
-| technical | analytical_evidence | MVP mock | no adapter | mock | high if real | NO | **C** | no real market data | real OHLCV product | Agent WP then WP-C |
-| timing | opportunity_forecast | MVP mock | no adapter | mock series | medium | NO | **C** | mock data | real OHLCV product | Agent WP then WP-C |
-| liquidity | execution_feasibility | stub | blocked | stub `0.55` | control chain | NO | **C** | stub; analyzer unwired | real order-book feasibility | Agent/control WP |
-| risk | control_veto | substantial + gate debt | N/A directional | calc on often-mock prices; UUID debt | control | NO* | **D** | not on Artemis path; UUID hardcode | control schema + `agent_key=risk` | WP-C control |
-| portfolio | control_sizing | partial | N/A | partial / identity debt | control | NO* | **D** | not on Artemis path; self-id debt | SoT balances + control schema | WP-C control |
-| order | execution | real gated path | NOT_EXECUTION_ELIGIBLE | execution ops | execution only | NO | **D** | must not synthesize direction | ExecutionIntent only | late WP-C / later maturity |
-| optimization | NOT_APPLICABLE | utility/backtest | NOT_APPLICABLE | utility | deferred | NO | **E** | not equal analytical producer | keep out of initial set | deferred |
+| trend | analytical_evidence | frozen real product | adapter YES | real OHLCV | high directional/regime | YES | **A** | identity alias / freshness unknown gaps | keep adapter; normalize identity | WP-C intake |
+| volume | analytical_evidence | real path | adapter YES | real OHLCV volume | high; same OHLCV family as trend | YES | **A** | source-correlated with trend | qualitative containment with trend | WP-C intake |
+| arbitrage | opportunity_forecast | frozen real product | adapter YES | real public spread | opportunity context only | YES | **A** | must not become directional analytical vote | keep opportunity schema | WP-C opportunity |
+| pattern | analytical_evidence | partial | excluded | real MEXC path + dishonest mock fallback risk | same OHLCV family — no diversity gain | NO | **B** | `meta.source:'realtime'` even on mock path | fail-closed mock + truthful provenance; then adapter | before same-family reliance |
+| sentiment | analytical_evidence | partial | no adapter | Twitter/News mock-without-key; Reddit public real path; aggregate weights mock if `!error` | **candidate independent family** (`TEXT_SOCIAL_NEWS`) | NO | **C** | dishonest `meta.source:'realtime'`; mock-weighted confidence | fail-closed zero-real-sources; ignore `mock:true`; truthful provenance; then adapter | bounded remediation WP then intake |
+| price_prediction | opportunity_forecast | partial | no adapter | OHLCV real + mock predictions fallback | same OHLCV family; uncalibrated | NO | **C** | mock predictions + missing provenance on real path | fail-closed mock; provenance; calibration or confidence UNAVAILABLE | Agent remediation then later |
+| fundamental | analytical_evidence | partial | no adapter | F&G real; funding/news placeholders; random tokenomics; `_meta.source:'real'` dishonest | weak / not initial | NO | **C** | placeholders inside decision + dishonest provenance | remove placeholders from decision path or broad rebuild | deferred from initial (technically C) |
+| market_intelligence | analytical_evidence | larger partial | no adapter | empty news treated available; VIX numeric fallback; base confidence 50 | potentially independent but not trustworthy | NO | **C** | synthetic confidence / fallback / provenance gaps | fail-closed + confidence rewrite + slice isolation; else rebuild | deferred from initial (technically C) |
+| technical | analytical_evidence | MVP mock | no adapter | `Math.random` mock | future OHLCV family | NO | **C** | no real market data | real OHLCV product | Agent WP then WP-C |
+| timing | opportunity_forecast | MVP mock | no adapter | mock series | future OHLCV-like | NO | **C** | mock data | real OHLCV product | Agent WP then WP-C |
+| liquidity | execution_feasibility | stub | blocked | stub `0.55` | control feasibility | NO | **C** | stub; analyzer unwired | real order-book feasibility | Agent/control WP |
+| risk | control_veto | substantial + gate debt | N/A directional | UUID hardcode; Demo fail-open on gate error exists today | control authority | NO* | **D** | not on Artemis path; do not import Demo fail-open as Artemis approval | control schema + `agent_key=risk` | WP-C control packages |
+| portfolio | control_sizing | partial | N/A | partial / identity debt | control authority | NO* | **D** | not on Artemis path; self-id debt | SoT balances + control schema | WP-C control packages |
+| order | execution | real gated path | NOT_EXECUTION_ELIGIBLE | execution ops | execution only | NO | **D** | must not synthesize direction | ExecutionIntent only | after control packages |
+| optimization | NOT_APPLICABLE | utility/backtest | NOT_APPLICABLE | utility | not initial control | NO | **E** | not producer/control for initial chain | keep out unless separately promoted | deferred |
 
 \* Risk/Portfolio are “consumable” only as **control authorities**, not evidence votes.
 
-### Class counts
+### Class counts (revised)
 
-- **A** 3 — trend, arbitrage, volume  
-- **B** 5 — pattern, sentiment, price_prediction, fundamental, market_intelligence  
-- **C** 3 — technical, timing, liquidity  
+- **A** 3 — trend, volume, arbitrage  
+- **B** 1 — pattern  
+- **C** 7 — sentiment, price_prediction, fundamental, market_intelligence, technical, timing, liquidity  
 - **D** 3 — risk, portfolio, order  
 - **E** 1 — optimization  
 
+### Independent evidence-family candidate analysis
+
+| Candidate | Provider/data | Trustworthy today? | Independent of OHLCV? | Min remediation | Without broad rebuild? | Verdict |
+|---|---|---|---|---|---|---|
+| **sentiment** | Twitter (key), Reddit public JSON, CryptoPanic/News (key); mock-on-missing-key | **NO** (weights mock; labels realtime) | **YES** if real sources only | ignore mock; fail-closed if zero real; truthful provenance; adapter | **YES** (bounded) | **Best A candidate** |
+| **market_intelligence** | CryptoPanic/NewsAPI, CoinGecko, Blockchain.info, Glassnode, Alpha Vantage | **NO** (base-50 confidence; VIX fallback; empty-news-as-available) | **YES** potentially | large fail-closed + confidence rewrite; or narrow CoinGecko-only slice | **NO** for full product; maybe for narrow slice | Prefer after sentiment |
+| **fundamental** | Alternative.me F&G + placeholders/random | **NO** | Weak/partial | remove placeholders / rebuild decision | **NO** | Not initial |
+| **pattern** | MEXC OHLCV | Partial | **NO** (same family) | provenance only | YES | Does not fix diversity |
+| **price_prediction** | MEXC OHLCV + model/mock | Partial | **NO** | fail-closed + calibration | NO for calibrated forecast | Does not fix diversity |
+
+### Diversity correction recommendation
+
+**Prefer A:** add **one independent analytical family before meaningful multi-family WP-C synthesis**.
+
+**Recommended additional Agent:** `sentiment` — after a **bounded truthful remediation** (do not weight `mock:true`; fail-closed when no real source; honest provenance; then WP-B-style adapter). Reddit-only path is the key bounded real source today (**PROVEN BY CODE**).
+
+Until that remediation lands:
+
+- Current truthful directional/regime intake is effectively **one OHLCV family** (trend + volume) plus opportunity context (arbitrage)
+- Any WP-C synthesis over only that set must be labeled **architecture-only / insufficient for meaningful multi-family synthesis**
+
+**Do not** treat Market Intelligence as winner without the larger remediation above.
+
 ---
 
-## 8. Initial WP-C Agent set recommendation (PROPOSED)
+## 8. Initial WP-C Agent buckets (CORRECTED — REQUIRES OWNER DECISION)
 
-### INITIAL ANALYTICAL SET
+Buckets replace the prior “INITIAL ANALYTICAL SET” wording. Arbitrage is **not** directional analytical evidence.
 
-1. **trend** — direction/regime evidence (frozen, adapter-ready)
-2. **volume** — confirming/diverging volume context (adapter-ready; correlate with trend)
-3. **arbitrage** — opportunity context only (not directional vote)
+### INITIAL DIRECTIONAL / REGIME EVIDENCE
 
-Rationale: smallest diverse set with truthful adapters; covers regime + microstructure volume + non-directional opportunity. Avoids correlated mock Agents.
+1. **trend** — direction/regime (frozen, adapter-ready, OHLCV)
+2. **volume** — volume features from same OHLCV family (adapter-ready; **not** independent confirmation of trend)
 
-### CONTROL SET (integrate as authorities, not votes)
+**Diversity gap:** after qualitative correlation containment, this is **one directional evidence family**.
 
-1. **risk** — veto/limits (after UUID/control wiring)
+### OPPORTUNITY CONTEXT
+
+1. **arbitrage** — spread/opportunity context only; **never** an equal directional analytical vote
+
+### CONTROL AUTHORITIES
+
+1. **risk** — veto/limits (after UUID/control wiring); Artemis must not treat Demo fail-open as approval
 2. **portfolio** — bounded sizing (after identity/balance SoT)
 3. **runtime safety / Kill Switch** — already real SSOT (not an Agent)
-4. **liquidity** — only after real feasibility implementation (otherwise fail-closed / unavailable)
+4. **liquidity** — only after real feasibility implementation (otherwise unavailable / fail-closed)
 5. **order** — ExecutionIntent consumer only; never initial advisory voter
+6. **optimization** — **outside initial chain** (`NOT_APPLICABLE`) unless separately promoted
 
-### DEFERRED SET
+### DEFERRED
 
-- pattern (until mock provenance fixed)
-- technical, timing (until real implementation)
-- sentiment, market_intelligence, fundamental, price_prediction (adapter + provenance first)
-- optimization (`NOT_APPLICABLE` to equal synthesis)
+- **sentiment** — preferred independent-family remediation candidate (technically **C** today)
+- **market_intelligence** — technically **C**; deferred
+- **fundamental** — technically **C**; deferred from initial
+- **pattern** — **B** provenance; deferred for diversity (same OHLCV family)
+- **price_prediction** — **C**; deferred; same OHLCV family
+- **technical**, **timing** — **C**; need real productization
+- **optimization** — **E** / NOT_APPLICABLE
 
-**Do not require all 15 Agents before WP-C starts.**
+### Recommendation status
+
+| Question | Answer | Status |
+|---|---|---|
+| Is trend+volume+arbitrage the final smallest credible multi-family synthesis set? | **NO** | corrected |
+| Preferred path | **A** — remediate `sentiment` for a second family before claiming multi-family synthesis | PROPOSED |
+| Until sentiment remediation | Architecture-only / single-family synthesis over OHLCV + opportunity context | PROPOSED |
+| Final initial set | **REQUIRES OWNER DECISION** after this diversity review | REQUIRES OWNER DECISION |
+
+**Do not require all 15 Agents before WP-C starts.** C.1/C.2 may still proceed as contracts/deterministic libraries over current on-read evidence while clearly labeled insufficient for multi-family claims.
 
 ---
 
-## 9. WP-C vs B10 vs WP-D
+## 9. WP-C vs B10 vs WP-D (LOCKED SEQUENCE — OWNER DIRECTION)
 
 | Package | Belongs | Does not belong |
 |---|---|---|
-| **WP-C** | orchestration contracts; admission; synthesis/conflict/correlation; control-chain wiring; TE auth transport fix; product UI readiness/audit wiring; Shadow *prep* architecture | full evaluation/backtest/calibration; Live |
-| **B10** | append-only / versioned Artemis evidence + decision-context persistence foundation (if Owner approves) | synthesis algorithm; Live; broad Agent rewrites |
-| **WP-D** | lineage/replay/evaluation/backtesting/calibration/performance/promotion metrics | initial synthesis MVP |
+| **WP-C.1 / WP-C.2** | contracts; admission; ArtemisDecision schema; deterministic safety boundaries; pure synthesis/conflict/correlation library | runtime orchestration activation; Shadow; Live; B10 migration |
+| **B10** | append-only / versioned ArtemisDecision + evidence-reference persistence; durable decision context | Shadow activation; synthesis algorithm ownership; Live |
+| **WP-C control/runtime packages** | Risk; Portfolio; Liquidity boundary; runtime safety; Order ExecutionIntent boundary; product/history/audit | Optimization unless separately promoted; Live |
+| **WP-C Shadow prep** | Shadow wiring against B10; still `executionEligible=false` | Shadow activation without Owner gate |
+| **WP-D** | lineage/replay/evaluation/backtesting/calibration/performance/promotion | initial synthesis MVP |
 
-### Sequencing recommendation
+### Precise sequence (PROPOSED OWNER DIRECTION — Option A narrowed)
 
-**Primary PROPOSED sequence: A — WP-C core → B10 → Shadow**
+```
+PHASE 1 — WP-C.1
+  orchestration contracts
+  admission
+  ArtemisDecision schema
+  deterministic safety boundaries
+  (pure/library; uses WP-B.1 on-read evidence; NO B10 required)
 
-Rationale (PROVEN BY CODE + INFERRED):
+PHASE 2 — WP-C.2
+  deterministic synthesis / conflict / qualitative correlation engine
+  pure/library behavior
+  NO runtime orchestration activation
+  NO provider dependency required
+  (NO B10 required)
 
-- WP-B.1 already proved on-read evidence for 3 Agents
-- WP-C contracts/admission/synthesis/control UI can consume on-read without migration
-- Shadow needs durable ArtemisDecision + evidence references → B10 prerequisite for Shadow activation
-- Full WP-D evaluation comes after Shadow records exist
+THEN — B10
+  append-only / versioned ArtemisDecision + evidence-reference persistence
+  durable decision context
+  NO Shadow activation yet
+  DO NOT use system_logs as Shadow SoT
+  DO NOT present runtime-generated Artemis decisions as durable audited lineage
+    until approved persistence exists
 
-**Alternative REQUIRES OWNER DECISION: C — Small B10 prerequisite → WP-C core → remaining WP-D**
+THEN — WP-C control / runtime integration packages
+  Risk · Portfolio · Liquidity boundary · runtime safety
+  · Order ExecutionIntent boundary · product/history/audit
 
-Use C if Owner prefers persistence schema locked before synthesis implementation to reduce contract churn.
+THEN — WP-C Shadow preparation
 
-**Not recommended: B — full B10 before any WP-C core**, because it blocks useful orchestration design already justified by on-read proof.
+THEN — separate Owner gate: Shadow activation
+```
 
-Shadow / Paper / Live remain NOT STARTED under all options until separately authorized.
+### Sequence lock answers
+
+| Question | Answer |
+|---|---|
+| B10 required before C.1 / C.2? | **NO** — C.1/C.2 may operate as pure contracts/services over WP-B.1 on-read |
+| B10 required before meaningful Shadow? | **YES** |
+| B10 required before Shadow activation Owner gate? | **YES** |
+| system_logs as Shadow SoT? | **NO** |
+| WP-D timing? | After Shadow foundation / durable records; remains replay/eval/calibration |
+
+**No concrete source blocker** was found against this narrowed Option A sequence. Remaining dependency is Owner approval + separate authorization for each phase.
+
+Shadow / Paper / Live remain NOT STARTED until separately authorized.
 
 ---
 
@@ -417,16 +529,32 @@ ExecutionIntent may exist only after ArtemisDecision + Risk + Portfolio + Liquid
 | One analytical Agent fails | Continue if remaining admitted evidence sufficient; mark missing | fail closed |
 | Multiple analytical Agents fail | Degrade; likely abstain/insufficient | fail closed |
 | All analytical unavailable | No directional decision; explicit unavailable | fail closed |
-| Risk unavailable | Block proposal that needs control; do not invent pass | fail closed |
+| Risk unavailable | Analytical/advisory synthesis may continue **only** as explicitly **non-actionable** analysis with `riskStatus=UNAVAILABLE` | `decisionEligible` / `executionEligible` **fail closed** |
 | Portfolio unavailable | Allow analysis-only; sizing unavailable | fail closed for size-requiring intents |
-| Optimization unavailable | Ignore (NOT_APPLICABLE) | no change by itself |
+| Optimization unavailable | Ignore (NOT_APPLICABLE / outside initial chain) | no change by itself |
 | Liquidity unavailable | Analysis-only; no feasibility approval | fail closed for execution |
 | Provider degraded | Mark degraded evidence/providers | fail closed |
-| Stale evidence | Exclude from confirmation; may force abstain | fail closed |
+| Stale evidence | Exclude from independent confirmation claims; may force abstain | fail closed |
 | Unresolved material conflict | HOLD/ABSTAIN/insufficient | fail closed |
 | DB read failure | Degraded UI + deny decision persistence paths | fail closed |
 | Artemis LLM/provider unavailable | Deterministic fallback synthesis or abstain; never fake consensus | fail closed |
 | Emergency Stop active | Advisory may explain blocked state | fail closed; side effects suppressed |
+
+### 11.1 Risk unavailable semantics (IMPORTANT DISTINCTION)
+
+**Current RiskGate runtime (PROVEN BY CODE — do not rewrite in Discovery):**
+
+- `backend/services/risk-gate.js` resolves fail policy from runtime SSOT
+- Demo / injected-demo: `failClosedOnError: false` (fail-open on Risk gate **error**)
+- Live / kill-switch / unknown runtime: fail-closed
+- This existing Demo fail-open behavior is **not** redefined here
+
+**Future Artemis semantics (PROPOSED — no code change now):**
+
+1. Analytical/advisory synthesis may continue with Risk status **UNAVAILABLE** only as explicitly **non-actionable** analysis
+2. `decisionEligible` and `executionEligible` must **fail closed** when mandatory Risk authority is unavailable
+3. No Artemis control chain may interpret current Demo fail-open RiskGate error behavior as **Risk approval**
+4. Risk veto remains authoritative when Risk is available; unavailable ≠ approved
 
 **Execution eligibility must fail closed. Advisory may degrade gracefully when truthful.**
 
@@ -570,52 +698,62 @@ Without B10 (or equivalent approved persistence), Shadow activation is **BLOCKED
 
 ---
 
-## 18. Proposed WP-C work packages
-
-Adjustable after Owner review. Defaults:
+## 18. Proposed WP-C work packages (aligned to locked sequence)
 
 ### WP-C.1 — Orchestration contracts + deterministic admission
 
-- **Objective:** ArtemisDecision contract, admission rules, legacy MoE containment boundary, identity normalization for synthesis input
+- **Objective:** ArtemisDecision contract, admission rules, legacy MoE containment boundary, identity normalization, deterministic safety boundaries
 - **Likely files:** `backend/contracts/*`, `artemisDecisionContainment.js`, `artemisAgentIdentity.js`, schemas, readiness flags (read path)
-- **Depends on:** WP-B.1 frozen contract
+- **Depends on:** WP-B.1 frozen contract · **B10 NOT required**
 - **Risk:** Tier 2
 - **Migration:** NO · **Provider:** NO · **Runtime mutation:** NO (library/contract first)
 - **Human QA:** contract/readiness milestone later
 - **Owner gate:** approve contract shape before coding
 
-### WP-C.2 — Synthesis / conflict / correlation engine
+### WP-C.2 — Synthesis / conflict / qualitative correlation engine
 
-- **Objective:** deterministic role-aware synthesis; conflict states; correlation grouping; abstain rules; optional LLM advisor slot behind post-validation
-- **Likely files:** new synthesis service (not equal-vote MoE), replace/adapt `aggregateDecisions` consumers
-- **Depends on:** WP-C.1
+- **Objective:** deterministic role-aware synthesis; conflict states; qualitative correlation containment; abstain rules; optional LLM advisor slot behind post-validation later
+- **Likely files:** new pure synthesis library (not equal-vote MoE); no runtime orchestration activation in this package
+- **Depends on:** WP-C.1 · **B10 NOT required** · **Provider dependency NOT required**
 - **Risk:** Tier 2–3
-- **Migration:** NO initially · **Provider:** optional later LLM only via Integrations · **Runtime mutation:** NO until explicitly authorized deploy
-- **Human QA:** advisory decision scenarios
-- **Owner gate:** conflict policy + no-weight rule confirmation
+- **Migration:** NO · **Provider:** NO for core deterministic engine · **Runtime mutation:** NO
+- **Human QA:** library/scenario tests; later Browser QA with UI package
+- **Owner gate:** conflict + qualitative correlation policy confirmation
+- **Truth label:** with only OHLCV family admitted, outputs are architecture-capable but **insufficient for multi-family synthesis claims** until an independent family (preferred: remediated sentiment) is added
 
-### WP-C.3 — Required Agent remediation (scoped)
+### B10 — Append-only ArtemisDecision + evidence-reference persistence
 
-- **Objective:** only remediations required for initial set reliability (e.g., Pattern provenance if Owner expands set; identity debts). Prefer separate Agent WPs for Technical/Timing/Liquidity productization
-- **Depends on:** Owner choice of initial set
-- **Risk:** Tier 2–3 by Agent
+- **Objective:** durable decision context; versioned evidence refs; not Shadow activation
+- **Depends on:** WP-C.1 schema stability (C.2 preferred but not a hard code blocker if schema frozen in C.1)
+- **Risk:** Tier 3
+- **Migration:** YES (when Owner authorizes) · **Provider:** NO · **Runtime mutation:** NO Live
+- **Owner gate:** explicit B10 authorization
+- **Required before Shadow:** YES
+- **Required before C.1/C.2:** NO
+
+### WP-C.3 — Required Agent remediation (scoped; e.g. sentiment family)
+
+- **Objective:** bounded truthful remediation for the Owner-chosen independent family (preferred: sentiment) and only other remediations required for the approved initial set
+- **Depends on:** Owner decision on diversity recommendation A
+- **Risk:** Tier 2–3
 - **Migration:** NO unless Agent already requires it (stop if so)
-- **Provider:** public-only if already authorized by Agent outcome
-- **Owner gate:** per-Agent scope
+- **Provider:** public-only if already authorized by Agent outcome (Reddit public path needs no secret)
+- **Owner gate:** per-Agent scope; prefer separate Agent WP if rebuild needed
 
-### WP-C.4 — Risk / Portfolio / Optimization integration
+### WP-C.4 — Risk / Portfolio control integration (Optimization out)
 
-- **Objective:** wire Risk veto + Portfolio bounded sizing into ArtemisDecision lifecycle; keep Optimization NOT_APPLICABLE unless Owner reclassifies
+- **Objective:** wire Risk veto + Portfolio bounded sizing into ArtemisDecision lifecycle
+- **Optimization:** remains outside unless separately promoted
 - **Likely files:** `risk-gate.js` UUID debt fix via `agent_key`, portfolio SoT, readiness.controlChain → real pipeline
-- **Depends on:** WP-C.1–C.2
+- **Depends on:** WP-C.1–C.2 and preferably B10 if durable control outcomes must be audited
 - **Risk:** Tier 3
 - **Migration:** NO expected · **Provider:** NO · **Runtime mutation:** NO until authorized
-- **Human QA:** veto/sizing scenarios
-- **Owner gate:** Risk hard authority + Portfolio SoT
+- **Human QA:** veto/sizing + Risk-unavailable fail-closed scenarios
+- **Owner gate:** Risk hard authority + Portfolio SoT; Demo fail-open must not become Artemis approval
 
 ### WP-C.5 — Liquidity / runtime-safety / Order intent boundary
 
-- **Objective:** define Liquidity unavailable vs feasible; keep runtime SSOT; introduce ExecutionIntent boundary without enabling Live
+- **Objective:** Liquidity unavailable vs feasible; keep runtime SSOT; ExecutionIntent boundary without enabling Live
 - **Depends on:** WP-C.4; Liquidity real product may be external prerequisite
 - **Risk:** Tier 3 (Tier 4 if any real order path touched — stop)
 - **Migration:** NO · **Provider:** NO private · **Runtime mutation:** NO
@@ -624,9 +762,9 @@ Adjustable after Owner review. Defaults:
 
 ### WP-C.6 — Product UI / readiness / audit integration
 
-- **Objective:** Simple/Advanced diagnostics for synthesis/conflict/control; truthful states; TE→Artemis authenticated transport fix (still fail-closed)
+- **Objective:** Simple/Advanced diagnostics; truthful states; TE→Artemis authenticated transport fix (still fail-closed); history/audit against B10 when present
 - **Likely files:** AIManager Artemis sections, readiness service, `tradingEngine.js` auth transport
-- **Depends on:** WP-C.1–C.2 (+ partial C.4)
+- **Depends on:** WP-C.1–C.2 (+ control packages / B10 for durable audit views)
 - **Risk:** Tier 2
 - **Migration:** NO · **Provider:** NO · **Runtime mutation:** deploy only when authorized
 - **Human QA:** Simple + Advanced Browser QA
@@ -635,38 +773,41 @@ Adjustable after Owner review. Defaults:
 ### WP-C.7 — Shadow preparation
 
 - **Objective:** Shadow architecture wiring against B10 persistence; still `executionEligible=false`
-- **Depends on:** WP-C core + **B10 approved and implemented**
+- **Depends on:** **B10 implemented** + control/runtime packages as required for observable chain
 - **Risk:** Tier 3
 - **Migration:** via B10 only · **Provider:** NO · **Runtime mutation:** NO Live
 - **Human QA:** Shadow recording without orders
-- **Owner gate:** explicit Shadow authorization (separate from WP-C discovery)
+- **Owner gate:** Shadow **preparation** only — **Shadow activation is a separate Owner gate**
 
 ---
 
-## 19. Decision Register
+## 19. Decision Register (UPDATED — Discovery NOT OWNER APPROVED)
 
 | ID | Topic | Recommendation | Status |
 |---|---|---|---|
 | D1 | Synthesis strategy | Deterministic role-aware synthesis + optional LLM advisor; retire naive majority MoE as authority | PROPOSED |
-| D2 | Correlation strategy | Family grouping + single confirmation credit; no invented coefficients | PROPOSED |
-| D3 | Initial Agent set | Analytical: trend, volume, arbitrage; Control: risk, portfolio, runtime; defer others | PROPOSED |
+| D2 | Correlation policy | Qualitative containment: preserve lineage; identify families; no independent-confirmation claim; no flatten-to-one-vote; no invented coefficients | PROPOSED |
+| D2b | Quantitative correlation scoring | Numeric influence / de-correlation | UNKNOWN / REQUIRES MEASUREMENT |
+| D3 | Initial Agent set | Buckets: directional/regime = trend+volume (one OHLCV family); opportunity = arbitrage; control = risk/portfolio/runtime/(liquidity later)/order; prefer add remediated sentiment for second family | **REQUIRES OWNER DECISION** |
+| D3b | Diversity recommendation | **A** — remediate `sentiment` before claiming meaningful multi-family synthesis; until then architecture-only / single-family | PROPOSED |
 | D4 | Risk authority | Hard veto/limit; not a vote; resolve UUID via `agent_key=risk` | PROPOSED |
-| D5 | Portfolio / Optimization | Portfolio = bounded sizing; Optimization remains NOT_APPLICABLE to equal synthesis | PROPOSED |
+| D4b | Risk unavailable semantics | Advisory may continue as non-actionable with UNAVAILABLE; decisionEligible/executionEligible fail closed; Demo fail-open ≠ Artemis Risk approval | PROPOSED |
+| D5 | Portfolio / Optimization | Portfolio = bounded sizing; Optimization remains deferred / NOT_APPLICABLE to initial chain | PROPOSED |
 | D6 | Liquidity boundary | Feasibility only after real implementation; else unavailable fail-closed | PROPOSED |
 | D7 | Order boundary | ExecutionIntent consumer only; never invents direction | PROPOSED |
-| D8 | WP-C / B10 sequence | Primary **A** (WP-C core → B10 → Shadow); alt **C** | REQUIRES OWNER DECISION |
-| D9 | Shadow persistence prerequisite | Append-only ArtemisDecision + evidence refs (B10 candidate); not `system_logs` | PROPOSED |
+| D8 | WP-C / B10 sequence | **PROPOSED OWNER DIRECTION:** C.1 → C.2 → B10 → control/runtime integration → Shadow prep → separate Shadow activation gate | PROPOSED OWNER DIRECTION |
+| D9 | Shadow persistence prerequisite | Append-only ArtemisDecision + evidence refs (B10); not `system_logs`; no durable audited lineage claim before B10 | PROPOSED |
 | D10 | ArtemisDecision contract | Fields in §10.1; always non-execution until later gates | PROPOSED |
 | D11 | ExecutionIntent boundary | Separate later contract; blocks legacy `approved:true` | PROPOSED |
 | D12 | LLM role | Advisor behind deterministic pre/post validation; Integrations remain secret owner | PROPOSED |
 | D13 | Degraded behavior | Advisory degrade truthful; execution eligibility always fail closed | PROPOSED |
-| D14 | Expand initial set to include Pattern/Sentiment/etc. | Keep deferred until provenance/adapters ready | DEFERRED |
-| D15 | Activate Shadow/Paper/Live in WP-C | Forbidden by freeze | BLOCKED BY EVIDENCE / POLICY |
-| D16 | B10 migration now | Not part of Discovery | REQUIRES OWNER DECISION (later) |
+| D14 | Expand initial set / Pattern etc. | Pattern B same-family; MI/fundamental/PP remain C/deferred | DEFERRED |
+| D15 | Activate Shadow/Paper/Live in WP-C | Forbidden by freeze; Shadow activation separate Owner gate after prep | BLOCKED BY EVIDENCE / POLICY |
+| D16 | B10 migration now | Not part of Discovery; required before Shadow, not before C.1/C.2 | REQUIRES OWNER DECISION (later) |
 | D17 | Replace Capability name `ARTEMIS_DECISION_EXECUTE` | Rename/clarify to reduce misread | PROPOSED |
 | D18 | Fix TE unauthenticated Artemis transport | Required in WP-C.6; keep fail-closed | PROPOSED |
 
-**No new choices are OWNER APPROVED by this Discovery document.**
+**This Discovery correction pass is NOT OWNER APPROVED.** No new choices are OWNER APPROVED.
 
 ---
 
@@ -681,6 +822,10 @@ Adjustable after Owner review. Defaults:
 | Risk Gate hardcoded UUID | `risk-gate.js` | PROVEN BY CODE |
 | Liquidity Agent stub confidence 0.55 | `agents/liquidity.js` | PROVEN BY CODE |
 | Pattern mock can appear as realtime provenance | `agents/pattern.js` (WP-B documented) | PROVEN BY CODE / docs |
+| Sentiment labels `meta.source:'realtime'` while mock sources may be weighted | `agents/sentiment.js` + `sentimentAPI.js` | PROVEN BY CODE |
+| Market Intelligence base confidence 50 + VIX fallback | `market_intelligence.js` / `macroAPI.js` | PROVEN BY CODE |
+| Fundamental `_meta.source:'real'` with placeholders/random | `agents/fundamental.js` | PROVEN BY CODE |
+| RiskGate Demo fail-open on error | `risk-gate.js` | PROVEN BY CODE |
 | MoE prompt language implies EXECUTE | `artemisOrchestrator.js` | PROVEN BY CODE |
 | Portfolio self-id inconsistency (`portfolio_allocation`) | Agent code / catalog | PROVEN BY CODE |
 
@@ -715,8 +860,18 @@ Changed files expected for Discovery commit only:
 
 ## 22. Final Discovery verdict
 
-**ARTEMIS WP-C DISCOVERY COMPLETE**  
+**ARTEMIS WP-C DISCOVERY HARDENED**  
 **OWNER ARCHITECTURE REVIEW REQUIRED**  
 **NO IMPLEMENTATION STARTED**
 
-Current system is a truthful advisory shell over legacy MoE, with WP-B.1 on-read evidence for trend/arbitrage/volume and a fail-closed execution gate. The control chain Risk → Portfolio/Optimization → Liquidity → Order is **not** wired into Artemis decisions. WP-C should build role-aware synthesis and control-chain architecture without claiming EVIDENCE_READY, Shadow, Paper, or Live readiness.
+Hardening summary:
+
+- trend+volume are one OHLCV directional family; arbitrage is opportunity context, not analytical vote
+- prefer bounded `sentiment` remediation before multi-family synthesis claims
+- B/C/E classes revalidated from source (B=1, C=7)
+- correlation policy downgraded to qualitative containment; quantitative scoring REQUIRES MEASUREMENT
+- sequence locked: C.1 → C.2 → B10 → control/runtime → Shadow prep → separate Shadow gate
+- Optimization out of initial control chain
+- Risk unavailable ≠ approval; Demo fail-open must not be imported as Artemis Risk approval
+
+Current system remains a truthful advisory shell over legacy MoE, with WP-B.1 on-read evidence for trend/arbitrage/volume and a fail-closed execution gate. This Discovery is **not** Owner-approved yet.
