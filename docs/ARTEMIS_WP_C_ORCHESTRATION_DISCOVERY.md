@@ -2,16 +2,31 @@
 
 **Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**  
 **Base:** `origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
-**Branch:** `feat/artemis-wp-c-orchestration-discovery`  
-**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`  
-**Hardened Discovery HEAD:** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
-**Risk tier:** Tier 0 — Documentation milestone  
+**Discovery branch:** `feat/artemis-wp-c-orchestration-discovery`  
+**Discovery Owner-approval SHA:** `658290a07641f317b60ee8d4afec87464edfcdbc`  
+**Hardened Discovery HEAD (pre-approval):** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
+**C.1 branch (implementation):** `feat/artemis-wp-c1-orchestration-contracts`  
+**C.1 worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c1`  
+**Risk tier (Discovery):** Tier 0 — Documentation milestone  
 **Implementation started at Discovery approval:** **NO**  
+**C.1 pure-library implementation:** **COMPLETE — OWNER REVIEW REQUIRED — NOT CLOSED/FROZEN**  
+**C.2 / B10 / Shadow / Paper / Live:** **NOT STARTED**  
 **Migration / runtime / provider / financial side effects:** NONE  
 
 This is the **single canonical** WP-C discovery document. Do not create parallel planning docs.
 
 **Correction pass scope:** diversity of initial evidence families · B/C/E reclassification · qualitative correlation containment · precise C.1→C.2→B10→control→Shadow-prep sequence · Optimization wording · Risk unavailable semantics.
+
+### C.1 factual status pointer (library only)
+
+Delivered on `feat/artemis-wp-c1-orchestration-contracts`:
+
+- `backend/contracts/artemisDecisionContract.js` — `artemis-decision-1.0.0`
+- `backend/services/artemisEvidenceAdmissionService.js` — pure admission/compatibility
+- `backend/__tests__/unit/artemisDecisionContract.wpC1.test.js`
+
+Invariants enforced: `decisionEligible=false`, `executionEligible=false`, legacy `approved`/`approvedForExecution` rejected.  
+WP-B.1 evidence contract remains unmodified/frozen. Legacy Artemis runtime routes/orchestrator untouched. Sentiment untouched.
 
 ---
 

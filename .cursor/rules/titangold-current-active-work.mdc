@@ -1,83 +1,85 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-C Discovery Architecture OWNER APPROVED
+description: TitanGold Rule 02 — Artemis WP-C.1 Orchestration Contracts
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**
+**ARTEMIS WP-C.1 — ORCHESTRATION CONTRACTS + DETERMINISTIC ADMISSION**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (orchestration / synthesis / control-chain architecture)
+Shared Foundation → Artemis Central Intelligence (pure contract / admission library)
 
 Current program slice:
-ARTEMIS-WP-C-ORCHESTRATION-DISCOVERY (architecture approval milestone)
+ARTEMIS-WP-C-1-ORCHESTRATION-CONTRACTS
 
 Risk tier:
-Tier 0 — Documentation milestone (implementation begins only on a separate C.1 branch)
+Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**  
-**IMPLEMENTATION HAD NOT BEGUN AT THIS MILESTONE**  
-**C.1 NOT STARTED ON THIS BRANCH**  
+**WP-C.1 IMPLEMENTATION COMPLETE**  
+**FOCUSED TESTS PASS**  
+**BACKEND REGRESSION STATUS = Artemis unit suite PASS (96); broader unit suite reported in C.1 closeout notes**  
+**OWNER REVIEW REQUIRED**  
+**NOT CLOSED**  
+**NOT FROZEN**  
+**C.2 NOT STARTED**  
+**B10 NOT STARTED**  
+**PURE LIBRARY ONLY**  
 **NO RUNTIME ACTIVATION**  
 **NO MIGRATION**  
 **NO PROVIDER CALLS**  
+**NO AGENT EXECUTION**  
 **NO SHADOW / PAPER / LIVE**
 
-Canonical discovery document:
-`docs/ARTEMIS_WP_C_ORCHESTRATION_DISCOVERY.md`
+Branch:
+`feat/artemis-wp-c1-orchestration-contracts`
+
+Worktree:
+`/home/ubuntu/worktrees/titangold-artemis-wp-c1`
 
 Verified frozen main baseline:
 `origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`
 
-Hardened Discovery HEAD (pre-approval):
-`b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`
-
-Discovery branch:
-`feat/artemis-wp-c-orchestration-discovery`
-
-Isolated worktree:
-`/home/ubuntu/worktrees/titangold-artemis-wp-c-discovery`
-
-Owner-approved architecture (locked):
-1. Control chain: Analytical Evidence → Artemis Synthesis → Risk veto → Portfolio bounded sizing → Liquidity feasibility → Runtime safety → Order via ExecutionIntent only
-2. Risk = hard veto; unavailable Risk allows only non-actionable advisory; decisionEligible/executionEligible fail closed; Demo RiskGate fail-open ≠ Artemis approval
-3. Portfolio = bounded sizing/allocation only
-4. Optimization = outside initial chain / NOT_APPLICABLE unless separately promoted
-5. Liquidity = feasibility only; unavailable until real implementation; fail closed for execution
-6. Order = ExecutionIntent consumer only; never creates BUY/SELL direction
-7. Correlation = qualitative containment only; source/feature/signal distinct; no independent confirmation claim; no invented coefficients
-8. Current intake: trend+volume = one OHLCV family; arbitrage = opportunity context only (not directional vote)
-9. Sentiment = selected future remediation candidate; NOT evidence-approved; NOT Artemis-consumable; do NOT remediate in C.1
-10. Sequence: WP-C.1 → WP-C.2 → B10 → control/runtime → Shadow prep → separate Owner gate for Shadow activation
-11. B10 NOT required before C.1/C.2; REQUIRED before meaningful Shadow; system_logs must NOT become Shadow SoT
-12. WP-D = replay/evaluation/backtesting/calibration later
-13. Shadow / Paper / Live = NOT STARTED / NOT AUTHORIZED
-14. C.1/C.2 may proceed as pure deterministic library work
-15. No meaningful multi-family synthesis claim until an independent family is remediated and validated
+WP-C Discovery Owner-approved milestone:
+`WP_C_DISCOVERY_APPROVED_SHA` = `658290a07641f317b60ee8d4afec87464edfcdbc`
 
 Preserved frozen baselines:
-- **WP-B.1 CLOSED AND FROZEN**
-- **WP-A CLOSED AND FROZEN**
-- **Data Hub:** PASS / FROZEN
+- **WP-B.1 CLOSED AND FROZEN** (evidence contract unmodified)
+- **WP-C Discovery = OWNER APPROVED**
+- **Data Hub:** FROZEN
 - **Trend:** FROZEN
 - **Arbitrage:** FROZEN
 
-Safety flags (unchanged):
-- Maturity: ADVISORY ONLY (`LEGACY_ADVISORY_ONLY`)
-- `orchestration = LEGACY`
+Safety flags (unchanged / still false):
+- Product orchestration remains **LEGACY**
 - `artemisConsumable = false`
 - `decisionEligible = false`
 - `executionEligible = false`
 - Evidence readiness = ON_READ_PARTIAL — NOT EVIDENCE_READY
 
-Not authorized on this Discovery branch:
-- Product / runtime / test implementation commits after this approval milestone
-- Rewrite of approved Discovery architecture after C.1 branches
-- PR / merge without separate Owner instruction
-- Protected scripts under `scripts/backup-db.sh` and phase2 monitoring notify/healthcheck
+C.1 delivered (pure library):
+- `backend/contracts/artemisDecisionContract.js`
+- `backend/services/artemisEvidenceAdmissionService.js`
+- `backend/__tests__/unit/artemisDecisionContract.wpC1.test.js`
 
-Next authorized transition:
-Create a NEW isolated branch/worktree from this Owner-approval milestone SHA for **WP-C.1** pure-library implementation only.
+C.1 does NOT include:
+- synthesis / conflict scoring / LLM council
+- runtime route wiring / POST /artemis/decision replacement
+- Risk / Portfolio / Liquidity / Order integration
+- Sentiment remediation
+- B10 / persistence / Shadow
+- UI redesign
+
+Authorized:
+- Owner review of C.1 library + tests
+- Later explicit Rule 02 transition to WP-C.2 only after Owner authorization
+
+Not authorized:
+- Runtime / PM2 / deploy / migration / provider / Agent execution / Shadow / Paper / Live
+- PR / merge without separate Owner instruction
+- Protected scripts:
+  - `scripts/backup-db.sh`
+  - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
+  - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
