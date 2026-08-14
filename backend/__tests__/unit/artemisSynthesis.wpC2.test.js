@@ -339,14 +339,78 @@ describe('WP-C.2 realistic current evidence set', () => {
     ]).toContain(assessment.synthesisOutcome);
   });
 
-  it('duplicate => no duplicate directional influence', () => {
-    const { assessment, admissionSet } = synthesizeDeterministicAssessment(CTX, [
+  it('duplicate identical Trend identity is fail-closed in all permutations', () => {
+    const a = synthesizeDeterministicAssessment(CTX, [trendEnvelope(), trendEnvelope()]).assessment;
+    const b = synthesizeDeterministicAssessment(CTX, [trendEnvelope(), trendEnvelope()]).assessment;
+    expect(a.independentDirectionalFamilyCount).toBe(0);
+    expect(b.independentDirectionalFamilyCount).toBe(0);
+    expect(a.limitations).toContain('duplicate_identity_ambiguous');
+    expect(a.excludedNonConfirmingSummary.reasons).toContain('DUPLICATE_IDENTITY_AMBIGUOUS');
+    expect(a.synthesisOutcome).toBe(b.synthesisOutcome);
+  });
+});
+
+describe('WP-C.2 adversarial duplicate identity fail-closed', () => {
+  function expectDupFailClosed(left, right) {
+    const a = synthesizeDeterministicAssessment(CTX, [left, right]).assessment;
+    const b = synthesizeDeterministicAssessment(CTX, [right, left]).assessment;
+    expect(a.independentDirectionalFamilyCount).toBe(0);
+    expect(b.independentDirectionalFamilyCount).toBe(0);
+    expect(a.limitations).toContain('duplicate_identity_ambiguous');
+    expect(b.limitations).toContain('duplicate_identity_ambiguous');
+    expect(a.synthesisOutcome).toBe(b.synthesisOutcome);
+    expect(a.observedDirection).toBe(b.observedDirection);
+  }
+
+  it('same runId + same direction + different correlationFamily', () => {
+    expectDupFailClosed(
+      trendEnvelope({ correlationFamily: CORRELATION_FAMILY.OHLCV_CANDLE }),
+      trendEnvelope({ correlationFamily: CORRELATION_FAMILY.MICROSTRUCTURE }),
+    );
+  });
+
+  it('same runId + same direction + fresh vs stale', () => {
+    expectDupFailClosed(
+      trendEnvelope({ freshness: { status: 'fresh', reasonKey: 'fresh' } }),
+      trendEnvelope({
+        freshness: { status: 'stale', reasonKey: 'stale' },
+        dataQuality: {
+          status: 'degraded',
+          sourceAvailability: 'available',
+          coverage: 'unavailable',
+          completeness: 'ok',
+          staleness: 'stale',
+          providerDegradation: false,
+          sampleAdequacy: 'ok',
+          knownLimitationKeys: ['stale'],
+        },
+      }),
+    );
+  });
+
+  it('same runId + same direction + ok vs degraded', () => {
+    expectDupFailClosed(
       trendEnvelope(),
-      trendEnvelope(),
-    ]);
-    expect(admissionSet.results.some((r) => r.admissionReason === 'DUPLICATE_REFERENCE')).toBe(true);
-    expect(assessment.familyAssessments[0].admittedDirectionalMemberCount).toBe(1);
-    expect(assessment.independentDirectionalFamilyCount).toBe(1);
+      trendEnvelope({
+        dataQuality: {
+          status: 'degraded',
+          sourceAvailability: 'available',
+          coverage: 'unavailable',
+          completeness: 'ok',
+          staleness: 'fresh',
+          providerDegradation: true,
+          sampleAdequacy: 'ok',
+          knownLimitationKeys: ['degraded'],
+        },
+      }),
+    );
+  });
+
+  it('bullish vs bearish duplicate', () => {
+    expectDupFailClosed(
+      trendEnvelope({ conclusion: { direction: 'bullish', strength: { value: 70, scale: 'percent_100', provenance: 'a' } } }),
+      trendEnvelope({ conclusion: { direction: 'bearish', strength: { value: 70, scale: 'percent_100', provenance: 'b' } } }),
+    );
   });
 });
 
@@ -557,8 +621,8 @@ describe('WP-C.2 determinism', () => {
     expect(a.observedDirection).toBe(b.observedDirection);
     expect(a.independentDirectionalFamilyCount).toBe(b.independentDirectionalFamilyCount);
     expect(a.independentDirectionalFamilyCount).toBe(0);
-    expect(a.limitations).toContain('conflicting_duplicate_identity');
-    expect(a.excludedNonConfirmingSummary.reasons).toContain('CONFLICTING_DUPLICATE_IDENTITY');
+    expect(a.limitations).toContain('duplicate_identity_ambiguous');
+    expect(a.excludedNonConfirmingSummary.reasons).toContain('DUPLICATE_IDENTITY_AMBIGUOUS');
   });
 });
 
@@ -729,5 +793,190 @@ describe('WP-C.2 strict contract + projection gates', () => {
     });
     expect(projected.decision).toBeNull();
     expect(projected.validation.ok).toBe(false);
+  });
+});
+
+describe('WP-C.2 analytical family membership + coherent structure', () => {
+  it.each([
+    ['risk'],
+    ['order'],
+    ['arbitrage'],
+  ])('%s in directional family is rejected', (agentId) => {
+    const assessment = validAssessment({
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+          memberAgentIds: [agentId],
+        }),
+      ],
+    });
+    expect(validateArtemisSynthesisAssessment(assessment).ok).toBe(false);
+  });
+
+  it.each([
+    ['trend'],
+    ['volume'],
+    ['sentiment'],
+    ['pattern'],
+  ])('%s analytical member is accepted by taxonomy', (agentId) => {
+    const assessment = validAssessment({
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+          memberAgentIds: [agentId],
+        }),
+      ],
+    });
+    expect(validateArtemisSynthesisAssessment(assessment).ok).toBe(true);
+  });
+
+  it('coherent bullish with zero members / zero directional count rejects', () => {
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      independentDirectionalFamilyCount: 0,
+      familyAssessments: [
+        {
+          ...familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+          memberAgentIds: [],
+          admittedDirectionalMemberCount: 0,
+        },
+      ],
+    })).ok).toBe(false);
+
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      independentDirectionalFamilyCount: 0,
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+          admittedDirectionalMemberCount: 0,
+        }),
+      ],
+    })).ok).toBe(false);
+  });
+
+  it('non_confirming/unavailable cannot claim directional members; mixed needs >=2', () => {
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      independentDirectionalFamilyCount: 0,
+      familyAssessments: [
+        {
+          ...familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.NON_CONFIRMING, DIRECTION_OR_ABSTAIN.UNAVAILABLE),
+          admittedDirectionalMemberCount: 1,
+        },
+      ],
+    })).ok).toBe(false);
+
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      independentDirectionalFamilyCount: 0,
+      familyAssessments: [
+        {
+          ...familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.UNAVAILABLE, DIRECTION_OR_ABSTAIN.UNAVAILABLE),
+          admittedDirectionalMemberCount: 1,
+        },
+      ],
+    })).ok).toBe(false);
+
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      independentDirectionalFamilyCount: 0,
+      familyAssessments: [
+        {
+          ...familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.MIXED, DIRECTION_OR_ABSTAIN.ABSTAIN, {
+            conflictState: CONFLICT_STATE.MATERIAL,
+            memberAgentIds: ['trend', 'volume'],
+          }),
+          admittedDirectionalMemberCount: 1,
+        },
+      ],
+    })).ok).toBe(false);
+  });
+});
+
+describe('WP-C.2 supported outcome allowlist', () => {
+  it.each([
+    ['blocked_by_risk'],
+    ['blocked_by_runtime'],
+    ['unspecified'],
+    ['unavailable'],
+  ])('%s outcome is rejected', (outcome) => {
+    expect(validateArtemisSynthesisAssessment(validAssessment({
+      synthesisOutcome: outcome,
+      observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
+      multiFamilyConfirmation: false,
+    })).ok).toBe(false);
+  });
+});
+
+describe('WP-C.2 projection evidence lineage', () => {
+  it('empty evidenceRefs refused when assessment claims contributors', () => {
+    const { assessment } = synthesizeDeterministicAssessment(CTX, [trendEnvelope(), volumeEnvelope()]);
+    const projected = projectSynthesisToArtemisDecision(assessment, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [],
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.code).toBe('evidence_refs_required_for_contributors');
+  });
+
+  it('partial Trend-only refs refused for Trend+Volume assessment', () => {
+    const { assessment, admissionSet } = synthesizeDeterministicAssessment(CTX, [
+      trendEnvelope(),
+      volumeEnvelope(),
+    ]);
+    const onlyTrend = admissionSet.evidenceRefs.filter((r) => r.agentId === 'trend');
+    const projected = projectSynthesisToArtemisDecision(assessment, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: onlyTrend,
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.code).toBe('missing_contributor_evidence_ref');
+  });
+
+  it('Arbitrage opportunity without Arbitrage ref is refused', () => {
+    const { assessment, admissionSet } = synthesizeDeterministicAssessment(CTX, [
+      trendEnvelope(),
+      volumeEnvelope(),
+      arbitrageEnvelope(),
+    ]);
+    const withoutArb = admissionSet.evidenceRefs.filter((r) => r.agentId !== 'arbitrage');
+    const projected = projectSynthesisToArtemisDecision(assessment, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: withoutArb,
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.code).toBe('missing_contributor_evidence_ref');
+  });
+
+  it('true no-evidence insufficient assessment may project with empty refs', () => {
+    const { assessment } = synthesizeDeterministicAssessment(CTX, []);
+    const projected = projectSynthesisToArtemisDecision(assessment, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [],
+    });
+    expect(projected.validation.ok).toBe(true);
+    expect(projected.decision.decisionEligible).toBe(false);
+  });
+});
+
+describe('WP-C.2 input envelope bound', () => {
+  it('accepts 32 envelopes and refuses 33 without truncation', () => {
+    const mk = (i) => trendEnvelope({
+      runId: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+    });
+    const ok32 = synthesizeDeterministicAssessment(CTX, Array.from({ length: 32 }, (_, i) => mk(i)));
+    expect(ok32.validation.ok).toBe(true);
+    expect(ok32.assessment).not.toBeNull();
+
+    const bad33 = synthesizeDeterministicAssessment(CTX, Array.from({ length: 33 }, (_, i) => mk(i)));
+    expect(bad33.assessment).toBeNull();
+    expect(bad33.validation.ok).toBe(false);
+    expect(bad33.validation.code).toBe('input_envelope_limit_exceeded');
+    expect(bad33.validation.limit).toBe(32);
   });
 });

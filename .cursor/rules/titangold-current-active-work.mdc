@@ -18,11 +18,10 @@ Risk tier:
 Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.2 INTEGRITY CORRECTION COMPLETE**  
-**FOCUSED TESTS PASS**  
-**BACKEND REGRESSION = 102 suites / 820 tests PASS**  
-**ARTEMIS UNIT = 13 suites / 156 tests PASS**  
-**FOCUSED C.2 = 30 PASS**  
+**WP-C.2 FINAL ADVERSARIAL HARDENING COMPLETE**  
+**FOCUSED C.2 = 52 PASS**  
+**ARTEMIS UNIT = 13 suites / 178 tests PASS**  
+**BACKEND UNIT = 102 suites / 842 tests PASS**  
 **OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
@@ -38,15 +37,14 @@ Engineering status:
 **B10 NOT STARTED**  
 **PR NOT CREATED**
 
-Integrity correction focus:
-- Distinct correlationFamily identity (no same-family double counting)
-- Blocking cross-family conflict outranks material same-family conflict
-- No synthetic correlationFamily defaults
-- Strict nested synthesis contract + cross-field invariants
-- Projection validates synthesis first
-- Conflicting duplicate identity fail-closed / order-independent
-- Opportunity availability only when canonically proven
-
+Final adversarial hardening focus:
+- Duplicate `agentId+runId` → fail-closed all copies (no first-row wins)
+- Directional family members = `ANALYTICAL_EVIDENCE` only
+- Coherent / MIXED / non-confirming structural count invariants
+- C.2-supported synthesis outcomes only (no control-stage claims)
+- Projection evidence lineage coverage
+- `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (no truncation)
+- Prior integrity corrections preserved
 
 Preserved frozen baselines:
 - **WP-C Discovery = OWNER APPROVED**
@@ -79,6 +77,8 @@ Owner-approved C.2 policy (locked):
 8. No Risk / Portfolio / Optimization / Liquidity / Runtime / Order integration
 9. No B10 persistence
 10. Pure library only
+11. Duplicate canonical identity = NON-CONFIRMING / DUPLICATE_IDENTITY_AMBIGUOUS
+12. C.2 outcomes allowlist excludes control-stage outcomes
 
 Current realistic set truth:
 Trend + Volume (+ Arbitrage opportunity) ⇒ independent directional families = 1 ⇒ INSUFFICIENT_EVIDENCE / ABSTAIN

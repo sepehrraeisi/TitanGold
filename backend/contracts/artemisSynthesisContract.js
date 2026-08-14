@@ -37,6 +37,7 @@ export const MAX_LIMITATIONS = 64;
 export const MAX_SUMMARY_REASONS = 64;
 export const MAX_SYNTHESIS_UTF8_BYTES = 16 * 1024;
 export const MAX_STRING_CHARS = 256;
+export const MAX_SYNTHESIS_INPUT_ENVELOPES = 32;
 
 export const FAMILY_QUALITATIVE_STATE = Object.freeze({
   COHERENT_BULLISH: 'coherent_bullish',
@@ -47,11 +48,34 @@ export const FAMILY_QUALITATIVE_STATE = Object.freeze({
   NON_CONFIRMING: 'non_confirming',
 });
 
+/** C.2 may emit only these outcomes; control-stage outcomes are rejected. */
+export const C2_SUPPORTED_SYNTHESIS_OUTCOMES = Object.freeze({
+  PROPOSED: SYNTHESIS_OUTCOME.PROPOSED,
+  HOLD: SYNTHESIS_OUTCOME.HOLD,
+  ABSTAIN: SYNTHESIS_OUTCOME.ABSTAIN,
+  INSUFFICIENT_EVIDENCE: SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE,
+  INCOMPATIBLE_EVIDENCE: SYNTHESIS_OUTCOME.INCOMPATIBLE_EVIDENCE,
+});
+
 const QUALIFYING_FAMILY_STATES = new Set([
   FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
   FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
   FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
 ]);
+
+function familyHasConfirmingStructure(fam) {
+  if (!fam || !QUALIFYING_FAMILY_STATES.has(fam.qualitativeState)) return false;
+  if (!Array.isArray(fam.memberAgentIds) || fam.memberAgentIds.length < 1) return false;
+  if (
+    typeof fam.admittedDirectionalMemberCount !== 'number'
+    || !Number.isInteger(fam.admittedDirectionalMemberCount)
+    || fam.admittedDirectionalMemberCount < 1
+  ) {
+    return false;
+  }
+  if (fam.admittedDirectionalMemberCount > fam.memberAgentIds.length) return false;
+  return true;
+}
 
 const ALLOWED_TOP = new Set([
   'schemaVersion',
@@ -233,7 +257,7 @@ export function countDistinctQualifyingFamilies(familyAssessments = []) {
   const seen = new Set();
   for (const fam of familyAssessments) {
     if (!fam || !inEnum(fam.correlationFamily, CORRELATION_FAMILY)) continue;
-    if (!QUALIFYING_FAMILY_STATES.has(fam.qualitativeState)) continue;
+    if (!familyHasConfirmingStructure(fam)) continue;
     seen.add(fam.correlationFamily);
   }
   return seen.size;
@@ -243,6 +267,36 @@ function validateFamilyConsistency(fam, field, errors) {
   const state = fam.qualitativeState;
   const dir = fam.familyDirection;
   const conflict = fam.conflictState;
+  const memberCount = Array.isArray(fam.memberAgentIds) ? fam.memberAgentIds.length : 0;
+  const admitted = fam.admittedDirectionalMemberCount;
+
+  if (
+    state === FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH
+    || state === FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH
+    || state === FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL
+  ) {
+    if (memberCount < 1) {
+      errors.push({ field: `${field}.memberAgentIds`, code: 'coherent_requires_members' });
+    }
+    if (typeof admitted !== 'number' || admitted < 1) {
+      errors.push({ field: `${field}.admittedDirectionalMemberCount`, code: 'coherent_requires_directional_members' });
+    }
+  }
+
+  if (
+    state === FAMILY_QUALITATIVE_STATE.NON_CONFIRMING
+    || state === FAMILY_QUALITATIVE_STATE.UNAVAILABLE
+  ) {
+    if (admitted !== 0) {
+      errors.push({ field: `${field}.admittedDirectionalMemberCount`, code: 'non_confirming_requires_zero_directional' });
+    }
+  }
+
+  if (state === FAMILY_QUALITATIVE_STATE.MIXED) {
+    if (typeof admitted !== 'number' || admitted < 2) {
+      errors.push({ field: `${field}.admittedDirectionalMemberCount`, code: 'mixed_requires_min_directional_members' });
+    }
+  }
 
   if (state === FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH) {
     if (dir !== DIRECTION_OR_ABSTAIN.BULLISH) {
@@ -378,8 +432,8 @@ export function validateArtemisSynthesisAssessment(assessment) {
     }
   }
 
-  if (!inEnum(assessment.synthesisOutcome, SYNTHESIS_OUTCOME)) {
-    errors.push({ field: 'synthesisOutcome', code: 'invalid_synthesis_outcome' });
+  if (!inEnum(assessment.synthesisOutcome, C2_SUPPORTED_SYNTHESIS_OUTCOMES)) {
+    errors.push({ field: 'synthesisOutcome', code: 'unsupported_c2_synthesis_outcome' });
   }
   if (!inEnum(assessment.observedDirection, DIRECTION_OR_ABSTAIN)) {
     errors.push({ field: 'observedDirection', code: 'invalid_direction' });
@@ -443,6 +497,10 @@ export function validateArtemisSynthesisAssessment(assessment) {
           }
           if (!Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, agentId)) {
             errors.push({ field: af, code: 'unknown_agent_id' });
+          } else if (
+            AGENT_CONTRACT_ROLE[agentId].authorityClass !== AUTHORITY_CLASS.ANALYTICAL_EVIDENCE
+          ) {
+            errors.push({ field: af, code: 'non_analytical_family_member' });
           }
           if (seenAgents.has(agentId)) {
             errors.push({ field: af, code: 'duplicate_agent_id' });
@@ -597,7 +655,9 @@ export default {
   SYNTHESIS_CONTRACT_VERSION,
   SYNTHESIS_POLICY_VERSION,
   MIN_INDEPENDENT_DIRECTIONAL_FAMILIES,
+  MAX_SYNTHESIS_INPUT_ENVELOPES,
   FAMILY_QUALITATIVE_STATE,
+  C2_SUPPORTED_SYNTHESIS_OUTCOMES,
   validateArtemisSynthesisAssessment,
   buildUnavailableSynthesisConfidence,
   countDistinctQualifyingFamilies,

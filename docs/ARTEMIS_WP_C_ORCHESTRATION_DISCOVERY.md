@@ -1053,19 +1053,25 @@ Optimization remains NOT_APPLICABLE to the initial Artemis control chain.
 
 ## 24. WP-C.2 DETERMINISTIC SYNTHESIS IMPLEMENTATION
 
-**Status:** IMPLEMENTATION COMPLETE + INTEGRITY CORRECTION COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
+**Status:** FINAL ADVERSARIAL HARDENING COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
 **Branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2`  
 **Base main:** `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
 
-Integrity hardening (same branch):
+Integrity + final adversarial hardening (same branch):
 - Distinct `correlationFamily` identity enforcement (duplicate family summaries rejected)
 - Conflict precedence: blocking cross-family before material same-family
 - No synthetic correlation-family defaults for non-confirming evidence
 - Strict nested synthesis contract + outcome cross-field invariants
 - Projection refuses invalid synthesis assessments
-- Conflicting duplicate `agentId+runId` fail-closed and order-independent
+- **Any** duplicate `agentId+canonical runId` → fail-closed all copies (`DUPLICATE_IDENTITY_AMBIGUOUS`); no first/last/freshest winner
+- Directional family members must be `AUTHORITY_CLASS.ANALYTICAL_EVIDENCE` only
+- Coherent families require real directional members; MIXED requires ≥2; non-confirming/unavailable require 0
+- C.2 outcome allowlist only (no `BLOCKED_BY_RISK` / runtime / unspecified / unavailable control claims)
+- Projection evidence lineage: contributing Agent IDs must appear in Decision-safe `evidenceRefs`
+- `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (no silent truncation)
 - Opportunity availability only when canonically proven
+- `admittedDirectionalMemberCount` = distinct confirming Agent IDs (bounded by `memberAgentIds`)
 
 ### 24.1 Delivered library footprint
 
@@ -1090,6 +1096,8 @@ Frozen C.1 files remain unmodified and are imported/reused (`admitEvidenceSet`, 
 | Synthesis confidence | UNAVAILABLE / `qualitative_synthesis_not_calibrated` |
 | Eligibility | `artemisConsumable=false`, `decisionEligible=false`, `executionEligible=false` |
 | Controls | Risk / Portfolio / Optimization / Liquidity / Runtime / Order **not** integrated |
+| Input bound | `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (refuse excess; no truncation) |
+| C.2 outcomes | PROPOSED / HOLD / ABSTAIN / INSUFFICIENT_EVIDENCE / INCOMPATIBLE_EVIDENCE only |
 | B10 | **NOT STARTED** |
 | Runtime / server | **NOT ACTIVATED** / **UNCHANGED** |
 

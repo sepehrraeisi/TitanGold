@@ -10,6 +10,17 @@ import {
   isCanonicalUuid,
 } from '../contracts/artemisEvidenceContract.js';
 import {
+  FAMILY_QUALITATIVE_STATE,
+  MAX_SYNTHESIS_INPUT_ENVELOPES,
+  MIN_INDEPENDENT_DIRECTIONAL_FAMILIES,
+  SYNTHESIS_POLICY_VERSION,
+  SYNTHESIS_SCHEMA_VERSION,
+  SYNTHESIS_CONTRACT_VERSION,
+  buildUnavailableSynthesisConfidence,
+  countDistinctQualifyingFamilies,
+  validateArtemisSynthesisAssessment,
+} from '../contracts/artemisSynthesisContract.js';
+import {
   ALLOCATION_AVAILABILITY,
   CLASSIFICATION,
   CONFLICT_STATE,
@@ -21,27 +32,13 @@ import {
   RISK_STATUS,
   SYNTHESIS_OUTCOME,
   buildContractOnlyArtemisDecision,
+  isDecisionSafeEvidenceRef,
   validateArtemisDecision,
 } from '../contracts/artemisDecisionContract.js';
 import { admitEvidenceSet } from './artemisEvidenceAdmissionService.js';
-import {
-  FAMILY_QUALITATIVE_STATE,
-  MIN_INDEPENDENT_DIRECTIONAL_FAMILIES,
-  SYNTHESIS_POLICY_VERSION,
-  SYNTHESIS_SCHEMA_VERSION,
-  SYNTHESIS_CONTRACT_VERSION,
-  buildUnavailableSynthesisConfidence,
-  countDistinctQualifyingFamilies,
-  validateArtemisSynthesisAssessment,
-} from '../contracts/artemisSynthesisContract.js';
 
 const ACTIONABLE = new Set([DIRECTION.BULLISH, DIRECTION.BEARISH]);
 const NON_ACTIONING = new Set([DIRECTION.SIDEWAYS, DIRECTION.NEUTRAL]);
-const QUALIFYING_STATES = new Set([
-  FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
-  FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
-  FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
-]);
 
 function cmpStr(a, b) {
   return String(a).localeCompare(String(b));
@@ -94,27 +91,27 @@ function identityKey(envelope) {
   return `${envelope.agentId}|${String(envelope.runId).trim().toLowerCase()}`;
 }
 
-function directionalContentSignature(envelope) {
-  const direction = envelope?.conclusion?.direction ?? '';
-  const opportunityAvailability = envelope?.opportunity?.availability ?? '';
-  return `${direction}|${opportunityAvailability}`;
-}
-
 /**
- * Detect same agentId+runId with conflicting canonical directional/opportunity content.
- * Fail-closed: neither copy may win by input order.
+ * Any repeated canonical agentId+runId is ambiguous for C.2.
+ * Fail-closed: all copies are non-confirming; no first/last/freshest winner.
  */
-export function findConflictingDuplicateIdentityKeys(envelopes = []) {
-  const first = new Map();
-  const conflicts = new Set();
+export function findDuplicateIdentityKeys(envelopes = []) {
+  const counts = new Map();
   for (const envelope of envelopes) {
     const key = identityKey(envelope);
     if (!key) continue;
-    const sig = directionalContentSignature(envelope);
-    if (first.has(key) && first.get(key) !== sig) conflicts.add(key);
-    else if (!first.has(key)) first.set(key, sig);
+    counts.set(key, (counts.get(key) || 0) + 1);
   }
-  return conflicts;
+  const duplicates = new Set();
+  for (const [key, count] of counts.entries()) {
+    if (count > 1) duplicates.add(key);
+  }
+  return duplicates;
+}
+
+/** @deprecated use findDuplicateIdentityKeys — retained name for call-site clarity in older tests */
+export function findConflictingDuplicateIdentityKeys(envelopes = []) {
+  return findDuplicateIdentityKeys(envelopes);
 }
 
 /**
@@ -126,9 +123,14 @@ export function assessDirectionalFamily(input) {
   members.sort((a, b) => cmpStr(a.agentId, b.agentId) || cmpStr(a.direction || '', b.direction || ''));
 
   const confirming = members.filter((m) => m.direction && !m.nonConfirming);
-  const degradedMemberCount = members.filter((m) => m.degraded).length;
-  const nonConfirmingMemberCount = members.filter((m) => m.nonConfirming).length;
+  // Counts are distinct agentIds so they never exceed memberAgentIds.length.
+  const confirmingAgentIds = uniqueSorted(confirming.map((m) => m.agentId));
+  const degradedMemberCount = uniqueSorted(members.filter((m) => m.degraded).map((m) => m.agentId)).length;
+  const nonConfirmingMemberCount = uniqueSorted(
+    members.filter((m) => m.nonConfirming).map((m) => m.agentId),
+  ).length;
   const memberAgentIds = uniqueSorted(members.map((m) => m.agentId));
+  const admittedDirectionalMemberCount = confirmingAgentIds.length;
   const limitations = [];
 
   if (degradedMemberCount > 0) limitations.push('family_contains_degraded_members');
@@ -154,11 +156,26 @@ export function assessDirectionalFamily(input) {
   const actionable = dirs.filter((d) => ACTIONABLE.has(d));
   const nonActioning = dirs.filter((d) => NON_ACTIONING.has(d));
 
+  // MIXED requires >=2 distinct directional agents. Same-agent multi-run
+  // conflicts are fail-closed as non-confirming (no approved precedence).
+  const ambiguousSameAgentConflict = () => ({
+    correlationFamily,
+    memberAgentIds,
+    admittedDirectionalMemberCount: 0,
+    degradedMemberCount,
+    nonConfirmingMemberCount,
+    qualitativeState: FAMILY_QUALITATIVE_STATE.NON_CONFIRMING,
+    familyDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
+    conflictState: CONFLICT_STATE.NONE,
+    limitations: uniqueSorted([...limitations, 'ambiguous_same_agent_multi_run_conflict']),
+  });
+
   if (actionable.includes(DIRECTION.BULLISH) && actionable.includes(DIRECTION.BEARISH)) {
+    if (admittedDirectionalMemberCount < 2) return ambiguousSameAgentConflict();
     return {
       correlationFamily,
       memberAgentIds,
-      admittedDirectionalMemberCount: confirming.length,
+      admittedDirectionalMemberCount,
       degradedMemberCount,
       nonConfirmingMemberCount,
       qualitativeState: FAMILY_QUALITATIVE_STATE.MIXED,
@@ -169,10 +186,11 @@ export function assessDirectionalFamily(input) {
   }
 
   if (actionable.length === 1 && nonActioning.length > 0) {
+    if (admittedDirectionalMemberCount < 2) return ambiguousSameAgentConflict();
     return {
       correlationFamily,
       memberAgentIds,
-      admittedDirectionalMemberCount: confirming.length,
+      admittedDirectionalMemberCount,
       degradedMemberCount,
       nonConfirmingMemberCount,
       qualitativeState: FAMILY_QUALITATIVE_STATE.MIXED,
@@ -187,7 +205,7 @@ export function assessDirectionalFamily(input) {
     return {
       correlationFamily,
       memberAgentIds,
-      admittedDirectionalMemberCount: confirming.length,
+      admittedDirectionalMemberCount,
       degradedMemberCount,
       nonConfirmingMemberCount,
       qualitativeState: d === DIRECTION.BULLISH
@@ -203,7 +221,7 @@ export function assessDirectionalFamily(input) {
     return {
       correlationFamily,
       memberAgentIds,
-      admittedDirectionalMemberCount: confirming.length,
+      admittedDirectionalMemberCount,
       degradedMemberCount,
       nonConfirmingMemberCount,
       qualitativeState: FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
@@ -216,7 +234,7 @@ export function assessDirectionalFamily(input) {
   return {
     correlationFamily,
     memberAgentIds,
-    admittedDirectionalMemberCount: confirming.length,
+    admittedDirectionalMemberCount: 0,
     degradedMemberCount,
     nonConfirmingMemberCount,
     qualitativeState: FAMILY_QUALITATIVE_STATE.UNAVAILABLE,
@@ -267,9 +285,7 @@ export function resolveCrossFamilySynthesis(familyAssessments, extra = {}) {
   const coherentBearish = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH);
   const coherentNeutral = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL);
 
-  const independentDirectionalFamilyCount = countDistinctQualifyingFamilies(
-    families.filter((f) => QUALIFYING_STATES.has(f.qualitativeState)),
-  );
+  const independentDirectionalFamilyCount = countDistinctQualifyingFamilies(families);
 
   // Precedence 2: blocking independent cross-family bullish vs bearish
   if (coherentBullish.length > 0 && coherentBearish.length > 0) {
@@ -453,9 +469,23 @@ export function synthesizeFromFamilyAssessments(decisionContext, familyAssessmen
  */
 export function synthesizeDeterministicAssessment(decisionContext, envelopes = []) {
   const list = Array.isArray(envelopes) ? envelopes : [];
+  if (list.length > MAX_SYNTHESIS_INPUT_ENVELOPES) {
+    return {
+      assessment: null,
+      validation: {
+        ok: false,
+        code: 'input_envelope_limit_exceeded',
+        message: `C.2 accepts at most ${MAX_SYNTHESIS_INPUT_ENVELOPES} envelopes; no truncation`,
+        limit: MAX_SYNTHESIS_INPUT_ENVELOPES,
+        received: list.length,
+      },
+      admissionSet: null,
+    };
+  }
+
   const admissionSet = admitEvidenceSet(decisionContext, list);
   const results = admissionSet.results || [];
-  const conflictingIdentities = findConflictingDuplicateIdentityKeys(list);
+  const duplicateIdentities = findDuplicateIdentityKeys(list);
 
   const summary = {
     excludedCount: 0,
@@ -484,10 +514,10 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
     const reason = result.admissionReason || 'unknown';
     const key = identityKey(envelope);
 
-    if (key && conflictingIdentities.has(key)) {
+    if (key && duplicateIdentities.has(key)) {
       summary.nonConfirmingCount += 1;
-      summary.reasons.push('CONFLICTING_DUPLICATE_IDENTITY');
-      extraLimitations.push('conflicting_duplicate_identity');
+      summary.reasons.push('DUPLICATE_IDENTITY_AMBIGUOUS');
+      extraLimitations.push('duplicate_identity_ambiguous');
       contextIncompatibleOnly = false;
       continue;
     }
@@ -677,6 +707,70 @@ export function projectSynthesisToArtemisDecision(assessment, {
     };
   }
 
+  const refs = Array.isArray(evidenceRefs) ? evidenceRefs : null;
+  if (refs == null) {
+    return {
+      decision: null,
+      validation: {
+        ok: false,
+        code: 'evidence_refs_required_array',
+        message: 'evidenceRefs must be an array',
+      },
+    };
+  }
+
+  const contributingAgentIds = new Set();
+  for (const fam of assessment.familyAssessments || []) {
+    for (const agentId of fam.memberAgentIds || []) contributingAgentIds.add(agentId);
+  }
+  for (const row of assessment.opportunityContext || []) {
+    if (row?.agentId) contributingAgentIds.add(row.agentId);
+  }
+
+  const claimsEvidence = (
+    (Array.isArray(assessment.familyAssessments) && assessment.familyAssessments.length > 0)
+    || (Array.isArray(assessment.opportunityContext) && assessment.opportunityContext.length > 0)
+  );
+
+  if (claimsEvidence && refs.length === 0) {
+    return {
+      decision: null,
+      validation: {
+        ok: false,
+        code: 'evidence_refs_required_for_contributors',
+        message: 'Non-empty family/opportunity synthesis requires Decision-safe evidenceRefs',
+      },
+    };
+  }
+
+  for (let i = 0; i < refs.length; i += 1) {
+    if (!isDecisionSafeEvidenceRef(refs[i])) {
+      return {
+        decision: null,
+        validation: {
+          ok: false,
+          code: 'evidence_ref_not_decision_safe',
+          message: `evidenceRefs[${i}] failed Decision-safe validation`,
+          index: i,
+        },
+      };
+    }
+  }
+
+  for (const agentId of contributingAgentIds) {
+    if (!refs.some((ref) => ref && ref.agentId === agentId)) {
+      return {
+        decision: null,
+        validation: {
+          ok: false,
+          code: 'missing_contributor_evidence_ref',
+          message: `Missing Decision-safe evidenceRef for contributing agentId=${agentId}`,
+          agentId,
+        },
+      };
+    }
+  }
+
   const decision = buildContractOnlyArtemisDecision({
     decisionId,
     decisionContextId,
@@ -688,7 +782,7 @@ export function projectSynthesisToArtemisDecision(assessment, {
     marketType: marketType ?? assessment?.decisionContext?.marketType ?? undefined,
     timeframe: timeframe ?? assessment?.decisionContext?.timeframe ?? null,
     analysisHorizon: analysisHorizon ?? assessment?.decisionContext?.analysisHorizon ?? null,
-    evidenceRefs: Array.isArray(evidenceRefs) ? evidenceRefs : [],
+    evidenceRefs: refs,
     synthesisOutcome: assessment?.synthesisOutcome,
     direction: assessment?.observedDirection,
     conflictState: assessment?.conflictState,
@@ -723,5 +817,7 @@ export default {
   assessDirectionalFamily,
   resolveCrossFamilySynthesis,
   projectSynthesisToArtemisDecision,
+  findDuplicateIdentityKeys,
   findConflictingDuplicateIdentityKeys,
+  MAX_SYNTHESIS_INPUT_ENVELOPES,
 };
