@@ -24,9 +24,11 @@ import {
   EVIDENCE_ADMISSION_STATE,
   LIQUIDITY_STATUS,
   MATURITY_STAGE,
+  REQUIRED_EVIDENCE_CONTRACT_VERSION,
   RISK_STATUS,
   SYNTHESIS_OUTCOME,
   buildContractOnlyArtemisDecision,
+  isDecisionSafeEvidenceRef,
   validateArtemisDecision,
 } from '../../contracts/artemisDecisionContract.js';
 import {
@@ -196,6 +198,7 @@ describe('WP-C.1 ArtemisDecision contract', () => {
           runId: TREND_RUN,
           evidenceContractVersion: EVIDENCE_CONTRACT_VERSION,
           role: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+          authorityClass: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
           correlationFamily: CORRELATION_FAMILY.OHLCV_CANDLE,
           freshness: 'fresh',
           availability: 'available',
@@ -761,5 +764,149 @@ describe('WP-C.1 frozen Volume adapter compatibility', () => {
       evidenceRefs: set.evidenceRefs,
     });
     expect(validateArtemisDecision(decision).ok).toBe(true);
+  });
+});
+
+describe('WP-C.1 evidence ref integrity', () => {
+  function baseSafeRef(overrides = {}) {
+    return {
+      agentId: 'trend',
+      runId: TREND_RUN,
+      evidenceContractVersion: REQUIRED_EVIDENCE_CONTRACT_VERSION,
+      role: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      authorityClass: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      correlationFamily: CORRELATION_FAMILY.OHLCV_CANDLE,
+      freshness: 'fresh',
+      availability: 'available',
+      admissionState: EVIDENCE_ADMISSION_STATE.ADMITTED,
+      admissionReason: ADMISSION_REASON.VALID_ANALYTICAL_EVIDENCE,
+      confirmationSemantics: CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE,
+      ...overrides,
+    };
+  }
+
+  function decisionWithRef(ref) {
+    return buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [ref],
+    });
+  }
+
+  it('rejects trend with opportunity role', () => {
+    const result = validateArtemisDecision(decisionWithRef(baseSafeRef({
+      role: AUTHORITY_CLASS.OPPORTUNITY_FORECAST,
+      authorityClass: AUTHORITY_CLASS.OPPORTUNITY_FORECAST,
+      confirmationSemantics: CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT,
+    })));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects arbitrage with analytical role', () => {
+    const result = validateArtemisDecision(decisionWithRef(baseSafeRef({
+      agentId: 'arbitrage',
+      runId: ARB_RUN,
+      role: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      authorityClass: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      correlationFamily: CORRELATION_FAMILY.SPREAD_MONITOR,
+      confirmationSemantics: CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE,
+      admissionReason: ADMISSION_REASON.VALID_OPPORTUNITY_CONTEXT,
+    })));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects risk pretending analytical role', () => {
+    const result = validateArtemisDecision(decisionWithRef(baseSafeRef({
+      agentId: 'risk',
+      runId: RISK_RUN,
+      role: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      authorityClass: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      correlationFamily: CORRELATION_FAMILY.ACCOUNT_STATE,
+    })));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects role != authorityClass when taxonomy expects equality', () => {
+    const result = validateArtemisDecision(decisionWithRef(baseSafeRef({
+      role: AUTHORITY_CLASS.ANALYTICAL_EVIDENCE,
+      authorityClass: AUTHORITY_CLASS.OPPORTUNITY_FORECAST,
+    })));
+    expect(result.ok).toBe(false);
+  });
+
+  it.each([
+    ['EXCLUDED + directional', EVIDENCE_ADMISSION_STATE.EXCLUDED, CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE],
+    ['REJECTED + opportunity', EVIDENCE_ADMISSION_STATE.REJECTED, CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT],
+    ['NON_CONFIRMING + directional', EVIDENCE_ADMISSION_STATE.ADMITTED_NON_CONFIRMING, CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE],
+  ])('rejects inconsistent admission/confirmation: %s', (_label, state, semantics) => {
+    const result = validateArtemisDecision(decisionWithRef(baseSafeRef({
+      admissionState: state,
+      confirmationSemantics: semantics,
+    })));
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts correct Trend / Volume / Arbitrage refs', () => {
+    expect(validateArtemisDecision(decisionWithRef(baseSafeRef())).ok).toBe(true);
+    expect(validateArtemisDecision(decisionWithRef(baseSafeRef({
+      agentId: 'volume',
+      runId: VOLUME_RUN,
+    }))).ok).toBe(true);
+    expect(validateArtemisDecision(decisionWithRef(baseSafeRef({
+      agentId: 'arbitrage',
+      runId: ARB_RUN,
+      role: AUTHORITY_CLASS.OPPORTUNITY_FORECAST,
+      authorityClass: AUTHORITY_CLASS.OPPORTUNITY_FORECAST,
+      correlationFamily: CORRELATION_FAMILY.SPREAD_MONITOR,
+      admissionReason: ADMISSION_REASON.VALID_OPPORTUNITY_CONTEXT,
+      confirmationSemantics: CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT,
+    }))).ok).toBe(true);
+  });
+
+  it('requires exact frozen evidence contract version (policy A)', () => {
+    expect(REQUIRED_EVIDENCE_CONTRACT_VERSION).toBe('artemis-evidence-1.0.0');
+    expect(validateArtemisDecision(decisionWithRef(baseSafeRef({
+      evidenceContractVersion: REQUIRED_EVIDENCE_CONTRACT_VERSION,
+    }))).ok).toBe(true);
+    expect(validateArtemisDecision(decisionWithRef(baseSafeRef({
+      evidenceContractVersion: 'artemis-evidence-9.9.9',
+    }))).ok).toBe(false);
+  });
+
+  it('mixed-set keeps rejected diagnostics in results but Decision-safe evidenceRefs only', () => {
+    const invalidSchema = trendEnvelope({ schemaVersion: '0.0.0' });
+    const set = admitEvidenceSet(CTX, [
+      trendEnvelope(),
+      volumeEnvelope(),
+      trendEnvelope({ agentId: 'not_an_agent' }),
+      trendEnvelope({ agentId: 'agent-7' }),
+      invalidSchema,
+      trendEnvelope({ symbol: 'ETH/USDT', runId: '55555555-5555-4555-8555-555555555555' }),
+    ]);
+
+    expect(set.results.length).toBe(6);
+    expect(set.results.some((r) => r.admissionReason === ADMISSION_REASON.UNKNOWN_AGENT)).toBe(true);
+    expect(set.results.some((r) => r.admissionReason === ADMISSION_REASON.LEGACY_AGENT_N)).toBe(true);
+    expect(set.results.some((r) => r.admissionReason === ADMISSION_REASON.INVALID_SCHEMA)).toBe(true);
+    expect(set.results.some((r) => r.admissionReason === ADMISSION_REASON.CONTEXT_INCOMPATIBLE)).toBe(true);
+
+    expect(set.evidenceRefs.every((ref) => isDecisionSafeEvidenceRef(ref))).toBe(true);
+    expect(set.evidenceRefs.every((ref) => ref.admissionState !== EVIDENCE_ADMISSION_STATE.REJECTED)).toBe(true);
+    expect(set.evidenceRefs.some((ref) => ref.admissionReason === ADMISSION_REASON.CONTEXT_INCOMPATIBLE)).toBe(true);
+
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      symbol: CTX.symbol,
+      timeframe: CTX.timeframe,
+      evidenceRefs: set.evidenceRefs,
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(true);
+    expect(decision.decisionEligible).toBe(false);
+    expect(decision.executionEligible).toBe(false);
   });
 });

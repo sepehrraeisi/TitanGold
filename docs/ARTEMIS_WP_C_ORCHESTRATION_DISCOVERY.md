@@ -9,9 +9,10 @@
 **C.1 worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c1`  
 **Risk tier (Discovery):** Tier 0 — Documentation milestone  
 **Implementation started at Discovery approval:** **NO**  
-**C.1 pure-library implementation:** **COMPLETE — OWNER REVIEW REQUIRED — NOT CLOSED/FROZEN**  
+**C.1 pure-library implementation:** **FINAL INTEGRITY HARDENING COMPLETE — OWNER REVIEW REQUIRED — NOT CLOSED/FROZEN**  
 **C.2 / B10 / Shadow / Paper / Live:** **NOT STARTED**  
 **Migration / runtime / provider / financial side effects:** NONE  
+**PR / merge / deploy:** NONE  
 
 This is the **single canonical** WP-C discovery document. Do not create parallel planning docs.
 
@@ -27,12 +28,14 @@ Delivered on `feat/artemis-wp-c1-orchestration-contracts`:
 
 Invariants enforced: `decisionEligible=false`, `executionEligible=false`, legacy `approved`/`approvedForExecution` rejected.  
 Analytical `conclusion.signal` BUY/SELL/HOLD is **not** treated as execution authorization.  
+Final integrity: agentId↔role/authorityClass match; admissionState↔confirmationSemantics; Decision `evidenceRefs` Decision-safe only; Policy A exact `artemis-evidence-1.0.0`.  
 WP-B.1 evidence contract remains unmodified/frozen. Legacy Artemis runtime routes/orchestrator untouched. Sentiment untouched.
 
 Provenance:
 - C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
 - Prior review HEAD: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
-- Correction commit updates current review HEAD on the same branch.
+- Prior integrity review HEAD: `51dc36f9937e40126dfc8bcf6c2c543a5cff96b0`
+- Final integrity code milestone: git tip of C.1 branch (authoritative; no docs-only SHA stamp)
 
 ---
 

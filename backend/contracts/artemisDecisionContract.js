@@ -20,6 +20,7 @@ import {
   CONFIDENCE_SCALE,
   CALIBRATION_STATE,
   CORRELATION_FAMILY,
+  CONTRACT_VERSION as EVIDENCE_CONTRACT_VERSION,
   FRESHNESS_STATUS,
   MARKET_TYPE,
   collectForbiddenSecretKeys,
@@ -31,6 +32,8 @@ import {
 
 export const DECISION_SCHEMA_VERSION = '1.0.0';
 export const DECISION_CONTRACT_VERSION = 'artemis-decision-1.0.0';
+/** C.1 policy A: Decision refs must cite the frozen WP-B.1 evidence contract version only. */
+export const REQUIRED_EVIDENCE_CONTRACT_VERSION = EVIDENCE_CONTRACT_VERSION;
 export const MAX_EVIDENCE_REFS = 32;
 export const MAX_LIMITATIONS = 64;
 export const MAX_DECISION_UTF8_BYTES = 16 * 1024;
@@ -385,6 +388,46 @@ function validateRuntimeStatus(runtime, errors) {
   optionalString('runtimeStatus.reasonKey', runtime.reasonKey, errors);
 }
 
+function validateAdmissionConfirmationConsistency(ref, field, errors) {
+  const state = ref.admissionState;
+  const semantics = ref.confirmationSemantics;
+  if (state == null || semantics == null) return;
+
+  if (state === EVIDENCE_ADMISSION_STATE.REJECTED && semantics !== CONFIRMATION_SEMANTICS.NONE) {
+    errors.push({ field: `${field}.confirmationSemantics`, code: 'admission_confirmation_inconsistent' });
+  }
+  if (state === EVIDENCE_ADMISSION_STATE.EXCLUDED && semantics !== CONFIRMATION_SEMANTICS.NONE) {
+    errors.push({ field: `${field}.confirmationSemantics`, code: 'admission_confirmation_inconsistent' });
+  }
+  if (state === EVIDENCE_ADMISSION_STATE.ADMITTED_NON_CONFIRMING && semantics !== CONFIRMATION_SEMANTICS.NON_CONFIRMING) {
+    errors.push({ field: `${field}.confirmationSemantics`, code: 'admission_confirmation_inconsistent' });
+  }
+
+  const expected = AGENT_CONTRACT_ROLE[ref.agentId];
+  if (!expected) return;
+
+  if (state === EVIDENCE_ADMISSION_STATE.ADMITTED || state === EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED) {
+    if (expected.authorityClass === AUTHORITY_CLASS.ANALYTICAL_EVIDENCE
+      && semantics !== CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE) {
+      errors.push({ field: `${field}.confirmationSemantics`, code: 'admission_confirmation_inconsistent' });
+    }
+    if (expected.authorityClass === AUTHORITY_CLASS.OPPORTUNITY_FORECAST
+      && semantics !== CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT) {
+      errors.push({ field: `${field}.confirmationSemantics`, code: 'admission_confirmation_inconsistent' });
+    }
+  }
+
+  // Role/confirmation impossibilities independent of admissionState when role is known.
+  if (expected.authorityClass === AUTHORITY_CLASS.ANALYTICAL_EVIDENCE
+    && semantics === CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT) {
+    errors.push({ field: `${field}.confirmationSemantics`, code: 'role_confirmation_inconsistent' });
+  }
+  if (expected.authorityClass === AUTHORITY_CLASS.OPPORTUNITY_FORECAST
+    && semantics === CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE) {
+    errors.push({ field: `${field}.confirmationSemantics`, code: 'role_confirmation_inconsistent' });
+  }
+}
+
 function validateEvidenceRef(ref, index, errors) {
   const field = `evidenceRefs[${index}]`;
   if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
@@ -394,16 +437,53 @@ function validateEvidenceRef(ref, index, errors) {
   rejectUnknownFields(ref, ALLOWED_EVIDENCE_REF, field, errors);
   if (!ref.agentId || typeof ref.agentId !== 'string' || !Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, ref.agentId)) {
     errors.push({ field: `${field}.agentId`, code: 'unknown_agent_id' });
+    return;
   }
+
+  const expectedRole = AGENT_CONTRACT_ROLE[ref.agentId];
+
+  // C.1 canonical refs require both role and authorityClass.
+  if (ref.role == null) {
+    errors.push({ field: `${field}.role`, code: 'role_required' });
+  } else if (!inEnum(ref.role, AUTHORITY_CLASS)) {
+    errors.push({ field: `${field}.role`, code: 'invalid_role' });
+  } else if (ref.role !== expectedRole.agentRole) {
+    errors.push({ field: `${field}.role`, code: 'agent_role_mismatch', expected: expectedRole.agentRole });
+  }
+
+  if (ref.authorityClass == null) {
+    errors.push({ field: `${field}.authorityClass`, code: 'authority_class_required' });
+  } else if (!inEnum(ref.authorityClass, AUTHORITY_CLASS)) {
+    errors.push({ field: `${field}.authorityClass`, code: 'invalid_authority_class' });
+  } else if (ref.authorityClass !== expectedRole.authorityClass) {
+    errors.push({
+      field: `${field}.authorityClass`,
+      code: 'agent_authority_mismatch',
+      expected: expectedRole.authorityClass,
+    });
+  }
+
+  if (
+    ref.role != null
+    && ref.authorityClass != null
+    && expectedRole.agentRole === expectedRole.authorityClass
+    && ref.role !== ref.authorityClass
+  ) {
+    errors.push({ field: `${field}.authorityClass`, code: 'role_authority_mismatch' });
+  }
+
   validateIdentifier(`${field}.runId`, ref.runId, errors);
   validateIdentifier(`${field}.agentRecordId`, ref.agentRecordId, errors);
-  optionalString(`${field}.evidenceContractVersion`, ref.evidenceContractVersion, errors);
-  if (ref.role != null && !inEnum(ref.role, AUTHORITY_CLASS)) {
-    errors.push({ field: `${field}.role`, code: 'invalid_role' });
+
+  // Policy A: exact frozen WP-B.1 evidence contract version required in C.1.
+  if (ref.evidenceContractVersion !== REQUIRED_EVIDENCE_CONTRACT_VERSION) {
+    errors.push({
+      field: `${field}.evidenceContractVersion`,
+      code: 'unsupported_evidence_contract_version',
+      expected: REQUIRED_EVIDENCE_CONTRACT_VERSION,
+    });
   }
-  if (ref.authorityClass != null && !inEnum(ref.authorityClass, AUTHORITY_CLASS)) {
-    errors.push({ field: `${field}.authorityClass`, code: 'invalid_authority_class' });
-  }
+
   if (ref.correlationFamily != null && !inEnum(ref.correlationFamily, CORRELATION_FAMILY)) {
     errors.push({ field: `${field}.correlationFamily`, code: 'invalid_correlation_family' });
   }
@@ -431,6 +511,7 @@ function validateEvidenceRef(ref, index, errors) {
   if (ref.confirmationSemantics != null && !inEnum(ref.confirmationSemantics, CONFIRMATION_SEMANTICS)) {
     errors.push({ field: `${field}.confirmationSemantics`, code: 'invalid_confirmation_semantics' });
   }
+  validateAdmissionConfirmationConsistency(ref, field, errors);
   optionalNullableString(`${field}.symbol`, ref.symbol, errors);
   optionalNullableString(`${field}.venue`, ref.venue, errors);
   optionalNullableString(`${field}.timeframe`, ref.timeframe, errors);
@@ -439,6 +520,17 @@ function validateEvidenceRef(ref, index, errors) {
     errors.push({ field: `${field}.marketType`, code: 'invalid_market_type' });
   }
   assertIsoOptional(`${field}.analysisTimestamp`, ref.analysisTimestamp, errors);
+}
+
+/**
+ * Pure helper: whether a ref can be embedded in a valid ArtemisDecision evidenceRefs array.
+ */
+export function isDecisionSafeEvidenceRef(ref) {
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) return false;
+  if (ref.admissionState === EVIDENCE_ADMISSION_STATE.REJECTED) return false;
+  const errors = [];
+  validateEvidenceRef(ref, 0, errors);
+  return errors.length === 0;
 }
 
 /**
@@ -630,8 +722,10 @@ export function buildContractOnlyArtemisDecision(partial = {}) {
 export default {
   DECISION_SCHEMA_VERSION,
   DECISION_CONTRACT_VERSION,
+  REQUIRED_EVIDENCE_CONTRACT_VERSION,
   validateArtemisDecision,
   buildContractOnlyArtemisDecision,
+  isDecisionSafeEvidenceRef,
   MATURITY_STAGE,
   CLASSIFICATION,
   SYNTHESIS_OUTCOME,

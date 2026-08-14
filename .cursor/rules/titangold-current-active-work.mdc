@@ -18,7 +18,7 @@ Risk tier:
 Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.1 CORRECTION COMPLETE — OWNER REVIEW REQUIRED**  
+**WP-C.1 FINAL INTEGRITY HARDENING COMPLETE — OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
 **PURE LIBRARY ONLY**  
@@ -29,13 +29,15 @@ Engineering status:
 **NO AGENT EXECUTION**  
 **NO SHADOW / PAPER / LIVE**  
 **C.2 NOT STARTED**  
-**B10 NOT STARTED**
+**B10 NOT STARTED**  
+**PR NOT CREATED**
 
 Provenance (unambiguous):
 - C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
 - Prior review HEAD before this correction: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
 - C.1 correction code milestone: `d32e583d8358119a317f248158b656cf7b6914c2`
-- C.1 branch HEAD after correction docs stamp: see git tip of `feat/artemis-wp-c1-orchestration-contracts`
+- Prior integrity review HEAD: `51dc36f9937e40126dfc8bcf6c2c543a5cff96b0`
+- C.1 final integrity code milestone: see git tip of `feat/artemis-wp-c1-orchestration-contracts` (authoritative; no docs-only SHA stamp)
 
 Branch:
 `feat/artemis-wp-c1-orchestration-contracts`
@@ -61,13 +63,12 @@ Safety flags (unchanged / still false):
 - `decisionEligible = false`
 - `executionEligible = false`
 
-C.1 correction focus:
-- Analytical BUY/SELL/HOLD signals are not execution claims
-- Context-mismatch diagnostics stay outside Decision evidenceRef allowlist
-- Strict Decision freshness shape
-- Hardened duplicate identity for null/unavailable runId
-- Timestamp ordering + confidence range hardening
-- DATA_QUALITY_DEGRADED reason
+C.1 final integrity focus:
+- agentId ↔ role / authorityClass consistency via AGENT_CONTRACT_ROLE
+- admissionState ↔ confirmationSemantics cross-field consistency
+- evidenceRefs Decision-safe only (REJECTED stay in results, not in Decision refs)
+- Policy A: evidenceContractVersion must equal frozen `artemis-evidence-1.0.0`
+- Prior correction invariants preserved (Volume BUY/SELL/HOLD, Arbitrage opportunity-only, non-execution)
 
 Not authorized:
 - Runtime / PM2 / deploy / migration / provider / Agent execution / Shadow / Paper / Live

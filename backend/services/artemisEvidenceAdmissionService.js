@@ -20,6 +20,7 @@ import {
 import {
   CONFIRMATION_SEMANTICS,
   EVIDENCE_ADMISSION_STATE,
+  isDecisionSafeEvidenceRef,
 } from '../contracts/artemisDecisionContract.js';
 import { resolveArtemisAgentIdentity } from './artemisAgentIdentity.js';
 
@@ -571,7 +572,10 @@ export function admitEvidenceSet(decisionContext, envelopes = []) {
     results.push(result);
   }
 
-  const evidenceRefs = results.map((row) => row.evidenceRef).filter(Boolean);
+  // Canonical Decision evidenceRefs: Decision-safe only (REJECTED diagnostics stay in results).
+  const evidenceRefs = results
+    .map((row) => row.evidenceRef)
+    .filter((ref) => isDecisionSafeEvidenceRef(ref));
   const admitted = results.filter((row) => (
     row.admissionState === EVIDENCE_ADMISSION_STATE.ADMITTED
     || row.admissionState === EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED
