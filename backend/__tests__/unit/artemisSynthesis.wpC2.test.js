@@ -8,6 +8,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   ADAPTER_VERSIONS,
   AUTHORITY_CLASS,
+  AVAILABILITY,
   CONTRACT_VERSION as EVIDENCE_CONTRACT_VERSION,
   CORRELATION_FAMILY,
   SCHEMA_VERSION as EVIDENCE_SCHEMA_VERSION,
@@ -23,12 +24,16 @@ import {
 import {
   FAMILY_QUALITATIVE_STATE,
   MIN_INDEPENDENT_DIRECTIONAL_FAMILIES,
+  SYNTHESIS_CONTRACT_VERSION,
   SYNTHESIS_POLICY_VERSION,
+  SYNTHESIS_SCHEMA_VERSION,
+  buildUnavailableSynthesisConfidence,
   validateArtemisSynthesisAssessment,
 } from '../../contracts/artemisSynthesisContract.js';
 import {
   assessDirectionalFamily,
   projectSynthesisToArtemisDecision,
+  resolveCrossFamilySynthesis,
   synthesizeDeterministicAssessment,
   synthesizeFromFamilyAssessments,
 } from '../../services/artemisDeterministicSynthesisService.js';
@@ -154,7 +159,7 @@ function arbitrageEnvelope(overrides = {}) {
 function familyFixture(correlationFamily, qualitativeState, familyDirection, extras = {}) {
   return {
     correlationFamily,
-    memberAgentIds: extras.memberAgentIds || ['fixture_a'],
+    memberAgentIds: extras.memberAgentIds || ['trend'],
     admittedDirectionalMemberCount: extras.admittedDirectionalMemberCount ?? 1,
     degradedMemberCount: 0,
     nonConfirmingMemberCount: 0,
@@ -162,6 +167,49 @@ function familyFixture(correlationFamily, qualitativeState, familyDirection, ext
     familyDirection,
     conflictState: extras.conflictState || CONFLICT_STATE.NONE,
     limitations: extras.limitations || [],
+  };
+}
+
+function validAssessment(overrides = {}) {
+  return {
+    schemaVersion: SYNTHESIS_SCHEMA_VERSION,
+    contractVersion: SYNTHESIS_CONTRACT_VERSION,
+    policyVersion: SYNTHESIS_POLICY_VERSION,
+    implementationVersion: SYNTHESIS_POLICY_VERSION,
+    decisionContext: {
+      symbol: 'BTC/USDT',
+      venue: 'mexc',
+      marketType: 'spot',
+      timeframe: '1h',
+      analysisHorizon: null,
+    },
+    synthesisOutcome: SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE,
+    observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
+    conflictState: CONFLICT_STATE.NONE,
+    independentDirectionalFamilyCount: 1,
+    multiFamilyConfirmation: false,
+    familyAssessments: [
+      familyFixture(
+        CORRELATION_FAMILY.OHLCV_CANDLE,
+        FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+        DIRECTION_OR_ABSTAIN.BULLISH,
+        { memberAgentIds: ['trend', 'volume'], admittedDirectionalMemberCount: 2 },
+      ),
+    ],
+    opportunityContext: [],
+    excludedNonConfirmingSummary: {
+      excludedCount: 0,
+      rejectedCount: 0,
+      nonConfirmingCount: 0,
+      degradedCount: 0,
+      reasons: [],
+    },
+    limitations: ['wp_c2_qualitative_only', 'decision_eligible_false'],
+    confidence: buildUnavailableSynthesisConfidence(),
+    decisionEligible: false,
+    executionEligible: false,
+    artemisConsumable: false,
+    ...overrides,
   };
 }
 
@@ -302,6 +350,124 @@ describe('WP-C.2 realistic current evidence set', () => {
   });
 });
 
+describe('WP-C.2 distinct correlation-family integrity', () => {
+  it('two coherent bullish summaries with same OHLCV family MUST NOT propose', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['volume'],
+      }),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('duplicate_correlation_family');
+
+    const { assessment, validation } = synthesizeFromFamilyAssessments(CTX, [
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['volume'],
+      }),
+    ]);
+    expect(assessment).toBeNull();
+    expect(validation.ok).toBe(false);
+  });
+
+  it('two coherent bearish summaries same family MUST NOT propose', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH, DIRECTION_OR_ABSTAIN.BEARISH),
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH, DIRECTION_OR_ABSTAIN.BEARISH, {
+        memberAgentIds: ['volume'],
+      }),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('duplicate_correlation_family');
+  });
+
+  it('family assessment with missing/null correlationFamily => contract REJECT', () => {
+    const assessment = validAssessment({
+      familyAssessments: [
+        {
+          ...familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+          correlationFamily: null,
+        },
+      ],
+      independentDirectionalFamilyCount: 0,
+    });
+    expect(validateArtemisSynthesisAssessment(assessment).ok).toBe(false);
+  });
+
+  it('duplicate correlationFamily in one synthesis assessment => contract REJECT', () => {
+    const assessment = validAssessment({
+      independentDirectionalFamilyCount: 2,
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+          memberAgentIds: ['volume'],
+        }),
+      ],
+    });
+    expect(validateArtemisSynthesisAssessment(assessment).ok).toBe(false);
+  });
+});
+
+describe('WP-C.2 conflict precedence', () => {
+  it('blocking cross-family outranks material same-family mixed', () => {
+    const { assessment, validation } = synthesizeFromFamilyAssessments(CTX, [
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.MIXED, DIRECTION_OR_ABSTAIN.ABSTAIN, {
+        conflictState: CONFLICT_STATE.MATERIAL,
+        memberAgentIds: ['trend', 'volume'],
+        admittedDirectionalMemberCount: 2,
+      }),
+      familyFixture(
+        CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
+        FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+        DIRECTION_OR_ABSTAIN.BULLISH,
+        { memberAgentIds: ['sentiment'] },
+      ),
+      familyFixture(
+        CORRELATION_FAMILY.MICROSTRUCTURE,
+        FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
+        DIRECTION_OR_ABSTAIN.BEARISH,
+        { memberAgentIds: ['pattern'] },
+      ),
+    ]);
+    expect(validation.ok).toBe(true);
+    expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.ABSTAIN);
+    expect(assessment.conflictState).toBe(CONFLICT_STATE.BLOCKING);
+  });
+});
+
+describe('WP-C.2 no synthetic correlation family', () => {
+  it('stale analytical envelope without correlationFamily does not fabricate a family', () => {
+    const staleNoFamily = volumeEnvelope({
+      correlationFamily: undefined,
+      freshness: { status: 'stale', reasonKey: 'stale_no_family' },
+      dataQuality: {
+        status: 'degraded',
+        sourceAvailability: 'available',
+        coverage: 'unavailable',
+        completeness: 'ok',
+        staleness: 'stale',
+        providerDegradation: false,
+        sampleAdequacy: 'ok',
+        knownLimitationKeys: ['stale'],
+      },
+    });
+    delete staleNoFamily.correlationFamily;
+
+    const { assessment, validation } = synthesizeDeterministicAssessment(CTX, [
+      trendEnvelope(),
+      staleNoFamily,
+    ]);
+    expect(validation.ok).toBe(true);
+    expect(assessment.familyAssessments.every((f) => f.correlationFamily !== undefined)).toBe(true);
+    expect(assessment.familyAssessments).toHaveLength(1);
+    expect(assessment.familyAssessments[0].memberAgentIds).toEqual(['trend']);
+    expect(assessment.independentDirectionalFamilyCount).toBe(1);
+    expect(assessment.limitations).toContain('non_confirming_correlation_family_unavailable');
+    expect(assessment.excludedNonConfirmingSummary.nonConfirmingCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('WP-C.2 confidence integrity', () => {
   it('does not average numeric Agent confidences and keeps synthesis confidence unavailable', () => {
     const { assessment } = synthesizeDeterministicAssessment(CTX, [
@@ -377,6 +543,23 @@ describe('WP-C.2 determinism', () => {
     });
     expect(fam.memberAgentIds).toEqual(['trend', 'volume']);
   });
+
+  it('conflicting duplicate runId is order-independent and fail-closed', () => {
+    const bullish = trendEnvelope({
+      conclusion: { direction: 'bullish', strength: { value: 70, scale: 'percent_100', provenance: 'a' } },
+    });
+    const bearish = trendEnvelope({
+      conclusion: { direction: 'bearish', strength: { value: 70, scale: 'percent_100', provenance: 'b' } },
+    });
+    const a = synthesizeDeterministicAssessment(CTX, [bullish, bearish]).assessment;
+    const b = synthesizeDeterministicAssessment(CTX, [bearish, bullish]).assessment;
+    expect(a.synthesisOutcome).toBe(b.synthesisOutcome);
+    expect(a.observedDirection).toBe(b.observedDirection);
+    expect(a.independentDirectionalFamilyCount).toBe(b.independentDirectionalFamilyCount);
+    expect(a.independentDirectionalFamilyCount).toBe(0);
+    expect(a.limitations).toContain('conflicting_duplicate_identity');
+    expect(a.excludedNonConfirmingSummary.reasons).toContain('CONFLICTING_DUPLICATE_IDENTITY');
+  });
 });
 
 describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Agents)', () => {
@@ -387,7 +570,7 @@ describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Ag
         CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
         FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
         DIRECTION_OR_ABSTAIN.BULLISH,
-        { memberAgentIds: ['fixture_b'] },
+        { memberAgentIds: ['sentiment'] },
       ),
     ]);
     expect(validation.ok).toBe(true);
@@ -404,7 +587,7 @@ describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Ag
         CORRELATION_FAMILY.MICROSTRUCTURE,
         FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
         DIRECTION_OR_ABSTAIN.BEARISH,
-        { memberAgentIds: ['fixture_b'] },
+        { memberAgentIds: ['pattern'] },
       ),
     ]);
     expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.PROPOSED);
@@ -418,7 +601,7 @@ describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Ag
         CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
         FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
         DIRECTION_OR_ABSTAIN.BEARISH,
-        { memberAgentIds: ['fixture_b'] },
+        { memberAgentIds: ['sentiment'] },
       ),
     ]);
     expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.ABSTAIN);
@@ -432,7 +615,7 @@ describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Ag
         CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
         FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
         DIRECTION_OR_ABSTAIN.NEUTRAL,
-        { memberAgentIds: ['fixture_b'] },
+        { memberAgentIds: ['sentiment'] },
       ),
     ]);
     expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.ABSTAIN);
@@ -440,14 +623,34 @@ describe('WP-C.2 algorithm-only cross-family policy (not currently consumable Ag
   });
 });
 
-describe('WP-C.2 ArtemisDecision projection', () => {
-  it('projects a validating non-executable Decision', () => {
-    const { assessment, admissionSet } = synthesizeDeterministicAssessment(CTX, [
+describe('WP-C.2 opportunity truthfulness', () => {
+  it('opportunity without proven availability stays unavailable and non-directional', () => {
+    const { assessment, validation } = synthesizeDeterministicAssessment(CTX, [
       trendEnvelope(),
       volumeEnvelope(),
-      arbitrageEnvelope(),
+      arbitrageEnvelope({
+        opportunity: {
+          kind: 'spread',
+          horizon: 'intraday',
+        },
+      }),
     ]);
-    const { decision, validation } = projectSynthesisToArtemisDecision(assessment, {
+    expect(validation.ok).toBe(true);
+    expect(assessment.opportunityContext).toHaveLength(1);
+    expect(assessment.opportunityContext[0].availability).toBe(AVAILABILITY.UNAVAILABLE);
+    expect(assessment.independentDirectionalFamilyCount).toBe(1);
+    expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE);
+  });
+});
+
+describe('WP-C.2 strict contract + projection gates', () => {
+  it('valid assessment passes and projects', () => {
+    const { assessment, admissionSet, validation } = synthesizeDeterministicAssessment(CTX, [
+      trendEnvelope(),
+      volumeEnvelope(),
+    ]);
+    expect(validation.ok).toBe(true);
+    const projected = projectSynthesisToArtemisDecision(assessment, {
       decisionId: DECISION_ID,
       decisionContextId: CONTEXT_ID,
       createdAt: '2026-08-10T12:10:00.000Z',
@@ -458,20 +661,73 @@ describe('WP-C.2 ArtemisDecision projection', () => {
       marketType: CTX.marketType,
       timeframe: CTX.timeframe,
     });
-    expect(validation.ok).toBe(true);
-    expect(validateArtemisDecision(decision).ok).toBe(true);
-    expect(decision.decisionEligible).toBe(false);
-    expect(decision.executionEligible).toBe(false);
-    expect(decision).not.toHaveProperty('approved');
-    expect(decision).not.toHaveProperty('approvedForExecution');
-    expect(decision).not.toHaveProperty('action');
-    expect(decision.riskStatus).toBe('unavailable');
-    expect(decision.allocationProposal.availability).toBe('unavailable');
-    expect(decision.liquidityStatus).toBe('unavailable');
-    expect(decision.runtimeStatus.availability).toBe('unavailable');
-    expect(decision.classification).toBe(CLASSIFICATION.ADVISORY_ONLY);
-    expect(decision.maturityStage).toBe(MATURITY_STAGE.ADVISORY_ONLY);
-    expect(decision.confidence.availability).toBe('unavailable');
-    expect(decision.policyVersion).toBe(SYNTHESIS_POLICY_VERSION);
+    expect(projected.validation.ok).toBe(true);
+    expect(validateArtemisDecision(projected.decision).ok).toBe(true);
+    expect(projected.decision.decisionEligible).toBe(false);
+    expect(projected.decision.executionEligible).toBe(false);
+    expect(projected.decision.classification).toBe(CLASSIFICATION.ADVISORY_ONLY);
+    expect(projected.decision.maturityStage).toBe(MATURITY_STAGE.ADVISORY_ONLY);
+  });
+
+  it('PROPOSED without multiFamilyConfirmation is refused by projection', () => {
+    const bad = validAssessment({
+      synthesisOutcome: SYNTHESIS_OUTCOME.PROPOSED,
+      observedDirection: DIRECTION_OR_ABSTAIN.BULLISH,
+      multiFamilyConfirmation: false,
+      independentDirectionalFamilyCount: 2,
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+        familyFixture(
+          CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
+          FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+          DIRECTION_OR_ABSTAIN.BULLISH,
+          { memberAgentIds: ['sentiment'] },
+        ),
+      ],
+    });
+    expect(validateArtemisSynthesisAssessment(bad).ok).toBe(false);
+    const projected = projectSynthesisToArtemisDecision(bad, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [],
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.ok).toBe(false);
+  });
+
+  it('decisionEligible=true is refused by projection', () => {
+    const bad = validAssessment({ decisionEligible: true });
+    const projected = projectSynthesisToArtemisDecision(bad, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [],
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.ok).toBe(false);
+  });
+
+  it('duplicate family identity assessment is refused by projection', () => {
+    const bad = validAssessment({
+      independentDirectionalFamilyCount: 2,
+      familyAssessments: [
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
+        familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+          memberAgentIds: ['volume'],
+        }),
+      ],
+    });
+    const projected = projectSynthesisToArtemisDecision(bad, {
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [],
+    });
+    expect(projected.decision).toBeNull();
+    expect(projected.validation.ok).toBe(false);
   });
 });

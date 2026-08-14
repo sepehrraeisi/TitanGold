@@ -18,9 +18,11 @@ Risk tier:
 Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.2 IMPLEMENTATION COMPLETE**  
+**WP-C.2 INTEGRITY CORRECTION COMPLETE**  
 **FOCUSED TESTS PASS**  
-**BACKEND REGRESSION = 102 suites / 809 tests PASS**  
+**BACKEND REGRESSION = 102 suites / 820 tests PASS**  
+**ARTEMIS UNIT = 13 suites / 156 tests PASS**  
+**FOCUSED C.2 = 30 PASS**  
 **OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
@@ -35,6 +37,16 @@ Engineering status:
 **NO SHADOW / PAPER / LIVE**  
 **B10 NOT STARTED**  
 **PR NOT CREATED**
+
+Integrity correction focus:
+- Distinct correlationFamily identity (no same-family double counting)
+- Blocking cross-family conflict outranks material same-family conflict
+- No synthetic correlationFamily defaults
+- Strict nested synthesis contract + cross-field invariants
+- Projection validates synthesis first
+- Conflicting duplicate identity fail-closed / order-independent
+- Opportunity availability only when canonically proven
+
 
 Preserved frozen baselines:
 - **WP-C Discovery = OWNER APPROVED**

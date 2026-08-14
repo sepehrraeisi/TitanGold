@@ -1053,10 +1053,19 @@ Optimization remains NOT_APPLICABLE to the initial Artemis control chain.
 
 ## 24. WP-C.2 DETERMINISTIC SYNTHESIS IMPLEMENTATION
 
-**Status:** IMPLEMENTATION COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
+**Status:** IMPLEMENTATION COMPLETE + INTEGRITY CORRECTION COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
 **Branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
 **Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2`  
 **Base main:** `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
+
+Integrity hardening (same branch):
+- Distinct `correlationFamily` identity enforcement (duplicate family summaries rejected)
+- Conflict precedence: blocking cross-family before material same-family
+- No synthetic correlation-family defaults for non-confirming evidence
+- Strict nested synthesis contract + outcome cross-field invariants
+- Projection refuses invalid synthesis assessments
+- Conflicting duplicate `agentId+runId` fail-closed and order-independent
+- Opportunity availability only when canonically proven
 
 ### 24.1 Delivered library footprint
 

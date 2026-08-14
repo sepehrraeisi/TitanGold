@@ -7,6 +7,7 @@ import {
   AVAILABILITY,
   CORRELATION_FAMILY,
   DIRECTION,
+  isCanonicalUuid,
 } from '../contracts/artemisEvidenceContract.js';
 import {
   ALLOCATION_AVAILABILITY,
@@ -26,15 +27,21 @@ import { admitEvidenceSet } from './artemisEvidenceAdmissionService.js';
 import {
   FAMILY_QUALITATIVE_STATE,
   MIN_INDEPENDENT_DIRECTIONAL_FAMILIES,
-  SYNTHESIS_CONTRACT_VERSION,
   SYNTHESIS_POLICY_VERSION,
   SYNTHESIS_SCHEMA_VERSION,
+  SYNTHESIS_CONTRACT_VERSION,
   buildUnavailableSynthesisConfidence,
+  countDistinctQualifyingFamilies,
   validateArtemisSynthesisAssessment,
 } from '../contracts/artemisSynthesisContract.js';
 
 const ACTIONABLE = new Set([DIRECTION.BULLISH, DIRECTION.BEARISH]);
 const NON_ACTIONING = new Set([DIRECTION.SIDEWAYS, DIRECTION.NEUTRAL]);
+const QUALIFYING_STATES = new Set([
+  FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+  FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
+  FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
+]);
 
 function cmpStr(a, b) {
   return String(a).localeCompare(String(b));
@@ -42,6 +49,10 @@ function cmpStr(a, b) {
 
 function uniqueSorted(values) {
   return [...new Set(values.filter((v) => v != null && v !== ''))].sort(cmpStr);
+}
+
+function inCorrelationFamily(value) {
+  return Object.values(CORRELATION_FAMILY).includes(value);
 }
 
 function mapEvidenceDirection(direction) {
@@ -76,9 +87,38 @@ function isOpportunityAdmission(result) {
   );
 }
 
+function identityKey(envelope) {
+  if (!envelope || typeof envelope !== 'object') return null;
+  if (typeof envelope.agentId !== 'string' || !envelope.agentId) return null;
+  if (!isCanonicalUuid(envelope.runId)) return null;
+  return `${envelope.agentId}|${String(envelope.runId).trim().toLowerCase()}`;
+}
+
+function directionalContentSignature(envelope) {
+  const direction = envelope?.conclusion?.direction ?? '';
+  const opportunityAvailability = envelope?.opportunity?.availability ?? '';
+  return `${direction}|${opportunityAvailability}`;
+}
+
+/**
+ * Detect same agentId+runId with conflicting canonical directional/opportunity content.
+ * Fail-closed: neither copy may win by input order.
+ */
+export function findConflictingDuplicateIdentityKeys(envelopes = []) {
+  const first = new Map();
+  const conflicts = new Set();
+  for (const envelope of envelopes) {
+    const key = identityKey(envelope);
+    if (!key) continue;
+    const sig = directionalContentSignature(envelope);
+    if (first.has(key) && first.get(key) !== sig) conflicts.add(key);
+    else if (!first.has(key)) first.set(key, sig);
+  }
+  return conflicts;
+}
+
 /**
  * Assess one correlation family from member direction observations.
- * @param {{ correlationFamily: string, members: Array<{ agentId: string, direction: string|null, degraded: boolean, nonConfirming: boolean }> }} input
  */
 export function assessDirectionalFamily(input) {
   const correlationFamily = input.correlationFamily;
@@ -188,13 +228,13 @@ export function assessDirectionalFamily(input) {
 
 /**
  * Pure cross-family policy over already-built family assessments.
- * Used by main synthesis and algorithm-only tests (no fabricated Agent envelopes).
+ * Rejects missing/duplicate correlationFamily identities fail-closed.
  */
 export function resolveCrossFamilySynthesis(familyAssessments, extra = {}) {
   const families = Array.isArray(familyAssessments)
     ? [...familyAssessments].sort((a, b) => cmpStr(a.correlationFamily, b.correlationFamily))
     : [];
-  const limitations = uniqueSorted([
+  const baseLimitations = uniqueSorted([
     ...(Array.isArray(extra.limitations) ? extra.limitations : []),
     'wp_c2_qualitative_only',
     'no_numeric_synthesis_confidence',
@@ -203,111 +243,138 @@ export function resolveCrossFamilySynthesis(familyAssessments, extra = {}) {
     'artemis_consumable_false',
   ]);
 
+  const seen = new Set();
+  for (const fam of families) {
+    if (!fam || !inCorrelationFamily(fam.correlationFamily)) {
+      return {
+        ok: false,
+        code: 'invalid_or_missing_correlation_family',
+        message: 'Every family assessment requires a distinct canonical correlationFamily',
+      };
+    }
+    if (seen.has(fam.correlationFamily)) {
+      return {
+        ok: false,
+        code: 'duplicate_correlation_family',
+        message: 'Duplicate correlationFamily identities are forbidden in cross-family synthesis',
+      };
+    }
+    seen.add(fam.correlationFamily);
+  }
+
   const mixed = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.MIXED);
   const coherentBullish = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH);
   const coherentBearish = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH);
   const coherentNeutral = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL);
 
-  const independentDirectionalFamilyCount = coherentBullish.length
-    + coherentBearish.length
-    + coherentNeutral.length;
+  const independentDirectionalFamilyCount = countDistinctQualifyingFamilies(
+    families.filter((f) => QUALIFYING_STATES.has(f.qualitativeState)),
+  );
 
-  // Precedence 3: material unresolved same-family conflict
-  if (mixed.length > 0) {
-    return {
-      synthesisOutcome: SYNTHESIS_OUTCOME.ABSTAIN,
-      observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
-      conflictState: CONFLICT_STATE.MATERIAL,
-      independentDirectionalFamilyCount,
-      multiFamilyConfirmation: false,
-      limitations: uniqueSorted([...limitations, 'material_family_conflict']),
-    };
-  }
-
-  // Precedence 2: blocking cross-family actionable disagreement
+  // Precedence 2: blocking independent cross-family bullish vs bearish
   if (coherentBullish.length > 0 && coherentBearish.length > 0) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.ABSTAIN,
       observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
       conflictState: CONFLICT_STATE.BLOCKING,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: false,
-      limitations: uniqueSorted([...limitations, 'blocking_cross_family_conflict']),
+      limitations: uniqueSorted([...baseLimitations, 'blocking_cross_family_conflict']),
     };
   }
 
-  // Actionable vs independent neutral/sideways → conservative MATERIAL abstain
-  if (
-    (coherentBullish.length > 0 || coherentBearish.length > 0)
-    && coherentNeutral.length > 0
-  ) {
+  // Precedence 3: material unresolved same-family conflict
+  if (mixed.length > 0) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.ABSTAIN,
       observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
       conflictState: CONFLICT_STATE.MATERIAL,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: false,
-      limitations: uniqueSorted([...limitations, 'actionable_vs_neutral_cross_family']),
+      limitations: uniqueSorted([...baseLimitations, 'material_family_conflict']),
     };
   }
 
-  // Precedence 4: fewer than min independent directional families
+  // Precedence 4: actionable vs independent neutral/sideways
+  if (
+    (coherentBullish.length > 0 || coherentBearish.length > 0)
+    && coherentNeutral.length > 0
+  ) {
+    return {
+      ok: true,
+      synthesisOutcome: SYNTHESIS_OUTCOME.ABSTAIN,
+      observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
+      conflictState: CONFLICT_STATE.MATERIAL,
+      independentDirectionalFamilyCount,
+      multiFamilyConfirmation: false,
+      limitations: uniqueSorted([...baseLimitations, 'actionable_vs_neutral_cross_family']),
+    };
+  }
+
+  // Precedence 5: fewer than min independent directional families
   if (independentDirectionalFamilyCount < MIN_INDEPENDENT_DIRECTIONAL_FAMILIES) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE,
       observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
       conflictState: CONFLICT_STATE.NONE,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: false,
       limitations: uniqueSorted([
-        ...limitations,
+        ...baseLimitations,
         'min_independent_directional_families_not_met',
         `required_${MIN_INDEPENDENT_DIRECTIONAL_FAMILIES}`,
       ]),
     };
   }
 
-  // Precedence 5/6: aligned actionable multi-family
+  // Precedence 6: aligned actionable multi-family
   if (coherentBullish.length >= MIN_INDEPENDENT_DIRECTIONAL_FAMILIES) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.PROPOSED,
       observedDirection: DIRECTION_OR_ABSTAIN.BULLISH,
       conflictState: CONFLICT_STATE.NONE,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: true,
-      limitations: uniqueSorted([...limitations, 'multi_family_directional_alignment']),
+      limitations: uniqueSorted([...baseLimitations, 'multi_family_directional_alignment']),
     };
   }
   if (coherentBearish.length >= MIN_INDEPENDENT_DIRECTIONAL_FAMILIES) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.PROPOSED,
       observedDirection: DIRECTION_OR_ABSTAIN.BEARISH,
       conflictState: CONFLICT_STATE.NONE,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: true,
-      limitations: uniqueSorted([...limitations, 'multi_family_directional_alignment']),
+      limitations: uniqueSorted([...baseLimitations, 'multi_family_directional_alignment']),
     };
   }
 
   // Precedence 7: independent non-actioning families
   if (coherentNeutral.length >= MIN_INDEPENDENT_DIRECTIONAL_FAMILIES) {
     return {
+      ok: true,
       synthesisOutcome: SYNTHESIS_OUTCOME.HOLD,
       observedDirection: DIRECTION_OR_ABSTAIN.NEUTRAL,
       conflictState: CONFLICT_STATE.NONE,
       independentDirectionalFamilyCount,
       multiFamilyConfirmation: false,
-      limitations: uniqueSorted([...limitations, 'independent_non_actioning_families']),
+      limitations: uniqueSorted([...baseLimitations, 'independent_non_actioning_families']),
     };
   }
 
   return {
+    ok: true,
     synthesisOutcome: SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE,
     observedDirection: DIRECTION_OR_ABSTAIN.ABSTAIN,
     conflictState: CONFLICT_STATE.NONE,
     independentDirectionalFamilyCount,
     multiFamilyConfirmation: false,
-    limitations: uniqueSorted([...limitations, 'no_qualifying_multi_family_alignment']),
+    limitations: uniqueSorted([...baseLimitations, 'no_qualifying_multi_family_alignment']),
   };
 }
 
@@ -353,11 +420,29 @@ export function synthesizeFromFamilyAssessments(decisionContext, familyAssessmen
   const resolved = resolveCrossFamilySynthesis(familyAssessments, {
     limitations: options.limitations,
   });
+  if (!resolved.ok) {
+    return {
+      assessment: null,
+      validation: {
+        ok: false,
+        code: resolved.code,
+        message: resolved.message,
+      },
+      admissionSet: null,
+    };
+  }
+
   const assessment = buildAssessmentShell(decisionContext, {
     ...resolved,
     familyAssessments: [...familyAssessments].sort((a, b) => cmpStr(a.correlationFamily, b.correlationFamily)),
     opportunityContext: Array.isArray(options.opportunityContext) ? options.opportunityContext : [],
-    excludedNonConfirmingSummary: options.excludedNonConfirmingSummary,
+    excludedNonConfirmingSummary: options.excludedNonConfirmingSummary || {
+      excludedCount: 0,
+      rejectedCount: 0,
+      nonConfirmingCount: 0,
+      degradedCount: 0,
+      reasons: [],
+    },
   });
   const validation = validateArtemisSynthesisAssessment(assessment);
   return { assessment, validation, admissionSet: null };
@@ -370,6 +455,7 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
   const list = Array.isArray(envelopes) ? envelopes : [];
   const admissionSet = admitEvidenceSet(decisionContext, list);
   const results = admissionSet.results || [];
+  const conflictingIdentities = findConflictingDuplicateIdentityKeys(list);
 
   const summary = {
     excludedCount: 0,
@@ -385,10 +471,26 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
   let contextIncompatibleOnly = list.length > 0;
   let anyUsableDirectional = false;
 
+  function pushFamilyMember(family, member) {
+    if (!inCorrelationFamily(family)) return false;
+    if (!familyMembers.has(family)) familyMembers.set(family, []);
+    familyMembers.get(family).push(member);
+    return true;
+  }
+
   for (let i = 0; i < results.length; i += 1) {
     const result = results[i];
     const envelope = list[i] && typeof list[i] === 'object' ? list[i] : null;
     const reason = result.admissionReason || 'unknown';
+    const key = identityKey(envelope);
+
+    if (key && conflictingIdentities.has(key)) {
+      summary.nonConfirmingCount += 1;
+      summary.reasons.push('CONFLICTING_DUPLICATE_IDENTITY');
+      extraLimitations.push('conflicting_duplicate_identity');
+      contextIncompatibleOnly = false;
+      continue;
+    }
 
     if (result.admissionState === EVIDENCE_ADMISSION_STATE.REJECTED) {
       summary.rejectedCount += 1;
@@ -406,9 +508,12 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
       summary.nonConfirmingCount += 1;
       summary.reasons.push(reason);
       contextIncompatibleOnly = false;
-      const family = envelope?.correlationFamily || result.preserved?.correlationFamily || CORRELATION_FAMILY.OHLCV_CANDLE;
-      if (!familyMembers.has(family)) familyMembers.set(family, []);
-      familyMembers.get(family).push({
+      const family = envelope?.correlationFamily || result.preserved?.correlationFamily || null;
+      if (!inCorrelationFamily(family)) {
+        extraLimitations.push('non_confirming_correlation_family_unavailable');
+        continue;
+      }
+      pushFamilyMember(family, {
         agentId: envelope?.agentId || result.evidenceRef?.agentId || 'unknown',
         direction: mapEvidenceDirection(envelope?.conclusion?.direction),
         degraded: false,
@@ -425,13 +530,20 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
     contextIncompatibleOnly = false;
 
     if (isOpportunityAdmission(result)) {
+      const provenOpportunityAvailability = envelope?.opportunity?.availability;
       opportunityContext.push({
         agentId: envelope?.agentId || result.evidenceRef?.agentId || null,
         runId: envelope?.runId ?? result.evidenceRef?.runId ?? null,
-        correlationFamily: envelope?.correlationFamily || result.preserved?.correlationFamily || null,
+        correlationFamily: inCorrelationFamily(envelope?.correlationFamily)
+          ? envelope.correlationFamily
+          : (inCorrelationFamily(result.preserved?.correlationFamily)
+            ? result.preserved.correlationFamily
+            : null),
         admissionState: result.admissionState,
         admissionReason: result.admissionReason || null,
-        availability: envelope?.opportunity?.availability || envelope?.availability || null,
+        availability: Object.values(AVAILABILITY).includes(provenOpportunityAvailability)
+          ? provenOpportunityAvailability
+          : AVAILABILITY.UNAVAILABLE,
       });
       continue;
     }
@@ -447,14 +559,13 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
     }
 
     const family = envelope?.correlationFamily || result.preserved?.correlationFamily;
-    if (!family) {
+    if (!inCorrelationFamily(family)) {
       extraLimitations.push('missing_correlation_family');
       continue;
     }
 
     anyUsableDirectional = true;
-    if (!familyMembers.has(family)) familyMembers.set(family, []);
-    familyMembers.get(family).push({
+    pushFamilyMember(family, {
       agentId: envelope.agentId,
       direction: mapped,
       degraded: result.admissionState === EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED,
@@ -470,7 +581,12 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
     .map(([correlationFamily, members]) => assessDirectionalFamily({ correlationFamily, members }));
 
   // Precedence 1: structural / usable evidence failure
-  if (list.length === 0 || (!anyUsableDirectional && opportunityContext.length === 0 && familyAssessments.every((f) => f.admittedDirectionalMemberCount === 0))) {
+  if (
+    list.length === 0
+    || (!anyUsableDirectional
+      && opportunityContext.length === 0
+      && familyAssessments.every((f) => f.admittedDirectionalMemberCount === 0))
+  ) {
     const outcome = contextIncompatibleOnly && summary.excludedCount > 0 && summary.rejectedCount === 0
       ? SYNTHESIS_OUTCOME.INCOMPATIBLE_EVIDENCE
       : SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE;
@@ -503,7 +619,18 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
   }
 
   const resolved = resolveCrossFamilySynthesis(familyAssessments, { limitations: extraLimitations });
-  // Opportunity context must not alter directional counts (already true by construction).
+  if (!resolved.ok) {
+    return {
+      assessment: null,
+      validation: {
+        ok: false,
+        code: resolved.code,
+        message: resolved.message,
+      },
+      admissionSet,
+    };
+  }
+
   if (opportunityContext.length > 0) {
     resolved.limitations = uniqueSorted([
       ...resolved.limitations,
@@ -542,6 +669,14 @@ export function projectSynthesisToArtemisDecision(assessment, {
   analysisHorizon,
   expiresAt,
 } = {}) {
+  const synthesisValidation = validateArtemisSynthesisAssessment(assessment);
+  if (!synthesisValidation.ok) {
+    return {
+      decision: null,
+      validation: synthesisValidation,
+    };
+  }
+
   const decision = buildContractOnlyArtemisDecision({
     decisionId,
     decisionContextId,
@@ -573,7 +708,6 @@ export function projectSynthesisToArtemisDecision(assessment, {
     },
   });
 
-  // buildContractOnly hardcodes CONTRACT_ONLY; C.2 projection is advisory synthesis library output.
   decision.classification = CLASSIFICATION.ADVISORY_ONLY;
   decision.maturityStage = MATURITY_STAGE.ADVISORY_ONLY;
   decision.decisionEligible = false;
@@ -589,4 +723,5 @@ export default {
   assessDirectionalFamily,
   resolveCrossFamilySynthesis,
   projectSynthesisToArtemisDecision,
+  findConflictingDuplicateIdentityKeys,
 };

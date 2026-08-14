@@ -6,17 +6,23 @@
  */
 
 import {
+  AGENT_CONTRACT_ROLE,
+  AUTHORITY_CLASS,
   AVAILABILITY,
   CALIBRATION_STATE,
   CONFIDENCE_KIND,
   CONFIDENCE_SCALE,
   CORRELATION_FAMILY,
+  MARKET_TYPE,
   collectForbiddenSecretKeys,
+  isCanonicalUuid,
+  isUnavailableRepresentation,
   utf8ByteLength,
 } from './artemisEvidenceContract.js';
 import {
   CONFLICT_STATE,
   DIRECTION_OR_ABSTAIN,
+  EVIDENCE_ADMISSION_STATE,
   SYNTHESIS_OUTCOME,
 } from './artemisDecisionContract.js';
 
@@ -26,7 +32,9 @@ export const SYNTHESIS_POLICY_VERSION = 'wp-c2-synthesis-1.0.0';
 export const MIN_INDEPENDENT_DIRECTIONAL_FAMILIES = 2;
 export const MAX_FAMILY_ASSESSMENTS = 16;
 export const MAX_OPPORTUNITY_CONTEXT = 16;
+export const MAX_MEMBER_AGENT_IDS = 32;
 export const MAX_LIMITATIONS = 64;
+export const MAX_SUMMARY_REASONS = 64;
 export const MAX_SYNTHESIS_UTF8_BYTES = 16 * 1024;
 export const MAX_STRING_CHARS = 256;
 
@@ -38,6 +46,12 @@ export const FAMILY_QUALITATIVE_STATE = Object.freeze({
   UNAVAILABLE: 'unavailable',
   NON_CONFIRMING: 'non_confirming',
 });
+
+const QUALIFYING_FAMILY_STATES = new Set([
+  FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+  FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH,
+  FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL,
+]);
 
 const ALLOWED_TOP = new Set([
   'schemaVersion',
@@ -106,6 +120,12 @@ const ALLOWED_CONFIDENCE = new Set([
   'provenance',
 ]);
 
+const ALLOWED_PROVENANCE = new Set([
+  'writer',
+  'path',
+  'methodKey',
+]);
+
 const FORBIDDEN_TOP = new Set([
   'approved',
   'approvedForExecution',
@@ -126,16 +146,71 @@ function inEnum(value, enumObj) {
   return Object.values(enumObj).includes(value);
 }
 
-function optionalString(field, value, errors, max = MAX_STRING_CHARS) {
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function rejectUnknownFields(obj, allowed, field, errors) {
+  for (const key of Object.keys(obj || {})) {
+    if (!allowed.has(key)) errors.push({ field: `${field}.${key}`, code: 'unknown_field' });
+  }
+}
+
+function requireBoundedString(field, value, errors, { required = true, max = MAX_STRING_CHARS } = {}) {
+  if (value == null) {
+    if (required) errors.push({ field, code: 'required_string' });
+    return;
+  }
+  if (typeof value !== 'string' || value.length === 0 || value.length > max) {
+    errors.push({ field, code: 'invalid_string' });
+  }
+}
+
+function optionalNullableBoundedString(field, value, errors, { max = MAX_STRING_CHARS } = {}) {
   if (value == null) return;
   if (typeof value !== 'string' || value.length === 0 || value.length > max) {
     errors.push({ field, code: 'invalid_string' });
   }
 }
 
-function rejectUnknownFields(obj, allowed, field, errors) {
-  for (const key of Object.keys(obj || {})) {
-    if (!allowed.has(key)) errors.push({ field: `${field}.${key}`, code: 'unknown_field' });
+function validateStringArray(field, value, errors, { required = true, maxItems = MAX_LIMITATIONS } = {}) {
+  if (value == null) {
+    if (required) errors.push({ field, code: 'required_array' });
+    return;
+  }
+  if (!Array.isArray(value)) {
+    errors.push({ field, code: 'invalid_array' });
+    return;
+  }
+  if (value.length > maxItems) {
+    errors.push({ field, code: 'too_many' });
+  }
+  value.forEach((item, index) => {
+    if (typeof item !== 'string' || item.length === 0 || item.length > MAX_STRING_CHARS) {
+      errors.push({ field: `${field}[${index}]`, code: 'invalid_string' });
+    }
+  });
+}
+
+function validateNonNegInt(field, value, errors, { max = MAX_FAMILY_ASSESSMENTS } = {}) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) {
+    errors.push({ field, code: 'invalid_count' });
+  }
+}
+
+function validateIdentifier(field, value, errors, { required = false } = {}) {
+  if (value == null) {
+    if (required) errors.push({ field, code: 'required_identifier' });
+    return;
+  }
+  if (isUnavailableRepresentation(value)) {
+    if (typeof value === 'object') {
+      rejectUnknownFields(value, new Set(['availability', 'reasonKey']), field, errors);
+    }
+    return;
+  }
+  if (!isCanonicalUuid(value)) {
+    errors.push({ field, code: 'invalid_uuid_identifier' });
   }
 }
 
@@ -148,9 +223,105 @@ export function buildUnavailableSynthesisConfidence(reasonKey = 'qualitative_syn
     reasonKey,
     provenance: {
       writer: 'artemisDeterministicSynthesisService',
+      path: 'deterministic_synthesis',
       methodKey: SYNTHESIS_POLICY_VERSION,
     },
   };
+}
+
+export function countDistinctQualifyingFamilies(familyAssessments = []) {
+  const seen = new Set();
+  for (const fam of familyAssessments) {
+    if (!fam || !inEnum(fam.correlationFamily, CORRELATION_FAMILY)) continue;
+    if (!QUALIFYING_FAMILY_STATES.has(fam.qualitativeState)) continue;
+    seen.add(fam.correlationFamily);
+  }
+  return seen.size;
+}
+
+function validateFamilyConsistency(fam, field, errors) {
+  const state = fam.qualitativeState;
+  const dir = fam.familyDirection;
+  const conflict = fam.conflictState;
+
+  if (state === FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH) {
+    if (dir !== DIRECTION_OR_ABSTAIN.BULLISH) {
+      errors.push({ field: `${field}.familyDirection`, code: 'family_direction_inconsistent' });
+    }
+    if (conflict !== CONFLICT_STATE.NONE && conflict !== CONFLICT_STATE.INFORMATIONAL) {
+      errors.push({ field: `${field}.conflictState`, code: 'family_conflict_inconsistent' });
+    }
+  }
+  if (state === FAMILY_QUALITATIVE_STATE.COHERENT_BEARISH) {
+    if (dir !== DIRECTION_OR_ABSTAIN.BEARISH) {
+      errors.push({ field: `${field}.familyDirection`, code: 'family_direction_inconsistent' });
+    }
+    if (conflict !== CONFLICT_STATE.NONE && conflict !== CONFLICT_STATE.INFORMATIONAL) {
+      errors.push({ field: `${field}.conflictState`, code: 'family_conflict_inconsistent' });
+    }
+  }
+  if (state === FAMILY_QUALITATIVE_STATE.COHERENT_NEUTRAL) {
+    if (dir !== DIRECTION_OR_ABSTAIN.NEUTRAL && dir !== DIRECTION_OR_ABSTAIN.SIDEWAYS) {
+      errors.push({ field: `${field}.familyDirection`, code: 'family_direction_inconsistent' });
+    }
+  }
+  if (state === FAMILY_QUALITATIVE_STATE.MIXED) {
+    if (dir !== DIRECTION_OR_ABSTAIN.ABSTAIN) {
+      errors.push({ field: `${field}.familyDirection`, code: 'family_direction_inconsistent' });
+    }
+    if (conflict !== CONFLICT_STATE.MATERIAL && conflict !== CONFLICT_STATE.BLOCKING) {
+      errors.push({ field: `${field}.conflictState`, code: 'family_conflict_inconsistent' });
+    }
+  }
+  if (
+    (state === FAMILY_QUALITATIVE_STATE.NON_CONFIRMING || state === FAMILY_QUALITATIVE_STATE.UNAVAILABLE)
+    && (dir === DIRECTION_OR_ABSTAIN.BULLISH || dir === DIRECTION_OR_ABSTAIN.BEARISH)
+  ) {
+    errors.push({ field: `${field}.familyDirection`, code: 'non_confirming_actionable_forbidden' });
+  }
+}
+
+function validateOutcomeInvariants(assessment, errors) {
+  const outcome = assessment.synthesisOutcome;
+  const direction = assessment.observedDirection;
+  const conflict = assessment.conflictState;
+  const multi = assessment.multiFamilyConfirmation;
+  const count = assessment.independentDirectionalFamilyCount;
+
+  if (outcome === SYNTHESIS_OUTCOME.PROPOSED) {
+    if (direction !== DIRECTION_OR_ABSTAIN.BULLISH && direction !== DIRECTION_OR_ABSTAIN.BEARISH) {
+      errors.push({ field: 'observedDirection', code: 'proposed_direction_invalid' });
+    }
+    if (multi !== true) errors.push({ field: 'multiFamilyConfirmation', code: 'proposed_requires_multi_family' });
+    if (typeof count !== 'number' || count < MIN_INDEPENDENT_DIRECTIONAL_FAMILIES) {
+      errors.push({ field: 'independentDirectionalFamilyCount', code: 'proposed_requires_min_families' });
+    }
+    if (conflict === CONFLICT_STATE.MATERIAL || conflict === CONFLICT_STATE.BLOCKING) {
+      errors.push({ field: 'conflictState', code: 'proposed_conflict_forbidden' });
+    }
+  }
+
+  if (
+    outcome === SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE
+    || outcome === SYNTHESIS_OUTCOME.INCOMPATIBLE_EVIDENCE
+    || outcome === SYNTHESIS_OUTCOME.ABSTAIN
+  ) {
+    if (direction !== DIRECTION_OR_ABSTAIN.ABSTAIN) {
+      errors.push({ field: 'observedDirection', code: 'abstain_direction_required' });
+    }
+    if (multi !== false) {
+      errors.push({ field: 'multiFamilyConfirmation', code: 'must_be_false' });
+    }
+  }
+
+  if (outcome === SYNTHESIS_OUTCOME.HOLD) {
+    if (direction !== DIRECTION_OR_ABSTAIN.NEUTRAL && direction !== DIRECTION_OR_ABSTAIN.SIDEWAYS) {
+      errors.push({ field: 'observedDirection', code: 'hold_direction_invalid' });
+    }
+    if (multi !== false) {
+      errors.push({ field: 'multiFamilyConfirmation', code: 'must_be_false' });
+    }
+  }
 }
 
 /**
@@ -158,7 +329,7 @@ export function buildUnavailableSynthesisConfidence(reasonKey = 'qualitative_syn
  * @returns {{ ok: true, bytes: number } | { ok: false, code: string, message: string, errors?: object[], bytes?: number }}
  */
 export function validateArtemisSynthesisAssessment(assessment) {
-  if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) {
+  if (!isPlainObject(assessment)) {
     return fail('invalid_assessment', 'Synthesis assessment must be a plain object');
   }
 
@@ -186,12 +357,25 @@ export function validateArtemisSynthesisAssessment(assessment) {
   if (assessment.policyVersion !== SYNTHESIS_POLICY_VERSION) {
     errors.push({ field: 'policyVersion', code: 'unsupported_policy_version' });
   }
-  optionalString('implementationVersion', assessment.implementationVersion, errors);
+  requireBoundedString('implementationVersion', assessment.implementationVersion, errors);
 
-  if (!assessment.decisionContext || typeof assessment.decisionContext !== 'object') {
-    errors.push({ field: 'decisionContext', code: 'required' });
+  if (!isPlainObject(assessment.decisionContext)) {
+    errors.push({ field: 'decisionContext', code: 'required_object' });
   } else {
-    rejectUnknownFields(assessment.decisionContext, ALLOWED_CONTEXT, 'decisionContext', errors);
+    const ctx = assessment.decisionContext;
+    rejectUnknownFields(ctx, ALLOWED_CONTEXT, 'decisionContext', errors);
+    for (const key of Object.keys(ctx)) {
+      if (typeof ctx[key] === 'object' && ctx[key] !== null) {
+        errors.push({ field: `decisionContext.${key}`, code: 'nested_object_forbidden' });
+      }
+    }
+    optionalNullableBoundedString('decisionContext.symbol', ctx.symbol, errors);
+    optionalNullableBoundedString('decisionContext.venue', ctx.venue, errors);
+    optionalNullableBoundedString('decisionContext.timeframe', ctx.timeframe, errors);
+    optionalNullableBoundedString('decisionContext.analysisHorizon', ctx.analysisHorizon, errors);
+    if (ctx.marketType != null && !inEnum(ctx.marketType, MARKET_TYPE)) {
+      errors.push({ field: 'decisionContext.marketType', code: 'invalid_market_type' });
+    }
   }
 
   if (!inEnum(assessment.synthesisOutcome, SYNTHESIS_OUTCOME)) {
@@ -204,14 +388,12 @@ export function validateArtemisSynthesisAssessment(assessment) {
     errors.push({ field: 'conflictState', code: 'invalid_conflict_state' });
   }
 
-  if (
-    typeof assessment.independentDirectionalFamilyCount !== 'number'
-    || !Number.isInteger(assessment.independentDirectionalFamilyCount)
-    || assessment.independentDirectionalFamilyCount < 0
-    || assessment.independentDirectionalFamilyCount > MAX_FAMILY_ASSESSMENTS
-  ) {
-    errors.push({ field: 'independentDirectionalFamilyCount', code: 'invalid_count' });
-  }
+  validateNonNegInt(
+    'independentDirectionalFamilyCount',
+    assessment.independentDirectionalFamilyCount,
+    errors,
+    { max: MAX_FAMILY_ASSESSMENTS },
+  );
   if (typeof assessment.multiFamilyConfirmation !== 'boolean') {
     errors.push({ field: 'multiFamilyConfirmation', code: 'invalid_boolean' });
   }
@@ -225,6 +407,7 @@ export function validateArtemisSynthesisAssessment(assessment) {
     errors.push({ field: 'artemisConsumable', code: 'must_be_false' });
   }
 
+  const seenFamilies = new Set();
   if (!Array.isArray(assessment.familyAssessments)) {
     errors.push({ field: 'familyAssessments', code: 'invalid_array' });
   } else if (assessment.familyAssessments.length > MAX_FAMILY_ASSESSMENTS) {
@@ -232,40 +415,79 @@ export function validateArtemisSynthesisAssessment(assessment) {
   } else {
     assessment.familyAssessments.forEach((fam, index) => {
       const field = `familyAssessments[${index}]`;
-      if (!fam || typeof fam !== 'object' || Array.isArray(fam)) {
+      if (!isPlainObject(fam)) {
         errors.push({ field, code: 'invalid_family' });
         return;
       }
       rejectUnknownFields(fam, ALLOWED_FAMILY, field, errors);
-      if (fam.correlationFamily != null && !inEnum(fam.correlationFamily, CORRELATION_FAMILY)) {
-        errors.push({ field: `${field}.correlationFamily`, code: 'invalid_correlation_family' });
+
+      if (!inEnum(fam.correlationFamily, CORRELATION_FAMILY)) {
+        errors.push({ field: `${field}.correlationFamily`, code: 'correlation_family_required' });
+      } else if (seenFamilies.has(fam.correlationFamily)) {
+        errors.push({ field: `${field}.correlationFamily`, code: 'duplicate_correlation_family' });
+      } else {
+        seenFamilies.add(fam.correlationFamily);
       }
+
       if (!Array.isArray(fam.memberAgentIds)) {
         errors.push({ field: `${field}.memberAgentIds`, code: 'invalid_array' });
+      } else if (fam.memberAgentIds.length > MAX_MEMBER_AGENT_IDS) {
+        errors.push({ field: `${field}.memberAgentIds`, code: 'too_many' });
+      } else {
+        const seenAgents = new Set();
+        fam.memberAgentIds.forEach((agentId, agentIndex) => {
+          const af = `${field}.memberAgentIds[${agentIndex}]`;
+          if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > MAX_STRING_CHARS) {
+            errors.push({ field: af, code: 'invalid_string' });
+            return;
+          }
+          if (!Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, agentId)) {
+            errors.push({ field: af, code: 'unknown_agent_id' });
+          }
+          if (seenAgents.has(agentId)) {
+            errors.push({ field: af, code: 'duplicate_agent_id' });
+          }
+          seenAgents.add(agentId);
+        });
+        const memberCount = fam.memberAgentIds.length;
+        for (const countKey of [
+          'admittedDirectionalMemberCount',
+          'degradedMemberCount',
+          'nonConfirmingMemberCount',
+        ]) {
+          validateNonNegInt(`${field}.${countKey}`, fam[countKey], errors, { max: MAX_MEMBER_AGENT_IDS });
+          if (typeof fam[countKey] === 'number' && fam[countKey] > memberCount) {
+            errors.push({ field: `${field}.${countKey}`, code: 'count_exceeds_members' });
+          }
+        }
       }
+
       if (!inEnum(fam.qualitativeState, FAMILY_QUALITATIVE_STATE)) {
         errors.push({ field: `${field}.qualitativeState`, code: 'invalid_qualitative_state' });
       }
-      if (fam.familyDirection != null && !inEnum(fam.familyDirection, DIRECTION_OR_ABSTAIN)) {
+      if (!inEnum(fam.familyDirection, DIRECTION_OR_ABSTAIN)) {
         errors.push({ field: `${field}.familyDirection`, code: 'invalid_family_direction' });
       }
       if (!inEnum(fam.conflictState, CONFLICT_STATE)) {
         errors.push({ field: `${field}.conflictState`, code: 'invalid_conflict_state' });
       }
-      for (const countKey of [
-        'admittedDirectionalMemberCount',
-        'degradedMemberCount',
-        'nonConfirmingMemberCount',
-      ]) {
-        const n = fam[countKey];
-        if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) {
-          errors.push({ field: `${field}.${countKey}`, code: 'invalid_count' });
-        }
-      }
-      if (Array.isArray(fam.limitations) && fam.limitations.length > MAX_LIMITATIONS) {
-        errors.push({ field: `${field}.limitations`, code: 'too_many' });
-      }
+      validateStringArray(`${field}.limitations`, fam.limitations, errors, { required: true });
+      validateFamilyConsistency(fam, field, errors);
     });
+  }
+
+  if (Array.isArray(assessment.familyAssessments)) {
+    const expectedCount = countDistinctQualifyingFamilies(assessment.familyAssessments);
+    if (
+      typeof assessment.independentDirectionalFamilyCount === 'number'
+      && assessment.independentDirectionalFamilyCount !== expectedCount
+    ) {
+      errors.push({
+        field: 'independentDirectionalFamilyCount',
+        code: 'family_count_inconsistent',
+        expected: expectedCount,
+      });
+    }
   }
 
   if (!Array.isArray(assessment.opportunityContext)) {
@@ -275,44 +497,89 @@ export function validateArtemisSynthesisAssessment(assessment) {
   } else {
     assessment.opportunityContext.forEach((row, index) => {
       const field = `opportunityContext[${index}]`;
-      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      if (!isPlainObject(row)) {
         errors.push({ field, code: 'invalid_opportunity' });
         return;
       }
       rejectUnknownFields(row, ALLOWED_OPPORTUNITY, field, errors);
-      optionalString(`${field}.agentId`, row.agentId, errors);
-      optionalString(`${field}.runId`, row.runId, errors);
+      requireBoundedString(`${field}.agentId`, row.agentId, errors);
+      if (
+        row.agentId
+        && Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, row.agentId)
+        && AGENT_CONTRACT_ROLE[row.agentId].authorityClass !== AUTHORITY_CLASS.OPPORTUNITY_FORECAST
+      ) {
+        errors.push({ field: `${field}.agentId`, code: 'opportunity_role_required' });
+      }
+      if (
+        row.agentId
+        && !Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, row.agentId)
+      ) {
+        errors.push({ field: `${field}.agentId`, code: 'unknown_agent_id' });
+      }
+      validateIdentifier(`${field}.runId`, row.runId, errors, { required: false });
+      if (row.correlationFamily != null && !inEnum(row.correlationFamily, CORRELATION_FAMILY)) {
+        errors.push({ field: `${field}.correlationFamily`, code: 'invalid_correlation_family' });
+      }
+      if (!inEnum(row.admissionState, EVIDENCE_ADMISSION_STATE)) {
+        errors.push({ field: `${field}.admissionState`, code: 'invalid_admission_state' });
+      }
+      optionalNullableBoundedString(`${field}.admissionReason`, row.admissionReason, errors);
+      if (!inEnum(row.availability, AVAILABILITY)) {
+        errors.push({ field: `${field}.availability`, code: 'invalid_availability' });
+      }
     });
   }
 
-  if (!assessment.excludedNonConfirmingSummary || typeof assessment.excludedNonConfirmingSummary !== 'object') {
-    errors.push({ field: 'excludedNonConfirmingSummary', code: 'required' });
+  if (!isPlainObject(assessment.excludedNonConfirmingSummary)) {
+    errors.push({ field: 'excludedNonConfirmingSummary', code: 'required_object' });
   } else {
-    rejectUnknownFields(
-      assessment.excludedNonConfirmingSummary,
-      ALLOWED_SUMMARY,
-      'excludedNonConfirmingSummary',
-      errors,
-    );
-  }
-
-  if (!Array.isArray(assessment.limitations)) {
-    errors.push({ field: 'limitations', code: 'invalid_array' });
-  } else if (assessment.limitations.length > MAX_LIMITATIONS) {
-    errors.push({ field: 'limitations', code: 'too_many' });
-  }
-
-  if (!assessment.confidence || typeof assessment.confidence !== 'object') {
-    errors.push({ field: 'confidence', code: 'required' });
-  } else {
-    rejectUnknownFields(assessment.confidence, ALLOWED_CONFIDENCE, 'confidence', errors);
-    if (assessment.confidence.availability !== AVAILABILITY.UNAVAILABLE) {
-      errors.push({ field: 'confidence.availability', code: 'must_be_unavailable' });
+    const summary = assessment.excludedNonConfirmingSummary;
+    rejectUnknownFields(summary, ALLOWED_SUMMARY, 'excludedNonConfirmingSummary', errors);
+    for (const key of ['excludedCount', 'rejectedCount', 'nonConfirmingCount', 'degradedCount']) {
+      validateNonNegInt(`excludedNonConfirmingSummary.${key}`, summary[key], errors, {
+        max: 10_000,
+      });
     }
-    if (typeof assessment.confidence.value === 'number') {
+    validateStringArray('excludedNonConfirmingSummary.reasons', summary.reasons, errors, {
+      required: true,
+      maxItems: MAX_SUMMARY_REASONS,
+    });
+  }
+
+  validateStringArray('limitations', assessment.limitations, errors, { required: true });
+
+  if (!isPlainObject(assessment.confidence)) {
+    errors.push({ field: 'confidence', code: 'required_object' });
+  } else {
+    const conf = assessment.confidence;
+    rejectUnknownFields(conf, ALLOWED_CONFIDENCE, 'confidence', errors);
+    if (Object.prototype.hasOwnProperty.call(conf, 'value')) {
       errors.push({ field: 'confidence.value', code: 'numeric_confidence_forbidden' });
     }
+    if (conf.availability !== AVAILABILITY.UNAVAILABLE) {
+      errors.push({ field: 'confidence.availability', code: 'must_be_unavailable' });
+    }
+    if (conf.kind !== CONFIDENCE_KIND.UNAVAILABLE) {
+      errors.push({ field: 'confidence.kind', code: 'must_be_unavailable' });
+    }
+    if (conf.scale !== CONFIDENCE_SCALE.UNKNOWN) {
+      errors.push({ field: 'confidence.scale', code: 'must_be_unknown' });
+    }
+    if (conf.calibrationState !== CALIBRATION_STATE.UNAVAILABLE) {
+      errors.push({ field: 'confidence.calibrationState', code: 'must_be_unavailable' });
+    }
+    requireBoundedString('confidence.reasonKey', conf.reasonKey, errors);
+    if (!isPlainObject(conf.provenance)) {
+      errors.push({ field: 'confidence.provenance', code: 'required_object' });
+    } else {
+      rejectUnknownFields(conf.provenance, ALLOWED_PROVENANCE, 'confidence.provenance', errors);
+      requireBoundedString('confidence.provenance.writer', conf.provenance.writer, errors);
+      requireBoundedString('confidence.provenance.methodKey', conf.provenance.methodKey, errors);
+      optionalNullableBoundedString('confidence.provenance.path', conf.provenance.path, errors);
+    }
   }
+
+  validateOutcomeInvariants(assessment, errors);
 
   const bytes = utf8ByteLength(JSON.stringify(assessment));
   if (bytes > MAX_SYNTHESIS_UTF8_BYTES) {
@@ -333,4 +600,5 @@ export default {
   FAMILY_QUALITATIVE_STATE,
   validateArtemisSynthesisAssessment,
   buildUnavailableSynthesisConfidence,
+  countDistinctQualifyingFamilies,
 };
