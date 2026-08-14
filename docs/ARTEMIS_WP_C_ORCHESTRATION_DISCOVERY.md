@@ -1,41 +1,34 @@
 # ARTEMIS WP-C — Orchestration / Synthesis / Control-Chain Discovery
 
-**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED**  
-**Base:** `origin/main` = `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
+**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED** · **WP-C.1 CLOSED AND FROZEN**  
+**Canonical product main:** `origin/main` = `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
+**Pre-C.1 frozen main baseline (Discovery era):** `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
 **Discovery branch:** `feat/artemis-wp-c-orchestration-discovery`  
 **Discovery Owner-approval SHA:** `658290a07641f317b60ee8d4afec87464edfcdbc`  
 **Hardened Discovery HEAD (pre-approval):** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
-**C.1 branch (implementation):** `feat/artemis-wp-c1-orchestration-contracts`  
-**C.1 worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c1`  
+**C.1 implementation branch:** `feat/artemis-wp-c1-orchestration-contracts`  
+**C.1 implementation final HEAD:** `3ca6558c06a3412aa1ce8feb09e039bd7d172acb`  
+**C.1 merge:** PR #23 squash → `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
 **Risk tier (Discovery):** Tier 0 — Documentation milestone  
-**Implementation started at Discovery approval:** **NO**  
-**C.1 pure-library implementation:** **FINAL INTEGRITY HARDENING COMPLETE — OWNER REVIEW REQUIRED — NOT CLOSED/FROZEN**  
-**C.2 / B10 / Shadow / Paper / Live:** **NOT STARTED**  
-**Migration / runtime / provider / financial side effects:** NONE  
-**PR / merge / deploy:** NONE  
+**C.1 pure-library product:** **CLOSED AND FROZEN**  
+**C.1 Runtime Wired / Active:** **NO / NO**  
+**C.2 / B10 / WP-D / Shadow / Paper / Live:** **NOT STARTED**  
 
-This is the **single canonical** WP-C discovery document. Do not create parallel planning docs.
+This is the **single canonical** WP-C living document. Do not create parallel Artemis closeout docs.
 
-**Correction pass scope:** diversity of initial evidence families · B/C/E reclassification · qualitative correlation containment · precise C.1→C.2→B10→control→Shadow-prep sequence · Optimization wording · Risk unavailable semantics.
+### C.1 factual status (CLOSED AND FROZEN)
 
-### C.1 factual status pointer (library only)
-
-Delivered on `feat/artemis-wp-c1-orchestration-contracts`:
+Delivered library files on main:
 
 - `backend/contracts/artemisDecisionContract.js` — `artemis-decision-1.0.0`
 - `backend/services/artemisEvidenceAdmissionService.js` — pure admission/compatibility
 - `backend/__tests__/unit/artemisDecisionContract.wpC1.test.js`
 
-Invariants enforced: `decisionEligible=false`, `executionEligible=false`, legacy `approved`/`approvedForExecution` rejected.  
-Analytical `conclusion.signal` BUY/SELL/HOLD is **not** treated as execution authorization.  
-Final integrity: agentId↔role/authorityClass match; admissionState↔confirmationSemantics; Decision `evidenceRefs` Decision-safe only; Policy A exact `artemis-evidence-1.0.0`.  
-WP-B.1 evidence contract remains unmodified/frozen. Legacy Artemis runtime routes/orchestrator untouched. Sentiment untouched.
+Invariants: `decisionEligible=false`, `executionEligible=false`, legacy `approved`/`approvedForExecution` rejected.  
+Final integrity: agentId↔role/authorityClass; admissionState↔confirmationSemantics; Decision-safe `evidenceRefs`; Policy A exact `artemis-evidence-1.0.0`.  
+WP-B.1 frozen. Sentiment untouched / not Artemis-consumable. Optimization remains NOT_APPLICABLE to initial control chain.
 
-Provenance:
-- C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
-- Prior review HEAD: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
-- Prior integrity review HEAD: `51dc36f9937e40126dfc8bcf6c2c543a5cff96b0`
-- Final integrity code milestone: git tip of C.1 branch (authoritative; no docs-only SHA stamp)
+See **§23 WP-C.1 CLOSEOUT AND FREEZE** for full lifecycle, CI, server alignment, and provenance semantics.
 
 ---
 
@@ -932,3 +925,111 @@ Hardening + approval summary:
 - Risk unavailable ≠ approval; Demo fail-open must not be imported as Artemis Risk approval
 
 Current system remains a truthful advisory shell over legacy MoE, with WP-B.1 on-read evidence for trend/arbitrage/volume and a fail-closed execution gate.
+
+---
+
+## 23. WP-C.1 CLOSEOUT AND FREEZE
+
+**Verdict:** **ARTEMIS WP-C.1 — CLOSED AND FROZEN**  
+**Owner closeout review:** PASS  
+**Server content alignment closeout review:** PASS  
+
+### 23.1 Lifecycle milestones
+
+| Milestone | SHA / ref | Notes |
+|---|---|---|
+| Discovery Owner approval | `658290a07641f317b60ee8d4afec87464edfcdbc` | Architecture locked; implementation had not begun |
+| Hardened Discovery (pre-approval) | `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7` | Architecture baseline |
+| C.1 implementation code milestone | `a68168c8fa1cc3eb343998ba400f606c19cb013b` | Decision contract + admission + tests |
+| C.1 correction | `d32e583d8358119a317f248158b656cf7b6914c2` | Admission/contract compatibility hardening |
+| Prior integrity review HEAD | `51dc36f9937e40126dfc8bcf6c2c543a5cff96b0` | Pre final integrity |
+| C.1 final integrity | `3ca6558c06a3412aa1ce8feb09e039bd7d172acb` | Evidence-ref integrity; PR branch final HEAD |
+| PR #23 squash merge → main | `47655c008c01266299d6e92eb9c5b24ab5c7c5a3` | Canonical product baseline |
+
+### 23.2 Delivered scope (pure library)
+
+- Canonical ArtemisDecision contract (`artemis-decision-1.0.0`)
+- Deterministic WP-B.1 evidence admission
+- Strict role/identity semantics
+- Decision-safe evidence refs
+- Unavailable / stale / degraded truth handling
+- Correlation metadata preservation only (no scoring)
+- Frozen Volume adapter BUY/SELL/HOLD compatibility
+- Arbitrage opportunity-only semantics
+
+**Explicitly not delivered / not activated:** synthesis · C.2 · B10 · persistence · Risk/Portfolio/Liquidity/Order runtime integration · Sentiment remediation · runtime route wiring · Shadow / Paper / Live · provider calls · Agent execution
+
+### 23.3 Verification evidence
+
+| Suite | Result |
+|---|---|
+| Focused WP-C.1 | 62 PASS |
+| Artemis unit | 12 suites / 126 PASS |
+| Full backend unit | 101 suites / 790 PASS |
+| PR #23 Backend Tests | SUCCESS |
+| PR #23 E2E Tests | SUCCESS |
+| GitGuardian | SUCCESS — 12 commits scanned; no secrets detected |
+| Unresolved review threads | 0 |
+
+Owner reviews: architecture PASS · code PASS · PR/CI PASS · server alignment closeout PASS.
+
+**Human QA:** NOT APPLICABLE BY SCOPE (no UI / no runtime route / no orchestration / no execution behavior change). Equivalent milestone verification via tests, CI, security scan, exact server content verification, module import smoke, root HTTP 200, backend health 200/ok.
+
+### 23.4 Server content alignment
+
+| Item | Truth |
+|---|---|
+| Runtime tree | `/home/ubuntu/webapp/TitanGold` |
+| Runtime-tree git SHA before alignment | `a100f7ba21131c351b561fb66554e90990da8725` |
+| Dirty tree | YES (~481 entries) |
+| Mutation method | Create exactly two previously MISSING files only |
+| `artemisDecisionContract.js` SHA256 | `fcc16f70f495b4cdec72d498d8dbed4259902352d62c6475d7cae61f92db98b0` |
+| `artemisEvidenceAdmissionService.js` SHA256 | `72dc9d33d43038033ebcb764a1c70ee2643706246e86df35015587ced136a1e7` |
+| Exact main content match | YES (both) |
+| Other runtime-tree files modified | 0 |
+| Frozen dependencies modified | NO |
+| Restart / PM2 mutation | NO |
+| `TITAN_RUNTIME_COMMIT` | unchanged `48d7722b651e1d551bbbf128eaa30e1b1c136163` |
+
+Post-alignment health snapshot (no topology repair):
+
+- `https://titan.zala.ir/` → 200
+- `GET /api/v1/health` → 200 / ok
+- PM2 backend ids 1–4 online
+- `titan-engine-worker` ids 5, 9 online
+- Telegram processor id11 online · id15 stopped
+- collector id16 online · id12 stopped
+
+### 23.5 Provenance semantics (must stay distinct)
+
+| Layer | State |
+|---|---|
+| GitHub Source | `main` @ `47655c008c01266299d6e92eb9c5b24ab5c7c5a3` |
+| Server Content | WP-C.1 two-file content aligned to that main |
+| Runtime Active | legacy runtime unchanged |
+| WP-C.1 Runtime Wired | **NO** |
+| WP-C.1 Runtime Active | **NO** |
+| Product orchestration | **LEGACY** |
+| `artemisConsumable` | `false` |
+| `decisionEligible` | `false` |
+| `executionEligible` | `false` |
+| Evidence readiness | `ON_READ_PARTIAL` — NOT `EVIDENCE_READY` |
+
+Do **not** claim `runtimeCommit = 47655c`.
+
+### 23.6 Frozen declaration and future sequence
+
+**WP-C.1 is CLOSED AND FROZEN.** No further Artemis implementation is authorized by this closeout.
+
+Approved future sequence remains:
+
+1. **WP-C.1** — DONE / FROZEN  
+2. **WP-C.2** — deterministic synthesis / conflict / qualitative correlation — **requires new Owner authorization**  
+3. **B10** — append-only decision/evidence persistence  
+4. Control / runtime integration  
+5. Shadow preparation  
+6. Separate Owner gate for Shadow activation  
+
+Still closed / not started: C.2 · B10 · WP-D · Shadow · Paper · Live.  
+Sentiment remains future remediation candidate / NOT Artemis-consumable.  
+Optimization remains NOT_APPLICABLE to the initial Artemis control chain.
