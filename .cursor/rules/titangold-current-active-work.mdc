@@ -34,7 +34,8 @@ Engineering status:
 Provenance (unambiguous):
 - C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
 - Prior review HEAD before this correction: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
-- C.1 current review HEAD: `d32e583d8358119a317f248158b656cf7b6914c2`
+- C.1 correction code milestone: `d32e583d8358119a317f248158b656cf7b6914c2`
+- C.1 branch HEAD after correction docs stamp: see git tip of `feat/artemis-wp-c1-orchestration-contracts`
 
 Branch:
 `feat/artemis-wp-c1-orchestration-contracts`
