@@ -329,6 +329,14 @@ function validateConfidence(confidence, errors) {
   }
   if (typeof confidence.value !== 'number' || !Number.isFinite(confidence.value)) {
     errors.push({ field: 'confidence.value', code: 'invalid_confidence_value' });
+  } else if (confidence.scale === CONFIDENCE_SCALE.UNIT_INTERVAL) {
+    if (confidence.value < 0 || confidence.value > 1) {
+      errors.push({ field: 'confidence.value', code: 'confidence_out_of_range' });
+    }
+  } else if (confidence.scale === CONFIDENCE_SCALE.PERCENT_100) {
+    if (confidence.value < 0 || confidence.value > 100) {
+      errors.push({ field: 'confidence.value', code: 'confidence_out_of_range' });
+    }
   }
   if (!inEnum(confidence.scale, CONFIDENCE_SCALE) || confidence.scale === CONFIDENCE_SCALE.UNKNOWN) {
     errors.push({ field: 'confidence.scale', code: 'invalid_confidence_scale' });
@@ -399,13 +407,18 @@ function validateEvidenceRef(ref, index, errors) {
   if (ref.correlationFamily != null && !inEnum(ref.correlationFamily, CORRELATION_FAMILY)) {
     errors.push({ field: `${field}.correlationFamily`, code: 'invalid_correlation_family' });
   }
-  if (ref.freshness != null && !inEnum(ref.freshness, FRESHNESS_STATUS) && !isUnavailableRepresentation(ref.freshness)) {
-    if (typeof ref.freshness === 'object' && !Array.isArray(ref.freshness) && ref.freshness.status != null) {
-      if (!inEnum(ref.freshness.status, FRESHNESS_STATUS)) {
+  if (ref.freshness != null) {
+    // C.1 Decision refs allow only canonical freshness status string or unavailable representation.
+    if (typeof ref.freshness === 'string') {
+      if (!inEnum(ref.freshness, FRESHNESS_STATUS)) {
         errors.push({ field: `${field}.freshness`, code: 'invalid_freshness_status' });
       }
+    } else if (isUnavailableRepresentation(ref.freshness)) {
+      if (typeof ref.freshness === 'object') {
+        rejectUnknownFields(ref.freshness, ALLOWED_UNAVAILABLE_OBJECT, `${field}.freshness`, errors);
+      }
     } else {
-      errors.push({ field: `${field}.freshness`, code: 'invalid_freshness_status' });
+      errors.push({ field: `${field}.freshness`, code: 'invalid_freshness_shape' });
     }
   }
   if (ref.availability != null && !inEnum(ref.availability, AVAILABILITY)) {
@@ -480,7 +493,14 @@ export function validateArtemisDecision(decision) {
   validateSourceWindow(decision.sourceWindow, errors);
 
   if (isIsoTimestamp(decision.createdAt) && isIsoTimestamp(decision.analysisAt)) {
-    // analysisAt may precede createdAt; reject only clearly inverted expiry
+    if (Date.parse(decision.createdAt) < Date.parse(decision.analysisAt)) {
+      errors.push({ field: 'createdAt', code: 'invalid_time_ordering' });
+    }
+  }
+  if (isIsoTimestamp(decision.createdAt) && isIsoTimestamp(decision.expiresAt)) {
+    if (Date.parse(decision.expiresAt) < Date.parse(decision.createdAt)) {
+      errors.push({ field: 'expiresAt', code: 'invalid_time_ordering' });
+    }
   }
   if (isIsoTimestamp(decision.analysisAt) && isIsoTimestamp(decision.expiresAt)) {
     if (Date.parse(decision.expiresAt) < Date.parse(decision.analysisAt)) {

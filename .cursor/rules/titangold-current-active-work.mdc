@@ -18,25 +18,23 @@ Risk tier:
 Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.1 IMPLEMENTATION COMPLETE**  
-**FOCUSED TESTS PASS** (`artemisDecisionContract.wpC1.test.js` — 32/32)  
-**BACKEND REGRESSION STATUS = PASS**  
-- Artemis unit suite: 12 suites / 96 tests PASS  
-- Full backend `__tests__/unit`: 101 suites / 760 tests PASS  
-**OWNER REVIEW REQUIRED**  
+**WP-C.1 CORRECTION COMPLETE — OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
-**C.2 NOT STARTED**  
-**B10 NOT STARTED**  
 **PURE LIBRARY ONLY**  
 **NO RUNTIME ACTIVATION**  
+**NO SERVER CONTENT CHANGE**  
 **NO MIGRATION**  
 **NO PROVIDER CALLS**  
 **NO AGENT EXECUTION**  
-**NO SHADOW / PAPER / LIVE**
+**NO SHADOW / PAPER / LIVE**  
+**C.2 NOT STARTED**  
+**B10 NOT STARTED**
 
-C.1 final HEAD:
-`a68168c8fa1cc3eb343998ba400f606c19cb013b`
+Provenance (unambiguous):
+- C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
+- Prior review HEAD before this correction: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
+- C.1 current review HEAD: recorded after correction commit push
 
 Branch:
 `feat/artemis-wp-c1-orchestration-contracts`
@@ -53,38 +51,24 @@ WP-C Discovery Owner-approved milestone:
 Preserved frozen baselines:
 - **WP-B.1 CLOSED AND FROZEN** (evidence contract unmodified)
 - **WP-C Discovery = OWNER APPROVED**
-- **Data Hub:** FROZEN
-- **Trend:** FROZEN
-- **Arbitrage:** FROZEN
+- **Data Hub / Trend / Arbitrage:** FROZEN
+- Frozen adapters unmodified
 
 Safety flags (unchanged / still false):
 - Product orchestration remains **LEGACY**
 - `artemisConsumable = false`
 - `decisionEligible = false`
 - `executionEligible = false`
-- Evidence readiness = ON_READ_PARTIAL — NOT EVIDENCE_READY
 
-C.1 delivered (pure library):
-- `backend/contracts/artemisDecisionContract.js`
-- `backend/services/artemisEvidenceAdmissionService.js`
-- `backend/__tests__/unit/artemisDecisionContract.wpC1.test.js`
-
-C.1 does NOT include:
-- synthesis / conflict scoring / LLM council
-- runtime route wiring / POST /artemis/decision replacement
-- Risk / Portfolio / Liquidity / Order integration
-- Sentiment remediation
-- B10 / persistence / Shadow
-- UI redesign
-
-Authorized:
-- Owner review of C.1 library + tests
-- Later explicit Rule 02 transition to WP-C.2 only after Owner authorization
+C.1 correction focus:
+- Analytical BUY/SELL/HOLD signals are not execution claims
+- Context-mismatch diagnostics stay outside Decision evidenceRef allowlist
+- Strict Decision freshness shape
+- Hardened duplicate identity for null/unavailable runId
+- Timestamp ordering + confidence range hardening
+- DATA_QUALITY_DEGRADED reason
 
 Not authorized:
 - Runtime / PM2 / deploy / migration / provider / Agent execution / Shadow / Paper / Live
 - PR / merge without separate Owner instruction
-- Protected scripts:
-  - `scripts/backup-db.sh`
-  - `scripts/phase2-monitoring/titangold-backup-healthcheck.sh`
-  - `scripts/phase2-monitoring/titangold-telegram-notify.sh`
+- Protected scripts under backup-db / phase2 monitoring notify/healthcheck

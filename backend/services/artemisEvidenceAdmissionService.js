@@ -10,8 +10,11 @@ import {
   AUTHORITY_CLASS,
   AVAILABILITY,
   CONTRACT_VERSION as EVIDENCE_CONTRACT_VERSION,
+  FORBIDDEN_EXECUTION_CLASS,
   FRESHNESS_STATUS,
   LIFECYCLE_STATUS,
+  isCanonicalUuid,
+  isUnavailableRepresentation,
   validateEvidenceEnvelope,
 } from '../contracts/artemisEvidenceContract.js';
 import {
@@ -38,6 +41,7 @@ export const ADMISSION_REASON = Object.freeze({
   FRESHNESS_AGED: 'FRESHNESS_AGED',
   MOCK_OR_PLACEHOLDER: 'MOCK_OR_PLACEHOLDER',
   DATA_QUALITY_BLOCKED: 'DATA_QUALITY_BLOCKED',
+  DATA_QUALITY_DEGRADED: 'DATA_QUALITY_DEGRADED',
   EXECUTION_CLAIM_FORBIDDEN: 'EXECUTION_CLAIM_FORBIDDEN',
   DUPLICATE_REFERENCE: 'DUPLICATE_REFERENCE',
   UNSUPPORTED_ROLE: 'UNSUPPORTED_ROLE',
@@ -78,15 +82,16 @@ function isMockOrPlaceholder(envelope) {
   return false;
 }
 
+/**
+ * Field-semantic + role-aware execution-claim detection.
+ * Analytical conclusion.signal values such as BUY/SELL/HOLD/LONG/SHORT are
+ * directional analytical signals under frozen WP-B.1 — NOT execution authorization.
+ */
 function hasForbiddenExecutionClaims(envelope) {
   if (envelope?.executionEligible === true) return true;
   if (envelope?.approvedForExecution === true) return true;
   if (envelope?.approved === true) return true;
-  const signal = envelope?.conclusion?.signal;
-  if (typeof signal === 'string') {
-    const upper = signal.toUpperCase();
-    if (['BUY', 'SELL', 'EXECUTE', 'LONG', 'SHORT'].includes(upper)) return true;
-  }
+  if (FORBIDDEN_EXECUTION_CLASS.includes(envelope?.executionClass)) return true;
   return false;
 }
 
@@ -126,7 +131,8 @@ export function evaluateContextCompatibility(decisionContext = {}, envelope = {}
   };
 }
 
-function buildRef(envelope, admissionState, admissionReason, confirmationSemantics, extras = {}) {
+function buildRef(envelope, admissionState, admissionReason, confirmationSemantics) {
+  // C.1 Decision refs keep freshness as a canonical status string only.
   const freshness = freshnessStatusOf(envelope);
   return {
     agentId: envelope.agentId,
@@ -147,7 +153,6 @@ function buildRef(envelope, admissionState, admissionReason, confirmationSemanti
     timeframe: envelope.timeframe ?? null,
     analysisHorizon: envelope.analysisHorizon ?? null,
     analysisTimestamp: envelope.analysisTimestamp ?? null,
-    ...extras,
   };
 }
 
@@ -171,10 +176,39 @@ function classifyRoleAdmission(envelope) {
   return { state: EVIDENCE_ADMISSION_STATE.REJECTED, reason: ADMISSION_REASON.UNSUPPORTED_ROLE };
 }
 
-function referenceKey(envelope) {
-  const agentId = envelope?.agentId || 'unknown';
-  const runId = typeof envelope?.runId === 'string' ? envelope.runId : JSON.stringify(envelope?.runId || null);
-  return `${agentId}::${runId}`;
+/**
+ * Deterministic duplicate identity.
+ * - Canonical UUID runId => primary stable key (agentId + runId)
+ * - null / unavailable runId => do NOT collapse all same-Agent evidence
+ * - Fallback only when analysisTimestamp + bounded context fields are present
+ * - Otherwise decline to deduplicate (return null)
+ */
+export function resolveDuplicateIdentityKey(envelope) {
+  const agentId = envelope?.agentId;
+  if (!agentId || typeof agentId !== 'string') return null;
+
+  const runId = envelope?.runId;
+  if (typeof runId === 'string' && isCanonicalUuid(runId)) {
+    return `run:${agentId}:${runId.trim().toLowerCase()}`;
+  }
+  if (runId != null && !isUnavailableRepresentation(runId)) {
+    // Non-canonical runId should already fail schema; do not invent a key.
+    return null;
+  }
+
+  const analysisTimestamp = typeof envelope?.analysisTimestamp === 'string'
+    ? envelope.analysisTimestamp.trim()
+    : '';
+  if (!analysisTimestamp) return null;
+
+  const symbol = normalizeContextValue(envelope?.symbol) || '';
+  const timeframe = normalizeContextValue(envelope?.timeframe) || '';
+  const venue = normalizeContextValue(envelope?.venue || envelope?.provider) || '';
+  const marketType = normalizeContextValue(envelope?.marketType) || '';
+  // Require at least one bounded context field besides timestamp to avoid false collapse.
+  if (!symbol && !timeframe && !venue && !marketType) return null;
+
+  return `ctx:${agentId}:${analysisTimestamp}:${symbol}|${timeframe}|${venue}|${marketType}`;
 }
 
 /**
@@ -323,7 +357,6 @@ export function admitEvidenceEnvelope(decisionContext, envelope) {
         EVIDENCE_ADMISSION_STATE.EXCLUDED,
         ADMISSION_REASON.CONTEXT_INCOMPATIBLE,
         CONFIRMATION_SEMANTICS.NONE,
-        { contextMismatches: contextCompatibility.mismatches },
       ),
       schemaValidation,
       contextCompatibility,
@@ -463,7 +496,7 @@ export function admitEvidenceEnvelope(decisionContext, envelope) {
   if (freshness === FRESHNESS_STATUS.AGED || normalizedEnvelope.dataQuality?.status === 'degraded') {
     const degradedReason = freshness === FRESHNESS_STATUS.AGED
       ? ADMISSION_REASON.FRESHNESS_AGED
-      : roleAdmission.reason;
+      : ADMISSION_REASON.DATA_QUALITY_DEGRADED;
     return {
       admissionState: EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED,
       admissionReason: degradedReason,
@@ -515,9 +548,9 @@ export function admitEvidenceSet(decisionContext, envelopes = []) {
 
   for (const envelope of list) {
     const result = admitEvidenceEnvelope(decisionContext, envelope);
-    if (result.evidenceRef) {
-      const key = referenceKey(envelope || {});
-      if (seen.has(key) && result.admissionState !== EVIDENCE_ADMISSION_STATE.REJECTED) {
+    if (result.evidenceRef && result.admissionState !== EVIDENCE_ADMISSION_STATE.REJECTED) {
+      const key = resolveDuplicateIdentityKey(envelope || {});
+      if (key && seen.has(key)) {
         const duplicate = {
           ...result,
           admissionState: EVIDENCE_ADMISSION_STATE.EXCLUDED,
@@ -533,7 +566,7 @@ export function admitEvidenceSet(decisionContext, envelopes = []) {
         results.push(duplicate);
         continue;
       }
-      if (envelope && typeof envelope === 'object') seen.add(key);
+      if (key) seen.add(key);
     }
     results.push(result);
   }
@@ -570,4 +603,5 @@ export default {
   admitEvidenceEnvelope,
   admitEvidenceSet,
   evaluateContextCompatibility,
+  resolveDuplicateIdentityKey,
 };

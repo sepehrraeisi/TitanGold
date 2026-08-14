@@ -26,7 +26,13 @@ Delivered on `feat/artemis-wp-c1-orchestration-contracts`:
 - `backend/__tests__/unit/artemisDecisionContract.wpC1.test.js`
 
 Invariants enforced: `decisionEligible=false`, `executionEligible=false`, legacy `approved`/`approvedForExecution` rejected.  
+Analytical `conclusion.signal` BUY/SELL/HOLD is **not** treated as execution authorization.  
 WP-B.1 evidence contract remains unmodified/frozen. Legacy Artemis runtime routes/orchestrator untouched. Sentiment untouched.
+
+Provenance:
+- C.1 implementation code milestone: `a68168c8fa1cc3eb343998ba400f606c19cb013b`
+- Prior review HEAD: `d14590825684ac5d17c6f7b7d5d64a0a00960563`
+- Correction commit updates current review HEAD on the same branch.
 
 ---
 

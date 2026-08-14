@@ -34,6 +34,8 @@ import {
   admitEvidenceEnvelope,
   admitEvidenceSet,
 } from '../../services/artemisEvidenceAdmissionService.js';
+import { mapVolumePersistedRun } from '../../services/artemisEvidenceAdapters/volumeAdapter.js';
+import { mapArbitragePersistedRun } from '../../services/artemisEvidenceAdapters/arbitrageAdapter.js';
 
 const DECISION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CONTEXT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -223,7 +225,9 @@ describe('WP-C.1 ArtemisDecision contract', () => {
     ['missing decisionId', { decisionId: undefined }],
     ['unknown top-level', { unexpectedField: true }],
     ['invalid timestamp', { createdAt: 'not-iso' }],
-    ['invalid time ordering', { analysisAt: '2026-08-10T12:00:00.000Z', expiresAt: '2026-08-10T11:00:00.000Z' }],
+    ['expiresAt before analysisAt', { analysisAt: '2026-08-10T12:00:00.000Z', expiresAt: '2026-08-10T11:00:00.000Z' }],
+    ['createdAt before analysisAt', { analysisAt: '2026-08-10T12:10:00.000Z', createdAt: '2026-08-10T12:00:00.000Z' }],
+    ['expiresAt before createdAt', { createdAt: '2026-08-10T12:10:00.000Z', analysisAt: '2026-08-10T12:00:00.000Z', expiresAt: '2026-08-10T12:05:00.000Z' }],
     ['invalid uuid', { decisionId: 'not-a-uuid' }],
   ])('rejects %s', (_label, patch) => {
     const decision = buildContractOnlyArtemisDecision({
@@ -239,6 +243,60 @@ describe('WP-C.1 ArtemisDecision contract', () => {
     if (patch.unexpectedField) decision.unexpectedField = true;
     const result = validateArtemisDecision(decision);
     expect(result.ok).toBe(false);
+  });
+
+  it('accepts valid analysisAt <= createdAt <= expiresAt ordering', () => {
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      createdAt: '2026-08-10T12:10:00.000Z',
+      expiresAt: '2026-08-10T13:00:00.000Z',
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(true);
+  });
+
+  it('rejects unknown nested freshness object keys on evidenceRef', () => {
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [{
+        agentId: 'trend',
+        freshness: { status: 'fresh', unexpectedDiagnostic: true },
+      }],
+    });
+    const result = validateArtemisDecision(decision);
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result.errors)).toMatch(/invalid_freshness_shape|unknown_field/);
+  });
+
+  it.each([
+    ['unit 0', { value: 0, scale: 'unit_interval' }, true],
+    ['unit 1', { value: 1, scale: 'unit_interval' }, true],
+    ['unit >1', { value: 1.01, scale: 'unit_interval' }, false],
+    ['unit negative', { value: -0.1, scale: 'unit_interval' }, false],
+    ['percent 0', { value: 0, scale: 'percent_100' }, true],
+    ['percent 100', { value: 100, scale: 'percent_100' }, true],
+    ['percent >100', { value: 100.1, scale: 'percent_100' }, false],
+    ['percent negative', { value: -1, scale: 'percent_100' }, false],
+  ])('confidence range %s', (_label, conf, ok) => {
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      confidence: {
+        availability: 'available',
+        value: conf.value,
+        scale: conf.scale,
+        kind: 'HEURISTIC',
+        calibrationState: 'uncalibrated',
+        provenance: { writer: 'test', methodKey: 'unit' },
+      },
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(ok);
   });
 
   it('rejects unknown nested evidenceRef fields', () => {
@@ -457,18 +515,86 @@ describe('WP-C.1 deterministic evidence admission', () => {
     ]).toContain(risk.admissionReason);
   });
 
-  it('excludes symbol/context mismatch without coercion', () => {
+  it('excludes symbol/context mismatch without coercion and keeps Decision-valid refs', () => {
     const result = admitEvidenceEnvelope(CTX, trendEnvelope({ symbol: 'ETH/USDT' }));
     expect(result.admissionState).toBe(EVIDENCE_ADMISSION_STATE.EXCLUDED);
     expect(result.admissionReason).toBe(ADMISSION_REASON.CONTEXT_INCOMPATIBLE);
     expect(result.contextCompatibility.compatible).toBe(false);
+    expect(result.contextCompatibility.mismatches.length).toBeGreaterThan(0);
+    expect(result.evidenceRef).not.toHaveProperty('contextMismatches');
+
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: [result.evidenceRef],
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(true);
+    expect(decision.evidenceRefs[0].admissionReason).toBe(ADMISSION_REASON.CONTEXT_INCOMPATIBLE);
   });
 
-  it('handles duplicate references deterministically', () => {
+  it('handles duplicate references deterministically for same canonical runId', () => {
     const set = admitEvidenceSet(CTX, [trendEnvelope(), trendEnvelope()]);
     expect(set.results).toHaveLength(2);
     expect(set.results[0].admissionState).toBe(EVIDENCE_ADMISSION_STATE.ADMITTED);
     expect(set.results[1].admissionReason).toBe(ADMISSION_REASON.DUPLICATE_REFERENCE);
+  });
+
+  it('does not treat same Agent with null runId and different analysisTimestamp as duplicates', () => {
+    const a = trendEnvelope({
+      runId: null,
+      analysisTimestamp: '2026-08-10T12:00:00.000Z',
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+    });
+    const b = trendEnvelope({
+      runId: null,
+      analysisTimestamp: '2026-08-10T11:00:00.000Z',
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+    });
+    // Schema requires UUID or unavailable for runId; null is allowed as omitted/null by identifier validator.
+    expect(validateEvidenceEnvelope(a).ok).toBe(true);
+    expect(validateEvidenceEnvelope(b).ok).toBe(true);
+    const set = admitEvidenceSet(CTX, [a, b]);
+    expect(set.results[0].admissionReason).not.toBe(ADMISSION_REASON.DUPLICATE_REFERENCE);
+    expect(set.results[1].admissionReason).not.toBe(ADMISSION_REASON.DUPLICATE_REFERENCE);
+  });
+
+  it('does not treat unavailable runId with distinct timestamps as duplicates', () => {
+    const a = trendEnvelope({
+      runId: 'unavailable',
+      analysisTimestamp: '2026-08-10T12:00:00.000Z',
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+    });
+    const b = trendEnvelope({
+      runId: { availability: 'unavailable', reasonKey: 'missing_run' },
+      analysisTimestamp: '2026-08-10T10:00:00.000Z',
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+    });
+    const set = admitEvidenceSet(CTX, [a, b]);
+    expect(set.results.every((row) => row.admissionReason !== ADMISSION_REASON.DUPLICATE_REFERENCE)).toBe(true);
+  });
+
+  it('uses DATA_QUALITY_DEGRADED when degradation is caused by data quality', () => {
+    const result = admitEvidenceEnvelope(CTX, trendEnvelope({
+      freshness: { status: 'fresh', reasonKey: 'test_fresh' },
+      dataQuality: {
+        status: 'degraded',
+        sourceAvailability: 'degraded',
+        coverage: 'unavailable',
+        completeness: 'degraded',
+        staleness: 'fresh',
+        providerDegradation: true,
+        sampleAdequacy: 'ok',
+        knownLimitationKeys: ['provider_partial'],
+      },
+    }));
+    expect(result.admissionState).toBe(EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED);
+    expect(result.admissionReason).toBe(ADMISSION_REASON.DATA_QUALITY_DEGRADED);
   });
 
   it('preserves correlation families for trend+volume without scoring', () => {
@@ -540,5 +666,100 @@ describe('WP-C.1 deterministic evidence admission', () => {
     expect(validated.ok).toBe(true);
     expect(decision.decisionEligible).toBe(false);
     expect(decision.executionEligible).toBe(false);
+  });
+});
+
+describe('WP-C.1 frozen Volume adapter compatibility', () => {
+  const NOW = Date.parse('2026-08-10T12:10:00.000Z');
+  const VOL_RUN_BUY = '44444444-4444-4444-8444-444444444441';
+  const VOL_RUN_SELL = '44444444-4444-4444-8444-444444444442';
+  const VOL_RUN_HOLD = '44444444-4444-4444-8444-444444444443';
+
+  function volumePersisted(action, runId) {
+    return mapVolumePersistedRun({
+      nowMs: NOW,
+      row: { id: runId, created_at: '2026-08-10T12:00:00.000Z', confidence: 0.5 },
+      output: {
+        symbol: 'BTC/USDT',
+        timeframe: '1h',
+        timestamp: '2026-08-10T12:00:00.000Z',
+        last_candle_timestamp: '2026-08-10T11:00:00.000Z',
+        obv: { current: 12, trend: 'rising' },
+        vwap: { current: 101 },
+        volume_spikes: { volumeRatio: 2.1, isSpike: true },
+        trading_recommendation: { action, confidence: 68 },
+        metadata: { dataPoints: 48 },
+      },
+      input: { symbol: 'BTC/USDT', timeframe: '1h' },
+    });
+  }
+
+  it.each([
+    ['BUY', VOL_RUN_BUY, 'bullish'],
+    ['SELL', VOL_RUN_SELL, 'bearish'],
+    ['HOLD', VOL_RUN_HOLD, 'neutral'],
+  ])('admits frozen Volume adapter %s as directional analytical evidence', (action, runId, direction) => {
+    const mapped = volumePersisted(action, runId);
+    expect(mapped.ok).toBe(true);
+    expect(validateEvidenceEnvelope(mapped.envelope).ok).toBe(true);
+    expect(mapped.envelope.conclusion.signal).toBe(action);
+    expect(mapped.envelope.conclusion.direction).toBe(direction);
+
+    const admitted = admitEvidenceEnvelope(CTX, mapped.envelope);
+    expect(admitted.admissionState).toBe(EVIDENCE_ADMISSION_STATE.ADMITTED);
+    expect(admitted.confirmationSemantics).toBe(CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE);
+    expect(admitted.admissionReason).not.toBe(ADMISSION_REASON.EXECUTION_CLAIM_FORBIDDEN);
+
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      symbol: CTX.symbol,
+      timeframe: CTX.timeframe,
+      evidenceRefs: [admitted.evidenceRef],
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(true);
+    expect(decision.decisionEligible).toBe(false);
+    expect(decision.executionEligible).toBe(false);
+  });
+
+  it('keeps frozen Arbitrage as opportunity role, never directional vote', () => {
+    const mapped = mapArbitragePersistedRun({
+      nowMs: NOW,
+      row: { id: ARB_RUN, created_at: '2026-08-10T12:00:00.000Z', confidence: 0.71 },
+      output: {
+        timestamp: '2026-08-10T12:00:00.000Z',
+        candidates: [{ id: 'c1', buyExchange: 'mexc', sellExchange: 'binance', profitPercent: 0.8 }],
+        confidence: 0.71,
+        symbol: 'BTC/USDT',
+      },
+      input: { symbol: 'BTC/USDT' },
+    });
+    expect(validateEvidenceEnvelope(mapped.envelope).ok).toBe(true);
+    expect(mapped.envelope.authorityClass).toBe(AUTHORITY_CLASS.OPPORTUNITY_FORECAST);
+    const admitted = admitEvidenceEnvelope({ symbol: 'BTC/USDT' }, mapped.envelope);
+    expect(admitted.evidenceRef.role).toBe(AUTHORITY_CLASS.OPPORTUNITY_FORECAST);
+    expect(admitted.confirmationSemantics).not.toBe(CONFIRMATION_SEMANTICS.DIRECTIONAL_CANDIDATE);
+    expect([
+      CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT,
+      CONFIRMATION_SEMANTICS.NON_CONFIRMING,
+    ]).toContain(admitted.confirmationSemantics);
+  });
+
+  it('end-to-end Volume BUY → Decision remains non-executable', () => {
+    const mapped = volumePersisted('BUY', VOL_RUN_BUY);
+    const set = admitEvidenceSet(CTX, [mapped.envelope]);
+    expect(set.decisionEligible).toBe(false);
+    expect(set.executionEligible).toBe(false);
+    expect(set.approvedForExecution).toBe(false);
+    const decision = buildContractOnlyArtemisDecision({
+      decisionId: DECISION_ID,
+      decisionContextId: CONTEXT_ID,
+      createdAt: '2026-08-10T12:10:00.000Z',
+      analysisAt: '2026-08-10T12:00:00.000Z',
+      evidenceRefs: set.evidenceRefs,
+    });
+    expect(validateArtemisDecision(decision).ok).toBe(true);
   });
 });
