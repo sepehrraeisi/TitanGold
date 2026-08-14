@@ -1,18 +1,21 @@
 # ARTEMIS WP-C — Orchestration / Synthesis / Control-Chain Discovery
 
-**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED** · **WP-C.1 CLOSED AND FROZEN**  
-**Canonical product main:** `origin/main` = `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
+**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED** · **WP-C.1 CLOSED AND FROZEN** · **WP-C.2 IMPLEMENTATION IN PROGRESS (LIBRARY ONLY)**  
+**Canonical product main:** `origin/main` = `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
+**WP-C.1 product merge (historical):** PR #23 → `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
 **Pre-C.1 frozen main baseline (Discovery era):** `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
 **Discovery branch:** `feat/artemis-wp-c-orchestration-discovery`  
 **Discovery Owner-approval SHA:** `658290a07641f317b60ee8d4afec87464edfcdbc`  
 **Hardened Discovery HEAD (pre-approval):** `b3274a59060db8c30f9f3dc35ef3e1de009ed8b7`  
 **C.1 implementation branch:** `feat/artemis-wp-c1-orchestration-contracts`  
 **C.1 implementation final HEAD:** `3ca6558c06a3412aa1ce8feb09e039bd7d172acb`  
-**C.1 merge:** PR #23 squash → `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
+**C.2 implementation branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
+**C.2 worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2`  
 **Risk tier (Discovery):** Tier 0 — Documentation milestone  
 **C.1 pure-library product:** **CLOSED AND FROZEN**  
 **C.1 Runtime Wired / Active:** **NO / NO**  
-**C.2 / B10 / WP-D / Shadow / Paper / Live:** **NOT STARTED**  
+**C.2 Runtime Wired / Active:** **NO / NO**  
+**B10 / WP-D / Shadow / Paper / Live:** **NOT STARTED**  
 
 This is the **single canonical** WP-C living document. Do not create parallel Artemis closeout docs.
 
@@ -29,6 +32,18 @@ Final integrity: agentId↔role/authorityClass; admissionState↔confirmationSem
 WP-B.1 frozen. Sentiment untouched / not Artemis-consumable. Optimization remains NOT_APPLICABLE to initial control chain.
 
 See **§23 WP-C.1 CLOSEOUT AND FREEZE** for full lifecycle, CI, server alignment, and provenance semantics.
+
+### C.2 factual status (library implementation — not closed)
+
+Owner-authorized pure deterministic synthesis / conflict / qualitative correlation:
+
+- `backend/contracts/artemisSynthesisContract.js` — `artemis-synthesis-1.0.0` / policy `wp-c2-synthesis-1.0.0`
+- `backend/services/artemisDeterministicSynthesisService.js`
+- `backend/__tests__/unit/artemisSynthesis.wpC2.test.js`
+
+Policy locks: `MIN_INDEPENDENT_DIRECTIONAL_FAMILIES=2` · Trend+Volume = one OHLCV family · Arbitrage opportunity-only · no numeric synthesis confidence · no correlation coefficients · no Risk/Portfolio/Liquidity/Order integration · no Sentiment remediation · no B10 · no runtime activation.
+
+See **§24 WP-C.2 DETERMINISTIC SYNTHESIS IMPLEMENTATION**.
 
 ---
 
@@ -1030,6 +1045,60 @@ Approved future sequence remains:
 5. Shadow preparation  
 6. Separate Owner gate for Shadow activation  
 
-Still closed / not started: C.2 · B10 · WP-D · Shadow · Paper · Live.  
+Still closed / not started at WP-C.1 freeze: C.2 · B10 · WP-D · Shadow · Paper · Live.  
 Sentiment remains future remediation candidate / NOT Artemis-consumable.  
 Optimization remains NOT_APPLICABLE to the initial Artemis control chain.
+
+---
+
+## 24. WP-C.2 DETERMINISTIC SYNTHESIS IMPLEMENTATION
+
+**Status:** IMPLEMENTATION COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
+**Branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
+**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2`  
+**Base main:** `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
+
+### 24.1 Delivered library footprint
+
+| File | Role |
+|---|---|
+| `backend/contracts/artemisSynthesisContract.js` | `artemis-synthesis-1.0.0` assessment validator |
+| `backend/services/artemisDeterministicSynthesisService.js` | admit → family assess → qualitative resolve → Decision projection helper |
+| `backend/__tests__/unit/artemisSynthesis.wpC2.test.js` | focused C.2 matrix |
+
+Frozen C.1 files remain unmodified and are imported/reused (`admitEvidenceSet`, `validateArtemisDecision`, WP-B.1 envelope contract).
+
+### 24.2 Owner-approved policy locks
+
+| Rule | Value |
+|---|---|
+| Policy version | `wp-c2-synthesis-1.0.0` |
+| `MIN_INDEPENDENT_DIRECTIONAL_FAMILIES` | **2** |
+| Trend + Volume | one `ohlcv_candle_family` (not two independent confirmations) |
+| Arbitrage | opportunity context only; **no** directional influence |
+| Sentiment | future remediation; **not** remediated / not consumable in C.2 |
+| Correlation | qualitative only — no coefficients, weights, majority, averages |
+| Synthesis confidence | UNAVAILABLE / `qualitative_synthesis_not_calibrated` |
+| Eligibility | `artemisConsumable=false`, `decisionEligible=false`, `executionEligible=false` |
+| Controls | Risk / Portfolio / Optimization / Liquidity / Runtime / Order **not** integrated |
+| B10 | **NOT STARTED** |
+| Runtime / server | **NOT ACTIVATED** / **UNCHANGED** |
+
+### 24.3 Current realistic set truth
+
+With Trend + Volume + Arbitrage:
+
+- independent directional families = **1**
+- `multiFamilyConfirmation = false`
+- overall = **INSUFFICIENT_EVIDENCE / ABSTAIN** (expected, not a defect)
+
+Cross-family PROPOSED paths are covered by **algorithm-only family-summary fixtures** and do **not** imply additional Agents are currently Artemis-consumable.
+
+### 24.4 Provenance semantics
+
+| Layer | State |
+|---|---|
+| GitHub Source | C.2 branch (implementation) |
+| Server Content | **UNCHANGED** (no C.2 server alignment yet) |
+| Runtime Active | **UNCHANGED** · C.2 not wired |
+| Product orchestration | **LEGACY** |
