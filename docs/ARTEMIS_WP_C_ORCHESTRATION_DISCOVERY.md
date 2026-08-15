@@ -1,7 +1,9 @@
 # ARTEMIS WP-C — Orchestration / Synthesis / Control-Chain Discovery
 
-**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED** · **WP-C.1 CLOSED AND FROZEN** · **WP-C.2 IMPLEMENTATION IN PROGRESS (LIBRARY ONLY)**  
-**Canonical product main:** `origin/main` = `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
+**Status:** **WP-C DISCOVERY ARCHITECTURE — OWNER APPROVED** · **WP-C.1 CLOSED AND FROZEN** · **WP-C.2 CLOSED AND FROZEN**  
+**Canonical product main:** `origin/main` = `cf04f1137cd148385624dc12f10e9628ec530a13`  
+**WP-C.2 product merge:** PR #25 → `cf04f1137cd148385624dc12f10e9628ec530a13`  
+**WP-C.2 implementation branch final HEAD:** `e9b03a63499b79e3f8f335a095c95e712a16eaf6`  
 **WP-C.1 product merge (historical):** PR #23 → `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`  
 **Pre-C.1 frozen main baseline (Discovery era):** `69b71b6a628b8139d3161bb4efc41507a72db9cf`  
 **Discovery branch:** `feat/artemis-wp-c-orchestration-discovery`  
@@ -1053,10 +1055,10 @@ Optimization remains NOT_APPLICABLE to the initial Artemis control chain.
 
 ## 24. WP-C.2 DETERMINISTIC SYNTHESIS IMPLEMENTATION
 
-**Status:** FINAL ADVERSARIAL HARDENING COMPLETE — OWNER REVIEW REQUIRED — **NOT CLOSED / NOT FROZEN**  
-**Branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
-**Worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2`  
-**Base main:** `58a7c3633330031f039771a0a39f18f4cb59ac9c`  
+**Status:** **CLOSED AND FROZEN** (see §25 FINAL CLOSEOUT / FREEZE)  
+**Implementation branch:** `feat/artemis-wp-c2-deterministic-synthesis`  
+**Implementation final HEAD:** `e9b03a63499b79e3f8f335a095c95e712a16eaf6`  
+**Product merge:** PR #25 → `cf04f1137cd148385624dc12f10e9628ec530a13`  
 
 Integrity + final adversarial hardening (same branch):
 - Distinct `correlationFamily` identity enforcement (duplicate family summaries rejected)
@@ -1102,7 +1104,7 @@ Frozen C.1 files remain unmodified and are imported/reused (`admitEvidenceSet`, 
 | Input bound | `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (refuse excess; no truncation) |
 | C.2 outcomes | PROPOSED / HOLD / ABSTAIN / INSUFFICIENT_EVIDENCE / INCOMPATIBLE_EVIDENCE only |
 | B10 | **NOT STARTED** |
-| Runtime / server | **NOT ACTIVATED** / **UNCHANGED** |
+| Runtime / server | library content aligned; **NOT ACTIVATED** |
 
 ### 24.3 Current realistic set truth
 
@@ -1118,7 +1120,135 @@ Cross-family PROPOSED paths are covered by **algorithm-only family-summary fixtu
 
 | Layer | State |
 |---|---|
-| GitHub Source | C.2 branch (implementation) |
-| Server Content | **UNCHANGED** (no C.2 server alignment yet) |
-| Runtime Active | **UNCHANGED** · C.2 not wired |
+| GitHub Source | product main @ `cf04f113…` (PR #25) |
+| Server Content | two C.2 library files exact-main aligned |
+| Runtime Active | legacy · C.2 not wired / not active |
 | Product orchestration | **LEGACY** |
+
+---
+
+## 25. WP-C.2 FINAL CLOSEOUT / FREEZE
+
+**Status:** **CLOSED AND FROZEN** (docs-only closeout branch pending Owner merge)  
+**Closeout branch:** `docs/artemis-wp-c2-freeze`  
+**Closeout worktree:** `/home/ubuntu/worktrees/titangold-artemis-wp-c2-freeze`
+
+### 25.1 Product merge identity
+
+| Item | Value |
+|---|---|
+| Implementation PR | **#25** |
+| Title | `feat(artemis): add WP-C.2 deterministic synthesis and conflict policy` |
+| Squash / product main SHA | `cf04f1137cd148385624dc12f10e9628ec530a13` |
+| Implementation branch final HEAD | `e9b03a63499b79e3f8f335a095c95e712a16eaf6` |
+
+Branch HEAD ≠ squash-main SHA (expected after squash merge).
+
+### 25.2 Delivered library + policy
+
+Files:
+
+- `backend/contracts/artemisSynthesisContract.js`
+- `backend/services/artemisDeterministicSynthesisService.js`
+- `backend/__tests__/unit/artemisSynthesis.wpC2.test.js`
+
+Contract/policy:
+
+- `artemis-synthesis-1.0.0`
+- `wp-c2-synthesis-1.0.0`
+- `MIN_INDEPENDENT_DIRECTIONAL_FAMILIES = 2`
+- `MAX_SYNTHESIS_INPUT_ENVELOPES = 32`
+
+Frozen semantics:
+
+- Trend + Volume = **one** OHLCV family
+- Arbitrage = opportunity-only (zero directional vote)
+- PROPOSED requires ≥2 independent directional families
+- Correlation qualitative only (no coefficients / weights / majority / confidence averaging)
+- Synthesis confidence UNAVAILABLE / UNCALIBRATED
+- Duplicate `agentId+runId` fail-closed
+- Invalid family kernel fail-closed
+- Controls are not C.2 directional votes
+
+Current realistic synthesis:
+
+- family count = **1**
+- outcome = `INSUFFICIENT_EVIDENCE` / `ABSTAIN`
+
+### 25.3 Test + CI evidence
+
+Pre-PR / local (not GitHub CI):
+
+- Focused WP-C.2: **61 PASS / 0 fail / 0 skip**
+- Artemis unit: **13 suites / 187 PASS**
+- Full backend unit: **102 suites / 851 PASS**
+
+PR #25 actual GitHub CI:
+
+- Backend Tests = **SUCCESS**
+- E2E Tests = **SUCCESS**
+- GitGuardian Security Checks = **SUCCESS** (7 commits scanned; no secrets)
+- Frontend CI = **NOT TRIGGERED** (NOT TRIGGERED ≠ PASS)
+- Unresolved review threads = **0**
+- Bugbot = NOT ENABLED (not a finding)
+
+### 25.4 Server content alignment
+
+Owner-authorized create-only of EXACTLY two previously-missing files in `/home/ubuntu/webapp/TitanGold` from main `cf04f113…`:
+
+| File | SHA256 | Bytes | Match |
+|---|---|---|---|
+| `backend/contracts/artemisSynthesisContract.js` | `22ced7e7a6bbfa7f730ab2945eb09e9953c139f9d6fe3cd6647d9b9bb237a1f9` | 25853 | EXACT / `cmp IDENTICAL` / `O_EXCL` |
+| `backend/services/artemisDeterministicSynthesisService.js` | `44dab3ac49ccbdea667137db4a63e20978428b62e9f6d324c1b7a76d709b79b9` | 30312 | EXACT / `cmp IDENTICAL` / `O_EXCL` |
+
+Other runtime files mutated by alignment: **0**
+
+Runtime-tree provenance:
+
+- Branch `main` · observed HEAD `a100f7ba21131c351b561fb66554e90990da8725`
+- Dirty YES · before 482 · after 483
+- Task-attributable path delta **+2** (`??` both targets)
+- Absolute porcelain net delta **+1** (unrelated concurrent dirty fluctuation)
+- Do not stage / clean
+
+### 25.5 Runtime active state
+
+| Item | Value |
+|---|---|
+| `TITAN_RUNTIME_COMMIT` | `48d7722b651e1d551bbbf128eaa30e1b1c136163` (unchanged; ≠ product main) |
+| C.2 Runtime Wired | **NO** |
+| C.2 Runtime Active | **NO** |
+| C.1 Runtime Wired | **NO** |
+| Restart / PM2 / deploy | **NO** |
+| DB / migration / providers / Agents | **0** |
+
+Post-alignment health/topology (read-only):
+
+- root HTTP 200 · `/api/v1/health` HTTP 200 / `status=ok`
+- backend ids 1–4 online · workers 5,9 online
+- processor id11 online / id15 stopped · collector id16 online / id12 stopped
+
+Module smoke PASS: contract/policy versions, min families=2, max inputs=32, no-evidence → `insufficient_evidence`, eligibility flags false.
+
+### 25.6 Human QA
+
+**NOT APPLICABLE BY SCOPE** — no UI / frontend / runtime route / active orchestration / execution / provider / DB change.
+
+Applicable gates: source review, focused/backend tests, GitHub Backend+E2E CI, secret scan, exact-content server verification, pure module smoke, health.
+
+### 25.7 Three-state ledger
+
+| State | Value |
+|---|---|
+| GitHub Source | `main` @ `cf04f1137cd148385624dc12f10e9628ec530a13` |
+| Server Content | WP-C.2 two library files exact-content aligned to product main |
+| Runtime Active | legacy unchanged · C.2 not wired/active · `TITAN_RUNTIME_COMMIT=48d7722…` |
+
+### 25.8 Maturity / next work
+
+- `artemisConsumable=false` · `decisionEligible=false` · `executionEligible=false`
+- Product orchestration = **LEGACY**
+- Evidence readiness = `ON_READ_PARTIAL` — NOT `EVIDENCE_READY`
+- **NOT STARTED:** B10 · WP-D · Risk/Portfolio/Liquidity/Order/runtime-safety integration · Sentiment remediation · Shadow · Paper · Live
+
+Next Artemis implementation requires separate Owner authorization after this freeze merges.
