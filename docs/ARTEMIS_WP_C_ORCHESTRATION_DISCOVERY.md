@@ -1072,6 +1072,9 @@ Integrity + final adversarial hardening (same branch):
 - `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (no silent truncation)
 - Opportunity availability only when canonically proven
 - `admittedDirectionalMemberCount` = distinct confirming Agent IDs (bounded by `memberAgentIds`)
+- Non-confirming `OPPORTUNITY_FORECAST` → `opportunityContext` only (never directional familyMembers)
+- `resolveCrossFamilySynthesis` fail-closed via `validateSynthesisFamilyAssessmentSet` (`invalid_family_assessment_set`)
+- Invalid synthesis assessment is not exposed as a usable result (`assessment: null`)
 
 ### 24.1 Delivered library footprint
 

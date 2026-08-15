@@ -18,10 +18,10 @@ Risk tier:
 Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.2 FINAL ADVERSARIAL HARDENING COMPLETE**  
-**FOCUSED C.2 = 52 PASS**  
-**ARTEMIS UNIT = 13 suites / 178 tests PASS**  
-**BACKEND UNIT = 102 suites / 842 tests PASS**  
+**WP-C.2 FINAL PRE-PR MICRO-CORRECTION COMPLETE**  
+**FOCUSED C.2 = 61 PASS**  
+**ARTEMIS UNIT = 13 suites / 187 tests PASS**  
+**BACKEND UNIT = 102 suites / 851 tests PASS**  
 **OWNER REVIEW REQUIRED**  
 **NOT CLOSED**  
 **NOT FROZEN**  
@@ -37,13 +37,15 @@ Engineering status:
 **B10 NOT STARTED**  
 **PR NOT CREATED**
 
-Final adversarial hardening focus:
+Final adversarial + pre-PR micro-correction focus:
 - Duplicate `agentId+runId` → fail-closed all copies (no first-row wins)
 - Directional family members = `ANALYTICAL_EVIDENCE` only
 - Coherent / MIXED / non-confirming structural count invariants
 - C.2-supported synthesis outcomes only (no control-stage claims)
 - Projection evidence lineage coverage
 - `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (no truncation)
+- Non-confirming opportunity routed to `opportunityContext` only
+- Cross-family kernel fail-closed on invalid family summaries
 - Prior integrity corrections preserved
 
 Preserved frozen baselines:

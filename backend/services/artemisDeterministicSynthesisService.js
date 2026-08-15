@@ -4,6 +4,8 @@
  */
 
 import {
+  AGENT_CONTRACT_ROLE,
+  AUTHORITY_CLASS,
   AVAILABILITY,
   CORRELATION_FAMILY,
   DIRECTION,
@@ -19,6 +21,7 @@ import {
   buildUnavailableSynthesisConfidence,
   countDistinctQualifyingFamilies,
   validateArtemisSynthesisAssessment,
+  validateSynthesisFamilyAssessmentSet,
 } from '../contracts/artemisSynthesisContract.js';
 import {
   ALLOCATION_AVAILABILITY,
@@ -82,6 +85,33 @@ function isOpportunityAdmission(result) {
       || result.admissionState === EVIDENCE_ADMISSION_STATE.ADMITTED_DEGRADED)
     && result.confirmationSemantics === CONFIRMATION_SEMANTICS.OPPORTUNITY_CONTEXT
   );
+}
+
+function resolveCanonicalAuthorityClass(envelope, result) {
+  const agentId = envelope?.agentId || result?.evidenceRef?.agentId || null;
+  if (typeof agentId === 'string' && Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, agentId)) {
+    return AGENT_CONTRACT_ROLE[agentId].authorityClass;
+  }
+  return result?.evidenceRef?.authorityClass
+    || result?.evidenceRef?.role
+    || envelope?.authorityClass
+    || envelope?.agentRole
+    || null;
+}
+
+function pushOpportunityContextRow(opportunityContext, envelope, result, availability) {
+  opportunityContext.push({
+    agentId: envelope?.agentId || result.evidenceRef?.agentId || null,
+    runId: envelope?.runId ?? result.evidenceRef?.runId ?? null,
+    correlationFamily: inCorrelationFamily(envelope?.correlationFamily)
+      ? envelope.correlationFamily
+      : (inCorrelationFamily(result.preserved?.correlationFamily)
+        ? result.preserved.correlationFamily
+        : null),
+    admissionState: result.admissionState,
+    admissionReason: result.admissionReason || null,
+    availability,
+  });
 }
 
 function identityKey(envelope) {
@@ -246,12 +276,23 @@ export function assessDirectionalFamily(input) {
 
 /**
  * Pure cross-family policy over already-built family assessments.
- * Rejects missing/duplicate correlationFamily identities fail-closed.
+ * Rejects structurally invalid / non-analytical family summaries fail-closed.
  */
 export function resolveCrossFamilySynthesis(familyAssessments, extra = {}) {
   const families = Array.isArray(familyAssessments)
     ? [...familyAssessments].sort((a, b) => cmpStr(a.correlationFamily, b.correlationFamily))
     : [];
+
+  const familySetValidation = validateSynthesisFamilyAssessmentSet(families);
+  if (!familySetValidation.ok) {
+    return {
+      ok: false,
+      code: 'invalid_family_assessment_set',
+      message: familySetValidation.message || 'Family assessment set failed structural validation',
+      errors: familySetValidation.errors,
+    };
+  }
+
   const baseLimitations = uniqueSorted([
     ...(Array.isArray(extra.limitations) ? extra.limitations : []),
     'wp_c2_qualitative_only',
@@ -260,25 +301,6 @@ export function resolveCrossFamilySynthesis(familyAssessments, extra = {}) {
     'execution_eligible_false',
     'artemis_consumable_false',
   ]);
-
-  const seen = new Set();
-  for (const fam of families) {
-    if (!fam || !inCorrelationFamily(fam.correlationFamily)) {
-      return {
-        ok: false,
-        code: 'invalid_or_missing_correlation_family',
-        message: 'Every family assessment requires a distinct canonical correlationFamily',
-      };
-    }
-    if (seen.has(fam.correlationFamily)) {
-      return {
-        ok: false,
-        code: 'duplicate_correlation_family',
-        message: 'Duplicate correlationFamily identities are forbidden in cross-family synthesis',
-      };
-    }
-    seen.add(fam.correlationFamily);
-  }
 
   const mixed = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.MIXED);
   const coherentBullish = families.filter((f) => f.qualitativeState === FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH);
@@ -461,6 +483,9 @@ export function synthesizeFromFamilyAssessments(decisionContext, familyAssessmen
     },
   });
   const validation = validateArtemisSynthesisAssessment(assessment);
+  if (!validation.ok) {
+    return { assessment: null, validation, admissionSet: null };
+  }
   return { assessment, validation, admissionSet: null };
 }
 
@@ -538,6 +563,25 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
       summary.nonConfirmingCount += 1;
       summary.reasons.push(reason);
       contextIncompatibleOnly = false;
+      const authorityClass = resolveCanonicalAuthorityClass(envelope, result);
+
+      if (authorityClass === AUTHORITY_CLASS.OPPORTUNITY_FORECAST) {
+        // Non-confirming opportunity stays opportunity context only — never familyMembers.
+        pushOpportunityContextRow(
+          opportunityContext,
+          envelope,
+          result,
+          AVAILABILITY.UNAVAILABLE,
+        );
+        extraLimitations.push('opportunity_context_non_confirming');
+        continue;
+      }
+
+      if (authorityClass !== AUTHORITY_CLASS.ANALYTICAL_EVIDENCE) {
+        extraLimitations.push('non_confirming_role_not_synthesis_participant');
+        continue;
+      }
+
       const family = envelope?.correlationFamily || result.preserved?.correlationFamily || null;
       if (!inCorrelationFamily(family)) {
         extraLimitations.push('non_confirming_correlation_family_unavailable');
@@ -561,20 +605,14 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
 
     if (isOpportunityAdmission(result)) {
       const provenOpportunityAvailability = envelope?.opportunity?.availability;
-      opportunityContext.push({
-        agentId: envelope?.agentId || result.evidenceRef?.agentId || null,
-        runId: envelope?.runId ?? result.evidenceRef?.runId ?? null,
-        correlationFamily: inCorrelationFamily(envelope?.correlationFamily)
-          ? envelope.correlationFamily
-          : (inCorrelationFamily(result.preserved?.correlationFamily)
-            ? result.preserved.correlationFamily
-            : null),
-        admissionState: result.admissionState,
-        admissionReason: result.admissionReason || null,
-        availability: Object.values(AVAILABILITY).includes(provenOpportunityAvailability)
+      pushOpportunityContextRow(
+        opportunityContext,
+        envelope,
+        result,
+        Object.values(AVAILABILITY).includes(provenOpportunityAvailability)
           ? provenOpportunityAvailability
           : AVAILABILITY.UNAVAILABLE,
-      });
+      );
       continue;
     }
 
@@ -641,9 +679,10 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
         'artemis_consumable_false',
       ],
     });
+    const validation = validateArtemisSynthesisAssessment(assessment);
     return {
-      assessment,
-      validation: validateArtemisSynthesisAssessment(assessment),
+      assessment: validation.ok ? assessment : null,
+      validation,
       admissionSet,
     };
   }
@@ -656,6 +695,7 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
         ok: false,
         code: resolved.code,
         message: resolved.message,
+        errors: resolved.errors,
       },
       admissionSet,
     };
@@ -675,9 +715,10 @@ export function synthesizeDeterministicAssessment(decisionContext, envelopes = [
     excludedNonConfirmingSummary: summary,
   });
 
+  const validation = validateArtemisSynthesisAssessment(assessment);
   return {
-    assessment,
-    validation: validateArtemisSynthesisAssessment(assessment),
+    assessment: validation.ok ? assessment : null,
+    validation,
     admissionSet,
   };
 }

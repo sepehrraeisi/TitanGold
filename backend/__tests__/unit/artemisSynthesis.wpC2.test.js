@@ -17,6 +17,7 @@ import {
   CLASSIFICATION,
   CONFLICT_STATE,
   DIRECTION_OR_ABSTAIN,
+  EVIDENCE_ADMISSION_STATE,
   MATURITY_STAGE,
   SYNTHESIS_OUTCOME,
   validateArtemisDecision,
@@ -423,7 +424,8 @@ describe('WP-C.2 distinct correlation-family integrity', () => {
       }),
     ]);
     expect(resolved.ok).toBe(false);
-    expect(resolved.code).toBe('duplicate_correlation_family');
+    expect(resolved.code).toBe('invalid_family_assessment_set');
+    expect(resolved.errors.some((e) => e.code === 'duplicate_correlation_family')).toBe(true);
 
     const { assessment, validation } = synthesizeFromFamilyAssessments(CTX, [
       familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH),
@@ -443,7 +445,7 @@ describe('WP-C.2 distinct correlation-family integrity', () => {
       }),
     ]);
     expect(resolved.ok).toBe(false);
-    expect(resolved.code).toBe('duplicate_correlation_family');
+    expect(resolved.code).toBe('invalid_family_assessment_set');
   });
 
   it('family assessment with missing/null correlationFamily => contract REJECT', () => {
@@ -978,5 +980,139 @@ describe('WP-C.2 input envelope bound', () => {
     expect(bad33.validation.ok).toBe(false);
     expect(bad33.validation.code).toBe('input_envelope_limit_exceeded');
     expect(bad33.validation.limit).toBe(32);
+  });
+});
+
+function nonConfirmingArbitrage(freshnessStatus) {
+  return arbitrageEnvelope({
+    freshness: { status: freshnessStatus, reasonKey: `arb_${freshnessStatus}` },
+    dataQuality: {
+      status: 'degraded',
+      sourceAvailability: 'available',
+      coverage: 'unavailable',
+      completeness: 'ok',
+      staleness: freshnessStatus,
+      providerDegradation: false,
+      sampleAdequacy: 'ok',
+      knownLimitationKeys: [freshnessStatus],
+    },
+  });
+}
+
+describe('WP-C.2 non-confirming opportunity role routing', () => {
+  function expectNonConfirmingArbRouted(envelope) {
+    const { assessment, validation } = synthesizeDeterministicAssessment(CTX, [envelope]);
+    expect(validation.ok).toBe(true);
+    expect(assessment).not.toBeNull();
+    expect(assessment.opportunityContext).toHaveLength(1);
+    expect(assessment.opportunityContext[0].agentId).toBe('arbitrage');
+    expect(assessment.opportunityContext[0].admissionState).toBe(EVIDENCE_ADMISSION_STATE.ADMITTED_NON_CONFIRMING);
+    expect(assessment.opportunityContext[0].availability).toBe(AVAILABILITY.UNAVAILABLE);
+    expect(assessment.independentDirectionalFamilyCount).toBe(0);
+    expect(assessment.familyAssessments.every((f) => !f.memberAgentIds.includes('arbitrage'))).toBe(true);
+    expect(assessment.limitations).toContain('opportunity_context_non_confirming');
+  }
+
+  it('stale Arbitrage stays in opportunityContext unavailable', () => {
+    expectNonConfirmingArbRouted(nonConfirmingArbitrage('stale'));
+  });
+
+  it('expired Arbitrage stays in opportunityContext unavailable', () => {
+    expectNonConfirmingArbRouted(nonConfirmingArbitrage('expired'));
+  });
+
+  it('freshness-unknown Arbitrage stays in opportunityContext unavailable', () => {
+    expectNonConfirmingArbRouted(nonConfirmingArbitrage('unknown'));
+  });
+
+  it('Trend + Volume + stale Arbitrage => family count 1 / insufficient / no contract failure', () => {
+    const { assessment, validation } = synthesizeDeterministicAssessment(CTX, [
+      trendEnvelope(),
+      volumeEnvelope(),
+      nonConfirmingArbitrage('stale'),
+    ]);
+    expect(validation.ok).toBe(true);
+    expect(assessment).not.toBeNull();
+    expect(assessment.independentDirectionalFamilyCount).toBe(1);
+    expect(assessment.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.INSUFFICIENT_EVIDENCE);
+    expect(assessment.observedDirection).toBe(DIRECTION_OR_ABSTAIN.ABSTAIN);
+    expect(assessment.opportunityContext).toHaveLength(1);
+    expect(assessment.opportunityContext[0].agentId).toBe('arbitrage');
+    expect(assessment.opportunityContext[0].admissionState).toBe(EVIDENCE_ADMISSION_STATE.ADMITTED_NON_CONFIRMING);
+    expect(assessment.opportunityContext[0].availability).toBe(AVAILABILITY.UNAVAILABLE);
+    expect(assessment.familyAssessments.every((f) => !f.memberAgentIds.includes('arbitrage'))).toBe(true);
+  });
+});
+
+describe('WP-C.2 cross-family kernel fail-closed on invalid family summaries', () => {
+  it('risk + order coherent bullish families => ok=false / no PROPOSED', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.ACCOUNT_STATE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['risk'],
+      }),
+      familyFixture(CORRELATION_FAMILY.EXECUTION_PATH, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['order'],
+      }),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('invalid_family_assessment_set');
+    expect(resolved.synthesisOutcome).toBeUndefined();
+
+    const { assessment, validation } = synthesizeFromFamilyAssessments(CTX, [
+      familyFixture(CORRELATION_FAMILY.ACCOUNT_STATE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['risk'],
+      }),
+      familyFixture(CORRELATION_FAMILY.EXECUTION_PATH, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['order'],
+      }),
+    ]);
+    expect(assessment).toBeNull();
+    expect(validation.ok).toBe(false);
+  });
+
+  it('arbitrage coherent bullish family => ok=false', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.SPREAD_MONITOR, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['arbitrage'],
+      }),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('invalid_family_assessment_set');
+  });
+
+  it('coherent family with directional count 0 => ok=false', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        admittedDirectionalMemberCount: 0,
+      }),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('invalid_family_assessment_set');
+  });
+
+  it('malformed familyDirection/state combination => ok=false', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BEARISH),
+    ]);
+    expect(resolved.ok).toBe(false);
+    expect(resolved.code).toBe('invalid_family_assessment_set');
+  });
+
+  it('valid Trend-family + valid analytical external family remains PASS', () => {
+    const resolved = resolveCrossFamilySynthesis([
+      familyFixture(CORRELATION_FAMILY.OHLCV_CANDLE, FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH, DIRECTION_OR_ABSTAIN.BULLISH, {
+        memberAgentIds: ['trend', 'volume'],
+        admittedDirectionalMemberCount: 2,
+      }),
+      familyFixture(
+        CORRELATION_FAMILY.EXTERNAL_NARRATIVE,
+        FAMILY_QUALITATIVE_STATE.COHERENT_BULLISH,
+        DIRECTION_OR_ABSTAIN.BULLISH,
+        { memberAgentIds: ['sentiment'] },
+      ),
+    ]);
+    expect(resolved.ok).toBe(true);
+    expect(resolved.synthesisOutcome).toBe(SYNTHESIS_OUTCOME.PROPOSED);
+    expect(resolved.multiFamilyConfirmation).toBe(true);
   });
 });

@@ -263,6 +263,107 @@ export function countDistinctQualifyingFamilies(familyAssessments = []) {
   return seen.size;
 }
 
+/**
+ * Validate a family-assessment array for kernel/contract eligibility.
+ * Shared by full assessment validation and cross-family kernel gating.
+ */
+export function validateSynthesisFamilyAssessmentSet(familyAssessments) {
+  const errors = [];
+  if (!Array.isArray(familyAssessments)) {
+    return {
+      ok: false,
+      code: 'invalid_family_assessment_set',
+      message: 'familyAssessments must be an array',
+      errors: [{ field: 'familyAssessments', code: 'invalid_array' }],
+    };
+  }
+  if (familyAssessments.length > MAX_FAMILY_ASSESSMENTS) {
+    return {
+      ok: false,
+      code: 'invalid_family_assessment_set',
+      message: 'Too many family assessments',
+      errors: [{ field: 'familyAssessments', code: 'too_many' }],
+    };
+  }
+
+  const seenFamilies = new Set();
+  familyAssessments.forEach((fam, index) => {
+    const field = `familyAssessments[${index}]`;
+    if (!isPlainObject(fam)) {
+      errors.push({ field, code: 'invalid_family' });
+      return;
+    }
+    rejectUnknownFields(fam, ALLOWED_FAMILY, field, errors);
+
+    if (!inEnum(fam.correlationFamily, CORRELATION_FAMILY)) {
+      errors.push({ field: `${field}.correlationFamily`, code: 'correlation_family_required' });
+    } else if (seenFamilies.has(fam.correlationFamily)) {
+      errors.push({ field: `${field}.correlationFamily`, code: 'duplicate_correlation_family' });
+    } else {
+      seenFamilies.add(fam.correlationFamily);
+    }
+
+    if (!Array.isArray(fam.memberAgentIds)) {
+      errors.push({ field: `${field}.memberAgentIds`, code: 'invalid_array' });
+    } else if (fam.memberAgentIds.length > MAX_MEMBER_AGENT_IDS) {
+      errors.push({ field: `${field}.memberAgentIds`, code: 'too_many' });
+    } else {
+      const seenAgents = new Set();
+      fam.memberAgentIds.forEach((agentId, agentIndex) => {
+        const af = `${field}.memberAgentIds[${agentIndex}]`;
+        if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > MAX_STRING_CHARS) {
+          errors.push({ field: af, code: 'invalid_string' });
+          return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, agentId)) {
+          errors.push({ field: af, code: 'unknown_agent_id' });
+        } else if (
+          AGENT_CONTRACT_ROLE[agentId].authorityClass !== AUTHORITY_CLASS.ANALYTICAL_EVIDENCE
+        ) {
+          errors.push({ field: af, code: 'non_analytical_family_member' });
+        }
+        if (seenAgents.has(agentId)) {
+          errors.push({ field: af, code: 'duplicate_agent_id' });
+        }
+        seenAgents.add(agentId);
+      });
+      const memberCount = fam.memberAgentIds.length;
+      for (const countKey of [
+        'admittedDirectionalMemberCount',
+        'degradedMemberCount',
+        'nonConfirmingMemberCount',
+      ]) {
+        validateNonNegInt(`${field}.${countKey}`, fam[countKey], errors, { max: MAX_MEMBER_AGENT_IDS });
+        if (typeof fam[countKey] === 'number' && fam[countKey] > memberCount) {
+          errors.push({ field: `${field}.${countKey}`, code: 'count_exceeds_members' });
+        }
+      }
+    }
+
+    if (!inEnum(fam.qualitativeState, FAMILY_QUALITATIVE_STATE)) {
+      errors.push({ field: `${field}.qualitativeState`, code: 'invalid_qualitative_state' });
+    }
+    if (!inEnum(fam.familyDirection, DIRECTION_OR_ABSTAIN)) {
+      errors.push({ field: `${field}.familyDirection`, code: 'invalid_family_direction' });
+    }
+    if (!inEnum(fam.conflictState, CONFLICT_STATE)) {
+      errors.push({ field: `${field}.conflictState`, code: 'invalid_conflict_state' });
+    }
+    validateStringArray(`${field}.limitations`, fam.limitations, errors, { required: true });
+    validateFamilyConsistency(fam, field, errors);
+  });
+
+  if (errors.length) {
+    return {
+      ok: false,
+      code: 'invalid_family_assessment_set',
+      message: 'Family assessment set failed structural validation',
+      errors,
+    };
+  }
+  return { ok: true };
+}
+
 function validateFamilyConsistency(fam, field, errors) {
   const state = fam.qualitativeState;
   const dir = fam.familyDirection;
@@ -461,77 +562,15 @@ export function validateArtemisSynthesisAssessment(assessment) {
     errors.push({ field: 'artemisConsumable', code: 'must_be_false' });
   }
 
-  const seenFamilies = new Set();
   if (!Array.isArray(assessment.familyAssessments)) {
     errors.push({ field: 'familyAssessments', code: 'invalid_array' });
   } else if (assessment.familyAssessments.length > MAX_FAMILY_ASSESSMENTS) {
     errors.push({ field: 'familyAssessments', code: 'too_many' });
   } else {
-    assessment.familyAssessments.forEach((fam, index) => {
-      const field = `familyAssessments[${index}]`;
-      if (!isPlainObject(fam)) {
-        errors.push({ field, code: 'invalid_family' });
-        return;
-      }
-      rejectUnknownFields(fam, ALLOWED_FAMILY, field, errors);
-
-      if (!inEnum(fam.correlationFamily, CORRELATION_FAMILY)) {
-        errors.push({ field: `${field}.correlationFamily`, code: 'correlation_family_required' });
-      } else if (seenFamilies.has(fam.correlationFamily)) {
-        errors.push({ field: `${field}.correlationFamily`, code: 'duplicate_correlation_family' });
-      } else {
-        seenFamilies.add(fam.correlationFamily);
-      }
-
-      if (!Array.isArray(fam.memberAgentIds)) {
-        errors.push({ field: `${field}.memberAgentIds`, code: 'invalid_array' });
-      } else if (fam.memberAgentIds.length > MAX_MEMBER_AGENT_IDS) {
-        errors.push({ field: `${field}.memberAgentIds`, code: 'too_many' });
-      } else {
-        const seenAgents = new Set();
-        fam.memberAgentIds.forEach((agentId, agentIndex) => {
-          const af = `${field}.memberAgentIds[${agentIndex}]`;
-          if (typeof agentId !== 'string' || agentId.length === 0 || agentId.length > MAX_STRING_CHARS) {
-            errors.push({ field: af, code: 'invalid_string' });
-            return;
-          }
-          if (!Object.prototype.hasOwnProperty.call(AGENT_CONTRACT_ROLE, agentId)) {
-            errors.push({ field: af, code: 'unknown_agent_id' });
-          } else if (
-            AGENT_CONTRACT_ROLE[agentId].authorityClass !== AUTHORITY_CLASS.ANALYTICAL_EVIDENCE
-          ) {
-            errors.push({ field: af, code: 'non_analytical_family_member' });
-          }
-          if (seenAgents.has(agentId)) {
-            errors.push({ field: af, code: 'duplicate_agent_id' });
-          }
-          seenAgents.add(agentId);
-        });
-        const memberCount = fam.memberAgentIds.length;
-        for (const countKey of [
-          'admittedDirectionalMemberCount',
-          'degradedMemberCount',
-          'nonConfirmingMemberCount',
-        ]) {
-          validateNonNegInt(`${field}.${countKey}`, fam[countKey], errors, { max: MAX_MEMBER_AGENT_IDS });
-          if (typeof fam[countKey] === 'number' && fam[countKey] > memberCount) {
-            errors.push({ field: `${field}.${countKey}`, code: 'count_exceeds_members' });
-          }
-        }
-      }
-
-      if (!inEnum(fam.qualitativeState, FAMILY_QUALITATIVE_STATE)) {
-        errors.push({ field: `${field}.qualitativeState`, code: 'invalid_qualitative_state' });
-      }
-      if (!inEnum(fam.familyDirection, DIRECTION_OR_ABSTAIN)) {
-        errors.push({ field: `${field}.familyDirection`, code: 'invalid_family_direction' });
-      }
-      if (!inEnum(fam.conflictState, CONFLICT_STATE)) {
-        errors.push({ field: `${field}.conflictState`, code: 'invalid_conflict_state' });
-      }
-      validateStringArray(`${field}.limitations`, fam.limitations, errors, { required: true });
-      validateFamilyConsistency(fam, field, errors);
-    });
+    const familySetValidation = validateSynthesisFamilyAssessmentSet(assessment.familyAssessments);
+    if (!familySetValidation.ok && Array.isArray(familySetValidation.errors)) {
+      errors.push(...familySetValidation.errors);
+    }
   }
 
   if (Array.isArray(assessment.familyAssessments)) {
@@ -659,6 +698,7 @@ export default {
   FAMILY_QUALITATIVE_STATE,
   C2_SUPPORTED_SYNTHESIS_OUTCOMES,
   validateArtemisSynthesisAssessment,
+  validateSynthesisFamilyAssessmentSet,
   buildUnavailableSynthesisConfidence,
   countDistinctQualifyingFamilies,
 };
