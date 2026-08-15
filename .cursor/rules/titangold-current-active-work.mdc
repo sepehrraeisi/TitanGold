@@ -1,50 +1,60 @@
 ---
-description: TitanGold Rule 02 — Artemis B10 Persistence Discovery
+description: TitanGold Rule 02 — Artemis B10 Persistence Implementation
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS B10 — PERSISTENCE DISCOVERY**
+**ARTEMIS B10 — PERSISTENCE IMPLEMENTATION SOURCE COMPLETE**
 
 Current area:
 Shared Foundation → Artemis Central Intelligence (durable decision persistence)
 
 Current program slice:
-ARTEMIS-B10-PERSISTENCE-DISCOVERY
+ARTEMIS-B10-PERSISTENCE-IMPLEMENTATION
 
 Risk tier:
-Tier 0 — Documentation / architecture discovery (read-only DB metadata; no product mutation)
+Tier 2 — Backend persistence library + migration source (no live migration / no runtime wiring)
 
 Engineering status:
-**OWNER AUTHORIZED**  
-**DISCOVERY ACTIVE / OWNER REVIEW REQUIRED**  
-**IMPLEMENTATION NOT AUTHORIZED**  
-**MIGRATION NOT AUTHORIZED**  
-**RUNTIME WIRING NOT AUTHORIZED**  
-**WP-C.2 CLOSED AND FROZEN**  
-**WP-C.1 CLOSED AND FROZEN**  
-**WP-B.1 CLOSED AND FROZEN**  
-**Data Hub / Trend / Arbitrage FROZEN**  
-**PURE LIBRARY BASELINES PRESERVED**  
-**NO RUNTIME ORCHESTRATION ACTIVATION**  
-**NO MIGRATION**  
-**NO PERSISTENCE IMPLEMENTATION**  
-**NO PROVIDER CALLS**  
-**NO AGENT EXECUTION**  
-**NO LLM COUNCIL**  
-**NO SHADOW / PAPER / LIVE**  
-**WP-D NOT STARTED**  
-**PR NOT CREATED**
+**OWNER ARCHITECTURE APPROVED — OPTION C**
+**OWNER IMPLEMENTATION CORRECTION APPROVED**
+**OWNER FINAL CODE REVIEW PASSED**
+**OWNER IMPLEMENTATION COMMIT + PUSH AUTHORIZED**
+**IMPLEMENTATION SOURCE COMPLETE**
+**IMPLEMENTATION BRANCH COMMIT/PUSH STAGE**
+**MIGRATION SOURCE AUTHORED**
+**LIVE MIGRATION NOT AUTHORIZED**
+**LIVE DB UNCHANGED**
+**RUNTIME WIRING NOT AUTHORIZED**
+**RUNTIME ACTIVE = NO**
+**PR NOT AUTHORIZED**
+**MERGE NOT AUTHORIZED**
+**SHADOW NOT STARTED**
+**WP-D NOT STARTED**
+**PAPER NOT STARTED**
+**LIVE NOT STARTED**
+**WP-C.2 CLOSED AND FROZEN**
+**WP-C.1 CLOSED AND FROZEN**
+**WP-B.1 CLOSED AND FROZEN**
+**Data Hub / Trend / Arbitrage FROZEN**
+**NO PROVIDER CALLS**
+**NO AGENT EXECUTION**
+**NO LLM COUNCIL**
 
 Canonical product main baseline:
 `origin/main` = `6e89475b05f2bbd52669b845cb8e4d4b41ab7407`
 
-Discovery branch / worktree:
-- Branch: `feat/artemis-b10-persistence-discovery`
-- Worktree: `/home/ubuntu/worktrees/titangold-artemis-b10-discovery`
-- Canonical discovery doc: `docs/ARTEMIS_B10_PERSISTENCE_DISCOVERY.md`
+Canonical B10 Discovery head:
+`1f762aecde75bcad08ba5c56e957cd1d5a496f59`
+
+Implementation branch / worktree:
+- Branch: `feat/artemis-b10-persistence`
+- Worktree: `/home/ubuntu/worktrees/titangold-artemis-b10-implementation`
+- Discovery branch (frozen reference): `feat/artemis-b10-persistence-discovery`
+- Discovery worktree: `/home/ubuntu/worktrees/titangold-artemis-b10-discovery`
+- Canonical discovery/implementation doc: `docs/ARTEMIS_B10_PERSISTENCE_DISCOVERY.md`
 
 Preserved frozen baselines:
 - **WP-C Discovery = OWNER APPROVED**
@@ -60,20 +70,53 @@ Safety flags (unchanged / still false):
 - `executionEligible = false`
 - Evidence readiness = `ON_READ_PARTIAL` — NOT `EVIDENCE_READY`
 
-B10 Discovery scope (authorized):
-- Read-only repository + live schema inventory
-- Architecture options and Owner lock proposals
-- No table creation / migration / runtime wiring
+Implementation architecture (OPTION C — locked):
+- Dedicated tables: `artemis_decisions` + `artemis_decision_evidence_refs`
+- Canonical SoT: `decision_payload` JSONB (exact validated ArtemisDecision)
+- Canonicalization: `titangold-json-c14n-1` (TitanGold-owned; not claimed as RFC 8785/JCS)
+- `ai_decisions`: **UNCHANGED — AGENT-RUN SOT**
+- `system_logs`: **NOT ARTEMIS DECISION SOT**
+- Context table: **DEFERRED / NOT CREATED**
+- Append-only service policy; no UPDATE/DELETE persistence API
+- No route / worker / scheduler / runtime wiring in this commit
 
-Not authorized:
-- Migration up/down / CREATE/ALTER/DROP / INSERT/UPDATE/DELETE
-- Runtime / PM2 / deploy / provider / Agent execution
-- Shadow / Paper / Live / WP-D
+Verification truth (Owner-reviewed; not re-run for commit prep):
+- Focused unit: **2 suites / 56 tests PASS**
+- Disposable PostgreSQL integration: **1 suite / 10 tests PASS**
+- Disposable migration **051 PASS** via actual `node-pg-migrate` semantics
+- Disposable PostgreSQL version used: **15**
+- Production/live PostgreSQL discovered version: **14.23**
+- Production PostgreSQL 14.23 migration compatibility: **NOT EXECUTED / NOT PROVEN**
+- Human product/browser QA: **NOT APPLICABLE** — pure backend persistence library + migration source, not runtime-wired
+
+B10 LIVE MIGRATION = **NOT AUTHORIZED**
+
+Before any future production migration Owner gate, require separate assessment of at least:
+- production PostgreSQL **14.23** compatibility
+- actual live `pgmigrations` state
+- pending migration **050** ahead of **051**
+- exact safe execution path
+- backup/rollback readiness
+- no use of `setup_migrations.js` to falsely register an unexecuted migration
+
+Do NOT solve these items in the B10 implementation source commit.
+Do NOT inspect/mutate live DB under this Rule 02 authorization.
+
+Not authorized under this Rule 02:
+- PR creation / merge
+- Live/staging DB migration / production DB connection/mutation
+- Server content alignment / runtime deployment
+- Route / worker / scheduler wiring
+- PM2 mutation / restart / reload
+- Shadow / WP-D / Paper / Live
+- Provider calls / Agent execution
 - Reopening WP-C.1 or WP-C.2 contracts
 - Protected scripts under backup-db / phase2 monitoring notify/healthcheck
-- PR / merge without separate Owner instruction
 
-Server ledger:
-- GitHub Source State = B10 discovery branch
-- Server Content State = UNCHANGED
-- Runtime Active State = UNCHANGED
+Three-state ledger:
+- GitHub Source State = B10 implementation branch committed + pushed (when Owner push completes)
+- Server Content State = **UNCHANGED**
+- Runtime Active State = **UNCHANGED / LEGACY / B10 unwired**
+
+Next authorized transition (Owner-gated, not implied):
+Owner PR review gate — then separate gates for live migration assessment and any future runtime wiring.

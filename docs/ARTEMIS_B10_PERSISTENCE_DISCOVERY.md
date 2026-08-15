@@ -1,16 +1,22 @@
 # ARTEMIS B10 — Append-Only / Versioned Artemis Decision Persistence Discovery
 
-**Status:** OWNER AUTHORIZED · DISCOVERY COMPLETE · **OWNER ARCHITECTURE REVIEW REQUIRED**  
-**Implementation:** NOT AUTHORIZED  
-**Migration:** NOT AUTHORIZED  
-**Runtime wiring:** NOT AUTHORIZED  
-**Shadow / Paper / Live / WP-D:** NOT STARTED  
+**Discovery:** COMPLETE
+**Architecture:** OWNER APPROVED — OPTION C
+**Implementation:** SOURCE COMPLETE / OWNER FINAL CODE REVIEW PASSED
+**Implementation commit/push:** OWNER AUTHORIZED
+**Migration source:** AUTHORED + DISPOSABLE VERIFIED
+**Live migration:** NOT AUTHORIZED / NOT EXECUTED
+**Runtime wiring:** NOT AUTHORIZED / NOT ACTIVE
+**PR:** NOT AUTHORIZED / NOT CREATED
+**Shadow / WP-D / Paper / Live:** NOT STARTED
 
-**Canonical product main:** `origin/main` = `6e89475b05f2bbd52669b845cb8e4d4b41ab7407`  
-**Discovery branch:** `feat/artemis-b10-persistence-discovery`  
-**Discovery worktree:** `/home/ubuntu/worktrees/titangold-artemis-b10-discovery`  
+**Canonical product main:** `origin/main` = `6e89475b05f2bbd52669b845cb8e4d4b41ab7407`
+**Discovery branch / head:** `feat/artemis-b10-persistence-discovery` @ `1f762aecde75bcad08ba5c56e957cd1d5a496f59`
+**Discovery worktree:** `/home/ubuntu/worktrees/titangold-artemis-b10-discovery`
+**Implementation branch:** `feat/artemis-b10-persistence`
+**Implementation worktree:** `/home/ubuntu/worktrees/titangold-artemis-b10-implementation`
 
-**Preserved freezes:** WP-C.1 / WP-C.2 / WP-B.1 / Data Hub / Trend / Arbitrage  
+**Preserved freezes:** WP-C.1 / WP-C.2 / WP-B.1 / Data Hub / Trend / Arbitrage
 
 Classification legend used below:
 
@@ -486,21 +492,21 @@ Server library presence of C.1/C.2 ≠ runtime activation. B10 tables (future) �
 
 Pending Owner approval:
 
-1. **Table strategy:** OPTION C — dedicated Decision + normalized evidence refs  
-2. **`ai_decisions` reuse:** **NO** (KEEP AS AGENT-RUN SOT)  
-3. **Decision payload:** exact validated JSONB SoT  
-4. **Evidence refs:** JSONB parent array preserved in payload + normalized child rows with ordinal  
-5. **Context model:** `decision_context_id` on Decision; defer context table  
-6. **Append-only enforcement:** service policy required; DB privilege hardening recommended; triggers optional later  
-7. **Duplicates:** identical hash → ALREADY_PERSISTED; different hash → FAIL; never overwrite  
-8. **Revision model:** new `decisionId` per immutable record; no v1 supersession chain required  
-9. **Transaction:** atomic Decision + refs via existing `transaction()`  
-10. **Indexes:** minimal set in §15  
-11. **Read validation:** version-aware `validateArtemisDecision`; no silent coercion  
-12. **Schema evolution:** immutable history; new versions = new rows  
-13. **Retention:** no automatic purge  
-14. **Rollback:** disable writer; DROP destructive + Owner-gated  
-15. **Shadow boundary:** B10 ≠ Shadow activation  
+1. **Table strategy:** OPTION C — dedicated Decision + normalized evidence refs
+2. **`ai_decisions` reuse:** **NO** (KEEP AS AGENT-RUN SOT)
+3. **Decision payload:** exact validated JSONB SoT
+4. **Evidence refs:** JSONB parent array preserved in payload + normalized child rows with ordinal
+5. **Context model:** `decision_context_id` on Decision; defer context table
+6. **Append-only enforcement:** service policy required; DB privilege hardening recommended; triggers optional later
+7. **Duplicates:** identical hash → ALREADY_PERSISTED; different hash → FAIL; never overwrite
+8. **Revision model:** new `decisionId` per immutable record; no v1 supersession chain required
+9. **Transaction:** atomic Decision + refs via existing `transaction()`
+10. **Indexes:** minimal set in §15
+11. **Read validation:** version-aware `validateArtemisDecision`; no silent coercion
+12. **Schema evolution:** immutable history; new versions = new rows
+13. **Retention:** no automatic purge
+14. **Rollback:** disable writer; DROP destructive + Owner-gated
+15. **Shadow boundary:** B10 ≠ Shadow activation
 
 ---
 
@@ -518,8 +524,82 @@ Pending Owner approval:
 
 Implementation / migration may begin only after:
 
-1. Owner approves the architecture locks in §20  
-2. Separate implementation authorization in Rule 02  
-3. Explicit migration authorization  
+1. Owner approves the architecture locks in §20
+2. Separate implementation authorization in Rule 02
+3. Explicit migration authorization
 
 Until then: **NO CREATE TABLE / NO MIGRATE / NO RUNTIME WIRING**.
+
+---
+
+## 23. Implementation outcome (Owner-authorized source)
+
+This section records the post-Discovery implementation source outcome. Discovery
+findings and architecture history above remain authoritative for why OPTION C
+was selected. This section does **not** claim live deployment, live migration,
+production persistence, runtime activation, Shadow readiness, or WP-D start.
+
+### 23.1 Final implementation / test paths
+
+1. `backend/database/migrations/051_artemis_b10_decision_persistence.sql`
+2. `backend/services/artemisDecisionCanonicalJson.js`
+3. `backend/services/artemisDecisionPersistenceService.js`
+4. `backend/__tests__/unit/artemisDecisionCanonicalJson.b10.test.js`
+5. `backend/__tests__/unit/artemisDecisionPersistence.b10.test.js`
+6. `backend/__tests__/integration/artemisDecisionPersistence.b10.integration.test.js`
+
+Governance/docs accompanying the implementation commit:
+
+7. `.cursor/rules/titangold-current-active-work.mdc`
+8. `docs/ARTEMIS_B10_PERSISTENCE_DISCOVERY.md`
+
+### 23.2 Architecture locks realized in source
+
+| Item | State |
+|---|---|
+| Table strategy | OPTION C — dedicated `artemis_decisions` + `artemis_decision_evidence_refs` |
+| Canonical SoT | `decision_payload` JSONB (exact validated ArtemisDecision) |
+| Canonicalization | `titangold-json-c14n-1` |
+| Append-only / idempotency | identical hash → ALREADY_PERSISTED; different hash → CONFLICT; never overwrite |
+| Read-time integrity | re-canonicalize + SHA-256 + byte + projection verification |
+| Evidence projection integrity | ordinal + `ref_payload` + normalized column comparison |
+| UPDATE/DELETE persistence API | **NOT PROVIDED** |
+| `ai_decisions` / `system_logs` writes | **NONE** |
+| Context table | **DEFERRED / NOT CREATED** |
+| Runtime wiring | **NOT AUTHORIZED / NOT ACTIVE** |
+
+### 23.3 Final approved source SHA256
+
+| Path | SHA256 |
+|---|---|
+| `051_artemis_b10_decision_persistence.sql` | `c78599b5de5f727a26eb31367ec74ffd1024445c269d30a7261689abc57b173d` |
+| `artemisDecisionCanonicalJson.js` | `5841b2366e4ddb73c9dfbb3f6660566bb4ffa036a448ad1128ec2949d23b50fd` |
+| `artemisDecisionPersistenceService.js` | `795f10e6cf9dbbfb05131265769bb73554b0c0e4f5a0dd155ec7bd7c82467b16` |
+| `artemisDecisionCanonicalJson.b10.test.js` | `3e326288dbcc7fed4d30bbbe84fbcb9362a64fdeeb1b1dde91630e673a3e78f4` |
+| `artemisDecisionPersistence.b10.test.js` | `f31ee260f608c9a16d5a7c51ebb510fbedeefcffa2972f01e511516ec25cf7ed` |
+| `artemisDecisionPersistence.b10.integration.test.js` | `5ba9bfd0ff4f7309bd6cd6049442ebf9598dba8d1f99b997b3ce8777b109fff7` |
+
+### 23.4 Verification evidence (Owner-reviewed)
+
+| Check | Result |
+|---|---|
+| Focused unit | **56/56 PASS** (2 suites) |
+| Disposable PG integration | **10/10 PASS** (1 suite) |
+| Disposable migration 051 | **PASS** via actual `node-pg-migrate` |
+| Disposable PostgreSQL | **15** |
+| Live/production PostgreSQL | **14.23** (discovered earlier; migration compatibility **NOT EXECUTED / NOT PROVEN**) |
+| Live migration | **NOT AUTHORIZED / NOT EXECUTED** |
+| Pending live migration 050 | Must be reviewed before any future production **051** execution |
+| PR | **NOT AUTHORIZED / NOT CREATED** |
+| Shadow / WP-D / Paper / Live | **NOT STARTED** |
+
+### 23.5 Three-state ledger (Implementation source stage)
+
+| State | Value |
+|---|---|
+| GitHub Source | B10 implementation branch `feat/artemis-b10-persistence` (commit + push Owner-authorized) |
+| Server Content | **UNCHANGED** |
+| Runtime Active | **UNCHANGED / LEGACY / B10 unwired** |
+
+**Next Owner gate:** PR review (separate). Live migration remains a separate
+Owner gate after PostgreSQL 14.23 / `pgmigrations` / pending **050** assessment.
