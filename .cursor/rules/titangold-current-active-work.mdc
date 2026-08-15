@@ -1,98 +1,111 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-C.1 CLOSED AND FROZEN
+description: TitanGold Rule 02 — Artemis WP-C.2 Deterministic Synthesis
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-C.1 — CLOSED AND FROZEN**
+**ARTEMIS WP-C.2 — DETERMINISTIC SYNTHESIS / CONFLICT / QUALITATIVE CORRELATION**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (no active Artemis implementation package)
+Shared Foundation → Artemis Central Intelligence (pure synthesis library)
 
 Current program slice:
-NONE — WP-C.1 closed; no further Artemis implementation authorized by this closeout
+ARTEMIS-WP-C-2-DETERMINISTIC-SYNTHESIS
 
 Risk tier:
-Tier 0 — Documentation closeout / freeze (no product or runtime mutation)
+Tier 2 — Medium (contract/library; no runtime activation)
 
 Engineering status:
-**WP-C.1 CLOSED AND FROZEN**  
-**WP-C DISCOVERY = OWNER APPROVED**  
-**WP-B.1 CLOSED AND FROZEN**  
-**Data Hub / Trend / Arbitrage = FROZEN**  
-**PURE LIBRARY FOUNDATION ONLY**  
-**WP-C.1 Runtime Wired = NO**  
-**WP-C.1 Runtime Active = NO**  
-**NO RUNTIME ORCHESTRATION ACTIVATION**  
+**WP-C.2 FINAL PRE-PR MICRO-CORRECTION COMPLETE**  
+**FOCUSED C.2 = 61 PASS**  
+**ARTEMIS UNIT = 13 suites / 187 tests PASS**  
+**BACKEND UNIT = 102 suites / 851 tests PASS**  
+**OWNER REVIEW REQUIRED**  
+**NOT CLOSED**  
+**NOT FROZEN**  
+**PURE LIBRARY ONLY**  
+**NO SERVER CHANGE**  
+**NO RUNTIME ACTIVATION**  
 **NO MIGRATION**  
+**NO PERSISTENCE**  
 **NO PROVIDER CALLS**  
 **NO AGENT EXECUTION**  
+**NO LLM COUNCIL**  
 **NO SHADOW / PAPER / LIVE**  
-**C.2 NOT STARTED**  
 **B10 NOT STARTED**  
-**WP-D NOT STARTED**
+**PR NOT CREATED**
 
-Canonical product merge:
-- PR #23 — `feat(artemis): add WP-C.1 decision contract and evidence admission`
-- Squash / `origin/main` SHA: `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`
-- Implementation branch final HEAD: `3ca6558c06a3412aa1ce8feb09e039bd7d172acb`
+Final adversarial + pre-PR micro-correction focus:
+- Duplicate `agentId+runId` → fail-closed all copies (no first-row wins)
+- Directional family members = `ANALYTICAL_EVIDENCE` only
+- Coherent / MIXED / non-confirming structural count invariants
+- C.2-supported synthesis outcomes only (no control-stage claims)
+- Projection evidence lineage coverage
+- `MAX_SYNTHESIS_INPUT_ENVELOPES = 32` (no truncation)
+- Non-confirming opportunity routed to `opportunityContext` only
+- Cross-family kernel fail-closed on invalid family summaries
+- Prior integrity corrections preserved
 
-C.1 delivered (library only):
-- `backend/contracts/artemisDecisionContract.js`
-- `backend/services/artemisEvidenceAdmissionService.js`
+Preserved frozen baselines:
+- **WP-C Discovery = OWNER APPROVED**
+- **WP-C.1 = CLOSED AND FROZEN**
+- **WP-B.1 = CLOSED AND FROZEN**
+- **Data Hub / Trend / Arbitrage = FROZEN**
 
-Verified tests (pre-merge / closeout evidence):
-- focused WP-C.1: 62 PASS
-- Artemis unit: 12 suites / 126 tests PASS
-- full backend unit: 101 suites / 790 tests PASS
+Canonical product main baseline:
+`origin/main` = `58a7c3633330031f039771a0a39f18f4cb59ac9c`
 
-PR #23 CI:
-- Backend Tests = SUCCESS
-- E2E Tests = SUCCESS
-- GitGuardian = SUCCESS (12 commits scanned; no secrets detected)
-- Unresolved review threads = 0
+Branch:
+`feat/artemis-wp-c2-deterministic-synthesis`
 
-Server content alignment (authorized two-file create only):
-- Runtime tree: `/home/ubuntu/webapp/TitanGold`
-- Runtime-tree git SHA observed before alignment: `a100f7ba21131c351b561fb66554e90990da8725`
-- Runtime tree dirty: YES (~481 entries)
-- Created only:
-  - `backend/contracts/artemisDecisionContract.js` SHA256 `fcc16f70f495b4cdec72d498d8dbed4259902352d62c6475d7cae61f92db98b0`
-  - `backend/services/artemisEvidenceAdmissionService.js` SHA256 `72dc9d33d43038033ebcb764a1c70ee2643706246e86df35015587ced136a1e7`
-- Both: EXACT MAIN CONTENT MATCH
-- Other runtime-tree files modified by alignment: 0
-- Frozen dependencies modified: NO
-- Restart / PM2 mutation during alignment: NO
-- `TITAN_RUNTIME_COMMIT` remains `48d7722b651e1d551bbbf128eaa30e1b1c136163` (do NOT equate to `47655c`)
+Worktree:
+`/home/ubuntu/worktrees/titangold-artemis-wp-c2`
 
-Provenance semantics (distinct):
-- GitHub Source: `main` @ `47655c008c01266299d6e92eb9c5b24ab5c7c5a3`
-- Server Content: WP-C.1 exact content aligned to that main
-- Runtime Active: legacy runtime unchanged; C.1 not wired / not active
+C.2 delivered (library only):
+- `backend/contracts/artemisSynthesisContract.js` (`artemis-synthesis-1.0.0` / `wp-c2-synthesis-1.0.0`)
+- `backend/services/artemisDeterministicSynthesisService.js`
+- `backend/__tests__/unit/artemisSynthesis.wpC2.test.js`
+
+Owner-approved C.2 policy (locked):
+1. `MIN_INDEPENDENT_DIRECTIONAL_FAMILIES = 2`
+2. Trend + Volume = one OHLCV family (not two independent confirmations)
+3. Arbitrage = opportunity context only (no directional vote)
+4. Sentiment = future remediation; NOT Artemis-consumable; not remediated in C.2
+5. Correlation = qualitative only (no coefficients / weights / majority / averages)
+6. Synthesis confidence = UNAVAILABLE / UNCALIBRATED (no numeric aggregate)
+7. `artemisConsumable=false`, `decisionEligible=false`, `executionEligible=false`
+8. No Risk / Portfolio / Optimization / Liquidity / Runtime / Order integration
+9. No B10 persistence
+10. Pure library only
+11. Duplicate canonical identity = NON-CONFIRMING / DUPLICATE_IDENTITY_AMBIGUOUS
+12. C.2 outcomes allowlist excludes control-stage outcomes
+
+Current realistic set truth:
+Trend + Volume (+ Arbitrage opportunity) ⇒ independent directional families = 1 ⇒ INSUFFICIENT_EVIDENCE / ABSTAIN
+
+Safety flags (unchanged / still false):
 - Product orchestration remains **LEGACY**
-
-Safety / maturity (unchanged):
 - `artemisConsumable = false`
 - `decisionEligible = false`
 - `executionEligible = false`
 - Evidence readiness = `ON_READ_PARTIAL` — NOT `EVIDENCE_READY`
 
-Owner reviews:
-- Architecture review: PASS
-- Code review: PASS
-- PR/CI review: PASS
-- Server alignment closeout review: PASS
+Frozen C.1 boundary (unmodified):
+- `backend/contracts/artemisDecisionContract.js`
+- `backend/services/artemisEvidenceAdmissionService.js`
+- `backend/contracts/artemisEvidenceContract.js`
+- frozen Trend / Volume / Arbitrage adapters
 
-Human QA:
-**NOT APPLICABLE BY SCOPE** — no user-facing UI, no runtime route activation, no orchestration activation, no execution behavior change. Milestone verification via focused tests, backend regression, E2E CI, security scan, exact server content verification, module import smoke, root HTTP 200, backend health 200/ok.
-
-Not authorized by this closeout:
-- Any further Artemis implementation
-- WP-C.2 / B10 / WP-D / control-runtime / Shadow / Paper / Live
-- Runtime activation of C.1
+Not authorized:
+- Runtime / PM2 / deploy / migration / provider / Agent execution / LLM Council
+- Shadow / Paper / Live / B10
+- Reopening WP-C.1
+- PR / merge without separate Owner instruction
 - Protected scripts under backup-db / phase2 monitoring notify/healthcheck
 
-Next approved transition (requires new explicit Owner authorization + Rule 02 replacement):
-**WP-C.2 — deterministic synthesis / conflict / qualitative correlation** only after separate Owner instruction.
+Server ledger:
+- GitHub Source State = C.2 branch updated
+- Server Content State = UNCHANGED
+- Runtime Active State = UNCHANGED
