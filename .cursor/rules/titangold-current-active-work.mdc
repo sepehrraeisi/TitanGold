@@ -1,80 +1,57 @@
 ---
-description: TitanGold Rule 02 — Artemis WP-C.2 CLOSED AND FROZEN
+description: TitanGold Rule 02 — Artemis B10 Persistence Discovery
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS WP-C.2 — CLOSED AND FROZEN**
+**ARTEMIS B10 — PERSISTENCE DISCOVERY**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence
+Shared Foundation → Artemis Central Intelligence (durable decision persistence)
 
 Current program slice:
-NONE — WP-C.2 closed; no further Artemis implementation authorized by this closeout
+ARTEMIS-B10-PERSISTENCE-DISCOVERY
 
 Risk tier:
-Tier 0 — Documentation closeout / freeze (no product or runtime mutation)
+Tier 0 — Documentation / architecture discovery (read-only DB metadata; no product mutation)
 
 Engineering status:
+**OWNER AUTHORIZED**  
+**DISCOVERY ACTIVE / OWNER REVIEW REQUIRED**  
+**IMPLEMENTATION NOT AUTHORIZED**  
+**MIGRATION NOT AUTHORIZED**  
+**RUNTIME WIRING NOT AUTHORIZED**  
 **WP-C.2 CLOSED AND FROZEN**  
 **WP-C.1 CLOSED AND FROZEN**  
 **WP-B.1 CLOSED AND FROZEN**  
-**WP-C Discovery OWNER APPROVED**  
 **Data Hub / Trend / Arbitrage FROZEN**  
-**PURE LIBRARY ONLY**  
-**WP-C.2 Runtime Wired = NO**  
-**WP-C.2 Runtime Active = NO**  
-**WP-C.1 Runtime Wired = NO**  
+**PURE LIBRARY BASELINES PRESERVED**  
 **NO RUNTIME ORCHESTRATION ACTIVATION**  
 **NO MIGRATION**  
-**NO PERSISTENCE**  
+**NO PERSISTENCE IMPLEMENTATION**  
 **NO PROVIDER CALLS**  
 **NO AGENT EXECUTION**  
 **NO LLM COUNCIL**  
 **NO SHADOW / PAPER / LIVE**  
-**B10 NOT STARTED**  
-**WP-D NOT STARTED**
-
-Canonical product merge (WP-C.2):
-- PR **#25** — `feat(artemis): add WP-C.2 deterministic synthesis and conflict policy`
-- Squash / product main SHA = `cf04f1137cd148385624dc12f10e9628ec530a13`
-- Implementation branch final HEAD = `e9b03a63499b79e3f8f335a095c95e712a16eaf6`
-- Do NOT confuse branch HEAD with squash-main SHA
+**WP-D NOT STARTED**  
+**PR NOT CREATED**
 
 Canonical product main baseline:
-`origin/main` = `cf04f1137cd148385624dc12f10e9628ec530a13`
+`origin/main` = `6e89475b05f2bbd52669b845cb8e4d4b41ab7407`
 
-Closeout branch / worktree:
-- Branch: `docs/artemis-wp-c2-freeze`
-- Worktree: `/home/ubuntu/worktrees/titangold-artemis-wp-c2-freeze`
+Discovery branch / worktree:
+- Branch: `feat/artemis-b10-persistence-discovery`
+- Worktree: `/home/ubuntu/worktrees/titangold-artemis-b10-discovery`
+- Canonical discovery doc: `docs/ARTEMIS_B10_PERSISTENCE_DISCOVERY.md`
 
-C.2 delivered library (frozen product):
-- `backend/contracts/artemisSynthesisContract.js`
-- `backend/services/artemisDeterministicSynthesisService.js`
-- `backend/__tests__/unit/artemisSynthesis.wpC2.test.js`
-- Contract: `artemis-synthesis-1.0.0`
-- Policy: `wp-c2-synthesis-1.0.0`
-- `MIN_INDEPENDENT_DIRECTIONAL_FAMILIES = 2`
-- `MAX_SYNTHESIS_INPUT_ENVELOPES = 32`
-
-Owner-approved C.2 policy (locked / frozen):
-1. Trend + Volume = ONE OHLCV correlation family (not two independent confirmations)
-2. Arbitrage = OPPORTUNITY_CONTEXT only (zero directional voting influence)
-3. Minimum independent directional families for PROPOSED = 2
-4. Correlation = QUALITATIVE ONLY (no coefficients / weights / majority / confidence averaging)
-5. Synthesis confidence = UNAVAILABLE / UNCALIBRATED
-6. Duplicate canonical `agentId+runId` = fail-closed / non-confirming (no first-row winner)
-7. Invalid family kernel input = fail-closed
-8. Risk / Portfolio / Liquidity / Order / Optimization are NOT C.2 directional votes
-9. `artemisConsumable=false`, `decisionEligible=false`, `executionEligible=false`
-10. Pure library only — no runtime orchestration activation
-
-Current realistic set truth:
-Trend + Volume (+ Arbitrage opportunity) ⇒ independent directional family count = **1**  
-⇒ `INSUFFICIENT_EVIDENCE` / `ABSTAIN` (expected)  
-Algorithm-only cross-family tests do NOT imply Sentiment or another family is currently Artemis-consumable.
+Preserved frozen baselines:
+- **WP-C Discovery = OWNER APPROVED**
+- **WP-C.1 CLOSED AND FROZEN** (`artemis-decision-1.0.0`)
+- **WP-C.2 CLOSED AND FROZEN** (`artemis-synthesis-1.0.0` / `wp-c2-synthesis-1.0.0`)
+- **WP-B.1 CLOSED AND FROZEN**
+- **Data Hub / Trend / Arbitrage = FROZEN**
 
 Safety flags (unchanged / still false):
 - Product orchestration remains **LEGACY**
@@ -83,77 +60,20 @@ Safety flags (unchanged / still false):
 - `executionEligible = false`
 - Evidence readiness = `ON_READ_PARTIAL` — NOT `EVIDENCE_READY`
 
-Test evidence (pre-PR / local — not GitHub CI):
-- Focused WP-C.2: **61 PASS / 0 fail / 0 skip**
-- Artemis unit: **13 suites / 187 PASS**
-- Full backend unit: **102 suites / 851 PASS**
+B10 Discovery scope (authorized):
+- Read-only repository + live schema inventory
+- Architecture options and Owner lock proposals
+- No table creation / migration / runtime wiring
 
-PR #25 GitHub CI (actual):
-- Backend Tests = SUCCESS
-- E2E Tests = SUCCESS
-- GitGuardian Security Checks = SUCCESS (7 commits scanned; no secrets detected)
-- Frontend CI = NOT TRIGGERED (NOT TRIGGERED ≠ PASS)
-- Unresolved review threads = 0
-- Bugbot = NOT ENABLED (not a review finding)
-
-Server content alignment (Owner-authorized create-only):
-Runtime tree `/home/ubuntu/webapp/TitanGold` received EXACTLY two previously-missing library files from main `cf04f113…`:
-1. `backend/contracts/artemisSynthesisContract.js`  
-   SHA256 `22ced7e7a6bbfa7f730ab2945eb09e9953c139f9d6fe3cd6647d9b9bb237a1f9` · bytes 25853 · EXACT MAIN MATCH · `cmp IDENTICAL` · `O_EXCL`
-2. `backend/services/artemisDeterministicSynthesisService.js`  
-   SHA256 `44dab3ac49ccbdea667137db4a63e20978428b62e9f6d324c1b7a76d709b79b9` · bytes 30312 · EXACT MAIN MATCH · `cmp IDENTICAL` · `O_EXCL`  
-Other runtime files mutated by alignment = **0**
-
-Runtime-tree provenance (separate from GitHub Source):
-- Path: `/home/ubuntu/webapp/TitanGold`
-- Branch: `main`
-- Observed Git HEAD: `a100f7ba21131c351b561fb66554e90990da8725`
-- Dirty: YES · before 482 · after 483
-- Task-attributable path delta: **+2** (both targets untracked `??`)
-- Absolute porcelain net delta: **+1** (unrelated concurrent dirty fluctuation)
-- Do NOT stage / commit / clean dirty runtime state
-
-Runtime Active State:
-- `TITAN_RUNTIME_COMMIT` = `48d7722b651e1d551bbbf128eaa30e1b1c136163` (unchanged; ≠ `cf04f113…`)
-- C.2 Runtime Wired = NO
-- C.2 Runtime Active = NO
-- C.1 Runtime Wired = NO
-- Server library presence ≠ runtime activation
-- Restart / PM2 mutation / deployment / DB / migration / providers / Agents = NO / 0
-
-Post-alignment health / topology (read-only evidence):
-- root HTTP 200 · `/api/v1/health` HTTP 200 / `status=ok`
-- titan-backend ids 1–4 online
-- titan-engine-worker ids 5,9 online
-- telegram-processor id11 online · id15 stopped
-- telegram-collector id16 online · id12 stopped
-- No topology mutation by WP-C.2
-
-Module smoke (runtime-tree local import; no restart):
-- PASS · `artemis-synthesis-1.0.0` / `wp-c2-synthesis-1.0.0` · min families 2 · max inputs 32
-- no-evidence synthesis validation ok → `insufficient_evidence`
-- safety flags false
-
-Human / Browser product QA:
-**NOT APPLICABLE BY SCOPE** (no UI / frontend / runtime route / active orchestration / execution / provider / DB change)
-
-Three-state ledger:
-- GitHub Source State = `main` @ `cf04f1137cd148385624dc12f10e9628ec530a13`
-- Server Content State = WP-C.2 two library files exact-content aligned to product main
-- Runtime Active State = legacy runtime unchanged · C.2 not wired/active
-
-Frozen C.1 boundary (unmodified by C.2):
-- `backend/contracts/artemisDecisionContract.js`
-- `backend/services/artemisEvidenceAdmissionService.js`
-- `backend/contracts/artemisEvidenceContract.js`
-- frozen Trend / Volume / Arbitrage adapters
-
-Not authorized after this freeze:
-- B10 · WP-D · Risk / Portfolio / Liquidity / Order / runtime-safety integration
-- Sentiment remediation · Shadow / Paper / Live
-- Runtime / PM2 / deploy / migration / provider / Agent execution / LLM Council
-- Reopening WP-C.1 or WP-C.2 without separate Owner authorization
+Not authorized:
+- Migration up/down / CREATE/ALTER/DROP / INSERT/UPDATE/DELETE
+- Runtime / PM2 / deploy / provider / Agent execution
+- Shadow / Paper / Live / WP-D
+- Reopening WP-C.1 or WP-C.2 contracts
 - Protected scripts under backup-db / phase2 monitoring notify/healthcheck
+- PR / merge without separate Owner instruction
 
-Next implementation requires separate Owner authorization.
-Do NOT pre-authorize B10 in this Rule.
+Server ledger:
+- GitHub Source State = B10 discovery branch
+- Server Content State = UNCHANGED
+- Runtime Active State = UNCHANGED
