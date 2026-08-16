@@ -1,3 +1,10 @@
+# Database Migrations — CI disposable regression + B10 off-host PG14 proof.
+#
+# HARD SAFETY:
+# - This workflow must NEVER migrate production automatically.
+# - Production migration remains a separate Owner-gated operation.
+# - No production database secret / production migrate:up job is permitted here.
+
 name: Database Migrations
 
 on:
@@ -20,9 +27,20 @@ on:
       - 'backend/.npmrc'
       - '.github/workflows/migrations.yml'
 
+permissions:
+  contents: read
+
 jobs:
-  migrate:
-    name: Run Database Migrations
+  # -------------------------------------------------------------------------
+  # Disposable Schema Regression (PG15)
+  #
+  # Runner-local disposable Postgres only.
+  # Uses ci_apply_base_schema.js + migrate:setup + migrate:up.
+  # migrate:setup marks migrations as applied and therefore this PG15 bootstrap
+  # job must NOT be treated as exact execution proof of migration 051.
+  # -------------------------------------------------------------------------
+  disposable_schema_regression_pg15:
+    name: Disposable Schema Regression (PG15)
     runs-on: ubuntu-latest
 
     services:
@@ -65,6 +83,7 @@ jobs:
         run: |
           # Apply base schema, then register migration history (CI design of
           # migrate:setup). Do not rewrite migration files or touch Staging/Prod.
+          # NOTE: migrate:setup marks migrations as applied — not exact 051 proof.
           cd backend
           node scripts/ci_apply_base_schema.js
           npm run migrate:setup
@@ -87,11 +106,31 @@ jobs:
           cd backend
           npm run test:unit
 
-  deploy:
-    name: Deploy Migrations (Production)
+  # -------------------------------------------------------------------------
+  # B10 051 Exact Migration Proof (PG14) — off-host GitHub Actions only
+  #
+  # Authoritative disposable PG14 execution proof for exact migration 051.
+  # No setup_migrations / migrate:setup.
+  # No production secrets / SSH / server access.
+  # -------------------------------------------------------------------------
+  b10_pg14_051_proof:
+    name: B10 051 Exact Migration Proof (PG14)
     runs-on: ubuntu-latest
-    needs: migrate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: titangold_b10_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
       - name: Checkout code
@@ -107,18 +146,59 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
-          npm ci --omit=dev
+          npm ci
 
-      - name: Run migrations (production)
+      - name: Exact 051 hash gate + temp only-051 migration directory
+        id: prep051
+        run: |
+          set -euo pipefail
+          EXPECTED=c78599b5de5f727a26eb31367ec74ffd1024445c269d30a7261689abc57b173d
+          SRC=backend/database/migrations/051_artemis_b10_decision_persistence.sql
+          test -f "$SRC"
+          GOT=$(sha256sum "$SRC" | awk '{print $1}')
+          echo "source_sha=$GOT"
+          test "$GOT" = "$EXPECTED"
+
+          MIGDIR=$(mktemp -d /tmp/b10-ci-051-XXXXXX)
+          cp -f "$SRC" "$MIGDIR/051_artemis_b10_decision_persistence.sql"
+          COPIED=$(sha256sum "$MIGDIR/051_artemis_b10_decision_persistence.sql" | awk '{print $1}')
+          test "$COPIED" = "$EXPECTED"
+          COUNT=$(find "$MIGDIR" -maxdepth 1 -type f -name '*.sql' | wc -l)
+          test "$COUNT" = "1"
+          ls -la "$MIGDIR"
+          echo "migdir=$MIGDIR" >> "$GITHUB_OUTPUT"
+
+      - name: Prove disposable target + PostgreSQL 14
         env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_b10_test?sslmode=disable
+        run: |
+          set -euo pipefail
+          echo "host=localhost"
+          echo "port=5432"
+          echo "db=titangold_b10_test"
+          VER=$(psql "$DATABASE_URL" -Atc 'SHOW server_version')
+          echo "server_version=$VER"
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          test "$MAJOR" = "14"
+
+      - name: Execute ONLY migration 051 via local node-pg-migrate
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_b10_test?sslmode=disable
+          MIGDIR: ${{ steps.prep051.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          test -x ./node_modules/.bin/node-pg-migrate
+          ./node_modules/.bin/node-pg-migrate up \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-table b10_pgmigrations \
+            --migration-file-language sql
+
+      - name: Verify B10 051 schema + negative CHECKs
+        env:
+          TITAN_B10_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_b10_test?sslmode=disable
         run: |
           cd backend
-          npm run migrate:up
-
-      - name: Verify migrations
-        env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: |
-          cd backend
-          npm run migrate:status
+          node scripts/ci_verify_artemis_b10_051.js
