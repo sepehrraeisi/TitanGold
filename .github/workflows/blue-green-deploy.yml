@@ -2,10 +2,11 @@
 # TitanGold Blue-Green Deployment Workflow (INFRA-010)
 # ============================================================================
 #
-# Purpose: Automated blue-green deployment on push to main branch
+# Production/server deployment is manual-dispatch only and separately
+# Owner-gated; merge/push to main must not deploy.
 #
 # Features:
-#   - Triggered on push to main or manual dispatch
+#   - Manual workflow_dispatch only (push trigger removed for CI safety)
 #   - Runs full test suite before deployment
 #   - Deploys to inactive environment
 #   - Performs health checks
@@ -18,12 +19,6 @@
 name: Blue-Green Deployment
 
 on:
-  push:
-    branches:
-      - main
-      - production
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       environment:
