@@ -87,6 +87,32 @@ jobs:
           cd backend
           node scripts/ci_apply_base_schema.js
           npm run migrate:setup
+
+      - name: Disposable PG15 table for pending JS 052
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
+          DB_SSL: 'false'
+        run: |
+          # setup_migrations.js records only *.sql basenames.
+          # 052 is a JS migration, so it remains pending after migrate:setup.
+          # Create a minimal telegram_messages table on this disposable PG15
+          # database so npm run migrate:up still PASSES. This is not production
+          # C2 execution and does not authorize 050/051.
+          set -euo pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            CREATE TABLE IF NOT EXISTS telegram_messages (
+              id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+              message_id bigint NOT NULL,
+              channel_id uuid
+            );
+          "
+
+      - name: Apply remaining pending migrations on disposable PG15
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
+          DB_SSL: 'false'
+        run: |
+          cd backend
           npm run migrate:up
 
       - name: Check migration status
@@ -202,3 +228,332 @@ jobs:
         run: |
           cd backend
           node scripts/ci_verify_artemis_b10_051.js
+
+  # -------------------------------------------------------------------------
+  # C2 052 Exact Migration Proof (PG14) — off-host GitHub Actions only
+  #
+  # Authoritative disposable PG14 execution proof for exact migration 052.
+  # STRATEGY E-HARDENED: named-file selector + one-file isolated dir.
+  # No setup_migrations / migrate:setup as C2 proof.
+  # No production secrets / SSH / server access.
+  # Does not execute 050 or 051.
+  # -------------------------------------------------------------------------
+  c2_pg14_052_proof:
+    name: C2 052 Exact Migration Proof (PG14)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: titangold_c2_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Require local node-pg-migrate 8.0.4
+        run: |
+          set -euo pipefail
+          cd backend
+          test -x ./node_modules/.bin/node-pg-migrate
+          VER=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/node-pg-migrate/package.json','utf8')).version")
+          echo "node_pg_migrate=$VER"
+          test "$VER" = "8.0.4"
+
+      - name: Exact 052 hash gate + one-file isolated staging
+        id: prep052
+        run: |
+          set -euo pipefail
+          EXPECTED=2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082
+          SRC=backend/database/migrations/052_telegram_messages_channel_message_id_index.js
+          test -f "$SRC"
+          GOT=$(sha256sum "$SRC" | awk '{print $1}')
+          echo "source_sha=$GOT"
+          test "$GOT" = "$EXPECTED"
+
+          STAGE=$(mktemp -d /tmp/c2-ci-052-XXXXXX)
+          mkdir -p "$STAGE/migrations"
+          # Loader context only — not a migration. Node must treat isolated .js as ESM.
+          printf '%s\n' '{"type":"module"}' > "$STAGE/package.json"
+          cp -f "$SRC" "$STAGE/migrations/052_telegram_messages_channel_message_id_index.js"
+          COPIED=$(sha256sum "$STAGE/migrations/052_telegram_messages_channel_message_id_index.js" | awk '{print $1}')
+          test "$COPIED" = "$EXPECTED"
+          COUNT=$(find "$STAGE/migrations" -maxdepth 1 -type f | wc -l)
+          test "$COUNT" = "1"
+          test ! -e "$STAGE/migrations/050_mexc_capability_snapshots_rollback.sql"
+          test ! -e "$STAGE/migrations/051_artemis_b10_decision_persistence.sql"
+          ls -la "$STAGE/migrations"
+          echo "source_sha=$GOT" >> "$GITHUB_OUTPUT"
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+          echo "migdir=$STAGE/migrations" >> "$GITHUB_OUTPUT"
+
+      - name: Prove disposable target + PostgreSQL 14 + extra DBs
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_test?sslmode=disable
+        run: |
+          set -euo pipefail
+          echo "host=localhost"
+          echo "port=5432"
+          echo "db=titangold_c2_test"
+          VER=$(psql "$DATABASE_URL" -Atc 'SHOW server_version')
+          echo "server_version=$VER"
+          MAJOR=$(echo "$VER" | cut -d. -f1)
+          test "$MAJOR" = "14"
+          for db in titangold_c2_named titangold_c2_wrong titangold_c2_partial titangold_c2_invalid titangold_c2_down; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${db}"
+          done
+
+      - name: Bootstrap fixture + pre-index plan
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_test?sslmode=disable
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js require-pg14
+          node scripts/ci_verify_c2_052.js bootstrap-fixture
+          node scripts/ci_verify_c2_052.js prove-pre-plan
+
+      - name: Apply 052 via STRATEGY E-HARDENED (one-file dir + named selector)
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_test?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          test -x ./node_modules/.bin/node-pg-migrate
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction
+
+      - name: Post-apply index / ledger / plan
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_test?sslmode=disable
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js prove-post-apply
+          node scripts/ci_verify_c2_052.js prove-post-plan
+
+      - name: Second up is idempotent
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_test?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          OUT=$(./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction 2>&1)
+          echo "$OUT"
+          echo "$OUT" | grep -q 'No migrations to run'
+          node scripts/ci_verify_c2_052.js prove-idempotent-state
+
+      - name: Named-file selector with 050+051+052 visible
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_named?sslmode=disable
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js bootstrap-fixture
+          STAGE=$(mktemp -d /tmp/c2-ci-named-XXXXXX)
+          mkdir -p "$STAGE/migrations"
+          printf '%s\n' '{"type":"module"}' > "$STAGE/package.json"
+          cp -f database/migrations/050_mexc_capability_snapshots_rollback.sql "$STAGE/migrations/"
+          cp -f database/migrations/051_artemis_b10_decision_persistence.sql "$STAGE/migrations/"
+          cp -f database/migrations/052_telegram_messages_channel_message_id_index.js "$STAGE/migrations/"
+          test "$(find "$STAGE/migrations" -maxdepth 1 -type f | wc -l)" = "3"
+          OUT=$(./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$STAGE/migrations" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction 2>&1)
+          echo "$OUT"
+          echo "$OUT" | grep -F '> - 052_telegram_messages_channel_message_id_index'
+          echo "$OUT" | grep -F '> Migrating files:'
+          if echo "$OUT" | grep -F '> - 050_mexc_capability_snapshots_rollback'; then
+            echo '050 was selected' >&2
+            exit 1
+          fi
+          if echo "$OUT" | grep -F '> - 051_artemis_b10_decision_persistence'; then
+            echo '051 was selected' >&2
+            exit 1
+          fi
+          node scripts/ci_verify_c2_052.js prove-named-file-isolation
+
+      - name: Wrong-definition same-name fail-closed
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_wrong?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js setup-wrong-index
+          set +e
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction > /tmp/c2-wrong.log 2>&1
+          RC=$?
+          set -e
+          cat /tmp/c2-wrong.log
+          test "$RC" -ne 0
+          grep -q 'C2_052_INDEX_DEFINITION_CONFLICT_STOP' /tmp/c2-wrong.log
+          node scripts/ci_verify_c2_052.js prove-wrong-untouched
+
+      - name: Partial success valid-index / ledger-absent then retry fail-closed
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_partial?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js setup-partial-trap
+          set +e
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction > /tmp/c2-partial.log 2>&1
+          RC=$?
+          set -e
+          cat /tmp/c2-partial.log
+          test "$RC" -ne 0
+          grep -q 'C2_CI_SYNTHETIC_LEDGER_INSERT_REJECT' /tmp/c2-partial.log
+          node scripts/ci_verify_c2_052.js prove-partial-valid-ledger-absent
+          node scripts/ci_verify_c2_052.js drop-partial-trap
+          set +e
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction > /tmp/c2-partial-retry.log 2>&1
+          RC2=$?
+          set -e
+          cat /tmp/c2-partial-retry.log
+          test "$RC2" -ne 0
+          grep -q 'C2_052_INDEX_ALREADY_EXISTS_STOP' /tmp/c2-partial-retry.log
+          node scripts/ci_verify_c2_052.js prove-partial-valid-ledger-absent
+
+      - name: Invalid same-name index fail-closed
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_invalid?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js setup-invalid-index
+          set +e
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction > /tmp/c2-invalid.log 2>&1
+          RC=$?
+          set -e
+          cat /tmp/c2-invalid.log
+          test "$RC" -ne 0
+          grep -q 'C2_052_INDEX_INVALID_STOP' /tmp/c2-invalid.log
+          node scripts/ci_verify_c2_052.js prove-invalid-refused
+
+      - name: Explicit named down + round-trip
+        env:
+          TITAN_C2_CI_PG14: '1'
+          DATABASE_URL: postgresql://postgres@localhost:5432/titangold_c2_down?sslmode=disable
+          MIGDIR: ${{ steps.prep052.outputs.migdir }}
+        run: |
+          set -euo pipefail
+          cd backend
+          node scripts/ci_verify_c2_052.js bootstrap-fixture
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction
+          node scripts/ci_verify_c2_052.js prove-post-apply
+          ./node_modules/.bin/node-pg-migrate \
+            down 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction
+          node scripts/ci_verify_c2_052.js prove-down-state
+          ./node_modules/.bin/node-pg-migrate \
+            up 052_telegram_messages_channel_message_id_index \
+            --database-url-var DATABASE_URL \
+            --migrations-dir "$MIGDIR" \
+            --migrations-schema public \
+            --migrations-table pgmigrations \
+            --schema public \
+            --no-check-order \
+            --no-single-transaction
+          node scripts/ci_verify_c2_052.js prove-post-apply
+

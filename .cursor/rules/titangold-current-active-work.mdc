@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — Production Resource Stabilization C1 Production Closeout
+description: TitanGold Rule 02 — Production Resource Stabilization C2 source + CI
 alwaysApply: true
 ---
 
@@ -7,31 +7,32 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C1 PRODUCTION VERIFIED / C2 NEXT GATE**
+C2 DB ACCESS-PATH SOURCE + CI IMPLEMENTATION**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
 
 Current program slice:
-RESOURCE-STABILIZATION-WP-C
+RESOURCE-STABILIZATION-WP-C-C2
 
 Risk context:
-Tier 3 program
+Tier 3
+
+Canonical main baseline:
+`d29a3b63e1096f62d1e509f3d0f8bda2684f41d3`
 
 C1 deployed technical source baseline:
 `2f8ea66301e3ca392b1d3182622da6bac9c1c4fc`
 
 State:
 **C1 SOURCE = MERGED**
-**C1 DEPLOYMENT-SURFACE SYNTAX CI = ENFORCED**
-**C1 PRODUCTION DEPLOYMENT = COMPLETE**
 **C1 PRODUCTION VERIFICATION = PASS**
 **C1 RESOURCE EFFECT = IMPROVED**
 **C1 REAL WORKING = YES — FOR THE AUTHORIZED COLLECTOR-SIDE SCOPE ONLY**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **FULL SERVER / MAIN ALIGNMENT = NO**
-**C2 DB ACCESS-PATH / INDEX = NEXT PROGRAM COMPONENT**
-**C2 IMPLEMENTATION = NOT AUTHORIZED BY THIS RULE02 CLOSEOUT TASK**
+**C2 SOURCE + CI = AUTHORIZED ON THIS BRANCH**
+**C2 PRODUCTION EXECUTION = NOT AUTHORIZED**
 **B10 050 = BLOCKED_BY_PRODUCTION_RESOURCE_STABILIZATION**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
@@ -39,99 +40,80 @@ State:
 
 C1 REAL WORKING = YES does NOT mean RESOURCE_STABILIZATION_COMPLETE = YES.
 
-## Deployed production state
+## C2 accepted design (locked)
 
-Production collector target: `telegram-collector`
+Index:
+`idx_telegram_messages_channel_message_id`
+on `public.telegram_messages (channel_id, message_id)`
 
-Production C1 source:
-**EXACT TARGETED FIVE-FILE CONTENT FROM**
-`2f8ea66301e3ca392b1d3182622da6bac9c1c4fc`
+- UNIQUE = NO
+- DESC = NO
+- INCLUDE = NO
+- predicate = NO
+- IF NOT EXISTS = NO
+- PRODUCTION BUILD MODE = CREATE INDEX CONCURRENTLY
+- numeric slot = 052
+- language = JavaScript / ESM
+- `pgm.noTransaction()` required on up and down
 
-The entire production repository is NOT at main.
+DESC is unnecessary because PostgreSQL 14 btree can backward-scan for MAX.
+Non-unique because uniqueness is already enforced by
+`idx_telegram_messages_unique (message_id, channel_id)`.
 
-Verified C1 production behavior (bounded audited window):
-- effective concurrency = 3
-- initial connect max = 1 (`connectionRetries: 1`)
-- application immediate retry = 0
-- client churn observed reduced (old per-channel pattern → 1–2 connects per 10-channel cycle by session group)
-- 13 normal polling cycles observed
-- no polling overlap regression
-- no session isolation regression
-- no duplicate polling/persistence regression
-- collector remained online
-- no crash/restart loop
-- HTTP health remained 200
-- rollback not required
+## Authorized on this branch
 
-## C1 resource effect
+- canonical C2 migration source
+- fail-closed same-name / definition / invalid-index preconditions
+- PostgreSQL 14 disposable proof
+- CI workflow support
+- read-only / disposable CI verifier
+- Draft PR
 
-**C1_RESOURCE_EFFECT = IMPROVED**
+## NOT authorized
 
-Representative bounded-window evidence (not a permanent capacity claim):
-- collector RSS: approximately 1.4–1.7 GiB baseline → approximately 55–106 MiB post-C1
-- collector CPU: approximately 9–10% → approximately 2–5%
-- load1 median: 8.86 → 5.86
-- client/connect ownership: old behavior consistent with per-channel churn → observed 1–2 connects per 10-channel cycle depending on session groups
-
-## Residual / unresolved
-
-**GRAMJS INTERNAL RECONNECT = RESIDUAL DEPENDENCY RISK / NOT FIXED**
-
-Unresolved production resource driver:
-PostgreSQL `telegram_messages` access path for
-`MAX(message_id) WHERE channel_id = $1`
-
-Observed post-C1:
-- long Telegram queries still occur
-- BufferIO/DataFileRead waits still occur
-- disk utilization may remain high
-- swap remains materially used
-
-Discovery evidence:
-`SOURCE_AND_LIVE_BOTH_LACK_REQUIRED_ACCESS_PATH`
-
-Candidate access-path semantics:
-`(channel_id, message_id DESC)`
-
-Do NOT treat migration 052 as automatically the correct production sequencing.
-050 ledger state / sequencing and 051 (not production-authorized) remain
-explicit C2 design/Owner gates. Later migration ordering must stay canonical
-and auditable.
-
-Post-C1 samples with `load1 < nproc` do NOT independently unblock 050.
-The 050 health gate is unchanged.
-
-## Evidence (sanitized; not in repository)
-
-Packet: `/home/ubuntu/TITANGOLD_C1_PRODUCTION_DEPLOY_RETRY_20260817T155140Z.txt`
-SHA256: `0b57ee1c1a1430f3b661e99aa20d043b656b6c4b3e9e7d90f499d5506c62f908`
-bytes: 15315
-
-## Authorization after this closeout
-
-Authorized:
-- read-only C2 design/discovery necessary to construct the next Owner gate
-- no production mutation
-
-Not authorized:
-- CREATE INDEX / CREATE INDEX CONCURRENTLY
-- migration creation or execution
-- pgmigrations mutation
+- production C2 execution
 - production DB mutation
-- C2 implementation
-- B10 050 / B10 051
-- runtime wiring
+- CREATE INDEX / DROP INDEX on production
+- pgmigrations production mutation
+- `npm run migrate:up` on production
+- migration 050 execution or ledger reconciliation
+- migration 051 execution
 - PM2 mutation
-- full server alignment
+- server alignment
+- B10 050
+- B10 051
 - GramJS private hook
-- Shadow / Paper / Live
 
-Next Owner gate:
-**C2 DB ACCESS-PATH / INDEX
-IMPLEMENTATION DESIGN + MIGRATION-SEQUENCING GATE**
+## Future production execution architecture (NOT executed here)
 
-Not C2 implementation automatically.
-Not migration 052 automatically.
+**STRATEGY E-HARDENED** =
+canonical numbered 052
++ exact named-file selector
++ isolated temp migration directory containing ONLY C2
+
+Normal production `npm run migrate:up` remains **UNSAFE / BLOCKED**
+because the canonical directory still contains pending 050 and 051.
+
+Do not use `--fake` or `--no-lock`.
+Do not use npx for future production execution.
+Use the hash/version-gated local `backend/node_modules/.bin/node-pg-migrate`
+(must remain 8.0.4). Isolated `.js` staging requires a parent
+`package.json` `{"type":"module"}` outside the one-file migrations dir
+so Node loads ESM; that file is loader context, not a migration.
+
+## Residual / not C2 scope
+
+**GRAMJS INTERNAL RECONNECT = RESIDUAL DEPENDENCY RISK / NOT C2 SCOPE**
+
+050 ledger/schema divergence remains a separate Owner gate.
+051 remains not authorized.
+
+Post-C1 `load1 < nproc` samples do NOT unblock 050.
+
+## Next Owner gate after successful Draft PR
+
+**C2 SOURCE/CI FINAL REVIEW**
+
+Not production execution.
+Not merge.
 Not 050 retry.
-
-Do not start C2 from this Rule 02.
