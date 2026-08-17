@@ -97,6 +97,16 @@ jobs:
           cd backend
           node scripts/ci_apply_base_schema.js
           npm run migrate:setup
+          # setup_migrations.js records only *.sql; 052.js remains pending.
+          # Minimal disposable telegram_messages so migrate:up can apply C2.
+          # Not production C2 execution.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            CREATE TABLE IF NOT EXISTS telegram_messages (
+              id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+              message_id bigint NOT NULL,
+              channel_id uuid
+            );
+          "
           npm run migrate:up
 
       - name: Prepare disposable login fixture
