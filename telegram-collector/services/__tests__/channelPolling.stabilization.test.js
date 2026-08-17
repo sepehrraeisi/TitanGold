@@ -425,8 +425,8 @@ describe('N: saveMessages behavior unchanged', () => {
         assert.equal(built.params[1], '9');
 
         const insertQuery = async (text, params) => {
-            assert.match(text, /INSERT INTO telegram_messages/);
-            assert.match(text, SAVE_MESSAGES_CONFLICT.trim());
+            assert.ok(text.includes('INSERT INTO telegram_messages'));
+            assert.ok(text.includes('ON CONFLICT (message_id, channel_id) DO NOTHING'));
             assert.equal(params[0], 'chan');
             return { rowCount: 1 };
         };
