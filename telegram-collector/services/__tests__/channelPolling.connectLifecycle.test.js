@@ -23,8 +23,6 @@ const {
 
 const {
     GRAMJS_EPHEMERAL_CLIENT_OPTIONS,
-    gramJsInitialConnectAttemptCount,
-    gramJsWouldAttemptAutomaticReconnect,
     resolvePollingSession,
     connectAndProve,
     connectProvenSessionClient,
@@ -86,30 +84,17 @@ function createFakeClient(options = {}) {
     return { client, calls };
 }
 
-describe('A/B: verified GramJS 2.26.22 client options', () => {
-    it('A: connectionRetries=1 is exactly one initial attempt; 0 is zero attempts', () => {
-        assert.equal(gramJsInitialConnectAttemptCount(0), 0);
-        assert.equal(gramJsInitialConnectAttemptCount(1), 1);
+describe('A/B: C1 ephemeral client option requests (library proof is gramjs.contract.test.js)', () => {
+    it('A: requests exactly one initial GramJS connection attempt', () => {
         assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, 1);
-        assert.equal(
-            gramJsInitialConnectAttemptCount(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries),
-            1
-        );
+        assert.notEqual(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, 0);
+        assert.notEqual(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, Infinity);
     });
 
-    it('B: reconnectRetries=-1 disables automatic reconnect; autoReconnect is false', () => {
+    it('B: does not claim reconnectRetries=-1 disables every automatic reconnect', () => {
         assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.reconnectRetries, -1);
         assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.autoReconnect, false);
-        assert.equal(gramJsWouldAttemptAutomaticReconnect(0, undefined), true);
-        assert.equal(gramJsWouldAttemptAutomaticReconnect(0, 0), true);
-        assert.equal(gramJsWouldAttemptAutomaticReconnect(0, -1), false);
-        assert.equal(
-            gramJsWouldAttemptAutomaticReconnect(
-                0,
-                GRAMJS_EPHEMERAL_CLIENT_OPTIONS.reconnectRetries
-            ),
-            false
-        );
+        // Recv-path-only public option. All-path reconnect control is NOT claimed here.
     });
 
     it('service constructs clients with the verified ephemeral options, not connectionRetries=0', () => {

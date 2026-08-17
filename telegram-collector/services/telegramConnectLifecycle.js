@@ -1,44 +1,43 @@
 /**
  * Verified GramJS 2.26.22 connection lifecycle helpers.
- * Source: telegram@2.26.22 network/MTProtoSender.js + client/TelegramClient.js
- * No pg / gramJS imports (safe for unit tests).
+ * Public constructor options cannot bound every reconnect entrypoint.
+ * Exact path proof lives in services/__tests__/gramjs.contract.test.js
+ * against the installed telegram package — do not treat this file as that proof.
+ * No pg / gramJS imports (safe for unit tests that do not install telegram).
  */
 
 const SHARED_PRIMARY_IDENTITY = 'shared-primary';
 
 /**
- * Exact MTProtoSender.connect loop:
- *   for (let attempt = 0; attempt < retries; attempt++)
- * TelegramClient.connect() passes clientParams.connectionRetries as sender retries.
+ * Best-effort public options for an ephemeral C1 client.
  *
- * connectionRetries=0 => zero initial attempts (loop never runs).
- * connectionRetries=1 => exactly one initial attempt.
+ * connectionRetries: 1
+ *   TelegramClient.connect() passes this as MTProtoSender `_retries`.
+ *   MTProtoSender.connect() loops `for (attempt = 0; attempt < this._retries; ...)`.
+ *   0 = zero initial attempts. 1 = one initial attempt.
  *
- * reconnectRetries is checked as `_currentRetries > reconnectRetries` BEFORE
- * calling reconnect(). _currentRetries starts at 0, so:
- *   reconnectRetries=0  => one automatic reconnect is still allowed (0 > 0 is false)
- *   reconnectRetries=-1 => automatic reconnect is skipped (0 > -1 is true)
+ * reconnectRetries: -1
+ *   ONLY the `_recvLoop` transport `recv()` failure path checks
+ *   `_currentRetries > this._reconnectRetries` before calling reconnect().
+ *   Send-loop, InvalidBufferError non-404, unhandled decrypt, ping/_updateLoop,
+ *   and exported-sender `_reconnect()` do not consult this option.
+ *   This is PARTIAL recv-path control, not "automatic reconnect disabled".
  *
- * autoReconnect is stored on MTProtoSender in 2.26.22 but does NOT gate reconnect().
- * It is still set false so we do not request the default autoReconnect:true contract.
+ * autoReconnect: false
+ *   Stored on MTProtoSender as `_autoReconnect`. telegram@2.26.22 reconnect()
+ *   never reads `_autoReconnect`. Classification: NONE_FOR_RELEVANT_PATHS.
+ *
+ * PUBLIC_RECONNECT_CONTROL_SUFFICIENT = NO
+ * DESTROY_RECONNECT_RACE = POSSIBLE
+ *   reconnect() schedules Helpers.sleep(1000).then(() => this._reconnect())
+ *   with no `_destroyed` / `userDisconnected` check in that callback.
+ *   _reconnect() → connect() sets `userDisconnected = false` at entry.
  */
 const GRAMJS_EPHEMERAL_CLIENT_OPTIONS = Object.freeze({
     connectionRetries: 1,
     reconnectRetries: -1,
     autoReconnect: false,
 });
-
-function gramJsInitialConnectAttemptCount(connectionRetries) {
-    let attempts = 0;
-    for (let attempt = 0; attempt < connectionRetries; attempt += 1) {
-        attempts += 1;
-    }
-    return attempts;
-}
-
-function gramJsWouldAttemptAutomaticReconnect(currentRetries, reconnectRetries) {
-    return !(currentRetries > reconnectRetries);
-}
 
 async function resolvePollingSession({
     requestedAccountId,
@@ -176,8 +175,6 @@ async function disconnectClientSafe(client) {
 module.exports = {
     SHARED_PRIMARY_IDENTITY,
     GRAMJS_EPHEMERAL_CLIENT_OPTIONS,
-    gramJsInitialConnectAttemptCount,
-    gramJsWouldAttemptAutomaticReconnect,
     resolvePollingSession,
     isProvenConnected,
     connectAndProve,

@@ -6,6 +6,11 @@
  *
  * C1: bounded intra-cycle concurrency, one Telegram client per session
  * identity per cycle, fail-closed TIMEOUT (no immediate application retry).
+ *
+ * Canonical runtime owner for this service is this committed dist file.
+ * There is no corresponding src/services/channelPollingService.ts.
+ * telegram-collector/tsconfig.json compiles src/**/* only, so `npm run build`
+ * cannot emit or overwrite this file.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
