@@ -6,7 +6,7 @@ alwaysApply: true
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**PRODUCTION RESOURCE STABILIZATION — TELEGRAM COLLECTOR SOURCE STABILIZATION C1**
+**PRODUCTION RESOURCE STABILIZATION — TELEGRAM COLLECTOR C1 SOURCE DELIVERY**
 
 Current area:
 Telegram ingestion / collector runtime
@@ -15,94 +15,56 @@ Current program slice:
 RESOURCE-STABILIZATION-WP-C-C1
 
 Risk tier:
-Tier 3 — collector source/CI only (no production runtime mutation, no database mutation)
+Tier 3 — collector source delivery (no production runtime mutation)
 
-Verified RCA (read-only, already complete):
-- Production load driven materially by PostgreSQL `telegram_messages` I/O
-- Collector intra-cycle concurrency contributes
-- connect/disconnect churn contributes
-- TIMEOUT/reconnect behavior contributes
-- Collector memory lifecycle is high risk
-- DB access-path defect is also verified
-- DB index remediation remains deferred to C2
-
-Engineering status:
-**C1 SOURCE IMPLEMENTATION AUTHORIZED**
-**C1 ACCEPTANCE RE-SCOPE AUTHORIZED (collector-owned bounds only)**
+Final review state:
+**C1 SOURCE IMPLEMENTATION = FINAL REVIEW PASS**
+**PR #29 = OWNER APPROVED FOR SQUASH MERGE**
+**C1 PRODUCTION DEPLOY = NOT AUTHORIZED**
+**C1 PRODUCTION STABILIZATION = NOT YET VERIFIED**
+**C1 REAL WORKING = NO / NOT YET PROVEN**
 **C2 DB/INDEX = NOT AUTHORIZED / DEFERRED**
-**PRODUCTION DEPLOY = NOT AUTHORIZED**
-**PM2 MUTATION = NOT AUTHORIZED**
-**SERVER ALIGNMENT = NOT AUTHORIZED**
-**B10 050 LEDGER RECONCILIATION = BLOCKED_BY_PRODUCTION_RESOURCE_STABILIZATION**
-**B10 051 LIVE MIGRATION = NOT AUTHORIZED**
+**B10 050 = BLOCKED_BY_PRODUCTION_RESOURCE_STABILIZATION**
+**B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
-**C1 IS NOT REAL WORKING until production deployment verification**
 
-Canonical product main baseline:
+Canonical product main baseline before this C1 merge:
 `origin/main` = `433341514864f10f3569ef651427da79194ee7e8`
 
 Current branch / worktree:
 - Branch: `fix/resource-stabilization-collector-c1`
 - Worktree: `/home/ubuntu/worktrees/titangold-resource-stabilization-c1`
-- Base SHA: `433341514864f10f3569ef651427da79194ee7e8`
 
-Authorized in this Rule 02:
-- Collector source stabilization (bounded concurrency, client reuse per session identity, timeout fail-closed, deterministic cleanup)
-- Collector-owned amplification bounds only
-- Focused deterministic tests + dependency-backed GramJS residual-risk contract
-- Rule02 transition (this file, this branch only)
-- Commit / push this feature branch
-- Draft PR + CI
-
-Explicitly NOT authorized:
-- Private GramJS hooks / forks / replacement / dependency upgrade
-- Claiming all GramJS internal reconnect paths are bounded or disabled
-- Migration 052
-- Any production DB mutation
-- CREATE INDEX / CREATE INDEX CONCURRENTLY
-- Migration 050 execution or ledger reconciliation
-- Migration 051 execution
-- Production deploy / PM2 mutation / server alignment
-- Runtime wiring / Shadow / WP-D / Paper / Live
-- Protected scripts under backup-db / phase2 monitoring notify/healthcheck
-
-Acceptance (AUTHORIZED):
-- Collector intra-cycle concurrency bounded (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
-- Cycle overlap prevented (`isRunning` fail-closed + deterministic finally reset)
-- Initial connection attempts bounded to 1 (`connectionRetries: 1`)
-- Application immediate retry = 0
-- Client reused per session identity per cycle (cardinality = session-group count, not channel count)
+Accepted C1 guarantees:
+- Bounded collector concurrency (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
+- Polling-cycle overlap prevented (`isRunning` fail-closed)
+- Initial connection attempt max 1 (`connectionRetries: 1`)
+- Immediate application retry = 0
+- Client reuse per session identity per cycle
 - Assigned-account identity isolation fail-closed
 - Deterministic cleanup
-- Connect success proven; unconnected client never returned
 - DB query semantics unchanged (`MAX(message_id)`, saveMessages)
-- No schema change
-- No production mutation
-- Tests pass
-- CI pass (`npm ci` + telegram@2.26.22 contract)
+- No DB schema change
 
-Residual risk / NOT FIXED by C1:
-- GramJS 2.26.22 all-path internal reconnect behavior
-- destroy/reconnect race
-- potential orphan reconnect behavior inside the dependency
-- DB `MAX(message_id)` access path
-- production index requirement / C2
+Residual risk / NOT FIXED:
+- GramJS 2.26.22 all-path reconnect behavior
+- Possible destroy/reconnect race
+- Possible dependency-owned reconnect after lifecycle termination
+- `MAX(message_id)` DB access path
+- Production DB index requirement / C2
 
-C1 DOES NOT CLAIM TO FIX ALL GRAMJS INTERNAL RECONNECT PATHS.
-
+C1 SOURCE MERGE DOES NOT MEAN PRODUCTION DEPLOYMENT.
+C1 SOURCE MERGE DOES NOT UNBLOCK B10 050.
+C1 DOES NOT CLAIM ALL GRAMJS INTERNAL RECONNECT PATHS ARE CONTROLLED.
 C1 DOES NOT CLAIM TIMEOUT/RECONNECT AMPLIFICATION IS FULLY BOUNDED.
-
-C1 DOES NOT completely fix production resource pressure. It addresses only the verified collector-side component.
-
 Do not mark C1 REAL WORKING before production deployment verification.
 
-C1 alone does NOT unblock B10 050.
+Authorized after this Rule02 lands on main:
+- None of deploy / PM2 / DB / C2 / B10 050 / B10 051
 
 Next Owner gate:
-C1 FINAL PR REVIEW (draft; do not merge in this Rule 02)
-
-Then separately:
-C1 production deployment + stabilization verification
+**C1 PRODUCTION DEPLOYMENT + STABILIZATION VERIFICATION**
 
 Do not start C2 in this Rule 02.
+Do not deploy from this Rule 02.
