@@ -1,79 +1,83 @@
 ---
-description: TitanGold Rule 02 — B10 CI Safety + Off-Host PG14 Proof
+description: TitanGold Rule 02 — Production Resource Stabilization C1
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**ARTEMIS B10 — CI SAFETY + OFF-HOST PG14 PROOF IMPLEMENTATION**
+**PRODUCTION RESOURCE STABILIZATION — TELEGRAM COLLECTOR SOURCE STABILIZATION C1**
 
 Current area:
-Shared Foundation → Artemis Central Intelligence (CI safety + disposable PG14 proof)
+Telegram ingestion / collector runtime
 
 Current program slice:
-ARTEMIS-B10-CI-SAFETY-PG14-PROOF
+RESOURCE-STABILIZATION-WP-C-C1
 
 Risk tier:
-Tier 2 — CI workflow hardening + off-host disposable verification (no live migration / no runtime wiring)
+Tier 3 — collector source/CI only (no production runtime mutation, no database mutation)
+
+Verified RCA (read-only, already complete):
+- Production load driven materially by PostgreSQL `telegram_messages` I/O
+- Collector intra-cycle concurrency contributes
+- connect/disconnect churn contributes
+- TIMEOUT/reconnect behavior contributes
+- Collector memory lifecycle is high risk
+- DB access-path defect is also verified
+- DB index remediation remains deferred to C2
 
 Engineering status:
-**OWNER ARCHITECTURE APPROVED — OPTION C**
-**PR #27 MERGED TO MAIN**
-**B10 IMPLEMENTATION SOURCE = MERGED TO MAIN**
-**B10 RUNTIME = UNWIRED / INACTIVE**
-**LIVE B10 MIGRATION = NOT AUTHORIZED / NOT EXECUTED**
-**LIVE B10 TABLES = ABSENT (latest forensic assessment)**
-**050 REQUIRED PRODUCTION SCHEMA EFFECTS = FORENSICALLY PROVEN EQUIVALENT**
-**050 PGMIGRATIONS ROW = ABSENT**
-**050 LEDGER RECONCILIATION = NOT AUTHORIZED / NOT EXECUTED**
-**051 SOURCE = MERGED**
-**PG15 DISPOSABLE PROOF = PREVIOUSLY PASS**
-**PRODUCTION-HOST NATIVE PG14 DISPOSABLE ATTEMPT = DEFERRED (resource gates)**
-**OFF-HOST GITHUB ACTIONS PG14 PROOF = IMPLEMENTATION IN PROGRESS ON THIS BRANCH**
-**CI SAFETY: AUTO PRODUCTION MIGRATION JOB EXISTED ON MAIN PUSH — BEING REMOVED**
-**CI SAFETY: AUTO BLUE-GREEN DEPLOY ON MAIN PUSH EXISTED — BEING REMOVED**
-**B10 MERGE #27 TRIGGERED BOTH WORKFLOWS:**
-- production migration job reached migrate step but failed because DATABASE_URL was unset; no DB mutation
-- blue-green workflow failed in test job; build/deploy jobs skipped; no deployment
-**OWNER AUTHORIZATION: APPROVE B10 CI SAFETY + OFF-HOST PG14 PROOF IMPLEMENTATION**
-**PR = NOT CREATED / NOT AUTHORIZED**
-**MERGE = NOT AUTHORIZED**
+**C1 SOURCE IMPLEMENTATION AUTHORIZED**
+**C2 DB/INDEX = NOT AUTHORIZED / DEFERRED**
+**PRODUCTION DEPLOY = NOT AUTHORIZED**
+**PM2 MUTATION = NOT AUTHORIZED**
+**SERVER ALIGNMENT = NOT AUTHORIZED**
+**B10 050 LEDGER RECONCILIATION = BLOCKED_BY_PRODUCTION_RESOURCE_STABILIZATION**
+**B10 051 LIVE MIGRATION = NOT AUTHORIZED**
+**B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
-**WP-C.2 / WP-C.1 / WP-B.1 / Data Hub / Trend / Arbitrage = FROZEN**
 
 Canonical product main baseline:
-`origin/main` = `2eb2bbf674146428db89b860acff3d6232ed0deb`
+`origin/main` = `433341514864f10f3569ef651427da79194ee7e8`
 
 Current branch / worktree:
-- Branch: `fix/b10-ci-safety-pg14-proof`
-- Worktree: `/home/ubuntu/worktrees/titangold-b10-ci-safety-pg14-proof`
-- Base SHA: `2eb2bbf674146428db89b860acff3d6232ed0deb`
-
-Safety flags (unchanged / still false):
-- Product orchestration remains **LEGACY**
-- `artemisConsumable = false`
-- `decisionEligible = false`
-- `executionEligible = false`
-- Evidence readiness = `ON_READ_PARTIAL` — NOT `EVIDENCE_READY`
+- Branch: `fix/resource-stabilization-collector-c1`
+- Worktree: `/home/ubuntu/worktrees/titangold-resource-stabilization-c1`
+- Base SHA: `433341514864f10f3569ef651427da79194ee7e8`
 
 Authorized in this Rule 02:
-- Harden `.github/workflows/migrations.yml` (remove auto production migrate)
-- Harden `.github/workflows/blue-green-deploy.yml` (remove push auto-deploy)
-- Add off-host disposable PG14 exact-051 proof job + `ci_verify_artemis_b10_051.js`
-- One commit + push of this branch only
+- Collector source stabilization (bounded concurrency, client reuse per session identity, timeout fail-closed, deterministic cleanup)
+- Focused deterministic tests
+- Rule02 transition (this file, this branch only)
+- Commit / push this feature branch
+- Draft PR + CI
 
-Not authorized:
-- PR creation / merge
-- Live migration 050/051 / pgmigrations repair
-- Server alignment / deploy / PM2 mutation
+Explicitly NOT authorized:
+- Migration 052
+- Any production DB mutation
+- CREATE INDEX / CREATE INDEX CONCURRENTLY
+- Migration 050 execution or ledger reconciliation
+- Migration 051 execution
+- Production deploy / PM2 mutation / server alignment
 - Runtime wiring / Shadow / WP-D / Paper / Live
 - Protected scripts under backup-db / phase2 monitoring notify/healthcheck
 
-Three-state ledger:
-- GitHub Source State = CI safety + off-host PG14 proof branch committed/pushed (when push completes)
-- Server Content State = **UNCHANGED**
-- Runtime Active State = **UNCHANGED / LEGACY / B10 unwired**
+Acceptance:
+- Bounded collector concurrency (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
+- No polling-cycle overlap regression (`isRunning` fail-closed)
+- Materially reduced redundant Telegram connection lifecycle
+- Timeout path cannot create immediate unbounded amplification
+- Deterministic client cleanup
+- Bounded retained state
+- Existing message-ingestion semantics preserved
+- Tests pass
+- CI pass
+- No production mutation
 
 Next Owner gate:
-PR review for this CI-safety branch — then separate gates for any live migration / ledger reconciliation / runtime wiring.
+C1 PR review / merge authorization
+
+Then separately:
+C1 production deployment + stabilization verification
+
+Do not start C2 in this Rule 02.
