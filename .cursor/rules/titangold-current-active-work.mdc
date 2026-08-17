@@ -18,12 +18,8 @@ RESOURCE-STABILIZATION-WP-C
 Risk context:
 Tier 3 program
 
-Canonical main:
-`origin/main` = `2f8ea66301e3ca392b1d3182622da6bac9c1c4fc`
-
-Current branch / worktree:
-- Branch: `chore/c1-production-closeout`
-- Worktree: `/home/ubuntu/worktrees/titangold-c1-production-closeout`
+C1 deployed technical source baseline:
+`2f8ea66301e3ca392b1d3182622da6bac9c1c4fc`
 
 State:
 **C1 SOURCE = MERGED**
