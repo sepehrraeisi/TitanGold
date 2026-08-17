@@ -1,42 +1,28 @@
 /**
- * Verified GramJS 2.26.22 connection lifecycle helpers.
- * Public constructor options cannot bound every reconnect entrypoint.
- * Exact path proof lives in services/__tests__/gramjs.contract.test.js
- * against the installed telegram package — do not treat this file as that proof.
+ * C1 Telegram connect/session lifecycle helpers.
+ * Collector-owned bounds only. GramJS internal reconnect is residual risk
+ * documented by services/__tests__/gramjs.contract.test.js against telegram@2.26.22.
+ * C1 does not claim to fix all GramJS internal reconnect paths.
  * No pg / gramJS imports (safe for unit tests that do not install telegram).
  */
 
 const SHARED_PRIMARY_IDENTITY = 'shared-primary';
 
 /**
- * Best-effort public options for an ephemeral C1 client.
+ * Ephemeral TelegramClient constructor options owned by C1.
  *
  * connectionRetries: 1
  *   TelegramClient.connect() passes this as MTProtoSender `_retries`.
  *   MTProtoSender.connect() loops `for (attempt = 0; attempt < this._retries; ...)`.
- *   0 = zero initial attempts. 1 = one initial attempt.
+ *   0 = zero initial attempts. 1 = one initial collector-owned attempt.
  *
- * reconnectRetries: -1
- *   ONLY the `_recvLoop` transport `recv()` failure path checks
- *   `_currentRetries > this._reconnectRetries` before calling reconnect().
- *   Send-loop, InvalidBufferError non-404, unhandled decrypt, ping/_updateLoop,
- *   and exported-sender `_reconnect()` do not consult this option.
- *   This is PARTIAL recv-path control, not "automatic reconnect disabled".
- *
- * autoReconnect: false
- *   Stored on MTProtoSender as `_autoReconnect`. telegram@2.26.22 reconnect()
- *   never reads `_autoReconnect`. Classification: NONE_FOR_RELEVANT_PATHS.
- *
- * PUBLIC_RECONNECT_CONTROL_SUFFICIENT = NO
- * DESTROY_RECONNECT_RACE = POSSIBLE
- *   reconnect() schedules Helpers.sleep(1000).then(() => this._reconnect())
- *   with no `_destroyed` / `userDisconnected` check in that callback.
- *   _reconnect() → connect() sets `userDisconnected = false` at entry.
+ * reconnectRetries and autoReconnect are intentionally NOT set.
+ * telegram@2.26.22 public options cannot bound all reconnect paths
+ * (PUBLIC_RECONNECT_CONTROL_SUFFICIENT = NO). C1 does not advertise a
+ * partially overridden reconnect state as a fix.
  */
 const GRAMJS_EPHEMERAL_CLIENT_OPTIONS = Object.freeze({
     connectionRetries: 1,
-    reconnectRetries: -1,
-    autoReconnect: false,
 });
 
 async function resolvePollingSession({

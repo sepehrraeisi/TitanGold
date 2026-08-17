@@ -1,5 +1,6 @@
 /**
- * Dependency-backed contract for telegram@2.26.22.
+ * Dependency-backed residual-risk contract for telegram@2.26.22.
+ * Documents library reconnect limitations. Does NOT claim C1 fixed those paths.
  * Reads the installed package implementation. Does not reimplement GramJS.
  * No Telegram network. No credentials. No live DB.
  */
@@ -60,7 +61,7 @@ function extractMethod(source, signature) {
     return extractBalancedBlock(source, idx);
 }
 
-describe('installed telegram@2.26.22 contract', () => {
+describe('installed telegram@2.26.22 residual reconnect risk (NOT fixed by C1)', () => {
     it('resolves exact package version 2.26.22', () => {
         const pkg = require('telegram/package.json');
         assert.equal(pkg.version, REQUIRED_TELEGRAM_VERSION);

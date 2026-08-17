@@ -84,26 +84,34 @@ function createFakeClient(options = {}) {
     return { client, calls };
 }
 
-describe('A/B: C1 ephemeral client option requests (library proof is gramjs.contract.test.js)', () => {
-    it('A: requests exactly one initial GramJS connection attempt', () => {
+describe('A/B/J/S: C1 ephemeral client options (collector-owned only)', () => {
+    it('J: initial connection attempt configuration = 1', () => {
         assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, 1);
         assert.notEqual(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, 0);
         assert.notEqual(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.connectionRetries, Infinity);
     });
 
-    it('B: does not claim reconnectRetries=-1 disables every automatic reconnect', () => {
-        assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.reconnectRetries, -1);
-        assert.equal(GRAMJS_EPHEMERAL_CLIENT_OPTIONS.autoReconnect, false);
-        // Recv-path-only public option. All-path reconnect control is NOT claimed here.
+    it('S: does not override reconnectRetries or autoReconnect', () => {
+        assert.deepEqual(Object.keys(GRAMJS_EPHEMERAL_CLIENT_OPTIONS), ['connectionRetries']);
+        assert.equal(Object.prototype.hasOwnProperty.call(GRAMJS_EPHEMERAL_CLIENT_OPTIONS, 'reconnectRetries'), false);
+        assert.equal(Object.prototype.hasOwnProperty.call(GRAMJS_EPHEMERAL_CLIENT_OPTIONS, 'autoReconnect'), false);
     });
 
-    it('service constructs clients with the verified ephemeral options, not connectionRetries=0', () => {
+    it('service constructs clients with C1 options and does not set reconnect overrides', () => {
         const src = fs.readFileSync(SERVICE_PATH, 'utf8');
         assert.equal(src.includes('GRAMJS_EPHEMERAL_CLIENT_OPTIONS'), true);
         assert.equal(src.includes('connectAndProve'), true);
         assert.equal(src.includes('connectProvenSessionClient'), true);
         assert.equal(src.includes('resolvePollingSession'), true);
         assert.equal(/connectionRetries:\s*0/.test(src), false);
+        assert.equal(/reconnectRetries\s*:/.test(src), false);
+        assert.equal(/autoReconnect\s*:/.test(src), false);
+        const optionsSrc = fs.readFileSync(
+            path.join(__dirname, '../telegramConnectLifecycle.js'),
+            'utf8'
+        );
+        assert.equal(/reconnectRetries\s*:/.test(optionsSrc), false);
+        assert.equal(/autoReconnect\s*:/.test(optionsSrc), false);
     });
 });
 
@@ -258,6 +266,67 @@ describe('C-J: connect proof + PollCycleEngine fail-closed seam', () => {
         assert.equal(connectCalls, 1);
         assert.equal(outcome.summary.connectAttempts, 1);
         assert.equal(outcome.summary.channelsFailed, 2);
+    });
+
+    it('H: ten same-identity channels create one client, one connect, one cleanup', async () => {
+        const created = [];
+        const engine = new PollCycleEngine({
+            pollConcurrency: 3,
+            getActiveChannels: async () => Array.from({ length: 10 }, (_, i) => channel(`c${i}`, 'acc-1')),
+            connectSession: (identityKey, channels) => connectProvenSessionClient(
+                identityKey,
+                channels,
+                async () => {
+                    const fake = createFakeClient({
+                        connectResult: true,
+                        connected: true,
+                        label: `c${created.length}`,
+                    });
+                    created.push(fake);
+                    return fake.client;
+                }
+            ),
+            pollChannel: async () => ({ success: true, messagesCount: 1 }),
+        });
+        const outcome = await engine.runPollingCycle();
+        assert.equal(created.length, 1);
+        assert.equal(created[0].calls.connect, 1);
+        assert.equal(created[0].calls.destroy, 1);
+        assert.equal(outcome.summary.connectAttempts, 1);
+        assert.equal(outcome.summary.channelsSucceeded, 10);
+    });
+
+    it('H2: mixed identities create one client per session group, not per channel', async () => {
+        const created = [];
+        const engine = new PollCycleEngine({
+            pollConcurrency: 3,
+            getActiveChannels: async () => [
+                channel('a', 'acc-1'),
+                channel('b', 'acc-1'),
+                channel('c', 'acc-2'),
+                channel('d', null),
+            ],
+            connectSession: (identityKey, channels) => connectProvenSessionClient(
+                identityKey,
+                channels,
+                async () => {
+                    const fake = createFakeClient({
+                        connectResult: true,
+                        connected: true,
+                        label: identityKey,
+                    });
+                    created.push({ identityKey, fake });
+                    return fake.client;
+                }
+            ),
+            pollChannel: async () => ({ success: true, messagesCount: 1 }),
+        });
+        const outcome = await engine.runPollingCycle();
+        assert.equal(created.length, 3);
+        assert.equal(created.every((c) => c.fake.calls.connect === 1), true);
+        assert.equal(created.every((c) => c.fake.calls.destroy === 1), true);
+        assert.equal(outcome.summary.connectAttempts, 3);
+        assert.equal(outcome.summary.channelsSucceeded, 4);
     });
 });
 

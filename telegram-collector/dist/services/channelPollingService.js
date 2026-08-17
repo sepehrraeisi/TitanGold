@@ -6,11 +6,16 @@
  *
  * C1: bounded intra-cycle concurrency, one Telegram client per session
  * identity per cycle, fail-closed TIMEOUT (no immediate application retry).
+ * Production cycle path: PollCycleEngine → connectSessionForGroup (one client
+ * per identity) → pollChannelWithClient. Compatibility pollChannel() is not
+ * the production cycle path.
  *
  * Canonical runtime owner for this service is this committed dist file.
  * There is no corresponding src/services/channelPollingService.ts.
  * telegram-collector/tsconfig.json compiles src/**/* only, so `npm run build`
  * cannot emit or overwrite this file.
+ *
+ * C1 does not claim to fix GramJS 2.26.22 internal reconnect paths.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -292,8 +297,9 @@ class ChannelPollingService {
     }
 
     /**
-     * Compatibility wrapper: one-off poll still uses a dedicated client lifecycle.
-     * Cycle path uses connectSessionForGroup + pollChannelWithClient instead.
+     * Compatibility wrapper only. Production polling uses runPollingCycle →
+     * PollCycleEngine → one connectSessionForGroup per identity →
+     * pollChannelWithClient. This one-off path must not become the cycle owner.
      */
     async pollChannel(channel) {
         let client = null;

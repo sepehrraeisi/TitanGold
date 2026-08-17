@@ -28,6 +28,7 @@ Verified RCA (read-only, already complete):
 
 Engineering status:
 **C1 SOURCE IMPLEMENTATION AUTHORIZED**
+**C1 ACCEPTANCE RE-SCOPE AUTHORIZED (collector-owned bounds only)**
 **C2 DB/INDEX = NOT AUTHORIZED / DEFERRED**
 **PRODUCTION DEPLOY = NOT AUTHORIZED**
 **PM2 MUTATION = NOT AUTHORIZED**
@@ -36,6 +37,7 @@ Engineering status:
 **B10 051 LIVE MIGRATION = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
+**C1 IS NOT REAL WORKING until production deployment verification**
 
 Canonical product main baseline:
 `origin/main` = `433341514864f10f3569ef651427da79194ee7e8`
@@ -47,12 +49,15 @@ Current branch / worktree:
 
 Authorized in this Rule 02:
 - Collector source stabilization (bounded concurrency, client reuse per session identity, timeout fail-closed, deterministic cleanup)
-- Focused deterministic tests
+- Collector-owned amplification bounds only
+- Focused deterministic tests + dependency-backed GramJS residual-risk contract
 - Rule02 transition (this file, this branch only)
 - Commit / push this feature branch
 - Draft PR + CI
 
 Explicitly NOT authorized:
+- Private GramJS hooks / forks / replacement / dependency upgrade
+- Claiming all GramJS internal reconnect paths are bounded or disabled
 - Migration 052
 - Any production DB mutation
 - CREATE INDEX / CREATE INDEX CONCURRENTLY
@@ -62,20 +67,40 @@ Explicitly NOT authorized:
 - Runtime wiring / Shadow / WP-D / Paper / Live
 - Protected scripts under backup-db / phase2 monitoring notify/healthcheck
 
-Acceptance:
-- Bounded collector concurrency (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
-- No polling-cycle overlap regression (`isRunning` fail-closed)
-- Materially reduced redundant Telegram connection lifecycle
-- Timeout path cannot create immediate unbounded amplification
-- Deterministic client cleanup
-- Bounded retained state
-- Existing message-ingestion semantics preserved
-- Tests pass
-- CI pass
+Acceptance (AUTHORIZED):
+- Collector intra-cycle concurrency bounded (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
+- Cycle overlap prevented (`isRunning` fail-closed + deterministic finally reset)
+- Initial connection attempts bounded to 1 (`connectionRetries: 1`)
+- Application immediate retry = 0
+- Client reused per session identity per cycle (cardinality = session-group count, not channel count)
+- Assigned-account identity isolation fail-closed
+- Deterministic cleanup
+- Connect success proven; unconnected client never returned
+- DB query semantics unchanged (`MAX(message_id)`, saveMessages)
+- No schema change
 - No production mutation
+- Tests pass
+- CI pass (`npm ci` + telegram@2.26.22 contract)
+
+Residual risk / NOT FIXED by C1:
+- GramJS 2.26.22 all-path internal reconnect behavior
+- destroy/reconnect race
+- potential orphan reconnect behavior inside the dependency
+- DB `MAX(message_id)` access path
+- production index requirement / C2
+
+C1 DOES NOT CLAIM TO FIX ALL GRAMJS INTERNAL RECONNECT PATHS.
+
+C1 DOES NOT CLAIM TIMEOUT/RECONNECT AMPLIFICATION IS FULLY BOUNDED.
+
+C1 DOES NOT completely fix production resource pressure. It addresses only the verified collector-side component.
+
+Do not mark C1 REAL WORKING before production deployment verification.
+
+C1 alone does NOT unblock B10 050.
 
 Next Owner gate:
-C1 PR review / merge authorization
+C1 FINAL PR REVIEW (draft; do not merge in this Rule 02)
 
 Then separately:
 C1 production deployment + stabilization verification
