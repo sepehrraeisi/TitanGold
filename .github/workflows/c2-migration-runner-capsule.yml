@@ -1,0 +1,375 @@
+name: C2 Migration Runner Capsule
+
+on:
+  pull_request:
+    paths:
+      - 'tools/c2-migration-runner-capsule/**'
+      - '.github/workflows/c2-migration-runner-capsule.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Must be PUBLISH_C2_CAPSULE_D2 to enable the manual publish job'
+        required: false
+        default: ''
+      source_commit:
+        description: 'Exact source commit SHA to publish'
+        required: false
+        default: ''
+      expected_archive_sha256:
+        description: 'Expected capsule archive SHA256'
+        required: false
+        default: ''
+      release_tag:
+        description: 'Release tag, for example c2-runner-capsule-<sha12>'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: C2 Capsule Build
+    runs-on: ubuntu-22.04
+    outputs:
+      archive_sha256: ${{ steps.pack.outputs.archive_sha256 }}
+      archive_bytes: ${{ steps.pack.outputs.archive_bytes }}
+      source_commit: ${{ steps.pack.outputs.source_commit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Record toolchain
+        run: |
+          echo "node=$(node --version)"
+          echo "npm=$(npm --version)"
+          test "$(node --version)" = "v20.19.5"
+
+      - name: Validate lockfile
+        run: |
+          node tools/c2-migration-runner-capsule/scripts/inventory.mjs \
+            --validate-lock tools/c2-migration-runner-capsule/package-lock.json
+
+      - name: Double-build reproducibility
+        id: pack
+        run: |
+          set -euo pipefail
+          chmod +x tools/c2-migration-runner-capsule/scripts/*.sh
+          export SOURCE_COMMIT="${GITHUB_SHA}"
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          OUT_A="${RUNNER_TEMP}/c2-out-a"
+          OUT_B="${RUNNER_TEMP}/c2-out-b"
+          mkdir -p "${OUT_A}" "${OUT_B}"
+          OUT_DIR="${OUT_A}" tools/c2-migration-runner-capsule/scripts/build-artifact.sh | tee "${RUNNER_TEMP}/build-a.txt"
+          OUT_DIR="${OUT_B}" tools/c2-migration-runner-capsule/scripts/build-artifact.sh | tee "${RUNNER_TEMP}/build-b.txt"
+          SHA_A="$(awk -F= '/^ARCHIVE_SHA256=/{print $2}' "${RUNNER_TEMP}/build-a.txt")"
+          SHA_B="$(awk -F= '/^ARCHIVE_SHA256=/{print $2}' "${RUNNER_TEMP}/build-b.txt")"
+          BYTES_A="$(awk -F= '/^ARCHIVE_BYTES=/{print $2}' "${RUNNER_TEMP}/build-a.txt")"
+          echo "build A ${SHA_A}"
+          echo "build B ${SHA_B}"
+          if [[ "${SHA_A}" != "${SHA_B}" ]]; then
+            echo "DETERMINISTIC_CAPSULE_ARTIFACT=FAIL" >&2
+            exit 1
+          fi
+          cp "${OUT_A}/titangold-c2-runner-linux-x64-node20.19.5.tar.gz" "${RUNNER_TEMP}/capsule.tar.gz"
+          echo "${SHA_A}  titangold-c2-runner-linux-x64-node20.19.5.tar.gz" > "${RUNNER_TEMP}/capsule.sha256"
+          echo "archive_sha256=${SHA_A}" >> "${GITHUB_OUTPUT}"
+          echo "archive_bytes=${BYTES_A}" >> "${GITHUB_OUTPUT}"
+          echo "source_commit=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload intra-CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: c2-runner-capsule
+          path: |
+            ${{ runner.temp }}/capsule.tar.gz
+            ${{ runner.temp }}/capsule.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  consumer:
+    name: C2 Capsule Clean Consumer
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - name: Checkout scripts only
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Download capsule artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c2-runner-capsule
+          path: ${{ runner.temp }}/c2-in
+
+      - name: Verify without npm
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          chmod +x tools/c2-migration-runner-capsule/scripts/verify-artifact.sh
+          EXPECTED="${{ needs.build.outputs.archive_sha256 }}"
+          ACTUAL="$(sha256sum "${RUNNER_TEMP}/c2-in/capsule.tar.gz" | awk '{print $1}')"
+          echo "consumer actual ${ACTUAL}"
+          echo "build expected ${EXPECTED}"
+          test "${ACTUAL}" = "${EXPECTED}"
+          EXTRACT="${RUNNER_TEMP}/c2-extract"
+          mkdir -p "${EXTRACT}"
+          tools/c2-migration-runner-capsule/scripts/verify-artifact.sh \
+            "${RUNNER_TEMP}/c2-in/capsule.tar.gz" \
+            "${EXPECTED}" \
+            "${EXTRACT}"
+          CAPSULE="${EXTRACT}/titangold-c2-runner"
+          test ! -e "${CAPSULE}/052_telegram_messages_channel_message_id_index.js"
+          if grep -R --include='*.js' -l 'C2_052_INDEX_ALREADY_EXISTS_STOP' "${CAPSULE}"; then
+            echo 'C2_CAPSULE_SELF_TEST_FAILED: 052 source leaked into capsule' >&2
+            exit 1
+          fi
+          echo 'NO_052_SOURCE_IN_CAPSULE'
+          # Module isolation: required packages stay under extracted root.
+          node --input-type=module -e "
+          import { createRequire } from 'node:module';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root = process.argv[1];
+          const require = createRequire(path.join(root, 'package.json'));
+          for (const name of ['node-pg-migrate', 'pg', 'glob', 'yargs']) {
+            const resolved = fs.realpathSync(require.resolve(name));
+            const prefix = fs.realpathSync(root) + path.sep;
+            if (!resolved.startsWith(prefix)) {
+              console.error('C2_CAPSULE_MODULE_ESCAPE ' + name + ' ' + resolved);
+              process.exit(1);
+            }
+            if (resolved.includes(path.sep + 'backend' + path.sep + 'node_modules' + path.sep)) {
+              console.error('C2_CAPSULE_MODULE_ESCAPE backend ' + resolved);
+              process.exit(1);
+            }
+            console.log('RESOLVED', name, resolved);
+          }
+          " "${CAPSULE}"
+          if command -v strace >/dev/null 2>&1; then
+            strace -f -e trace=connect -o "${RUNNER_TEMP}/self-test.strace" \
+              node "${CAPSULE}/bin/c2-self-test.mjs"
+            if grep -E 'AF_INET|AF_INET6' "${RUNNER_TEMP}/self-test.strace"; then
+              echo 'C2_CAPSULE_SELF_TEST_FAILED: unexpected inet connect' >&2
+              exit 1
+            fi
+            echo 'OFFLINE_STRACE_PASS'
+          else
+            echo 'OFFLINE_STRACE_UNAVAILABLE using self-test only'
+            node "${CAPSULE}/bin/c2-self-test.mjs"
+          fi
+          # Prove consumer did not use npm/npx for package resolution.
+          command -v npm >/dev/null
+          echo 'CONSUMER_NO_NPM_INSTALL_BY_CONTRACT'
+
+  pg14:
+    name: C2 Capsule PG14 Integration
+    runs-on: ubuntu-22.04
+    needs: build
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: titangold_c2_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      TITAN_C2_CI_PG14: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Download capsule artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c2-runner-capsule
+          path: ${{ runner.temp }}/c2-in
+
+      - name: Stage 052 and extract capsule
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          chmod +x tools/c2-migration-runner-capsule/scripts/verify-artifact.sh
+          EXTRACT="${RUNNER_TEMP}/c2-pg-extract"
+          mkdir -p "${EXTRACT}"
+          tools/c2-migration-runner-capsule/scripts/verify-artifact.sh \
+            "${RUNNER_TEMP}/c2-in/capsule.tar.gz" \
+            "${{ needs.build.outputs.archive_sha256 }}" \
+            "${EXTRACT}"
+          echo "CAPSULE=${EXTRACT}/titangold-c2-runner" >> "${GITHUB_ENV}"
+          MIGDIR="${RUNNER_TEMP}/c2-onefile"
+          mkdir -p "${MIGDIR}"
+          SRC="backend/database/migrations/052_telegram_messages_channel_message_id_index.js"
+          ACTUAL="$(sha256sum "${SRC}" | awk '{print $1}')"
+          test "${ACTUAL}" = "2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082"
+          cp "${SRC}" "${MIGDIR}/052_telegram_messages_channel_message_id_index.js"
+          echo "MIGDIR=${MIGDIR}" >> "${GITHUB_ENV}"
+          EXTRA="${RUNNER_TEMP}/c2-extra"
+          mkdir -p "${EXTRA}"
+          cp "${SRC}" "${EXTRA}/052_telegram_messages_channel_message_id_index.js"
+          cp backend/database/migrations/050_mexc_capability_snapshots_rollback.sql \
+            "${EXTRA}/050_mexc_capability_snapshots_rollback.sql"
+          cp backend/database/migrations/051_artemis_b10_decision_persistence.sql \
+            "${EXTRA}/051_artemis_b10_decision_persistence.sql"
+          echo "EXTRA=${EXTRA}" >> "${GITHUB_ENV}"
+
+      - name: Extra-file launcher rejection
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          set +e
+          out="$(node "${CAPSULE}/bin/c2-migrate.mjs" up "${EXTRA}" 2>&1)"
+          rc=$?
+          set -e
+          echo "${out}"
+          test "${rc}" -ne 0
+          echo "${out}" | grep -q 'C2_CAPSULE_EXTRA_MIGRATION_FILE'
+
+      - name: Create disposable databases
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          node --input-type=module -e "
+          import { createRequire } from 'node:module';
+          import path from 'node:path';
+          const require = createRequire(path.join(process.argv[1], 'package.json'));
+          const pg = require('pg');
+          const client = new pg.Client({
+            connectionString: 'postgresql://postgres@127.0.0.1:5432/titangold_c2_test?sslmode=disable',
+          });
+          await client.connect();
+          for (const db of ['titangold_c2_wrong','titangold_c2_partial','titangold_c2_invalid','titangold_c2_down','titangold_c2_named']) {
+            await client.query('CREATE DATABASE ' + db);
+          }
+          await client.end();
+          " "${CAPSULE}"
+
+      - name: Copy verifier beside capsule pg
+        run: |
+          cp backend/scripts/ci_verify_c2_052.js "${CAPSULE}/_ci_verify_c2_052.mjs"
+
+      - name: Happy-path up / plan / second up / down
+        env:
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/titangold_c2_test?sslmode=disable
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" require-pg14
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" bootstrap-fixture
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-pre-plan
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-post-apply
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-post-plan
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-named-file-isolation
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-idempotent-state
+          node "${CAPSULE}/bin/c2-migrate.mjs" down "${MIGDIR}"
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-down-state
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-post-apply
+
+      - name: Wrong-definition fail-closed
+        env:
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/titangold_c2_wrong?sslmode=disable
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" setup-wrong-index
+          set +e
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          rc=$?
+          set -e
+          test "${rc}" -ne 0
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-wrong-untouched
+
+      - name: Valid-index ledger-absent retry fail-closed
+        env:
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/titangold_c2_partial?sslmode=disable
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" setup-partial-trap
+          set +e
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          rc=$?
+          set -e
+          test "${rc}" -ne 0
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" drop-partial-trap
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-partial-valid-ledger-absent
+          set +e
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          rc=$?
+          set -e
+          test "${rc}" -ne 0
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-partial-valid-ledger-absent
+
+      - name: Invalid-index fail-closed
+        env:
+          DATABASE_URL: postgresql://postgres@127.0.0.1:5432/titangold_c2_invalid?sslmode=disable
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" setup-invalid-index
+          set +e
+          node "${CAPSULE}/bin/c2-migrate.mjs" up "${MIGDIR}"
+          rc=$?
+          set -e
+          test "${rc}" -ne 0
+          node "${CAPSULE}/_ci_verify_c2_052.mjs" prove-invalid-refused
+
+  publish:
+    name: C2 Capsule Manual D2 Publish
+    runs-on: ubuntu-22.04
+    needs: [build, consumer, pg14]
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    steps:
+      - name: Fail-closed publish gate
+        run: |
+          set -euo pipefail
+          echo "THIS TASK MUST NOT PUBLISH. Gate remains fail-closed unless every condition matches."
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: not main" >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.confirm }}" != "PUBLISH_C2_CAPSULE_D2" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: confirmation token mismatch" >&2
+            exit 1
+          fi
+          if [[ "${{ github.sha }}" != "${{ github.event.inputs.source_commit }}" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: source commit mismatch" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.build.outputs.archive_sha256 }}" != "${{ github.event.inputs.expected_archive_sha256 }}" ]]; then
+            echo "C2_CAPSULE_SHA_MISMATCH: expected archive mismatch" >&2
+            exit 1
+          fi
+          if [[ -z "${{ github.event.inputs.release_tag }}" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: release tag required" >&2
+            exit 1
+          fi
+          echo "Publish conditions would pass, but this implementation refuses to create a Release until a later Owner publish authorization is issued."
+          echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: publish disabled in this source/CI implementation" >&2
+          exit 1

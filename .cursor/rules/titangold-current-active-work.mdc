@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 offline migration runner capsule design (Owner gap policy)
+description: TitanGold Rule 02 — C2 offline migration runner capsule source/CI
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 OFFLINE MIGRATION RUNNER CAPSULE DESIGN**
+C2 OFFLINE MIGRATION RUNNER CAPSULE SOURCE/CI IMPLEMENTATION**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -26,16 +26,14 @@ C2 accepted technical PR head:
 C2 source squash merge:
 `1fad6880d9509e3039afd251e6ffd0b01e98cc03`
 
-Governance blocker-closeout squash merge (this design base):
-`e6f9217c02a3efff86881107dcc754261854f21e`
+Capsule design governance squash merge:
+`4bf49f5cbbde93684d192736e5b0161177ad1816`
 
 C2 accepted migration SHA256:
 `2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
 
 Capsule design packet:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_CAPSULE_DESIGN_20260817T184508Z.txt`
-SHA256:
-`d92aa45ee92296ce23d65dee53194f818d4212a660098380c55d0e7a30eef030`
 
 ## State
 
@@ -51,92 +49,53 @@ SHA256:
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-Primary runner blocker remains:
-**NODE_PG_MIGRATE_EXECUTION_TOOL_ABSENT** (expected by `npm ci --production`)
-
-## Capsule design (NOT implemented)
+## Capsule (this branch)
 
 **CAPSULE_DESIGN = COMPLETE**
 **RUNNER MODEL = R2**
 **RECOMMENDED_NODE_MODEL = N1**
 Production Node = `v20.19.5` / linux x64
-Capsule = isolated / offline / hash-locked
 Root dependencies = `node-pg-migrate` 8.0.4 and `pg` 8.16.3
 **PURE_JS_CLOSURE = YES**
-
-**RECOMMENDED_CAPSULE_DELIVERY = D2**
-(public GitHub Release asset; content SHA256 is the authority; no new production retrieval secret)
-
 **CAPSULE_INCLUDES_052 = NO**
-Canonical 052 is staged separately at execution from the Git object.
-
-**CAPABILITY_LIMITED_LAUNCHER = RECOMMENDED**
-Allowed operations: `up` and `down` for
-`052_telegram_messages_channel_message_id_index` only.
-Arbitrary CLI flags / `--fake` / `--no-lock` / extra migrations = rejected.
+**RECOMMENDED_CAPSULE_DELIVERY = D2**
+Artifact authority = CONTENT SHA256
+**CAPABILITY_LIMITED_LAUNCHER = IMPLEMENTED**
 
 **APPLICATION NODE_MODULES = UNCHANGED**
 backend `package.json` / `package-lock.json` must not be modified.
 
-**CAPSULE IMPLEMENTATION = NOT YET AUTHORIZED**
-This Rule02 / PR does **not** authorize capsule source/CI implementation,
-production npm, 052 execution, collector pause, 050, or 051.
+Authorized on this branch:
 
-Building or merging the capsule does **not** authorize production 052.
-The runner blocker and the IO safety gate remain separate.
-Even after capsule source/CI is complete, 052 production execution requires
-a new Owner gate.
+- capsule source
+- dedicated capsule lockfile
+- launcher / self-test
+- build / verify tooling
+- dedicated CI workflow
+- Draft PR
 
-## Owner pause / gap policy
+NOT authorized:
+
+- public GitHub Release publication
+- production capsule staging
+- production C2 / 052 execution
+- collector pause
+- PM2 mutation
+- 050 / 051
+
+## Owner pause / gap policy (unchanged)
 
 **ZERO_LOSS_COLLECTOR_PAUSE_CATCHUP_SAFETY = UNSAFE**
-
-Current polling performs one bounded `getMessages(limit=50, minId=lastId)`
-per channel/cycle and has no backlog-drain pagination loop.
-Do **not** claim `NO_DATA_LOSS`, `CATCHUP_SAFE`, or `LOSSLESS_PAUSE`.
-
 **OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
-
-Owner product decision for the current pre-trading / pre-live-analysis stage:
-a SHORT, BOUNDED Telegram ingestion gap during a one-time C2 maintenance
-operation is ACCEPTABLE.
-
-This is an explicit product/operational tradeoff. It does **not** mean:
-
-- Telegram data loss is generally acceptable forever
-- continuous gaps are acceptable
-- arbitrary downtime is authorized
-- collector can be paused now
-- a specific maximum downtime has already been authorized
-- missed Telegram messages are recoverable
-
 **C2_CONTROLLED_COLLECTOR_PAUSE =
 ELIGIBLE FOR A FUTURE EXPLICIT OWNER EXECUTION GATE**
-
 **CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
-
-Messages missed beyond the collector's bounded fetch window may be permanently
-absent from TitanGold ingestion. That possibility is knowingly accepted by
-Owner ONLY for the future bounded C2 maintenance window. Do not conceal the gap.
-
-This temporary Owner tradeoff applies to the current pre-trading stage.
-It must **not** become the permanent Telegram ingestion contract.
-A later collector pagination/backlog-drain enhancement may be considered
-separately before Artemis/live data-quality maturity. Do **not** implement it
-in this Rule02.
-
-## IO execution strategy
-
-Historical/current IO evidence remains: dm-0 saturation is material.
-C2 build while saturated is **NOT AUTHORIZED**.
 
 **IO_EXECUTION_STRATEGY =
 CONTROLLED_PAUSE_ELIGIBLE_BUT_NOT_YET_AUTHORIZED**
 
-Controlled collector pause may later be evaluated as a way to create
-temporary IO headroom because bounded data loss has been Owner-accepted.
-This does **not** bypass the resource gate.
-The index must still **not** be built while IO remains saturated.
+Building or merging the capsule does **not** authorize production 052.
+The runner blocker and the IO safety gate remain separate.
 
 ## Future C2 pre-build resource gate (ACTIVE / MANDATORY)
 
@@ -160,43 +119,10 @@ Reject the build if **any** of:
 
 One favorable sample must not override a bad observation window.
 
-## Future controlled pause safety model (DESIGN ONLY)
-
-A future Owner-authorized production execution MAY use:
-
-1. verify normal production preflight
-2. capture exact active collector PM2 id/PID/restart count
-3. intentionally stop ONLY that collector
-4. record pause start UTC
-5. allow existing Telegram DB queries to drain
-6. collect a fresh bounded IO recovery observation
-7. rerun this resource gate AFTER collector pause
-8. only if the resource gate passes: permit the future 052 execution gate
-9. if the resource gate still fails: restart the same collector, verify
-   online/HTTP, STOP, do **not** execute 052
-10. after successful 052: restart collector exactly once if still stopped
-11. verify collector health
-12. record exact total pause duration
-13. explicitly record that a bounded Telegram data gap may have occurred
-
-Future audit packet must record:
-
-- pause start
-- pause end
-- total pause duration
-- collector state
-- potential ingestion gap acknowledged = YES
-
-This sequence is DESIGN ONLY.
-This Rule02 does **not** authorize PM2 stop/start.
-Do **not** invent a maximum pause duration here; that bound must be specified
-by the later production execution gate.
-
 ## Next Owner gate
 
 **C2 OFFLINE MIGRATION RUNNER CAPSULE
-SOURCE/CI IMPLEMENTATION**
+SOURCE/CI FINAL REVIEW**
 
-This does **not** authorize production execution of 052.
-Capsule source/CI must be implemented and reviewed first.
-Do not jump directly to production execution.
+This does **not** authorize production execution of 052,
+Release publication, collector pause, or production staging.
