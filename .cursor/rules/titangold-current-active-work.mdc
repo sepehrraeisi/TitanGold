@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 production execution blockers / remediation required
+description: TitanGold Rule 02 — C2 offline migration runner capsule design
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 PRODUCTION EXECUTION BLOCKED / REMEDIATION REQUIRED**
+C2 OFFLINE MIGRATION RUNNER CAPSULE DESIGN**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -23,23 +23,25 @@ Tier 3
 C2 accepted technical PR head:
 `07488458437c171eeba30ae08e4c4aa01a6e8887`
 
-C2 squash merge on main:
+C2 source squash merge:
 `1fad6880d9509e3039afd251e6ffd0b01e98cc03`
+
+Governance blocker-closeout squash merge (this design base):
+`e6f9217c02a3efff86881107dcc754261854f21e`
 
 C2 accepted migration SHA256:
 `2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
 
-Failed production execution packet:
-`/home/ubuntu/TITANGOLD_C2_052_PRODUCTION_EXEC_20260817T174206Z.txt`
-
-Do not treat worktree-local `node-pg-migrate` binaries as production runtime.
+Capsule design packet:
+`/home/ubuntu/TITANGOLD_C2_RUNNER_CAPSULE_DESIGN_20260817T184508Z.txt`
+SHA256:
+`d92aa45ee92296ce23d65dee53194f818d4212a660098380c55d0e7a30eef030`
 
 ## State
 
 **C1 PRODUCTION = VERIFIED**
-**C1 RESOURCE EFFECT = IMPROVED**
 **C2 SOURCE/CI = VERIFIED**
-**C2 PRODUCTION EXECUTION ATTEMPT = STOPPED BEFORE MUTATION**
+**C2 052 = NOT EXECUTED**
 **C2_PRODUCTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
@@ -49,112 +51,46 @@ Do not treat worktree-local `node-pg-migrate` binaries as production runtime.
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-Primary blocker:
-**NODE_PG_MIGRATE_EXECUTION_TOOL_ABSENT**
+Primary runner blocker remains:
+**NODE_PG_MIGRATE_EXECUTION_TOOL_ABSENT** (expected by `npm ci --production`)
 
-Secondary blocker:
-**IO_RESOURCE_GATE_FAILED**
+## Capsule design (NOT implemented)
 
-## C2 source (unchanged / unexecuted)
+**RUNNER MODEL = R2**
+**RECOMMENDED_NODE_MODEL = N1**
+(production system Node `v20.19.5` / linux x64; capsule is JS dependency closure only)
 
-Migration:
-`052_telegram_messages_channel_message_id_index`
+**RECOMMENDED_CAPSULE_DELIVERY = D2**
+(public GitHub Release asset; content SHA256 is the authority; no new production secret)
 
-Index intended:
-`idx_telegram_messages_channel_message_id`
-NON-UNIQUE BTREE on `public.telegram_messages (channel_id, message_id)`
+**CAPSULE_DESIGN = COMPLETE**
 
-Production ledger 052 = ABSENT
-Production index = ABSENT
-050 ledger = ABSENT / NOT RECONCILED
-051 ledger = ABSENT / NOT AUTHORIZED
+**CAPSULE_INCLUDES_052 = NO**
+Canonical 052 is staged separately at execution from the Git object.
 
-## Runner conclusion (design only — NOT authorized to implement)
+**CAPABILITY_LIMITED_LAUNCHER = RECOMMENDED**
+Allowed operations: `up` and `down` for
+`052_telegram_messages_channel_message_id_index` only.
+Arbitrary CLI flags / `--fake` / `--no-lock` / extra migrations = rejected.
 
-**RECOMMENDED_RUNNER_STRATEGY = R2**
+**APPLICATION NODE_MODULES = UNCHANGED**
+backend `package.json` / `package-lock.json` must not be modified.
 
-Rationale:
+This Rule02 does **not** authorize capsule source/CI implementation,
+production npm, 052 execution, collector pause, 050, or 051.
 
-- `node-pg-migrate` is a **devDependency** (`^8.0.4` / lockfile 8.0.4).
-- Production backend install policy is `npm ci --production` / omit devDependencies
-  (`infrastructure/blue-green-deploy.sh`, Blue-Green GHA deploy job).
-- Absence in `/home/ubuntu/webapp/TitanGold/backend/node_modules` is
-  **EXPECTED_BY_INSTALL_POLICY**, not unexpected drift.
-- No class-A production-runtime-owned binary exists.
-- No class-B canonical-clean origin/main worktree binary exists
-  (this closeout worktree at `1fad688` has no `node_modules`; installing is forbidden).
-- Class-C lockfile-matching binaries exist in unrelated worktrees; they are not
-  a durable production runner (HEAD ≠ origin/main; worktree retention risk;
-  `--version` prints `0.0.0` even when `package.json` is 8.0.4).
-- R3 (install devDependencies into production) = REJECT
-- R4 (npx / npm exec / network) = REJECT
-- R5 (direct CREATE INDEX + manual ledger INSERT) = REJECT
-- R6: `npm run migrate:up` / `database/migrate.js` would also apply pending 050/051
-  = REJECT
-
-R2 next source/CI work (NOT started):
-
-dedicated immutable/offline migration-tool capsule of node-pg-migrate 8.0.4
-with hashed dependency closure, disposable CI proof, staged outside application
-`node_modules`, no production npm mutation, execute reviewed 052 only.
-
-This Rule02 does **not** authorize capsule implementation.
-
-## IO conclusion (design only — NOT authorized to execute)
+## IO (unchanged / independent)
 
 **RECOMMENDED_IO_STRATEGY = BLOCKED**
-
 **COLLECTOR_PAUSE_CATCHUP_SAFETY = UNSAFE**
 
-Evidence:
-
-- Fresh dm-0 interval util still ~95–100% with iowait 5–25% in a 4-minute window.
-- Swap 2.0/2.0 GiB occupied.
-- PostgreSQL: active MAX(message_id) queries on telegram_messages; unique-index
-  `idx_telegram_messages_unique` dominates index reads; heap hit ratio ~1.8%.
-- Host: TitanGold backend/engine-worker processes also show large lifetime reads.
-- CURRENT_IO_ROOT_DRIVER = MULTI_FACTOR
-- IO_PRESSURE_TYPE = READ_DOMINANT
-- I1 (wait for natural window): no reliable historical iostat window proven;
-  MAX-query cost is not tied only to insert-rate troughs.
-- I2 (pause collector): resume uses one `getMessages({limit:50, minId:lastId})`
-  per channel per cycle. Hottest channel produced 68 messages in 5 minutes
-  (limit 50). Gaps would be unrecoverable. Monitor does not auto-restart PM2,
-  but catch-up is still unsafe. I2 is therefore not recommended.
-- I3: no existing no-mutation throttle found.
-- I4 (build while saturated) = REJECT
-
-Do **not** mutate PM2. Do **not** pause the collector under this Rule02.
-
-## Future pre-build resource gate (for a later Owner execution prompt)
-
-Minimum observation: **5 minutes**, ≥5 samples, ~60s apart.
-
-Reject the build if **any** of:
-
-- HTTP health ≠ 200
-- collector not exactly one online target / restart loop
-- idle-in-transaction > 0 or ≥60s unexpected xact
-- active CREATE INDEX / REINDEX on telegram_messages
-- available RAM < 4 GiB
-- root free < 10 GiB
-- swap-out (`so`) > 0 on a majority of samples
-- **median** data-device (`dm-0`) `%util` ≥ 80 **and** median iowait ≥ 10
-- **any two consecutive** samples with dm-0 `%util` ≥ 95 and iowait ≥ 10
-
-One favorable sample must not override a bad window.
-
-Do not reason that C2 must be built while the disk is saturated because MAX
-queries cause the pressure.
+Capsule readiness does **not** authorize 052 execution.
+The five-minute resource gate in the prior Rule02 remains required.
+Do not build the production index while the data device is saturated.
 
 ## Next Owner gate
 
 **C2 OFFLINE MIGRATION RUNNER CAPSULE
-SOURCE/CI IMPLEMENTATION DESIGN**
+SOURCE/CI IMPLEMENTATION**
 
-This does **not** authorize capsule implementation, C2 production execution,
-collector pause, 050, or 051.
-
-MERGING THIS GOVERNANCE PR DOES NOT EXECUTE 052.
-RESOURCE STABILIZATION REMAINS INCOMPLETE.
-B10 050 REMAINS BLOCKED.
+This does **not** authorize production execution of 052.
