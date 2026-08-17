@@ -1,12 +1,13 @@
 ---
-description: TitanGold Rule 02 — Production Resource Stabilization C1
+description: TitanGold Rule 02 — C1 Deployment-Gate Source Correction Delivery
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
 Current outcome:
-**PRODUCTION RESOURCE STABILIZATION — TELEGRAM COLLECTOR C1 SOURCE DELIVERY**
+**PRODUCTION RESOURCE STABILIZATION —
+C1 DEPLOYMENT-GATE SOURCE CORRECTION DELIVERY**
 
 Current area:
 Telegram ingestion / collector runtime
@@ -14,29 +15,49 @@ Telegram ingestion / collector runtime
 Current program slice:
 RESOURCE-STABILIZATION-WP-C-C1
 
-Risk tier:
-Tier 3 — collector source delivery (no production runtime mutation)
+Risk context:
+Tier 3 program
 
 Final review state:
-**C1 SOURCE IMPLEMENTATION = FINAL REVIEW PASS**
-**PR #29 = OWNER APPROVED FOR SQUASH MERGE**
-**C1 PRODUCTION DEPLOY = NOT AUTHORIZED**
-**C1 PRODUCTION STABILIZATION = NOT YET VERIFIED**
+**PR #29 C1 SOURCE MERGE = COMPLETE**
+**FIRST C1 PRODUCTION DEPLOYMENT ATTEMPT = STOPPED BEFORE INSTALL**
+**PRODUCTION COLLECTOR = PRE-C1 / UNCHANGED**
+**SOURCE SYNTAX BLOCKER = FIXED**
+**C1 DEPLOYMENT-SURFACE SYNTAX CI = ENFORCED**
+**PR #30 FINAL REVIEW = PASS**
+**PR #30 = OWNER APPROVED FOR SQUASH MERGE**
+**C1 PRODUCTION DEPLOY = NOT AUTHORIZED BY THIS RULE02**
+**C1 PRODUCTION VERIFICATION = NOT YET PASS**
 **C1 REAL WORKING = NO / NOT YET PROVEN**
-**C2 DB/INDEX = NOT AUTHORIZED / DEFERRED**
+**C2 DB/INDEX = DEFERRED / NOT AUTHORIZED**
 **B10 050 = BLOCKED_BY_PRODUCTION_RESOURCE_STABILIZATION**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-Canonical product main baseline before this C1 merge:
-`origin/main` = `433341514864f10f3569ef651427da79194ee7e8`
+Canonical product main baseline before this syntax-fix merge:
+`origin/main` = `b74fb74fdc0c7d9757023e98f95b61ccf2f4c2ea`
+
+Accepted technical head:
+`e52286dad3df26b46fa245fd8574d253afa5a539`
 
 Current branch / worktree:
-- Branch: `fix/resource-stabilization-collector-c1`
-- Worktree: `/home/ubuntu/worktrees/titangold-resource-stabilization-c1`
+- Branch: `fix/c1-runtime-syntax-gate`
+- Worktree: `/home/ubuntu/worktrees/titangold-c1-syntax-fix`
 
-Accepted C1 guarantees:
+Deployment-gate history:
+The first Owner-authorized targeted C1 production deployment correctly stopped
+before install because canonical `channelPollingService.js` contained a
+block-comment lexical syntax defect (`src/**/*` embeds `*/`). Production
+target files remained pre-C1 / unchanged. No PM2 restart. Production DB
+mutation = 0. The syntax defect is now fixed by comment wording only.
+Executable runtime semantics are unchanged.
+
+Deployment-gate improvement:
+The exact five C1 runtime deployment files are now syntax-validated by CI using
+`node --check` before unit tests.
+
+Accepted C1 source guarantees:
 - Bounded collector concurrency (`TELEGRAM_POLL_CONCURRENCY`, default 3, min 1, max 10)
 - Polling-cycle overlap prevented (`isRunning` fail-closed)
 - Initial connection attempt max 1 (`connectionRetries: 1`)
@@ -48,23 +69,31 @@ Accepted C1 guarantees:
 - No DB schema change
 
 Residual risk / NOT FIXED:
-- GramJS 2.26.22 all-path reconnect behavior
-- Possible destroy/reconnect race
+- GramJS 2.26.22 internal reconnect not fully controllable
+- Possible destroy/reconnect dependency race
 - Possible dependency-owned reconnect after lifecycle termination
-- `MAX(message_id)` DB access path
-- Production DB index requirement / C2
+- `MAX(message_id)` inefficient access path
+- Required DB access-path/index work deferred to C2
 
-C1 SOURCE MERGE DOES NOT MEAN PRODUCTION DEPLOYMENT.
-C1 SOURCE MERGE DOES NOT UNBLOCK B10 050.
+MERGING PR #30 DOES NOT DEPLOY C1 TO PRODUCTION.
+MERGING PR #30 DOES NOT UNBLOCK B10 050.
+RESOURCE STABILIZATION IS NOT COMPLETE.
 C1 DOES NOT CLAIM ALL GRAMJS INTERNAL RECONNECT PATHS ARE CONTROLLED.
-C1 DOES NOT CLAIM TIMEOUT/RECONNECT AMPLIFICATION IS FULLY BOUNDED.
-Do not mark C1 REAL WORKING before production deployment verification.
 
-Authorized after this Rule02 lands on main:
-- None of deploy / PM2 / DB / C2 / B10 050 / B10 051
+Not authorized by this Rule02:
+- production deployment
+- PM2 mutation
+- DB / index / C2
+- migrations
+- B10 050 / B10 051
+- runtime wiring
+- Shadow / Paper / Live
+
+When PR #30 lands on main:
 
 Next Owner gate:
-**C1 PRODUCTION DEPLOYMENT + STABILIZATION VERIFICATION**
+**C1 TARGETED PRODUCTION DEPLOYMENT RETRY
++ STABILIZATION VERIFICATION**
 
+Do not authorize that deployment from this Rule 02.
 Do not start C2 in this Rule 02.
-Do not deploy from this Rule 02.

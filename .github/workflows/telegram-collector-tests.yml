@@ -34,6 +34,15 @@ jobs:
         working-directory: telegram-collector
         run: node -e "const v=require('telegram/package.json').version; if (v!=='2.26.22') { console.error('unexpected telegram version', v); process.exit(1); } console.log('telegram@'+v);"
 
+      - name: Validate C1 production runtime JavaScript syntax
+        working-directory: telegram-collector
+        run: |
+          node --check dist/services/channelPollingService.js
+          node --check services/pollConcurrency.js
+          node --check services/pollCycleEngine.js
+          node --check services/pollQueries.js
+          node --check services/telegramConnectLifecycle.js
+
       - name: Run collector unit tests (no DB, no Docker, no provider)
         working-directory: telegram-collector
         run: npm test

@@ -12,8 +12,8 @@
  *
  * Canonical runtime owner for this service is this committed dist file.
  * There is no corresponding src/services/channelPollingService.ts.
- * telegram-collector/tsconfig.json compiles src/**/* only, so `npm run build`
- * cannot emit or overwrite this file.
+ * telegram-collector/tsconfig.json compiles files under src/ only, so
+ * `npm run build` cannot emit or overwrite this file.
  *
  * C1 does not claim to fix GramJS 2.26.22 internal reconnect paths.
  */
