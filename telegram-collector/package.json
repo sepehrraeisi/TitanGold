@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "test": "node --test services/__tests__/gramjs.contract.test.js services/__tests__/channelPolling.stabilization.test.js services/__tests__/channelPolling.connectLifecycle.test.js services/__tests__/messageProcessor.scheduling.test.js",
     "start": "node dist/index.js",
     "auth": "ts-node src/auth/generateSession.ts"
   },

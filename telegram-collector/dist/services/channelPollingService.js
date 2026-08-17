@@ -3,6 +3,19 @@
  * Background Channel Polling Service
  * Periodically fetches new messages from tracked Telegram channels
  * and stores them in the database for Data Hub pipeline processing.
+ *
+ * C1: bounded intra-cycle concurrency, one Telegram client per session
+ * identity per cycle, fail-closed TIMEOUT (no immediate application retry).
+ * Production cycle path: PollCycleEngine → connectSessionForGroup (one client
+ * per identity) → pollChannelWithClient. Compatibility pollChannel() is not
+ * the production cycle path.
+ *
+ * Canonical runtime owner for this service is this committed dist file.
+ * There is no corresponding src/services/channelPollingService.ts.
+ * telegram-collector/tsconfig.json compiles src/**/* only, so `npm run build`
+ * cannot emit or overwrite this file.
+ *
+ * C1 does not claim to fix GramJS 2.26.22 internal reconnect paths.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -16,6 +29,21 @@ const sessionManager_1 = require("../utils/sessionManager");
 const dataValidator_1 = require("../utils/dataValidator");
 const metricsCollector_1 = __importDefault(require("../utils/metricsCollector"));
 const accountManager_1 = __importDefault(require("../utils/accountManager"));
+const { parsePollConcurrency, DEFAULT_POLL_CONCURRENCY } = require("../../services/pollConcurrency");
+const {
+    isTimeoutError,
+    formatCycleSummary,
+    PollCycleEngine,
+} = require("../../services/pollCycleEngine");
+const {
+    GRAMJS_EPHEMERAL_CLIENT_OPTIONS,
+    resolvePollingSession,
+    connectAndProve,
+    connectProvenSessionClient,
+    disconnectClientSafe,
+} = require("../../services/telegramConnectLifecycle");
+const pollQueries = require("../../services/pollQueries");
+
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5433'),
@@ -23,34 +51,49 @@ const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || ''
 });
+
 class ChannelPollingService {
-    constructor() {
+    constructor(options = {}) {
         this.intervalId = null;
-        this.isRunning = false;
+        this._createTelegramClient = options.createTelegramClient;
+        this._loadAccountSession = options.loadAccountSession;
+        this._loadPrimarySession = options.loadPrimarySession;
+        this._loadLegacySession = options.loadLegacySession;
         this.config = {
             // Default: enabled. Set TELEGRAM_POLLING_ENABLED=false to disable.
             enabled: process.env.TELEGRAM_POLLING_ENABLED !== 'false',
-            intervalMinutes: parseInt(process.env.TELEGRAM_POLLING_INTERVAL_MINUTES || '1'), // Changed to 1 minute base interval
-            batchSize: parseInt(process.env.TELEGRAM_POLLING_BATCH_SIZE || '10'), // Increased for faster polling
+            intervalMinutes: parseInt(process.env.TELEGRAM_POLLING_INTERVAL_MINUTES || '1'),
+            batchSize: parseInt(process.env.TELEGRAM_POLLING_BATCH_SIZE || '10'),
             maxMessagesPerChannel: parseInt(process.env.TELEGRAM_POLLING_MAX_MESSAGES || '50'),
-            // Priority-based intervals (in minutes)
+            pollConcurrency: parsePollConcurrency(process.env.TELEGRAM_POLL_CONCURRENCY),
             priorityIntervals: {
-                high: 1,    // 1 minute for HIGH priority (trading critical)
-                normal: 3,  // 3 minutes for NORMAL priority
-                low: 5      // 5 minutes for LOW priority
+                high: 1,
+                normal: 3,
+                low: 5
             }
         };
+        this.cycleEngine = new PollCycleEngine({
+            pollConcurrency: this.config.pollConcurrency,
+            getActiveChannels: () => this.getActiveChannels(),
+            connectSession: (identityKey, channels) => this.connectSessionForGroup(identityKey, channels),
+            pollChannel: (client, channel) => this.pollChannelWithClient(client, channel),
+            disconnectClient: disconnectClientSafe,
+        });
     }
+
+    get isRunning() {
+        return this.cycleEngine.isRunning;
+    }
+
     /**
      * Get active channels from database that are due for polling based on priority
      */
     async getActiveChannels() {
         try {
-            // Get priority intervals in minutes
             const highInterval = this.config.priorityIntervals.high;
             const normalInterval = this.config.priorityIntervals.normal;
             const lowInterval = this.config.priorityIntervals.low;
-            
+
             const result = await pool.query(`
                 SELECT id, channel_id, username, title, last_synced_at, config, account_id, priority
                 FROM telegram_channels
@@ -79,7 +122,7 @@ class ChannelPollingService {
                     last_synced_at ASC NULLS FIRST
                 LIMIT $1
             `, [this.config.batchSize]);
-            
+
             return result.rows.map(row => ({
                 id: row.id,
                 channel_id: BigInt(row.channel_id),
@@ -96,8 +139,13 @@ class ChannelPollingService {
             return [];
         }
     }
+
     /**
-     * Get Telegram client with session, optionally for a specific account
+     * Get Telegram client with session, optionally for a specific account.
+     * Does not connect. Caller owns connect/disconnect for the session identity.
+     *
+     * Explicit account_id groups fail closed when that account session cannot be
+     * loaded. Primary/legacy fallback is only for the shared-primary group.
      */
     async getTelegramClient(accountId) {
         const apiId = parseInt(process.env.TELEGRAM_API_ID || '0');
@@ -105,74 +153,44 @@ class ChannelPollingService {
         if (!apiId || !apiHash) {
             throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured');
         }
-        let sessionString = null;
-        // 1) If specific account_id is provided, try to use that account
-        if (accountId) {
-            try {
-                const accountSession = await accountManager_1.default.getDecryptedSessionForAccount(accountId);
-                sessionString = accountSession.sessionString;
-            }
-            catch (error) {
-                console.warn(`⚠️  Could not load session for account ${accountId}:`, error.message);
-                // fall through to primary/legacy
-            }
-        }
-        // 2) If no specific session yet, try primary account
-        if (!sessionString) {
-            try {
-                const primary = await accountManager_1.default.getPrimaryAccountSession();
-                if (primary && primary.sessionString) {
-                    sessionString = primary.sessionString;
-                }
-            }
-            catch (error) {
-                console.warn('⚠️  Could not load primary account session:', error.message);
-            }
-        }
-        // 3) Fallback to legacy session manager
-        if (!sessionString) {
-            const dbSession = await (0, sessionManager_1.getSessionFromDB)('telegram-collector');
-            if (!dbSession || !dbSession.sessionString) {
-                throw new Error('No active Telegram session found. Please complete login first.');
-            }
-            sessionString = dbSession.sessionString;
-        }
-        const session = new sessions_1.StringSession(sessionString);
-        const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
-            connectionRetries: 5,
+        const resolved = await resolvePollingSession({
+            requestedAccountId: accountId,
+            loadAccountSession: this._loadAccountSession
+                || ((id) => accountManager_1.default.getDecryptedSessionForAccount(id)),
+            loadPrimarySession: this._loadPrimarySession
+                || (() => accountManager_1.default.getPrimaryAccountSession()),
+            loadLegacySession: this._loadLegacySession
+                || (() => (0, sessionManager_1.getSessionFromDB)('telegram-collector')),
         });
-        return client;
+        const session = new sessions_1.StringSession(resolved.sessionString);
+        const createClient = this._createTelegramClient
+            || ((sess, id, hash, opts) => new telegram_1.TelegramClient(sess, id, hash, opts));
+        return createClient(session, apiId, apiHash, { ...GRAMJS_EPHEMERAL_CLIENT_OPTIONS });
     }
-    /**
-     * Get the highest message_id we already have for this channel (so we only fetch newer)
-     */
+
+    async connectSessionForGroup(identityKey, channels) {
+        return connectProvenSessionClient(
+            identityKey,
+            channels,
+            (accountId) => this.getTelegramClient(accountId)
+        );
+    }
+
     async getLastMessageIdForChannel(channelDbId) {
-        try {
-            const result = await pool.query(
-                'SELECT MAX(message_id) AS max_id FROM telegram_messages WHERE channel_id = $1',
-                [channelDbId]
-            );
-            const maxId = result.rows[0]?.max_id;
-            return maxId != null ? Number(maxId) : 0;
-        }
-        catch (error) {
-            console.error('❌ Error getting last message id for channel:', error.message);
-            return 0;
-        }
+        return pollQueries.getLastMessageIdForChannel(
+            (text, params) => pool.query(text, params),
+            channelDbId
+        );
     }
-    /**
-     * Fetch new messages from a channel (only messages with id > minId when minId > 0)
-     */
+
     async fetchChannelMessages(client, channelId, channelUsername, limit, minId = 0) {
         try {
-            // Use channel_id (numeric) or username
             const channelIdentifier = channelUsername || channelId.toString();
             const opts = { limit };
             if (minId > 0) {
                 opts.minId = minId;
             }
             const messages = await client.getMessages(channelIdentifier, opts);
-            // Process and normalize messages
             const formattedMessages = messages.map((msg) => ({
                 id: msg.id,
                 text: msg.message || null,
@@ -183,21 +201,16 @@ class ChannelPollingService {
                 replyTo: msg.replyTo?.replyToMsgId,
                 edited: msg.editDate
             }));
-            // Batch process for validation and normalization
             const batchResults = (0, dataValidator_1.batchProcessMessages)(formattedMessages);
-            // Return only valid, normalized messages
             return batchResults
                 .filter(r => r.validation.valid && r.normalized)
                 .map((r, index) => {
                 const msg = formattedMessages[index];
-                // Validate and convert timestamp safely
                 let messageDate;
                 try {
-                    // Check if msg.date is a valid Unix timestamp (in seconds)
                     if (typeof msg.date === 'number' && msg.date > 0 && msg.date < 2147483647) {
                         messageDate = new Date(msg.date * 1000);
                     } else {
-                        // Fallback to current time if invalid
                         console.warn(`⚠️ Invalid timestamp for message ${msg.id}: ${msg.date}, using current time`);
                         messageDate = new Date();
                     }
@@ -205,14 +218,14 @@ class ChannelPollingService {
                     console.error(`❌ Error converting timestamp for message ${msg.id}:`, e);
                     messageDate = new Date();
                 }
-                
+
                 return {
                     message_id: BigInt(msg.id),
                     message_text: msg.text,
                     message_type: msg.media ? 'media' : 'text',
                     has_media: !!msg.media,
                     telegram_created_at: messageDate,
-                    sender_id: null, // Telegram channels don't have sender info
+                    sender_id: null,
                     sender_username: null,
                     normalized: (0, dataValidator_1.enrichMessage)(r.normalized)
                 };
@@ -223,40 +236,15 @@ class ChannelPollingService {
             throw error;
         }
     }
-    /**
-     * Save messages to database
-     */
+
     async saveMessages(channelDbId, messages) {
-        if (messages.length === 0)
-            return 0;
-        try {
-            // Use INSERT ... ON CONFLICT to avoid duplicates
-            const values = messages.map((msg, index) => {
-                const base = index * 8;
-                return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`;
-            }).join(', ');
-            const params = [];
-            messages.forEach(msg => {
-                params.push(channelDbId, msg.message_id.toString(), msg.sender_id?.toString() || null, msg.sender_username || null, msg.message_text, msg.message_type, msg.has_media, msg.telegram_created_at);
-            });
-            const query = `
-                INSERT INTO telegram_messages 
-                    (channel_id, message_id, sender_id, sender_username, message_text, message_type, has_media, telegram_created_at)
-                VALUES ${values}
-                ON CONFLICT (message_id, channel_id) DO NOTHING
-                RETURNING id
-            `;
-            const result = await pool.query(query, params);
-            return result.rowCount || 0;
-        }
-        catch (error) {
-            console.error('❌ Error saving messages to database:', error);
-            throw error;
-        }
+        return pollQueries.saveMessages(
+            (text, params) => pool.query(text, params),
+            channelDbId,
+            messages
+        );
     }
-    /**
-     * Update channel last_synced_at timestamp
-     */
+
     async updateChannelSyncTime(channelDbId) {
         try {
             await pool.query('UPDATE telegram_channels SET last_synced_at = NOW(), updated_at = NOW() WHERE id = $1', [channelDbId]);
@@ -265,102 +253,105 @@ class ChannelPollingService {
             console.error(`❌ Error updating sync time for channel ${channelDbId}:`, error);
         }
     }
+
     /**
-     * Poll a single channel
+     * Poll a single channel using an already-connected client for this session identity.
+     * Does not connect, disconnect, or retry.
      */
-    async pollChannel(channel) {
-        let client = null;
+    async pollChannelWithClient(client, channel) {
         try {
-            console.log(`📡 Polling channel: ${channel.title} (${channel.username || channel.channel_id})`);
-            client = await this.getTelegramClient(channel.account_id);
-            await client.connect();
-            // Only fetch messages newer than last we have (so new posts are not missed)
             const lastId = await this.getLastMessageIdForChannel(channel.id);
-            const messages = await this.fetchChannelMessages(client, channel.channel_id, channel.username, this.config.maxMessagesPerChannel, lastId);
+            const messages = await this.fetchChannelMessages(
+                client,
+                channel.channel_id,
+                channel.username,
+                this.config.maxMessagesPerChannel,
+                lastId
+            );
             if (messages.length === 0) {
-                console.log(`   ℹ️  No new messages found`);
                 await this.updateChannelSyncTime(channel.id);
                 return { success: true, messagesCount: 0 };
             }
-            // Save to database
             const savedCount = await this.saveMessages(channel.id, messages);
             await this.updateChannelSyncTime(channel.id);
-            console.log(`   ✅ Saved ${savedCount} new messages`);
             return { success: true, messagesCount: savedCount };
         }
         catch (error) {
-            console.error(`   ❌ Error polling channel ${channel.title}:`, error.message);
-            // حتی در صورت خطا هم زمان آخرین تلاش برای sync را ثبت می‌کنیم
-            // تا در UI ستون "Last Synced" از حالت "never" خارج شود و نشان دهد
-            // آخرین بار چه زمانی تلاش شده است.
+            const timeout = isTimeoutError(error);
+            if (!timeout) {
+                console.error(`   ❌ Error polling channel ${channel.title}:`, error.message);
+            }
             try {
                 await this.updateChannelSyncTime(channel.id);
             }
             catch (e) {
-                // خطای به‌روزرسانی زمان sync نباید کل polling را از کار بیندازد
                 console.error(`   ⚠️ Failed to update last_synced_at for channel ${channel.id}:`, e.message || e);
             }
             return {
                 success: false,
                 messagesCount: 0,
-                error: error.message
+                timeout,
+                error: timeout ? 'TIMEOUT' : (error && error.message)
+            };
+        }
+    }
+
+    /**
+     * Compatibility wrapper only. Production polling uses runPollingCycle →
+     * PollCycleEngine → one connectSessionForGroup per identity →
+     * pollChannelWithClient. This one-off path must not become the cycle owner.
+     */
+    async pollChannel(channel) {
+        let client = null;
+        try {
+            client = await this.getTelegramClient(channel.account_id);
+            await connectAndProve(client);
+            return await this.pollChannelWithClient(client, channel);
+        }
+        catch (error) {
+            const timeout = isTimeoutError(error);
+            if (!timeout) {
+                console.error(`   ❌ Error polling channel ${channel.title}:`, error.message);
+            }
+            try {
+                await this.updateChannelSyncTime(channel.id);
+            }
+            catch (e) {
+                console.error(`   ⚠️ Failed to update last_synced_at for channel ${channel.id}:`, e.message || e);
+            }
+            return {
+                success: false,
+                messagesCount: 0,
+                timeout,
+                error: timeout ? 'TIMEOUT' : (error && error.message)
             };
         }
         finally {
-            if (client) {
-                try {
-                    await client.disconnect();
-                }
-                catch (e) {
-                    // Ignore disconnect errors
-                }
-            }
+            await disconnectClientSafe(client);
         }
     }
-    /**
-     * Run one polling cycle
-     */
+
     async runPollingCycle() {
-        if (this.isRunning) {
-            console.log('⏸️  Polling cycle already running, skipping...');
-            return;
-        }
-        this.isRunning = true;
-        const startTime = Date.now();
         try {
-            console.log('\n🔄 Starting channel polling cycle...');
-            // Get active channels
-            const channels = await this.getActiveChannels();
-            if (channels.length === 0) {
-                console.log('ℹ️  No active channels to poll');
-                return;
+            const outcome = await this.cycleEngine.runPollingCycle();
+            if (outcome.skipped) {
+                console.log('⏸️  Polling cycle already running, skipping...');
+                return outcome;
             }
-            console.log(`📋 Found ${channels.length} active channel(s) to poll`);
-            // Poll each channel
-            const results = await Promise.allSettled(channels.map(channel => this.pollChannel(channel)));
-            // Summary
-            const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-            const failed = results.length - successful;
-            const totalMessages = results
-                .filter(r => r.status === 'fulfilled')
+
+            const totalMessages = (outcome.results || [])
+                .filter((r) => r.status === 'fulfilled')
                 .reduce((sum, r) => sum + (r.value?.messagesCount || 0), 0);
-            // Record polling cycle metrics
             metricsCollector_1.default.recordPollingCycle(totalMessages);
-            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`\n✅ Polling cycle completed in ${duration}s`);
-            console.log(`   📊 Channels: ${successful} successful, ${failed} failed`);
-            console.log(`   📨 Messages: ${totalMessages} new messages saved`);
+            console.log(formatCycleSummary(outcome.summary));
+            return outcome;
         }
         catch (error) {
             console.error('❌ Error in polling cycle:', error.message);
-        }
-        finally {
-            this.isRunning = false;
+            return { skipped: false, error: error.message };
         }
     }
-    /**
-     * Start background polling
-     */
+
     start() {
         if (!this.config.enabled) {
             console.log('⏸️  Channel polling is disabled (set TELEGRAM_POLLING_ENABLED=true to enable)');
@@ -378,21 +369,18 @@ class ChannelPollingService {
         console.log(`     ⚪ NORMAL: ${this.config.priorityIntervals.normal} minute(s) - Standard`);
         console.log(`     ⚫ LOW:    ${this.config.priorityIntervals.low} minute(s) - Less Important`);
         console.log(`   Batch size: ${this.config.batchSize} channels per cycle`);
+        console.log(`   Poll concurrency: ${this.config.pollConcurrency} (default ${DEFAULT_POLL_CONCURRENCY})`);
         console.log(`   Max messages: ${this.config.maxMessagesPerChannel} per channel`);
-        // Run immediately on start
         this.runPollingCycle().catch(err => {
             console.error('❌ Error in initial polling cycle:', err);
         });
-        // Then run on interval (every 1 minute to check for due channels)
         this.intervalId = setInterval(() => {
             this.runPollingCycle().catch(err => {
                 console.error('❌ Error in polling cycle:', err);
             });
         }, intervalMs);
     }
-    /**
-     * Stop background polling
-     */
+
     stop() {
         if (this.intervalId) {
             clearInterval(this.intervalId);
@@ -400,17 +388,17 @@ class ChannelPollingService {
             console.log('🛑 Channel polling service stopped');
         }
     }
-    /**
-     * Get service status
-     */
+
     getStatus() {
         return {
             enabled: this.config.enabled,
             running: this.isRunning,
-            intervalMinutes: this.config.intervalMinutes
+            intervalMinutes: this.config.intervalMinutes,
+            pollConcurrency: this.config.pollConcurrency
         };
     }
 }
-// Singleton instance
+
 const channelPollingService = new ChannelPollingService();
 exports.default = channelPollingService;
+exports.ChannelPollingService = ChannelPollingService;

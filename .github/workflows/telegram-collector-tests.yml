@@ -1,0 +1,39 @@
+name: Telegram Collector Tests
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'telegram-collector/**'
+      - '.github/workflows/telegram-collector-tests.yml'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'telegram-collector/**'
+      - '.github/workflows/telegram-collector-tests.yml'
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+          cache-dependency-path: telegram-collector/package-lock.json
+
+      - name: Install collector lockfile dependencies
+        working-directory: telegram-collector
+        run: npm ci
+
+      - name: Verify telegram@2.26.22
+        working-directory: telegram-collector
+        run: node -e "const v=require('telegram/package.json').version; if (v!=='2.26.22') { console.error('unexpected telegram version', v); process.exit(1); } console.log('telegram@'+v);"
+
+      - name: Run collector unit tests (no DB, no Docker, no provider)
+        working-directory: telegram-collector
+        run: npm test
