@@ -25,4 +25,4 @@ jobs:
           node-version: 20.x
 
       - name: Run collector unit tests (no DB, no Docker, no provider)
-        run: node --test telegram-collector/services/__tests__/channelPolling.stabilization.test.js telegram-collector/services/__tests__/messageProcessor.scheduling.test.js
+        run: node --test telegram-collector/services/__tests__/channelPolling.stabilization.test.js telegram-collector/services/__tests__/channelPolling.connectLifecycle.test.js telegram-collector/services/__tests__/messageProcessor.scheduling.test.js

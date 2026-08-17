@@ -4,8 +4,10 @@
  */
 
 const { parsePollConcurrency, mapWithConcurrency } = require('./pollConcurrency');
-
-const SHARED_PRIMARY_IDENTITY = 'shared-primary';
+const {
+    SHARED_PRIMARY_IDENTITY,
+    disconnectClientSafe,
+} = require('./telegramConnectLifecycle');
 
 function isTimeoutError(error) {
     if (!error) {
@@ -40,27 +42,6 @@ function groupChannelsBySessionIdentity(channels) {
         identityKey,
         channels: grouped,
     }));
-}
-
-async function disconnectClientSafe(client) {
-    if (!client) {
-        return { disconnected: false };
-    }
-    try {
-        if (typeof client.disconnect === 'function') {
-            await client.disconnect();
-        }
-    } catch (_err) {
-        // Ignore disconnect errors — cleanup must remain best-effort and non-throwing.
-    }
-    try {
-        if (typeof client.destroy === 'function') {
-            await client.destroy();
-        }
-    } catch (_err) {
-        // Optional gramJS destroy; ignore if unsupported or already closed.
-    }
-    return { disconnected: true };
 }
 
 function emptySummary(pollConcurrency) {
@@ -162,6 +143,9 @@ class PollCycleEngine {
                         }
                     }
                 } catch (error) {
+                    if (!client && error && error.telegramClient) {
+                        client = error.telegramClient;
+                    }
                     if (isTimeoutError(error)) {
                         summary.timeoutCount += 1;
                     }

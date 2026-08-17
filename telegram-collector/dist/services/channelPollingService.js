@@ -22,10 +22,16 @@ const accountManager_1 = __importDefault(require("../utils/accountManager"));
 const { parsePollConcurrency, DEFAULT_POLL_CONCURRENCY } = require("../../services/pollConcurrency");
 const {
     isTimeoutError,
-    disconnectClientSafe,
     formatCycleSummary,
     PollCycleEngine,
 } = require("../../services/pollCycleEngine");
+const {
+    GRAMJS_EPHEMERAL_CLIENT_OPTIONS,
+    resolvePollingSession,
+    connectAndProve,
+    connectProvenSessionClient,
+    disconnectClientSafe,
+} = require("../../services/telegramConnectLifecycle");
 const pollQueries = require("../../services/pollQueries");
 
 const pool = new Pool({
@@ -37,8 +43,12 @@ const pool = new Pool({
 });
 
 class ChannelPollingService {
-    constructor() {
+    constructor(options = {}) {
         this.intervalId = null;
+        this._createTelegramClient = options.createTelegramClient;
+        this._loadAccountSession = options.loadAccountSession;
+        this._loadPrimarySession = options.loadPrimarySession;
+        this._loadLegacySession = options.loadLegacySession;
         this.config = {
             // Default: enabled. Set TELEGRAM_POLLING_ENABLED=false to disable.
             enabled: process.env.TELEGRAM_POLLING_ENABLED !== 'false',
@@ -123,6 +133,9 @@ class ChannelPollingService {
     /**
      * Get Telegram client with session, optionally for a specific account.
      * Does not connect. Caller owns connect/disconnect for the session identity.
+     *
+     * Explicit account_id groups fail closed when that account session cannot be
+     * loaded. Primary/legacy fallback is only for the shared-primary group.
      */
     async getTelegramClient(accountId) {
         const apiId = parseInt(process.env.TELEGRAM_API_ID || '0');
@@ -130,48 +143,27 @@ class ChannelPollingService {
         if (!apiId || !apiHash) {
             throw new Error('TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured');
         }
-        let sessionString = null;
-        if (accountId) {
-            try {
-                const accountSession = await accountManager_1.default.getDecryptedSessionForAccount(accountId);
-                sessionString = accountSession.sessionString;
-            }
-            catch (error) {
-                console.warn(`⚠️  Could not load session for account ${accountId}:`, error.message);
-            }
-        }
-        if (!sessionString) {
-            try {
-                const primary = await accountManager_1.default.getPrimaryAccountSession();
-                if (primary && primary.sessionString) {
-                    sessionString = primary.sessionString;
-                }
-            }
-            catch (error) {
-                console.warn('⚠️  Could not load primary account session:', error.message);
-            }
-        }
-        if (!sessionString) {
-            const dbSession = await (0, sessionManager_1.getSessionFromDB)('telegram-collector');
-            if (!dbSession || !dbSession.sessionString) {
-                throw new Error('No active Telegram session found. Please complete login first.');
-            }
-            sessionString = dbSession.sessionString;
-        }
-        const session = new sessions_1.StringSession(sessionString);
-        const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
-            connectionRetries: 0,
+        const resolved = await resolvePollingSession({
+            requestedAccountId: accountId,
+            loadAccountSession: this._loadAccountSession
+                || ((id) => accountManager_1.default.getDecryptedSessionForAccount(id)),
+            loadPrimarySession: this._loadPrimarySession
+                || (() => accountManager_1.default.getPrimaryAccountSession()),
+            loadLegacySession: this._loadLegacySession
+                || (() => (0, sessionManager_1.getSessionFromDB)('telegram-collector')),
         });
-        return client;
+        const session = new sessions_1.StringSession(resolved.sessionString);
+        const createClient = this._createTelegramClient
+            || ((sess, id, hash, opts) => new telegram_1.TelegramClient(sess, id, hash, opts));
+        return createClient(session, apiId, apiHash, { ...GRAMJS_EPHEMERAL_CLIENT_OPTIONS });
     }
 
     async connectSessionForGroup(identityKey, channels) {
-        const accountId = identityKey.startsWith('account:')
-            ? identityKey.slice('account:'.length)
-            : (channels[0] && channels[0].account_id) || null;
-        const client = await this.getTelegramClient(accountId);
-        await client.connect();
-        return client;
+        return connectProvenSessionClient(
+            identityKey,
+            channels,
+            (accountId) => this.getTelegramClient(accountId)
+        );
     }
 
     async getLastMessageIdForChannel(channelDbId) {
@@ -302,7 +294,7 @@ class ChannelPollingService {
         let client = null;
         try {
             client = await this.getTelegramClient(channel.account_id);
-            await client.connect();
+            await connectAndProve(client);
             return await this.pollChannelWithClient(client, channel);
         }
         catch (error) {
