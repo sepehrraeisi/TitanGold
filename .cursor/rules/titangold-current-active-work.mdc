@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 offline migration runner capsule source/CI
+description: TitanGold Rule 02 — C2 offline migration runner capsule source/CI verified
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 OFFLINE MIGRATION RUNNER CAPSULE SOURCE/CI IMPLEMENTATION**
+C2 OFFLINE MIGRATION RUNNER CAPSULE SOURCE/CI VERIFIED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -32,6 +32,19 @@ Capsule design governance squash merge:
 C2 accepted migration SHA256:
 `2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
 
+Accepted capsule technical head:
+`343d2b368166562afe90fc51b7fb39c141ba936c`
+
+Accepted PR CI run:
+`32245650087`
+
+Accepted PR evidence artifact SHA256:
+`81fa8f1994c3be9e94beb0cd34b703374b367f0de9e5d5a28bf36cfcac22211c`
+
+That artifact SHA is **PR TEST EVIDENCE ONLY / NOT PRODUCTION AUTHORITY**.
+The production-candidate artifact must later be rebuilt by VERIFY_ONLY
+from the actual post-squash-merge main SHA.
+
 Capsule design packet:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_CAPSULE_DESIGN_20260817T184508Z.txt`
 
@@ -39,17 +52,21 @@ Capsule design packet:
 
 **C1 PRODUCTION = VERIFIED**
 **C2 SOURCE/CI = VERIFIED**
+**C2 CAPSULE SOURCE FINAL REVIEW = PASS**
+**C2 CAPSULE CI = PASS**
 **C2 052 = NOT EXECUTED**
 **C2_PRODUCTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
+**PRODUCTION CAPSULE = NOT STAGED**
+**PUBLIC GITHUB RELEASE = NOT PUBLISHED**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-## Capsule (this branch)
+## Capsule (source/CI verified)
 
 **CAPSULE_DESIGN = COMPLETE**
 **RUNNER MODEL = R2**
@@ -60,22 +77,31 @@ Root dependencies = `node-pg-migrate` 8.0.4 and `pg` 8.16.3
 **CAPSULE_INCLUDES_052 = NO**
 **RECOMMENDED_CAPSULE_DELIVERY = D2**
 Artifact authority = CONTENT SHA256
-**CAPABILITY_LIMITED_LAUNCHER = IMPLEMENTED**
+**CAPABILITY_LIMITED_LAUNCHER = PASS**
+Allowed operations = `up` / `down` only
+Allowed migration = `052_telegram_messages_channel_message_id_index.js` only
+Arbitrary CLI passthrough = NO
+050/051 isolation = PASS
 
 **APPLICATION NODE_MODULES = UNCHANGED**
 backend `package.json` / `package-lock.json` must not be modified.
 
-Authorized on this branch:
+**VERIFY_ONLY = IMPLEMENTED**
+`workflow_dispatch` with blank `confirm` = VERIFY_ONLY
+VERIFY_ONLY publish-specific inputs must be empty
+Invalid nonempty confirm = FAIL CLOSED
+VERIFY_ONLY runs Build + Consumer + PG14 and skips Publish
 
-- capsule source
-- dedicated capsule lockfile
-- launcher / self-test
-- build / verify tooling
-- dedicated CI workflow
-- Draft PR
+**D2 PUBLISH MECHANISM = IMPLEMENTED / NOT INVOKED**
+Publish requires `workflow_dispatch`, main, exact token
+`PUBLISH_C2_CAPSULE_D2`, exact source commit, exact archive SHA,
+exact tag `c2-runner-capsule-<source-sha-first12>`, same-run artifact,
+independent SHA verification, and no existing tag/release collision.
+No automatic publish on push, PR, or tag overwrite.
 
-NOT authorized:
+NOT authorized now:
 
+- VERIFY_ONLY dispatch on merged main (next Owner gate)
 - public GitHub Release publication
 - production capsule staging
 - production C2 / 052 execution
@@ -88,13 +114,13 @@ NOT authorized:
 **ZERO_LOSS_COLLECTOR_PAUSE_CATCHUP_SAFETY = UNSAFE**
 **OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
 **C2_CONTROLLED_COLLECTOR_PAUSE =
-ELIGIBLE FOR A FUTURE EXPLICIT OWNER EXECUTION GATE**
+FUTURE EXPLICIT OWNER EXECUTION GATE ONLY**
 **CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 
 **IO_EXECUTION_STRATEGY =
 CONTROLLED_PAUSE_ELIGIBLE_BUT_NOT_YET_AUTHORIZED**
 
-Building or merging the capsule does **not** authorize production 052.
+Capsule source/CI merge does **not** authorize production 052.
 The runner blocker and the IO safety gate remain separate.
 
 ## Future C2 pre-build resource gate (ACTIVE / MANDATORY)
@@ -121,8 +147,14 @@ One favorable sample must not override a bad observation window.
 
 ## Next Owner gate
 
-**C2 OFFLINE MIGRATION RUNNER CAPSULE
-SOURCE/CI FINAL REVIEW**
+**C2 CAPSULE POST-MERGE MAIN
+VERIFY-ONLY + ARTIFACT SHA FREEZE**
 
-This does **not** authorize production execution of 052,
-Release publication, collector pause, or production staging.
+This next gate authorizes only:
+
+- `workflow_dispatch` VERIFY_ONLY on actual merged main
+- final artifact SHA derivation
+- artifact provenance/integrity review
+
+It does **not** authorize D2 publication, production staging,
+collector pause, 052 execution, 050, or 051.
