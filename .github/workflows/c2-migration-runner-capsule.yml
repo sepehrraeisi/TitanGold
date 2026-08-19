@@ -160,6 +160,7 @@ jobs:
     name: C2 Capsule Clean Consumer
     runs-on: ubuntu-22.04
     needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' }}
     steps:
       - name: Checkout exact source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -258,6 +259,7 @@ jobs:
     name: C2 Capsule PG14 Integration
     runs-on: ubuntu-22.04
     needs: build
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' }}
     services:
       postgres:
         image: postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
