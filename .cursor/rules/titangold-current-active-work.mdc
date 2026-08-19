@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; pause retry #2 restored; post-pause gate FAIL_IO_PRESSURE
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; post-pause IO RCA complete; foreground query remediation DESIGN next
 alwaysApply: true
 ---
 
@@ -8,9 +8,9 @@ alwaysApply: true
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
-CONTROLLED PAUSE RETRY #2 COMPLETE + RESTORED /
-POST-PAUSE RESOURCE GATE FAIL_IO_PRESSURE /
-IO BLOCKER RCA NEXT**
+POST-PAUSE IO RCA COMPLETE /
+PRIMARY DRIVER POSTGRES_FOREGROUND_QUERY_IO /
+FOREGROUND QUERY REMEDIATION DESIGN NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -50,16 +50,22 @@ Pause attempt #1 evidence packet:
 SHA256:
 `17e3e6a5ba428803d1d1efdd6e8261558248a28403428e6c486f1a3c4b5ed360`
 
-That historical packet is unchanged. Attempt #1 remains incomplete for
-post-pause resource proof (`sample_count = 0` / `NOT_MEASURED`).
-
 Pause retry #2 evidence packet:
 `/home/ubuntu/TITANGOLD_C2_CONTROLLED_PAUSE_RETRY2_20260819T145718Z.txt`
 SHA256:
 `e9eb59f5f9238509a0139a93f6cb66ec8f3679494631d4c7bb1b9c9cb2255d8e`
 bytes = 6243
 
-Retry #2 is the current formal post-pause measurement authority.
+Retry #2 remains the formal collector-off resource-gate authority.
+
+Post-pause IO RCA packet:
+`/home/ubuntu/TITANGOLD_C2_POST_PAUSE_IO_RCA_20260819T155156Z.txt`
+SHA256:
+`9f11613a8f9b5f84db75ab3dc1e147fac2beba45ec5cc6765dd3121c4b08d801`
+bytes = 18109
+
+The RCA packet is the current attribution authority. It does not replace
+retry #2 as the collector-off gate measurement.
 
 ## Production capsule staging
 
@@ -77,13 +83,26 @@ Capsule root:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86_CLEAN1/payload/titangold-c2-runner`
 
 **PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
-Manifest source = `13bd0b5def6d14584be4a4fa5c2ef5d58c252266`
-Node = `v20.19.5`
-node-pg-migrate = `8.0.4`
-pg = `8.16.3`
-package-lock SHA256 = `740a49a2722139446b3f925429e18681510f42c75c9e67568b15befca3e53e8a`
-Offline self-test = PASS
 Capsule DB connection attempted = NO
+
+## Capsule execution contract (frozen)
+
+**RUNNER MODEL = R2**
+**NODE MODEL = N1** (`v20.19.5` / linux x64)
+**node-pg-migrate = 8.0.4**
+**pg = 8.16.3**
+**PURE_JS_CLOSURE = YES**
+**CAPSULE_INCLUDES_052 = NO**
+**CAPABILITY_LIMITED_LAUNCHER = PASS**
+**APPLICATION NODE_MODULES = UNCHANGED**
+
+Frozen capsule SHA256:
+`4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
+
+Canonical 052 SHA256:
+`2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
+
+Do not rebuild, download, run, or connect the capsule to DB in this closeout.
 
 ## State
 
@@ -93,6 +112,7 @@ Capsule DB connection attempted = NO
 **PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
 **C2 052 = NOT EXECUTED**
 **C2_052_EXECUTION_AUTHORIZED = NO**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
 **C2_PRODUCTION_EXECUTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
@@ -108,236 +128,400 @@ Capsule DB connection attempted = NO
 **CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 **C2_POST_PAUSE_RESOURCE_GATE = FAIL_IO_PRESSURE**
 **C2 RESOURCE BLOCKER = ACTIVE**
+**C2 POST-PAUSE IO BLOCKER RCA = COMPLETE**
+**RCA_CONFIDENCE = HIGH**
+**C2_IO_PRIMARY_DRIVER = POSTGRES_FOREGROUND_QUERY_IO**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-## Capsule contract
+`READY_TO_APPLY` means schema/ledger readiness only.
+It does **not** mean `RESOURCE_SAFE_TO_EXECUTE`.
 
-**RUNNER MODEL = R2**
-**NODE MODEL = N1** (`v20.19.5` / linux x64)
-**node-pg-migrate = 8.0.4**
-**pg = 8.16.3**
-**PURE_JS_CLOSURE = YES**
-**CAPSULE_INCLUDES_052 = NO**
-**CAPABILITY_LIMITED_LAUNCHER = PASS**
-**APPLICATION NODE_MODULES = UNCHANGED**
+## RCA execution provenance
 
-## Formal pre-pause resource baseline
+**READ_ONLY = YES**
+production DB mutation = 0
+PM2 mutation = 0
+process cancellation = 0
+VACUUM = NO
+ANALYZE = NO
+CREATE/DROP/REINDEX = NO
+052 = NOT EXECUTED
+capsule DB connection = NO
+OS tuning = 0
+swap mutation = 0
+production repo mutation = 0
+Rule02 mutation during RCA = 0
 
-samples = 6
-span = 303.1 seconds
-median dm-0 util = 97.71
-median iowait = 12.5
-swap-out positive = 5/6
-consecutive severe pair = YES
-**C2_PRE_MAINTENANCE_RESOURCE_GATE = FAIL_IO_PRESSURE**
+## Resource gate — ACTIVE / MANDATORY
 
-This remains the proven collector-online IO baseline. It is not replaced by
-the post-pause window; the post-pause window is a separate measurement.
+Minimum observation:
 
-## Controlled pause attempt #1 (historical / incomplete proof)
+- at least 5 minutes
+- at least 5 samples
+- approximately 60 seconds apart
+- first-to-last formal span must be at least 300 seconds
 
-Attempt #1 executed and restored the collector, but collected **zero**
-post-pause resource samples because the test contract incorrectly required
-collector-owned port 5003 to remain healthy while the collector was stopped.
+Reject if ANY of:
 
-**C2_POST_PAUSE_RESOURCE_GATE (attempt #1) = INCOMPLETE_BOUNDED_WINDOW**
-**COLLECTOR_PAUSE_IO_EFFECT (attempt #1) = NOT_MEASURED**
+A.
+swap-out (`so`) > 0 on a majority of samples
 
-Do not use attempt #1 as the current post-pause resource authority.
+B.
+median data-device (`dm-0`) `%util` >= 80
+AND
+median iowait >= 10
+
+C.
+any two consecutive samples with:
+dm-0 `%util` >= 95
+AND
+iowait >= 10
+
+One favorable sample must not override a bad observation window.
+Do not weaken these thresholds.
+C2 052 must not execute while the resource gate is failed.
+
+These are existing safety semantics, not new policy.
+
+Retry #2 collector-off formal window remains FAIL_IO_PRESSURE:
+
+- samples = 6 / span = 319.0 seconds
+- median dm-0 util = 95.6 / median iowait = 11.0 / swap-out positive = 4/6
+- severe consecutive pair = YES
+- reject A/B/C all fired
+- **COLLECTOR_REMOVAL_SUFFICIENT_TO_PASS_RESOURCE_GATE = NO**
 
 ## Port 5003 corrected health semantics
 
 **PORT 5003 OWNERSHIP = TELEGRAM COLLECTOR**
 **COLLECTOR_PORT_5003_DURING_INTENTIONAL_PAUSE = EXPECTED_UNAVAILABLE**
 
-Do not classify 5003 unavailability during an intentional collector stop as
-backend health failure.
-
 Health contract:
 
-- Pre-pause: 5002=200 mandatory; 5003=200 mandatory
-- During intentional collector pause: 5002=200 mandatory; 5003 expected unavailable; no unexpected replacement listener on 5003
-- Post-recovery: 5002=200 mandatory; 5003=200 mandatory; 5003 listener must belong to the restored intended collector
+Pre-pause:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = HTTP 200 mandatory
 
-Retry #2 used this contract and it **passed**.
+During an explicitly authorized intentional collector pause:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = expected unavailable
+- no unexpected replacement listener on 5003
 
-## Controlled pause retry #2
+Post-recovery:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = HTTP 200 mandatory
+- 5003 listener must belong to the restored intended collector
 
-**CONTROLLED COLLECTOR PAUSE ATTEMPT = #2 COMPLETE**
-collector identity = UNAMBIGUOUS
-PM2 process = `telegram-collector`
-PM2 id = 16
-pre-stop PID = 1469107
-pre-stop restart count = 13553
-pre-stop 5002 = 200
-pre-stop 5003 = 200
-pre-stop 5003 owner = collector PID 1469107
-PAUSE2_START_UTC = `2026-08-19T14:50:29Z`
-pm2 stop = SUCCESS
-collector stopped = YES
-during pause 5002 = 200
-during pause 5003 listener = ABSENT / EXPECTED
-unexpected replacement listener = NO
+Current gate does **not** authorize any collector pause.
+**CURRENT COLLECTOR PAUSE = NO**
+**CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 
-**DRAIN_RESULT = PASS_WITH_UNATTRIBUTED_SELECTS**
+Do not execute these health checks as a production operation in this closeout.
 
-Facts:
+## Bounded maintenance-gap safety
 
-- idle-in-transaction = 0
-- unexpected transaction ≥60s = 0
-- active CREATE INDEX / REINDEX = NO
-- telegram_messages queries initially = 6, then 0, later 3 SELECTs without application_name
-- attribution of those final SELECTs to the stopped collector = NOT PROVEN
-
-Do not claim those SELECTs were collector queries.
-Do not turn unattributed SELECTs into a retroactive blocker.
-
-## Retry #2 complete post-pause resource window
-
-formal sample count = 6
-sample #1 = `2026-08-19T14:51:12Z`
-sample #6 = `2026-08-19T14:56:31Z`
-formal observation span = 319.0 seconds
-collector = STOPPED throughout formal window
-5002 = 200 throughout
-5003 intended listener = ABSENT throughout
-unexpected 5003 replacement = NO
-MemAvailable ≈ 13.5–13.6 GiB
-root free ≈ 85–87 GiB
-idle-in-transaction = 0 throughout
-active index build = NO throughout
-
-Formal samples:
-
-1. so=5296 iowait=12 dm-0 util=100.0
-2. so=352 iowait=3 dm-0 util=92.4
-3. so=0 iowait=6 dm-0 util=33.6
-4. so=28 iowait=19 dm-0 util=98.8
-5. so=36 iowait=17 dm-0 util=99.2
-6. so=0 iowait=10 dm-0 util=50.0
-
-median dm-0 util = 95.6
-median iowait = 11.0
-swap-out positive = 4/6
-severe consecutive pair = YES (samples 4 and 5)
-
-## Post-pause resource gate verdict
-
-**C2_POST_PAUSE_RESOURCE_GATE = FAIL_IO_PRESSURE**
-
-This formal gate result is the decision authority. All three independent
-rejection clauses fired:
-
-- A: swap-out > 0 on majority = YES (4/6)
-- B: median dm-0 util ≥ 80 AND median iowait ≥ 10 = YES (95.6 / 11.0)
-- C: two consecutive severe samples = YES (samples 4–5)
-
-## IO effect interpretation
-
-**COLLECTOR_PAUSE_IO_EFFECT = NO_MATERIAL_RECOVERY**
-
-This is a **descriptive interpretation of the complete window**, not a new
-numeric policy threshold.
-
-Do **not** record or adopt invented thresholds such as util improvement ≥ 10,
-iowait improvement ≥ 5, or any other quantitative "material recovery" rule.
-Those thresholds are **not** Owner-approved and are **not** part of Rule 02.
-
-Observed comparison only:
-
-- pre median util = 97.71 → post = 95.6
-- pre median iowait = 12.5 → post = 11.0
-- pre swap-out positive = 5/6 → post = 4/6
-
-Collector removal did not make the host pass the mandatory resource gate.
-
-**COLLECTOR_REMOVAL_SUFFICIENT_TO_PASS_RESOURCE_GATE = NO**
-
-This does **not** prove the collector contributes zero IO.
-It proves that removing the collector for the complete test window was **not**
-sufficient to bring production below the mandatory C2 resource thresholds.
-
-Therefore: **do not execute 052.** A broader post-pause IO blocker RCA is required.
-
-## Collector recovery (retry #2)
-
-recovery command = `pm2 restart 16`
-emergency fallback = NO
-PAUSE2_RESTART_COMMAND_UTC = `2026-08-19T14:56:31Z`
-PAUSE2_ONLINE_UTC = `2026-08-19T14:56:31Z`
-stop-to-restart = 361.944 seconds
-stop-to-online = 362.355 seconds
-480-second boundary exceeded = NO
-post-recovery PM2 id = 16
-post-recovery PID = 1481973
-post-recovery status = online
-post-recovery 5002 = 200
-post-recovery 5003 = 200
-5003 ownership restored = YES
-polling resumed = YES
-polling attempted/succeeded/failed = 10 / 10 / 0
-Telegram reauth prompt = NO
-session reuse = PASS / decrypt YES
-**COLLECTOR_RECOVERY = PASS**
-**COLLECTOR = RESTORED ONLINE + FUNCTIONAL**
-
-## Data gap
-
-**POTENTIAL_TELEGRAM_INGESTION_GAP = YES**
-bounded duration = 362.355 seconds
 **OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
 **ZERO_LOSS_CATCHUP = NOT GUARANTEED**
-exact lost-message count = NOT PROVEN
+Permanent/unbounded ingestion loss = **NOT AUTHORIZED**
+Retry #2 historical potential ingestion-gap duration ≈ 362.355 seconds
+Exact lost-message count = NOT PROVEN
 
-## Resource gate (ACTIVE / MANDATORY; thresholds unchanged)
+This does **not** authorize another pause.
 
-Minimum observation: **≥5 minutes**, ≥5 samples, ~60 seconds apart.
-For ~60-second spacing, collect enough samples to prove first-to-last span
-**≥300 seconds**.
+## Device RCA
 
-Reject if **any** of:
+PG data device = `/dev/dm-0`
+filesystem = ext4
+backing storage = rotational LVM
+RCA formal samples = 11
+formal observation start = `2026-08-19T15:38:52Z`
+formal observation end = `2026-08-19T15:49:27Z`
+formal observation span = 635 seconds
+median dm-0 util = 99.6
+median iowait = 21.0
+median rkB/s = 341280
+rkB/s range = 39548–628344
+median wkB/s = 1924
+median aqu-sz = 21.47
+**DEVICE_RW_CHARACTER = READ_HEAVY**
+**DEVICE_BEHAVIOR = THROUGHPUT_SATURATED + QUEUE_SATURATED**
+kernel/storage error evidence = NONE OBSERVED in the bounded RCA window
 
-- swap-out (`so`) > 0 on a majority of samples
-- **median** data-device (`dm-0`) `%util` ≥ 80 **AND** median iowait ≥ 10
-- **any two consecutive** samples with dm-0 `%util` ≥ 95 **AND** iowait ≥ 10
+Do not claim physical device failure.
 
-One favorable sample must not override a bad observation window.
-Do not weaken these thresholds.
+## PostgreSQL IO character
+
+**POSTGRES_IO_CHARACTER = FOREGROUND_READ**
+DB blks_read delta = 49,708,216
+DB blks_hit delta = 13,819,005
+delta cache hit ratio ≈ 21.7%
+temp_files delta = 16,863
+temp_bytes delta = 19,929,268,224 (~18.56 GiB in RCA window)
+**CHECKPOINT_IO_PRESSURE = LOW**
+**WAL_IO_PRESSURE = LOW**
+WAL bytes delta ≈ 72.4 MiB
+
+Checkpoint/WAL are **not** the primary saturation explanation.
+
+## Primary query driver #1 — telegram-processor
+
+workload = telegram-processor
+PM2 id during RCA = 11
+PID during RCA = 2827901
+query family = TELEGRAM_UNPROCESSED_FETCH
+query semantics = `telegram_messages` joined to `telegram_channels` with
+`NOT EXISTS` against `processed_telegram_messages`
+**RUNTIME_CLIENT_ATTRIBUTION = PROVEN**
+
+Impact evidence:
+
+- telegram_messages seq_scan delta = 48
+- telegram_messages seq_tup_read delta = 125,947,803
+- processed_telegram_messages heap_blks_read delta = 10,221,125
+- processed_telegram_messages seq_scan delta = 33
+- processed_telegram_messages seq_tup_read delta = 127,928,676
+- processed_telegram_messages last vacuum/autovacuum/analyze/autoanalyze = NONE
+
+Do not claim bloat is proven.
+
+Fresh origin/main source review:
+
+**PROCESSOR_CANONICAL_SOURCE = telegram-collector/services/messageProcessor.js**
+**PROCESSOR_SOURCE_MATCH = VERIFIED-BY-SOURCE-REVIEW**
+
+`getUnprocessedMessages()` on current main contains the matching
+`NOT EXISTS` / `processed_telegram_messages` family.
+
+Keep separate from runtime attribution. Source match alone does not prove
+runtime ownership; runtime ownership was proven independently by socket/PID
+correlation during RCA.
+
+## Primary query driver #2 — titan-engine-worker
+
+workload = titan-engine-worker
+observed PID = 1510
+query family = COLLECTED_DATA_TELEGRAM_MESSAGE_JSONB_LOOKUP
+observed SQL semantics = `source_id` membership +
+`raw_data ->> telegram_message_id` membership
+**RUNTIME_CLIENT_ATTRIBUTION = PROVEN**
+
+Relation evidence:
+
+- collected_data heap_blks_read delta = 32,062,720
+- collected_data seq_scan delta = 63
+- collected_data seq_tup_read delta = 187,917,338
+- collected_data last autovacuum stale relative to RCA context
+
+Fresh origin/main source review:
+
+`backend/services/telegramIngest.js` = ABSENT on current main.
+
+**ENGINE_QUERY_CANONICAL_SOURCE = backend/services/telegramPipeline.js**
+**ENGINE_SOURCE_MATCH = VERIFIED-BY-SOURCE-REVIEW**
+
+`loadExistingTelegramKeys()` on current main contains:
+
+`SELECT source_id::text, raw_data->>'telegram_message_id' ... FROM collected_data
+ WHERE source_id = ANY($1::uuid[])
+   AND raw_data->>'telegram_message_id' = ANY($2::text[])`
+
+Do not treat the RCA-suggested `telegramIngest.js` path as canonical.
+Do not guess additional paths.
+
+## Collector MAX query
+
+**TELEGRAM_MAX_QUERY_CURRENT_MATERIALITY = MEDIUM**
+Runtime caller during RCA = telegram-collector only
+Other caller proven = NO
+Canonical MAX helper on current main =
+`telegram-collector/services/pollQueries.js`
+(`SELECT MAX(message_id) AS max_id FROM telegram_messages WHERE channel_id = $1`)
+idx_telegram_messages_unique physical reads remain material.
+
+**COLLECTOR MAX QUERY SUFFICIENT ROOT CAUSE = NOT SUPPORTED**
+
+because collector-off retry #2 still failed the mandatory resource gate.
+
+Do not remove C2 052 rationale.
+Do not claim the MAX query has zero cost.
+
+## Memory / swap amplifier
+
+Swap used at RCA start ≈ 1.98 / 2.00 GiB
+pswpout delta = 225040
+pswpin delta = 182242
+kswapd scan delta ≈ 47.99M
+kswapd steal delta ≈ 46.68M
+PSI IO = material/high during RCA
+PSI memory = material
+**MEMORY_RECLAIM_PRESSURE = MATERIAL**
+Causal classification = **MATERIAL AMPLIFIER**, not the sole primary SQL source.
+Do not claim swap pressure is harmless.
+
+## Stale stats evidence grade
+
+**STALE_STATS_RISK = MATERIAL**
+telegram_messages last autoanalyze = 2026-08-14
+processed_telegram_messages = NEVER analyzed / vacuumed in recorded statistics
+collected_data statistics/maintenance = stale in RCA context
+
+PROVEN: statistics are stale/missing as observed.
+STRONGLY SUPPORTED: they may contribute to poor planner choices / parallel sequential scans.
+Do **not** state as proven that stale stats alone caused the seq scans.
+No ANALYZE is authorized by this governance closeout.
+
+## Concurrency / parallelism
+
+max_connections = 100
+observed connections ≈ 19–27
+connection exhaustion = NOT PRESENT
+parallel workers / query parallelism = MATERIAL IO AMPLIFIER
+Do not classify max_connections as root cause.
+
+## Safe time-window conclusion
+
+**SAFE_TIME_WINDOW_ONLY_REMEDIATION = UNLIKELY**
+
+Basis: persistent saturation across the RCA window; continuously running
+foreground workloads; collector-off test already failed.
+Do not state IMPOSSIBLE unless directly proven.
+
+## Root-cause statement
+
+PROVEN:
+
+- dm-0 pressure is read-heavy / throughput+queue saturated
+- PostgreSQL foreground reads dominate the relevant DB workload
+- telegram-processor runtime client issues the unprocessed NOT EXISTS family
+- titan-engine-worker runtime client issues the collected_data JSONB lookup
+- those relations exhibit very large physical/sequence-read deltas
+- stopping collector alone was insufficient to pass the C2 resource gate
+
+STRONGLY SUPPORTED:
+
+- stale/missing relation statistics contribute to inefficient query plans
+- swap/kswapd reclaim materially amplifies IO pressure
+
+NOT SUPPORTED:
+
+- collector MAX(message_id) is the sufficient cause of collector-off failure
+- checkpoint or WAL activity is the primary saturation driver
+
+**RCA_CONFIDENCE = HIGH**
+
+## Primary driver and ordered secondaries
+
+**C2_IO_PRIMARY_DRIVER = POSTGRES_FOREGROUND_QUERY_IO**
+
+1. telegram-processor unprocessed NOT EXISTS / seq-scan family — HIGH / HIGH
+2. titan-engine-worker collected_data JSONB lookup — HIGH / HIGH
+3. memory reclaim / swap / kswapd — HIGH AS AMPLIFIER / HIGH
+4. collector MAX + reversed unique index reads — MEDIUM occurrence / LOW as sufficient root cause / HIGH for occurrence
+5. checkpoint/WAL — LOW / HIGH
+
+Do not invent percentages.
+
+## Design candidates only — no implementation
+
+**CANDIDATE_1 (DESIGN ONLY)** = telegram-processor unprocessed-fetch remediation  
+Target: NOT EXISTS / sequential-scan foreground query pressure  
+Surfaces may include query semantics, processed_telegram_messages lookup path,
+telegram_messages unprocessed path, statistics state, and temp-spill behavior.  
+Exact SQL rewrite, exact index, exact migration, ANALYZE, and restart plan are
+**not** decided here. Potential migration = MAYBE. No migration is authorized.
+
+**CANDIDATE_2 (DESIGN ONLY)** = collected_data telegram-message lookup remediation  
+Target: JSONB membership lookup causing collected_data sequential reads  
+Surfaces may include typed/indexable representation, query-shape redesign,
+existing schema/index capability, and confirmed canonical source ownership.  
+Potential migration = LIKELY / TO BE DESIGNED.  
+Do not choose generated column, side table, expression index, typed physical
+column, or specific index shape yet.
+
+**DESIGN PRIORITY = POSTGRES FOREGROUND QUERY REMEDIATION**
+
+The next design gate must evaluate **both** families before selecting
+implementation ordering. It may conclude candidate #1 first, candidate #2
+first, or a staged combination. Do not pre-authorize either implementation.
+
+## 052 safety
+
+**C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+
+Do not weaken resource thresholds.
+Do not interpret this RCA as authorization to build the C2 index.
+
+## Source-path rule
+
+Do not convert RCA `SOURCE_MATCH_PROBABLE` into canonical source authority
+without current-main repo verification.
+
+Fresh origin/main verification for this closeout:
+
+- processor = `telegram-collector/services/messageProcessor.js` VERIFIED
+- engine JSONB = `backend/services/telegramPipeline.js` VERIFIED
+- `backend/services/telegramIngest.js` = ABSENT; do not use it
+
+Any later source move must be rediscovered on then-current main before
+implementation is proposed.
 
 ## Next Owner gate
 
-**C2 POST-PAUSE IO BLOCKER RCA**
+**C2 POST-PAUSE IO BLOCKER
+POSTGRES FOREGROUND QUERY REMEDIATION DESIGN**
 
-This gate may authorize read-only production investigation,
-process/device/DB attribution, query/IO correlation, an RCA evidence packet,
-and candidate remediation design.
+This gate may authorize:
 
-Read-only RCA should at minimum investigate:
-
-- PostgreSQL IO independent of the collector
-- currently active query families after collector-removal evidence
-- telegram_messages and other high-IO relations
-- buffer/cache miss pressure
-- checkpoint / background writer / WAL pressure
-- autovacuum/vacuum/analyze state
-- swap pressure / memory reclaim
-- filesystem/device queueing and latency
-- other TitanGold processes
-- non-TitanGold host processes if material
-- unexplained telegram_messages SELECTs without application_name
-- whether MAX(message_id) remains material when collector is not the source
-- whether host/device saturation is driven by another workload
-- whether a safe time-window change alone could solve the gate
-- whether a technical remediation is required before 052
-
-RCA is read-only discovery unless a later exact Owner task authorizes a fix.
+- repository read-only source discovery
+- production read-only schema/index/statistics discovery
+- exact SQL/query-shape analysis
+- EXPLAIN WITHOUT ANALYZE only if demonstrably read-only and low-risk
+- source/runtime ownership mapping
+- comparison of remediation alternatives
+- migration/index DESIGN
+- statistics remediation DESIGN
+- service-restart DESIGN
+- sequencing/design of candidate #1 and #2
+- deterministic test-plan design
+- rollback design
+- production verification metric design
+- governance design evidence
 
 This gate does **not** authorize:
 
-052, capsule DB connection, CREATE/DROP INDEX, VACUUM/ANALYZE,
-query cancellation, process kill/restart, PM2 mutation, OS tuning,
-swap mutation, DB config mutation, pgmigrations, 050, or 051.
+source implementation, migration implementation, CREATE/DROP INDEX,
+ANALYZE, VACUUM, EXPLAIN ANALYZE, DB mutation, capsule DB connection,
+processor/engine/collector restart, PM2 mutation, OS/swap tuning,
+052, 050, or 051.
+
+## Remediation DESIGN hard requirements before implementation
+
+The design gate must resolve before any implementation:
+
+1. exact canonical current-main source owner of processor query
+2. exact canonical current-main source owner of engine JSONB query
+3. full table schemas for telegram_messages, processed_telegram_messages, collected_data
+4. all existing indexes for those tables
+5. exact constraints / uniqueness / nullability / data types
+6. exact processor SQL semantics and result ordering/limit semantics
+7. exact engine JSONB lookup semantics
+8. current read-only EXPLAIN plans where safe
+9. why idx_unprocessed_created scan delta was zero
+10. processed_telegram_messages access-path requirements
+11. whether stale stats remediation alone could materially change plan
+12. whether ANALYZE would be enough, insufficient, or only complementary
+13. whether candidate #1 requires a migration
+14. whether candidate #2 requires a migration
+15. migration sequencing relative to existing 050/051/052
+16. concurrent-index requirements for live production
+17. rollback strategy
+18. deterministic test plan
+19. source/service restart requirements
+20. verification against dm-0 / temp_bytes / seq_scan / physical-read metrics
