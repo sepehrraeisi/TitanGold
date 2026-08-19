@@ -20,12 +20,16 @@ on:
         required: false
         default: ''
       release_tag:
-        description: 'Release tag, for example c2-runner-capsule-<sha12>'
+        description: 'Must be exactly c2-runner-capsule-<first 12 chars of source_commit>'
         required: false
         default: ''
 
 permissions:
   contents: read
+
+env:
+  SOURCE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  SOURCE_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
 
 jobs:
   build:
@@ -36,11 +40,27 @@ jobs:
       archive_bytes: ${{ steps.pack.outputs.archive_bytes }}
       source_commit: ${{ steps.pack.outputs.source_commit }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
+
+      - name: Prove source identity
+        run: |
+          set -euo pipefail
+          ACTUAL_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          echo "EXPECTED_SOURCE_REF=${SOURCE_REF}"
+          echo "ACTUAL_SOURCE_COMMIT=${ACTUAL_SOURCE_COMMIT}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          test "${ACTUAL_SOURCE_COMMIT}" = "${SOURCE_REF}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            test "${ACTUAL_SOURCE_COMMIT}" != "${GITHUB_SHA}"
+          fi
 
       - name: Setup Node 20.19.5
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20.19.5'
 
@@ -60,7 +80,9 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x tools/c2-migration-runner-capsule/scripts/*.sh
-          export SOURCE_COMMIT="${GITHUB_SHA}"
+          ACTUAL_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          test "${ACTUAL_SOURCE_COMMIT}" = "${SOURCE_REF}"
+          export SOURCE_COMMIT="${ACTUAL_SOURCE_COMMIT}"
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           OUT_A="${RUNNER_TEMP}/c2-out-a"
           OUT_B="${RUNNER_TEMP}/c2-out-b"
@@ -70,20 +92,24 @@ jobs:
           SHA_A="$(awk -F= '/^ARCHIVE_SHA256=/{print $2}' "${RUNNER_TEMP}/build-a.txt")"
           SHA_B="$(awk -F= '/^ARCHIVE_SHA256=/{print $2}' "${RUNNER_TEMP}/build-b.txt")"
           BYTES_A="$(awk -F= '/^ARCHIVE_BYTES=/{print $2}' "${RUNNER_TEMP}/build-a.txt")"
+          SRC_A="$(awk -F= '/^SOURCE_COMMIT=/{print $2}' "${RUNNER_TEMP}/build-a.txt")"
           echo "build A ${SHA_A}"
           echo "build B ${SHA_B}"
+          echo "PR_HEAD_SHA=${SOURCE_REF}"
+          echo "ARTIFACT_MANIFEST_SOURCE_COMMIT=${SRC_A}"
           if [[ "${SHA_A}" != "${SHA_B}" ]]; then
             echo "DETERMINISTIC_CAPSULE_ARTIFACT=FAIL" >&2
             exit 1
           fi
+          test "${SRC_A}" = "${ACTUAL_SOURCE_COMMIT}"
           cp "${OUT_A}/titangold-c2-runner-linux-x64-node20.19.5.tar.gz" "${RUNNER_TEMP}/capsule.tar.gz"
           echo "${SHA_A}  titangold-c2-runner-linux-x64-node20.19.5.tar.gz" > "${RUNNER_TEMP}/capsule.sha256"
           echo "archive_sha256=${SHA_A}" >> "${GITHUB_OUTPUT}"
           echo "archive_bytes=${BYTES_A}" >> "${GITHUB_OUTPUT}"
-          echo "source_commit=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "source_commit=${ACTUAL_SOURCE_COMMIT}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload intra-CI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: c2-runner-capsule
           path: |
@@ -97,16 +123,29 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build
     steps:
-      - name: Checkout scripts only
-        uses: actions/checkout@v4
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ needs.build.outputs.source_commit }}
+          persist-credentials: false
+
+      - name: Prove consumer source identity
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "PR_HEAD_SHA=${{ needs.build.outputs.source_commit }}"
+          echo "CHECKED_OUT=${ACTUAL}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          test "${ACTUAL}" = "${{ needs.build.outputs.source_commit }}"
 
       - name: Setup Node 20.19.5
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20.19.5'
 
       - name: Download capsule artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: c2-runner-capsule
           path: ${{ runner.temp }}/c2-in
@@ -128,13 +167,20 @@ jobs:
             "${EXPECTED}" \
             "${EXTRACT}"
           CAPSULE="${EXTRACT}/titangold-c2-runner"
+          MANIFEST="${CAPSULE}/manifests/capsule-manifest.json"
+          MANIFEST_SOURCE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceCommit"])' "${MANIFEST}")"
+          echo "PR_HEAD_SHA=${{ needs.build.outputs.source_commit }}"
+          echo "ARTIFACT_MANIFEST_SOURCE_COMMIT=${MANIFEST_SOURCE}"
+          test "${MANIFEST_SOURCE}" = "${{ needs.build.outputs.source_commit }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            test "${MANIFEST_SOURCE}" != "${GITHUB_SHA}"
+          fi
           test ! -e "${CAPSULE}/052_telegram_messages_channel_message_id_index.js"
           if grep -R --include='*.js' -l 'C2_052_INDEX_ALREADY_EXISTS_STOP' "${CAPSULE}"; then
             echo 'C2_CAPSULE_SELF_TEST_FAILED: 052 source leaked into capsule' >&2
             exit 1
           fi
           echo 'NO_052_SOURCE_IN_CAPSULE'
-          # Module isolation: required packages stay under extracted root.
           node --input-type=module -e "
           import { createRequire } from 'node:module';
           import fs from 'node:fs';
@@ -167,7 +213,6 @@ jobs:
             echo 'OFFLINE_STRACE_UNAVAILABLE using self-test only'
             node "${CAPSULE}/bin/c2-self-test.mjs"
           fi
-          # Prove consumer did not use npm/npx for package resolution.
           command -v npm >/dev/null
           echo 'CONSUMER_NO_NPM_INSTALL_BY_CONTRACT'
 
@@ -177,7 +222,7 @@ jobs:
     needs: build
     services:
       postgres:
-        image: postgres:14
+        image: postgres:14@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4
         env:
           POSTGRES_DB: titangold_c2_test
           POSTGRES_USER: postgres
@@ -192,16 +237,28 @@ jobs:
     env:
       TITAN_C2_CI_PG14: '1'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ needs.build.outputs.source_commit }}
+          persist-credentials: false
+
+      - name: Prove PG14 source identity
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "PR_HEAD_SHA=${{ needs.build.outputs.source_commit }}"
+          echo "CHECKED_OUT=${ACTUAL}"
+          test "${ACTUAL}" = "${{ needs.build.outputs.source_commit }}"
 
       - name: Setup Node 20.19.5
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20.19.5'
 
       - name: Download capsule artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: c2-runner-capsule
           path: ${{ runner.temp }}/c2-in
@@ -259,6 +316,11 @@ jobs:
             connectionString: 'postgresql://postgres@127.0.0.1:5432/titangold_c2_test?sslmode=disable',
           });
           await client.connect();
+          const { rows } = await client.query('SHOW server_version');
+          const major = String(rows[0].server_version).split('.')[0];
+          if (major !== '14') {
+            throw new Error('disposable server major must remain 14, got ' + rows[0].server_version);
+          }
           for (const db of ['titangold_c2_wrong','titangold_c2_partial','titangold_c2_invalid','titangold_c2_down','titangold_c2_named']) {
             await client.query('CREATE DATABASE ' + db);
           }
@@ -346,30 +408,138 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Fail-closed publish gate
+      - name: Fail-closed publish gates
+        env:
+          INPUT_CONFIRM: ${{ github.event.inputs.confirm }}
+          INPUT_SOURCE: ${{ github.event.inputs.source_commit }}
+          INPUT_SHA: ${{ github.event.inputs.expected_archive_sha256 }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+          BUILD_SOURCE: ${{ needs.build.outputs.source_commit }}
+          BUILD_SHA: ${{ needs.build.outputs.archive_sha256 }}
         run: |
           set -euo pipefail
-          echo "THIS TASK MUST NOT PUBLISH. Gate remains fail-closed unless every condition matches."
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: not workflow_dispatch" >&2
+            exit 1
+          fi
           if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
             echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: not main" >&2
             exit 1
           fi
-          if [[ "${{ github.event.inputs.confirm }}" != "PUBLISH_C2_CAPSULE_D2" ]]; then
+          if [[ "${INPUT_CONFIRM}" != "PUBLISH_C2_CAPSULE_D2" ]]; then
             echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: confirmation token mismatch" >&2
             exit 1
           fi
-          if [[ "${{ github.sha }}" != "${{ github.event.inputs.source_commit }}" ]]; then
-            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: source commit mismatch" >&2
+          if [[ -z "${INPUT_SOURCE}" || "${{ github.sha }}" != "${INPUT_SOURCE}" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: github.sha != input source_commit" >&2
             exit 1
           fi
-          if [[ "${{ needs.build.outputs.archive_sha256 }}" != "${{ github.event.inputs.expected_archive_sha256 }}" ]]; then
+          if [[ "${BUILD_SOURCE}" != "${INPUT_SOURCE}" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: build source_commit != input source_commit" >&2
+            exit 1
+          fi
+          if [[ -z "${INPUT_SHA}" || "${BUILD_SHA}" != "${INPUT_SHA}" ]]; then
             echo "C2_CAPSULE_SHA_MISMATCH: expected archive mismatch" >&2
             exit 1
           fi
-          if [[ -z "${{ github.event.inputs.release_tag }}" ]]; then
-            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: release tag required" >&2
+          EXPECTED_TAG="c2-runner-capsule-${INPUT_SOURCE:0:12}"
+          if [[ -z "${INPUT_TAG}" || "${INPUT_TAG}" != "${EXPECTED_TAG}" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: release_tag must be ${EXPECTED_TAG}" >&2
             exit 1
           fi
-          echo "Publish conditions would pass, but this implementation refuses to create a Release until a later Owner publish authorization is issued."
-          echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: publish disabled in this source/CI implementation" >&2
-          exit 1
+
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.build.outputs.source_commit }}
+          persist-credentials: false
+
+      - name: Prove publish source identity
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git rev-parse HEAD)"
+          test "${ACTUAL}" = "${{ needs.build.outputs.source_commit }}"
+          test "${ACTUAL}" = "${{ github.event.inputs.source_commit }}"
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Download same-run capsule artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: c2-runner-capsule
+          path: ${{ runner.temp }}/c2-in
+
+      - name: Recheck archive SHA and verify artifact
+        env:
+          BUILD_SHA: ${{ needs.build.outputs.archive_sha256 }}
+          INPUT_SHA: ${{ github.event.inputs.expected_archive_sha256 }}
+        run: |
+          set -euo pipefail
+          unset NODE_PATH || true
+          chmod +x tools/c2-migration-runner-capsule/scripts/verify-artifact.sh
+          INNER="${RUNNER_TEMP}/c2-in/capsule.tar.gz"
+          ACTUAL="$(sha256sum "${INNER}" | awk '{print $1}')"
+          echo "publish recomputed ${ACTUAL}"
+          test "${ACTUAL}" = "${BUILD_SHA}"
+          test "${ACTUAL}" = "${INPUT_SHA}"
+          EXTRACT="${RUNNER_TEMP}/c2-publish-extract"
+          mkdir -p "${EXTRACT}"
+          tools/c2-migration-runner-capsule/scripts/verify-artifact.sh \
+            "${INNER}" \
+            "${ACTUAL}" \
+            "${EXTRACT}"
+          echo "INNER_SHA=${ACTUAL}" >> "${GITHUB_ENV}"
+          echo "INNER_ARCHIVE=${INNER}" >> "${GITHUB_ENV}"
+
+      - name: Reject existing tag or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "${INPUT_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: release already exists" >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${INPUT_TAG}" >/dev/null 2>&1; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: git tag already exists" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub Release from same-run artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          ASSET_NAME="titangold-c2-runner-linux-x64-node20.19.5.tar.gz"
+          ASSET_DIR="${RUNNER_TEMP}/c2-release-assets"
+          mkdir -p "${ASSET_DIR}"
+          cp "${INNER_ARCHIVE}" "${ASSET_DIR}/${ASSET_NAME}"
+          echo "${INNER_SHA}  ${ASSET_NAME}" > "${ASSET_DIR}/${ASSET_NAME}.sha256"
+          test "$(sha256sum "${ASSET_DIR}/${ASSET_NAME}" | awk '{print $1}')" = "${INNER_SHA}"
+          BODY="$(cat <<EOF
+          TitanGold C2 offline migration runner capsule.
+
+          Source commit: ${SOURCE_COMMIT}
+          Capsule archive SHA256: ${INNER_SHA}
+          Node: v20.19.5
+          Platform: linux x64
+          node-pg-migrate: 8.0.4
+          pg: 8.16.3
+
+          C2-only maintenance tool. Canonical 052 is NOT contained in this artifact.
+          GitHub Release/tag/URL is transport only. CONTENT SHA256 is the trust authority.
+          EOF
+          )"
+          gh release create "${INPUT_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${SOURCE_COMMIT}" \
+            --title "C2 runner capsule ${SOURCE_COMMIT:0:12}" \
+            --notes "${BODY}" \
+            "${ASSET_DIR}/${ASSET_NAME}" \
+            "${ASSET_DIR}/${ASSET_NAME}.sha256"
