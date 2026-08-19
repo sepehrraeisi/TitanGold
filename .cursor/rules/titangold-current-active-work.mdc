@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A exact-pair design corrected; source-only implementation + CI next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A source+CI merged; production deploy + engine-worker restart + targeted measurement DESIGN next
 alwaysApply: true
 ---
 
@@ -8,9 +8,9 @@ alwaysApply: true
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
-FOREGROUND QUERY REMEDIATION DESIGN CORRECTED + COMPLETE /
-E6A EXACT-PAIR ENGINE SOURCE REMEDIATION SELECTED /
-SOURCE-ONLY IMPLEMENTATION + CI NEXT**
+E6A SOURCE + CI MERGED /
+PRODUCTION NOT DEPLOYED /
+E6A RUNTIME DEPLOYMENT + MEASUREMENT DESIGN NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -81,6 +81,13 @@ SHA256:
 bytes = 10124
 
 **C2 FOREGROUND QUERY REMEDIATION DESIGN = COMPLETE WITH CORRECTION**
+**E6A SOURCE IMPLEMENTATION = MERGED**
+**E6A SOURCE CI = PASS**
+**E6A TECHNICAL PR = #41**
+**E6A PRE-MERGE HEAD = `f491070cf7102e8f3b83d40d4b480298e573dc60`**
+**E6A CANONICAL SOURCE MERGE = `1c4e85af36bc5924f4b2f75c41319f8b20fbe6b7`**
+**E6A BACKEND TESTS RUN = `32282174640`**
+**E6A BACKEND TESTS = PASS**
 
 ## Production capsule staging
 
@@ -147,8 +154,33 @@ Do not rebuild, download, run, or connect the capsule to DB in this closeout.
 **RCA_CONFIDENCE = HIGH**
 **C2_IO_PRIMARY_DRIVER = POSTGRES_FOREGROUND_QUERY_IO**
 **C2 FOREGROUND QUERY REMEDIATION DESIGN = COMPLETE WITH CORRECTION**
+**E6A SOURCE IMPLEMENTATION = MERGED**
+**E6A SOURCE CI = PASS**
+**E6A TECHNICAL PR = #41**
+**E6A PRE-MERGE HEAD = `f491070cf7102e8f3b83d40d4b480298e573dc60`**
+**E6A CANONICAL SOURCE MERGE = `1c4e85af36bc5924f4b2f75c41319f8b20fbe6b7`**
+**E6A BACKEND TESTS RUN = `32282174640`**
+**E6A BACKEND TESTS = PASS**
+**Exact-pair semantics = IMPLEMENTED**
+**Old independent-array lookup = REMOVED**
+**Existing dedupe index contract = PRESERVED**
+**New DB index = NO**
+**Migration = NO**
+**DB schema change = NO**
+**CLOSED_BASELINE_SOURCE_CHANGE = IMPLEMENTED + CI VERIFIED + MERGED**
+**SOURCE/CI CLOSED = YES**
+**PRODUCTION RUNTIME RE-CLOSE = PENDING**
+**Human/production verification = PENDING**
+**E6A PRODUCTION DEPLOYED = NO**
+**E6A ENGINE RESTARTED = NO**
+**E6A PRODUCTION MEASUREMENT = NOT STARTED**
+**E6A ENGINE_LOOKUP_EFFECT = NOT MEASURED**
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = NOT MEASURED**
+**PHASE 1 = E6A SOURCE + TESTS + CI / COMPLETE / MERGED**
+**PHASE 2 = PRODUCTION DEPLOY / ENGINE-WORKER CONTROLLED RESTART / TARGETED E6A MEASUREMENT / NOT AUTHORIZED / NOT STARTED**
 **E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
 **SELECTED_SEQUENCE = SEQUENCE_B**
+**FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
@@ -443,94 +475,185 @@ NOT SUPPORTED:
 
 Do not invent percentages.
 
-## Corrected E6A design (selected; not implemented)
+## E6A source implementation (merged; production not applied)
 
 **PREVIOUS E6 INPUT ASSUMPTION = FALSE / SUPERSEDED**
+**Old independent-array lookup = REMOVED from origin/main**
 
 Incorrect historical assumption: callers already pass positionally aligned
-parallel arrays.
-
-Current canonical source (`backend/services/telegramPipeline.js`
-`processSubBatch()`):
+parallel arrays. Pre-E6A canonical source used independent arrays:
 
 - sourceIds = `[...new Set(resolved.map((r) => r.source.id))]`
 - messageIds = `resolved.map((r) => String(r.message.message_id))`
 
-**CURRENT_SOURCE_ARRAYS_POSITIONALLY_ALIGNED = NO**
-**PREVIOUS_E6_DESIGN = NOT IMPLEMENTATION ELIGIBLE AS WRITTEN**
+That model is absent from current origin/main.
+
+**E6A SOURCE IMPLEMENTATION = MERGED**
+Technical PR = **#41** (CLOSED / MERGED / SQUASH)
+Pre-merge technical head = `f491070cf7102e8f3b83d40d4b480298e573dc60`
+Canonical source squash merge = `1c4e85af36bc5924f4b2f75c41319f8b20fbe6b7`
+Changed files in #41:
+
+- `backend/services/telegramPipeline.js`
+- `backend/__tests__/unit/telegramPipelineExactPair.test.js`
+
+No Rule02 change in the technical PR.
+
+Verified on current origin/main:
+
+- `async function loadExistingTelegramKeys(requestedPairs)`
+- `requestedPairs = resolved.map(...)` 1:1 from `resolved[]`
+- `sourceId = source.id`
+- `messageId = String(message.message_id)`
+- `pairSourceIds` and `pairMessageIds` derived from the same `requestedPairs` sequence
+- SQL uses `JOIN unnest($1::uuid[], $2::text[])`
+- `cd.source_id = v.source_id`
+- `(cd.raw_data->>'telegram_message_id') = v.message_id`
+- `WHERE cd.raw_data ? 'telegram_message_id'`
+- old independent Set/source-id model absent
+- `SAVEPOINT transfer_row` + `error.code === '23505'` fallback remains
+- `loadExistingTelegramKeys` is not exported
+
+**Exact-pair semantics = IMPLEMENTED**
+**Existing dedupe index contract = PRESERVED**
+Reuse `idx_collected_data_telegram_msg_dedupe`
+UNIQUE btree `(source_id, (raw_data->>'telegram_message_id'))`
+WHERE `raw_data ? 'telegram_message_id'`
+**New DB index = NO**
+**Migration = NO**
+**DB schema change = NO**
+**DB stats mutation = NO**
 
 **TELEGRAM_TRANSFER_DEFAULT_BATCH = 700**
 **TELEGRAM_TRANSFER_SUB_BATCH = 100**
 loadExistingTelegramKeys direct runtime pair cardinality = **<=100**
-N=700 lookup plan = **NON_REPRESENTATIVE_FOR_DIRECT_RUNTIME_LOOKUP**
-Primary representative evidence: N=1 / 10 / 50 / 100
+N=700 lookup plan remains **NON_REPRESENTATIVE_FOR_DIRECT_RUNTIME_LOOKUP**
 
-**REQUESTED_DEDUPE_PAIR = (source.id, String(message.message_id))**
-Pairs must be derived 1:1 from `resolved[]`. Dedupe only by the complete pair.
-Never unique(sourceId) independently.
+**FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
+source implementation = COMPLETE / MERGED
+production runtime application = PENDING
+runtime restart eventually required = YES
 
-Preferred conceptual API (DESIGN ONLY, not implemented):
-`loadExistingTelegramKeys(requestedPairs)`
-Fail closed unless pairSourceIds.length == pairMessageIds.length == requestedPairs.length.
+## E6A source CI
 
-Corrected SQL is eligible only when `$1` and `$2` come from the same ordered
-requestedPairs list. Reusing unique source IDs + all message IDs is forbidden.
+**E6A BACKEND TESTS RUN = `32282174640`**
+workflow = Backend Tests
+head SHA = `f491070cf7102e8f3b83d40d4b480298e573dc60`
+status = completed
+conclusion = success
+job `test (20.x)` = completed / success
+Run unit tests = success
+Run integration tests = success
+Run tests with coverage = success
 
-**FIRST REMEDIATION NEW INDEX = NONE**
-Reuse `idx_collected_data_telegram_msg_dedupe`
-UNIQUE btree `(source_id, (raw_data->>'telegram_message_id'))`
-WHERE `raw_data ? 'telegram_message_id'`
-Corrected SQL matches expression and partial predicate.
+Do not invent per-test GitHub counts beyond this retained run evidence.
 
-Runtime-representative EXPLAIN (no ANALYZE):
-N=1 / 10 / 50 / 100 = Nested Loop + Index Scan
-whole-table seq scan = NO
-**E6_RUNTIME_REPRESENTATIVE_PLAN = INDEX_BACKED_AT_N_LE_100**
+## Test coverage authority
 
-Semantic design-level: same-source/multiple-message PASS; same-message/multiple-source
-PASS; duplicate exact pair PASS; missing pair PASS; exact Set intersection PASS.
-23505 unique-violation handling = DEFENSE IN DEPTH, not the desired normal lookup path.
+Canonical regression file on main:
+`backend/__tests__/unit/telegramPipelineExactPair.test.js`
 
-**E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
-Selected design name = **E6A EXACT-PAIR ENGINE LOOKUP SOURCE-ONLY DESIGN**
-**SELECTED_SEQUENCE = SEQUENCE_B**
-1. E6A engine source-only exact-pair remediation
-2. production measurement in a separately authorized later task
-3. processor remediation only if still required
+Mandatory regression categories present in that file:
 
-E6A does **not** resolve the processor blocker.
+- same-source / multiple-message
+- same-message / multiple-source
+- partial existence
+- duplicate exact pair
+- no existing pairs
+- 23505 fallback
+- N=100 repeated-source cardinality
 
-Processor findings preserved:
+Public API expanded solely for test = NO
+
+This source merge does not itself prove production behavior.
+
+## Closed-baseline source status
+
+**CLOSED_BASELINE_SOURCE_CHANGE = IMPLEMENTED + CI VERIFIED + MERGED**
+**SOURCE/CI CLOSED = YES**
+**PRODUCTION RUNTIME RE-CLOSE = PENDING**
+**Human/production verification = PENDING**
+**PRODUCTION VERIFIED = NO**
+
+## Production deployment state
+
+Do not claim a fresh production app HEAD from this closeout.
+Do not claim current production contains pre- or post-E6A code.
+
+**E6A PRODUCTION DEPLOYED = NO**
+**E6A ENGINE RESTARTED = NO**
+**E6A PRODUCTION MEASUREMENT = NOT STARTED**
+**E6A ENGINE_LOOKUP_EFFECT = NOT MEASURED**
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = NOT MEASURED**
+
+## Processor blocker remains open
+
+telegram-processor foreground blocker = **NOT REMEDIATED BY E6A**
 **IS_PROCESSED_EQUIVALENCE = PROVEN_UNSAFE**
 processed_telegram_messages(raw_message_id) lookup index = ABSENT
 processor plan = PARALLEL SEQ SCAN / HASH ANTI JOIN / SORT / LIMIT
-**TEMP_SPILL_PRIMARY_FAMILY = PROCESSOR** (HIGH)
+**TEMP_SPILL_PRIMARY_FAMILY = PROCESSOR**
+
+E6A does not solve processor NOT EXISTS, processor temp spill, missing
+raw_message_id path, collector MAX, or global swap/reclaim by itself.
+Do not claim E6A solves global IO pressure.
+
 Later candidate non-unique btree `processed_telegram_messages(raw_message_id)`
 requires TIER3 DB migration + CREATE INDEX CONCURRENTLY + separate authorization.
 No migration number assigned. Not authorized now.
 
-E6A targets collected_data JSONB dedupe lookup / engine heap pressure.
-E6A does not solve processor NOT EXISTS, processor temp spill, missing
-raw_message_id path, collector MAX, or global swap/reclaim by itself.
-The production resource gate may still fail after E6A.
+## E6A targeted success contract
 
-Future verification must score ENGINE_LOOKUP_EFFECT separately from
-GLOBAL_RESOURCE_GATE. Do not invent unapproved numeric success thresholds.
+E6A targeted verification must determine **ENGINE_LOOKUP_EFFECT**
+separately from **GLOBAL_RESOURCE_GATE**.
 
-**FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
-DB migration = NO
-DB stats mutation = NO
-new index = NO
-source change = YES
-runtime restart eventually required = YES
+Targeted production evidence later must inspect:
 
-PHASE 1 = repository source + tests + CI only
-PHASE 2 = separate production deploy / engine-worker controlled restart / measurement
-Do not combine those phases in this governance task.
+- collected_data heap_blks_read delta
+- collected_data seq_scan delta
+- idx_collected_data_telegram_msg_dedupe idx_scan delta
+- engine lookup recurrence
+- dm-0 rkB/s
+- DB blks_read delta
 
-**CLOSED_BASELINE_CHANGE = REQUIRES EXACT OWNER AUTHORIZATION**
-Future implementation surface: `backend/services/telegramPipeline.js`
-This closeout does **not** authorize source modification.
+Global resource measurements must separately include:
+
+- dm-0 util
+- iowait
+- aqu-sz
+- swap-out
+- PSI IO
+- temp_bytes
+
+Processor may still keep the global resource gate failed.
+Do not invent unapproved numeric success thresholds.
+
+## Resource gate preservation
+
+Mandatory thresholds remain unchanged. Threshold weakening = **NOT AUTHORIZED**.
+
+Minimum observation:
+
+- at least 5 minutes
+- at least 5 samples
+- approximately 60 seconds apart
+- first-to-last span >= 300 seconds
+
+Reject A: swap-out (`so`) > 0 on a majority of samples
+Reject B: median dm-0 util >= 80 AND median iowait >= 10
+Reject C: two consecutive samples where dm-0 util >= 95 AND iowait >= 10
+
+One favorable sample cannot override a bad window.
+
+## Source/runtime phase split
+
+**PHASE 1 = E6A SOURCE + TESTS + CI**
+status = COMPLETE / MERGED
+
+**PHASE 2 = PRODUCTION DEPLOY / ENGINE-WORKER CONTROLLED RESTART / TARGETED E6A MEASUREMENT**
+status = NOT AUTHORIZED / NOT STARTED
+
+These phases remain separate.
 
 ## 052 safety
 
@@ -538,9 +661,22 @@ This closeout does **not** authorize source modification.
 **C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
 **C2_052_EXECUTION_AUTHORIZED = NO**
 **C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
 
+E6A source merge does **not** make 052 safe.
 Do not weaken resource thresholds.
-Do not interpret this RCA as authorization to build the C2 index.
+Do not interpret this closeout as authorization to build the C2 index.
+No 052 execution.
+
+## B10 boundary
+
+**B10 050 = BLOCKED**
+050 ledger = ABSENT
+**B10 051 = NOT AUTHORIZED**
+051 ledger = ABSENT
+052 ledger = ABSENT
+B10 runtime wiring = NOT AUTHORIZED
+SHADOW / WP-D / PAPER / LIVE = NOT STARTED
 
 ## Source-path rule
 
@@ -554,26 +690,73 @@ Fresh origin/main verification for this closeout:
 - `backend/services/telegramIngest.js` = ABSENT; do not use it
 
 Any later source move must be rediscovered on then-current main before
-implementation is proposed.
+runtime deployment is designed.
 
 ## Next Owner gate
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-SOURCE-ONLY IMPLEMENTATION + CI AUTHORIZATION**
+PRODUCTION DEPLOY + ENGINE-WORKER RESTART + TARGETED MEASUREMENT DESIGN**
 
-This future gate is repository implementation only, after separate Owner
-authorization:
+This gate is **DESIGN / READ-ONLY DISCOVERY ONLY**.
 
-- modify `backend/services/telegramPipeline.js`
-- add/update narrowly scoped deterministic tests
-- run local/CI verification
-- create a source PR
+It may authorize after separate Owner approval:
 
-It does **not** authorize:
+- fresh read-only production provenance discovery
+- exact deployed-file/hash comparison
+- identify exact engine-worker PM2 process/id
+- determine exact deployment mechanism
+- design source-file deployment boundaries
+- design pre-deploy health checks
+- design rollback
+- design engine-worker controlled restart
+- design post-restart health verification
+- design targeted E6A DB/read metrics
+- design global resource observation
+- design evidence packet
+- design Human QA/re-close criteria
 
-production deploy, engine-worker restart, PM2 mutation,
-production DB access/mutation, ANALYZE/VACUUM, CREATE/DROP/REINDEX,
-migration, 052, 050, or 051.
+It does **NOT** authorize:
 
-After source/CI merge, a separate production deployment/restart gate is required.
+actual source deployment,
+file copy to production,
+git pull/reset on production,
+engine-worker restart/reload/stop/start,
+PM2 mutation,
+DB mutation,
+ANALYZE,
+VACUUM,
+CREATE/DROP/REINDEX,
+migration,
+collector pause,
+processor restart,
+052,
+050,
+or 051.
+
+The next design task must resolve before runtime authorization:
+
+1. exact current production source provenance
+2. whether production app tree is dirty and whether preexisting dirt is unrelated
+3. exact canonical file SHA/content to deploy
+4. exact production destination path
+5. whether single-file deployment is safe or commit-level deployment is required
+6. exact engine-worker PM2 name/id/PID
+7. whether more than one worker instance consumes telegramPipeline.js
+8. restart scope required to load new source
+9. pre-restart health contract
+10. post-restart health contract
+11. rollback source artifact
+12. rollback restart procedure
+13. how to avoid restarting collector/processor
+14. how to verify only intended engine process changed
+15. whether E6A query can be identified read-only after deployment
+16. targeted collected_data relation/index counters
+17. formal >=300-second measurement window
+18. global resource-gate comparison
+19. how to classify ENGINE_LOOKUP_EFFECT vs GLOBAL_RESOURCE_GATE
+20. evidence packet and Human QA/re-close requirements
+
+No runtime mutation before this design is approved and governance authority
+updated.
+**IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
