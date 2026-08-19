@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Must be PUBLISH_C2_CAPSULE_D2 to enable the manual publish job'
+        description: 'Empty = VERIFY_ONLY. PUBLISH_C2_CAPSULE_D2 = publish. Any other value fails closed.'
         required: false
         default: ''
       source_commit:
@@ -32,8 +32,46 @@ env:
   SOURCE_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
 
 jobs:
+  dispatch_contract:
+    name: C2 Capsule Dispatch Contract
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    outputs:
+      mode: ${{ steps.gate.outputs.mode }}
+    steps:
+      - name: Validate dispatch intent
+        id: gate
+        env:
+          INPUT_CONFIRM: ${{ github.event.inputs.confirm }}
+          INPUT_SOURCE: ${{ github.event.inputs.source_commit }}
+          INPUT_SHA: ${{ github.event.inputs.expected_archive_sha256 }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          CONFIRM="${INPUT_CONFIRM:-}"
+          SOURCE="${INPUT_SOURCE:-}"
+          SHA="${INPUT_SHA:-}"
+          TAG="${INPUT_TAG:-}"
+          if [[ -z "${CONFIRM}" ]]; then
+            if [[ -n "${SOURCE}" || -n "${SHA}" || -n "${TAG}" ]]; then
+              echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: VERIFY_ONLY forbids publish-only inputs" >&2
+              exit 1
+            fi
+            echo "C2_CAPSULE_DISPATCH_MODE=VERIFY_ONLY"
+            echo "mode=VERIFY_ONLY" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          if [[ "${CONFIRM}" != "PUBLISH_C2_CAPSULE_D2" ]]; then
+            echo "C2_CAPSULE_DELIVERY_PROVENANCE_UNVERIFIED: invalid confirm token" >&2
+            exit 1
+          fi
+          echo "C2_CAPSULE_DISPATCH_MODE=PUBLISH"
+          echo "mode=PUBLISH" >> "${GITHUB_OUTPUT}"
+
   build:
     name: C2 Capsule Build
+    needs: [dispatch_contract]
+    if: ${{ always() && !cancelled() && (github.event_name != 'workflow_dispatch' || needs.dispatch_contract.result == 'success') }}
     runs-on: ubuntu-22.04
     outputs:
       archive_sha256: ${{ steps.pack.outputs.archive_sha256 }}
@@ -403,8 +441,8 @@ jobs:
   publish:
     name: C2 Capsule Manual D2 Publish
     runs-on: ubuntu-22.04
-    needs: [build, consumer, pg14]
-    if: github.event_name == 'workflow_dispatch'
+    needs: [dispatch_contract, build, consumer, pg14]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'PUBLISH_C2_CAPSULE_D2' }}
     permissions:
       contents: write
     steps:
