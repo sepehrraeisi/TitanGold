@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 capsule verified and D2 published; production retrieval next
+description: TitanGold Rule 02 — C2 capsule staged; pause attempt #1 restored; post-pause IO not measured
 alwaysApply: true
 ---
 
@@ -7,8 +7,9 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 CAPSULE VERIFIED + D2 PUBLISHED /
-PRODUCTION RETRIEVAL NEXT GATE**
+C2 CAPSULE STAGED + READY_TO_APPLY /
+CONTROLLED PAUSE ATTEMPT #1 RESTORED /
+POST-PAUSE RESOURCE PROOF INCOMPLETE**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -24,57 +25,87 @@ Tier 3
 Capsule source/CI squash merge:
 `13bd0b5def6d14584be4a4fa5c2ef5d58c252266`
 
-Final VERIFY_ONLY run:
-`32249181124`
-
-Final frozen capsule SHA256:
-`4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
-
-Final archive bytes:
-`1851989`
-
-D2 publish run:
-`32249974572`
-
-D2 release tag:
-`c2-runner-capsule-13bd0b5def6d`
-
-D2 asset SHA256:
+Frozen capsule SHA256:
 `4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
 
 Canonical 052 SHA256:
 `2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
 
-Publication packet:
-`/home/ubuntu/TITANGOLD_C2_CAPSULE_D2_PUBLICATION_20260819T115808Z.txt`
-SHA256:
-`a308fec6d56d11456377a4120653d2a7a7cfb58edf64ea9e85383d29cede3b53`
+D2 release tag:
+`c2-runner-capsule-13bd0b5def6d`
 
-Content authority is the inner archive SHA256 above.
-GitHub tag/URL/Actions ZIP digest are transport only.
+Production preflight packet:
+`/home/ubuntu/TITANGOLD_C2_PROD_CAPSULE_PREFLIGHT_20260819T135517Z.txt`
+SHA256:
+`7ae8fc060b9735b4189a8afbf78f9ac9e6771643c2605cb701102163b0c65882`
+
+Fresh-stage provenance packet:
+`/home/ubuntu/TITANGOLD_C2_PROD_CAPSULE_PROVENANCE_RECON_20260819T140250Z.txt`
+SHA256:
+`e9b7ee0d93c0127f4080834f63ca46669b2550f896037a978d25cb80768db95e`
+
+Pause attempt #1 evidence packet:
+`/home/ubuntu/TITANGOLD_C2_CONTROLLED_PAUSE_RESOURCE_PROOF_20260819T141140Z.txt`
+SHA256:
+`17e3e6a5ba428803d1d1efdd6e8261558248a28403428e6c486f1a3c4b5ed360`
+
+That pause packet retains the original execution report, including the
+unsupported `NO_MATERIAL_RECOVERY` label. Rule02 interpretation supersedes
+that label with **NOT_MEASURED** because post-pause sample_count = 0.
+Do not alter the historical evidence packet.
+
+## Production capsule staging
+
+Old staging:
+`/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
+
+**OLD_STAGING_CLASS = PROVENANCE_AMBIGUOUS_EVIDENCE_ONLY**
+**OLD_STAGING_EXECUTION_ELIGIBLE = NO**
+Do not use the old stage for C2 execution.
+
+Execution-eligible staging:
+`/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86_CLEAN1`
+
+Capsule root:
+`/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86_CLEAN1/payload/titangold-c2-runner`
+
+**NEW_STAGING_CLASS = FRESH_STAGED_HASH_VERIFIED_OFFLINE_SELF_TEST_PASS**
+Manifest source = `13bd0b5def6d14584be4a4fa5c2ef5d58c252266`
+Node = `v20.19.5`
+node-pg-migrate = `8.0.4`
+pg = `8.16.3`
+package-lock SHA256 = `740a49a2722139446b3f925429e18681510f42c75c9e67568b15befca3e53e8a`
+Offline self-test = PASS
+Production self-test inet connect = 0 / PASS
+Capsule DB connection attempted = NO
 
 ## State
 
 **C1 PRODUCTION = VERIFIED**
 **C2 SOURCE/CI = VERIFIED**
-**C2 CAPSULE SOURCE FINAL REVIEW = PASS**
-**C2 CAPSULE CI = PASS**
-**C2 CAPSULE VERIFY_ONLY = PASS**
 **C2 D2 PUBLICATION = PASS**
+**PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
 **C2 052 = NOT EXECUTED**
-**C2_PRODUCTION_VERIFICATION = NOT STARTED**
+**C2_PRODUCTION_EXECUTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
-**PRODUCTION CAPSULE = NOT STAGED**
-**PUBLIC GITHUB RELEASE = PUBLISHED + HASH-VERIFIED**
-**COLLECTOR PAUSE = NOT EXECUTED**
+**PostgreSQL = 14.23 / titangold_db**
+**050 ledger = ABSENT**
+**051 ledger = ABSENT**
+**052 ledger = ABSENT**
+**051 objects = ABSENT**
+**same-name C2 index = ABSENT**
+**equivalent channel-leading index = NONE**
+**CONTROLLED COLLECTOR PAUSE ATTEMPT = #1 EXECUTED AND COLLECTOR RESTORED ONLINE**
+**CURRENT COLLECTOR PAUSE = NO**
+**CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-## Capsule
+## Capsule contract
 
 **RUNNER MODEL = R2**
 **NODE MODEL = N1** (`v20.19.5` / linux x64)
@@ -85,24 +116,94 @@ GitHub tag/URL/Actions ZIP digest are transport only.
 **CAPABILITY_LIMITED_LAUNCHER = PASS**
 **APPLICATION NODE_MODULES = UNCHANGED**
 
-Publication does **not** authorize production retrieval, collector pause,
-or 052 execution.
+## Formal pre-pause resource baseline
 
-## Owner pause / gap policy (unchanged)
+samples = 6
+span = 303.1 seconds
+median dm-0 util = 97.71
+median iowait = 12.5
+swap-out positive = 5/6
+consecutive severe pair = YES
+**C2_PRE_MAINTENANCE_RESOURCE_GATE = FAIL_IO_PRESSURE**
+
+This remains the currently proven IO state with collector online.
+
+## Controlled pause attempt #1
+
+PM2 process = `telegram-collector`
+PM2 id = 16
+pre-stop PID = 854649
+pre-stop restart count = 13553
+PAUSE_START_UTC = `2026-08-19T14:10:24Z`
+pm2 stop = SUCCESS
+collector stopped confirmed = YES
+old PID exited = YES
+PAUSE_END_UTC = `2026-08-19T14:10:27Z`
+stop-to-restart = 2.9 seconds
+recovery command = `pm2 restart 16`
+emergency fallback = NO
+post-recovery PID = 1469107
+post-recovery PM2 id = 16
+post-recovery status = online
+functional polling resume = PASS (`attempted=10 succeeded=10`)
+post-recovery 5002 = 200
+post-recovery 5003 = 200
+potential Telegram ingestion gap = YES (bounded; Owner-accepted)
+exact lost-message count = NOT PROVEN
+
+**COLLECTOR = RESTORED ONLINE**
+**COLLECTOR FUNCTIONAL RESUME = PASS**
+
+## Port 5003 discovery and corrected health semantics
+
+**PORT 5003 OWNERSHIP = TELEGRAM COLLECTOR**
+
+Observed: 5003=200 before stop; 5003 unavailable during intentional stop;
+5003=200 after same collector recovery.
+
+**COLLECTOR_PORT_5003_DURING_INTENTIONAL_PAUSE = EXPECTED_UNAVAILABLE**
+
+Do not classify 5003 unavailability during an intentional collector stop as
+backend health failure.
+
+Future health contract:
+
+- Pre-pause: 5002=200 mandatory; 5003=200 mandatory
+- During intentional collector pause: 5002=200 mandatory; 5003 expected unavailable; no unexpected replacement listener on 5003
+- Post-recovery: 5002=200 mandatory; 5003=200 mandatory; 5003 listener must belong to the restored intended collector
+
+## Attempt #1 post-pause resource proof
+
+post-pause sample count = 0
+post-pause observation span = 0
+**C2_POST_PAUSE_RESOURCE_GATE = INCOMPLETE_BOUNDED_WINDOW**
+
+Reason: the test contract incorrectly required collector-owned port 5003 to
+remain healthy while the collector itself was intentionally stopped.
+
+**COLLECTOR_PAUSE_IO_EFFECT = NOT_MEASURED**
+
+Do not retain `NO_MATERIAL_RECOVERY`. That statement is unsupported because
+no post-pause resource samples exist. Do not infer recovery or non-recovery
+from the 2.9-second pause.
+
+## Owner gap policy
 
 **ZERO_LOSS_COLLECTOR_PAUSE_CATCHUP_SAFETY = UNSAFE**
 **OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
-**C2_CONTROLLED_COLLECTOR_PAUSE =
-FUTURE EXPLICIT OWNER EXECUTION GATE ONLY**
-**CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 
-## Future C2 pre-build resource gate (ACTIVE / MANDATORY)
+Do not claim lossless recovery or zero lost messages.
+A future controlled pause still requires a new exact Owner execution gate.
 
-Minimum observation: **5 minutes**, ≥5 samples, ~60 seconds apart.
+## Resource gate (ACTIVE / MANDATORY; thresholds unchanged)
+
+Minimum observation: **≥5 minutes**, ≥5 samples, ~60 seconds apart.
+For ~60-second spacing, collect enough samples to prove first-to-last span
+**≥300 seconds**.
 
 Normal pre-maintenance gates:
 
-- HTTP health = 200
+- HTTP health = 200 under the corrected port semantics above
 - collector initially = exactly one intended online target / no restart loop
 - idle-in-transaction = 0
 - no unexpected transaction ≥60s
@@ -117,23 +218,36 @@ Reject if **any** of:
 - **any two consecutive** samples with dm-0 `%util` ≥ 95 **AND** iowait ≥ 10
 
 One favorable sample must not override a bad observation window.
+Do not weaken these thresholds.
+
+## Future post-pause test contract
+
+A future authorized collector pause must:
+
+1. freshly prove READY_TO_APPLY
+2. prove exactly one intended collector
+3. prove port 5003 belongs to that collector before stop
+4. require pre-stop 5002=200 and 5003=200
+5. stop exactly that PM2 collector
+6. prove collector stopped
+7. require during pause 5002=200 and 5003 expected unavailable
+8. require no replacement/unexpected listener on 5003
+9. drain prior collector DB activity
+10. collect a complete ≥300-second post-pause resource window
+11. evaluate unchanged resource thresholds
+12. always restart collector before task end
+13. require post-recovery 5002=200, 5003=200, exactly one collector online, polling resumed
+14. **not** execute 052 in that resource-proof task
 
 ## Next Owner gate
 
-**C2 PRODUCTION CAPSULE RETRIEVAL
-+ OFFLINE SELF-TEST
-+ CONTROLLED MAINTENANCE PREFLIGHT**
+**C2 CONTROLLED COLLECTOR PAUSE RETRY
++ CORRECTED HEALTH SEMANTICS
++ POST-PAUSE RESOURCE RECOVERY PROOF**
 
-This gate may authorize:
+This gate may authorize exactly one bounded collector stop, the corrected
+health semantics, complete post-pause IO measurement, and mandatory collector
+recovery.
 
-- public Release retrieval to an exact production maintenance staging path
-- SHA verification
-- safe extraction
-- capsule self-test WITHOUT DB connection
-- fresh production READY_TO_APPLY proof
-- fresh five-minute resource baseline
-- controlled collector-pause readiness
-
-It does **not** automatically authorize 052 execution.
-052 remains a separate explicit Owner gate after resource-recovery proof
-unless a later Owner task specifically combines them.
+It does **not** authorize 052 execution, capsule DB connection,
+CREATE/DROP INDEX, pgmigrations mutation, 050, or 051.
