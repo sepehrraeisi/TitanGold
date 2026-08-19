@@ -190,14 +190,28 @@ function buildTransferMetadata(message, channelIdStr) {
     };
 }
 
-async function loadExistingTelegramKeys(sourceIds, messageIds) {
-    if (sourceIds.length === 0) return new Set();
+async function loadExistingTelegramKeys(requestedPairs) {
+    if (!Array.isArray(requestedPairs) || requestedPairs.length === 0) {
+        return new Set();
+    }
+
+    const pairSourceIds = requestedPairs.map((pair) => pair.sourceId);
+    const pairMessageIds = requestedPairs.map((pair) => pair.messageId);
+    if (
+        pairSourceIds.length !== pairMessageIds.length
+        || pairSourceIds.length !== requestedPairs.length
+    ) {
+        throw new Error('Telegram exact-pair lookup invariant failed');
+    }
+
     const result = await query(
-        `SELECT source_id::text, raw_data->>'telegram_message_id' AS message_id
-         FROM collected_data
-         WHERE source_id = ANY($1::uuid[])
-           AND raw_data->>'telegram_message_id' = ANY($2::text[])`,
-        [sourceIds, messageIds],
+        `SELECT cd.source_id::text, cd.raw_data->>'telegram_message_id' AS message_id
+         FROM collected_data cd
+         JOIN unnest($1::uuid[], $2::text[]) AS v(source_id, message_id)
+           ON cd.source_id = v.source_id
+          AND (cd.raw_data->>'telegram_message_id') = v.message_id
+         WHERE cd.raw_data ? 'telegram_message_id'`,
+        [pairSourceIds, pairMessageIds],
     );
     return new Set(result.rows.map((r) => `${r.source_id}:${r.message_id}`));
 }
@@ -242,9 +256,11 @@ async function processSubBatch(messages, sourceMap) {
         return subSummary;
     }
 
-    const sourceIds = [...new Set(resolved.map((r) => r.source.id))];
-    const messageIds = resolved.map((r) => String(r.message.message_id));
-    const existingKeys = await loadExistingTelegramKeys(sourceIds, messageIds);
+    const requestedPairs = resolved.map(({ source, message }) => ({
+        sourceId: source.id,
+        messageId: String(message.message_id),
+    }));
+    const existingKeys = await loadExistingTelegramKeys(requestedPairs);
 
     const toInsert = [];
 
