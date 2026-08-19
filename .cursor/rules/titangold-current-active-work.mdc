@@ -85,6 +85,25 @@ Capsule root:
 **PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
 Capsule DB connection attempted = NO
 
+## Capsule execution contract (frozen)
+
+**RUNNER MODEL = R2**
+**NODE MODEL = N1** (`v20.19.5` / linux x64)
+**node-pg-migrate = 8.0.4**
+**pg = 8.16.3**
+**PURE_JS_CLOSURE = YES**
+**CAPSULE_INCLUDES_052 = NO**
+**CAPABILITY_LIMITED_LAUNCHER = PASS**
+**APPLICATION NODE_MODULES = UNCHANGED**
+
+Frozen capsule SHA256:
+`4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
+
+Canonical 052 SHA256:
+`2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
+
+Do not rebuild, download, run, or connect the capsule to DB in this closeout.
+
 ## State
 
 **C1 PRODUCTION = VERIFIED**
@@ -106,6 +125,7 @@ Capsule DB connection attempted = NO
 **equivalent channel-leading index = NONE**
 **CONTROLLED COLLECTOR PAUSE ATTEMPT = #2 COMPLETE AND COLLECTOR RESTORED ONLINE**
 **CURRENT COLLECTOR PAUSE = NO**
+**CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
 **C2_POST_PAUSE_RESOURCE_GATE = FAIL_IO_PRESSURE**
 **C2 RESOURCE BLOCKER = ACTIVE**
 **C2 POST-PAUSE IO BLOCKER RCA = COMPLETE**
@@ -136,7 +156,36 @@ swap mutation = 0
 production repo mutation = 0
 Rule02 mutation during RCA = 0
 
-## Resource gate authority (unchanged)
+## Resource gate — ACTIVE / MANDATORY
+
+Minimum observation:
+
+- at least 5 minutes
+- at least 5 samples
+- approximately 60 seconds apart
+- first-to-last formal span must be at least 300 seconds
+
+Reject if ANY of:
+
+A.
+swap-out (`so`) > 0 on a majority of samples
+
+B.
+median data-device (`dm-0`) `%util` >= 80
+AND
+median iowait >= 10
+
+C.
+any two consecutive samples with:
+dm-0 `%util` >= 95
+AND
+iowait >= 10
+
+One favorable sample must not override a bad observation window.
+Do not weaken these thresholds.
+C2 052 must not execute while the resource gate is failed.
+
+These are existing safety semantics, not new policy.
 
 Retry #2 collector-off formal window remains FAIL_IO_PRESSURE:
 
@@ -146,8 +195,42 @@ Retry #2 collector-off formal window remains FAIL_IO_PRESSURE:
 - reject A/B/C all fired
 - **COLLECTOR_REMOVAL_SUFFICIENT_TO_PASS_RESOURCE_GATE = NO**
 
-Mandatory thresholds are unchanged. Do not weaken them.
-Do not execute 052.
+## Port 5003 corrected health semantics
+
+**PORT 5003 OWNERSHIP = TELEGRAM COLLECTOR**
+**COLLECTOR_PORT_5003_DURING_INTENTIONAL_PAUSE = EXPECTED_UNAVAILABLE**
+
+Health contract:
+
+Pre-pause:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = HTTP 200 mandatory
+
+During an explicitly authorized intentional collector pause:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = expected unavailable
+- no unexpected replacement listener on 5003
+
+Post-recovery:
+- backend 5002 = HTTP 200 mandatory
+- collector 5003 = HTTP 200 mandatory
+- 5003 listener must belong to the restored intended collector
+
+Current gate does **not** authorize any collector pause.
+**CURRENT COLLECTOR PAUSE = NO**
+**CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
+
+Do not execute these health checks as a production operation in this closeout.
+
+## Bounded maintenance-gap safety
+
+**OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
+**ZERO_LOSS_CATCHUP = NOT GUARANTEED**
+Permanent/unbounded ingestion loss = **NOT AUTHORIZED**
+Retry #2 historical potential ingestion-gap duration ≈ 362.355 seconds
+Exact lost-message count = NOT PROVEN
+
+This does **not** authorize another pause.
 
 ## Device RCA
 
@@ -155,7 +238,9 @@ PG data device = `/dev/dm-0`
 filesystem = ext4
 backing storage = rotational LVM
 RCA formal samples = 11
-formal observation span ≈ 646 seconds
+formal observation start = `2026-08-19T15:38:52Z`
+formal observation end = `2026-08-19T15:49:27Z`
+formal observation span = 635 seconds
 median dm-0 util = 99.6
 median iowait = 21.0
 median rkB/s = 341280
