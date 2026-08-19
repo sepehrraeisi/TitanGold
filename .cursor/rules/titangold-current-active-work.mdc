@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 offline migration runner capsule source/CI verified
+description: TitanGold Rule 02 — C2 capsule verified and D2 published; production retrieval next
 alwaysApply: true
 ---
 
@@ -7,7 +7,8 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 OFFLINE MIGRATION RUNNER CAPSULE SOURCE/CI VERIFIED**
+C2 CAPSULE VERIFIED + D2 PUBLISHED /
+PRODUCTION RETRIEVAL NEXT GATE**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -20,33 +21,37 @@ Tier 3
 
 ## Durable provenance
 
-C2 accepted technical PR head:
-`07488458437c171eeba30ae08e4c4aa01a6e8887`
+Capsule source/CI squash merge:
+`13bd0b5def6d14584be4a4fa5c2ef5d58c252266`
 
-C2 source squash merge:
-`1fad6880d9509e3039afd251e6ffd0b01e98cc03`
+Final VERIFY_ONLY run:
+`32249181124`
 
-Capsule design governance squash merge:
-`4bf49f5cbbde93684d192736e5b0161177ad1816`
+Final frozen capsule SHA256:
+`4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
 
-C2 accepted migration SHA256:
+Final archive bytes:
+`1851989`
+
+D2 publish run:
+`32249974572`
+
+D2 release tag:
+`c2-runner-capsule-13bd0b5def6d`
+
+D2 asset SHA256:
+`4b501544ee86912106fbbfbe018efaadc206d6e19e4c7b912ea1790ede57168d`
+
+Canonical 052 SHA256:
 `2c7c5723b20fd823102fb78f8cd97664453e3fcbb07ece56efb4ec0bd444f082`
 
-Accepted capsule technical head:
-`343d2b368166562afe90fc51b7fb39c141ba936c`
+Publication packet:
+`/home/ubuntu/TITANGOLD_C2_CAPSULE_D2_PUBLICATION_20260819T115808Z.txt`
+SHA256:
+`a308fec6d56d11456377a4120653d2a7a7cfb58edf64ea9e85383d29cede3b53`
 
-Accepted PR CI run:
-`32245650087`
-
-Accepted PR evidence artifact SHA256:
-`81fa8f1994c3be9e94beb0cd34b703374b367f0de9e5d5a28bf36cfcac22211c`
-
-That artifact SHA is **PR TEST EVIDENCE ONLY / NOT PRODUCTION AUTHORITY**.
-The production-candidate artifact must later be rebuilt by VERIFY_ONLY
-from the actual post-squash-merge main SHA.
-
-Capsule design packet:
-`/home/ubuntu/TITANGOLD_C2_RUNNER_CAPSULE_DESIGN_20260817T184508Z.txt`
+Content authority is the inner archive SHA256 above.
+GitHub tag/URL/Actions ZIP digest are transport only.
 
 ## State
 
@@ -54,60 +59,34 @@ Capsule design packet:
 **C2 SOURCE/CI = VERIFIED**
 **C2 CAPSULE SOURCE FINAL REVIEW = PASS**
 **C2 CAPSULE CI = PASS**
+**C2 CAPSULE VERIFY_ONLY = PASS**
+**C2 D2 PUBLICATION = PASS**
 **C2 052 = NOT EXECUTED**
 **C2_PRODUCTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
 **PRODUCTION CAPSULE = NOT STAGED**
-**PUBLIC GITHUB RELEASE = NOT PUBLISHED**
+**PUBLIC GITHUB RELEASE = PUBLISHED + HASH-VERIFIED**
+**COLLECTOR PAUSE = NOT EXECUTED**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
 **B10 RUNTIME WIRING = NOT AUTHORIZED**
 **SHADOW / WP-D / PAPER / LIVE = NOT STARTED**
 
-## Capsule (source/CI verified)
+## Capsule
 
-**CAPSULE_DESIGN = COMPLETE**
 **RUNNER MODEL = R2**
-**RECOMMENDED_NODE_MODEL = N1**
-Production Node = `v20.19.5` / linux x64
-Root dependencies = `node-pg-migrate` 8.0.4 and `pg` 8.16.3
+**NODE MODEL = N1** (`v20.19.5` / linux x64)
+**node-pg-migrate = 8.0.4**
+**pg = 8.16.3**
 **PURE_JS_CLOSURE = YES**
 **CAPSULE_INCLUDES_052 = NO**
-**RECOMMENDED_CAPSULE_DELIVERY = D2**
-Artifact authority = CONTENT SHA256
 **CAPABILITY_LIMITED_LAUNCHER = PASS**
-Allowed operations = `up` / `down` only
-Allowed migration = `052_telegram_messages_channel_message_id_index.js` only
-Arbitrary CLI passthrough = NO
-050/051 isolation = PASS
-
 **APPLICATION NODE_MODULES = UNCHANGED**
-backend `package.json` / `package-lock.json` must not be modified.
 
-**VERIFY_ONLY = IMPLEMENTED**
-`workflow_dispatch` with blank `confirm` = VERIFY_ONLY
-VERIFY_ONLY publish-specific inputs must be empty
-Invalid nonempty confirm = FAIL CLOSED
-VERIFY_ONLY runs Build + Consumer + PG14 and skips Publish
-
-**D2 PUBLISH MECHANISM = IMPLEMENTED / NOT INVOKED**
-Publish requires `workflow_dispatch`, main, exact token
-`PUBLISH_C2_CAPSULE_D2`, exact source commit, exact archive SHA,
-exact tag `c2-runner-capsule-<source-sha-first12>`, same-run artifact,
-independent SHA verification, and no existing tag/release collision.
-No automatic publish on push, PR, or tag overwrite.
-
-NOT authorized now:
-
-- VERIFY_ONLY dispatch on merged main (next Owner gate)
-- public GitHub Release publication
-- production capsule staging
-- production C2 / 052 execution
-- collector pause
-- PM2 mutation
-- 050 / 051
+Publication does **not** authorize production retrieval, collector pause,
+or 052 execution.
 
 ## Owner pause / gap policy (unchanged)
 
@@ -116,12 +95,6 @@ NOT authorized now:
 **C2_CONTROLLED_COLLECTOR_PAUSE =
 FUTURE EXPLICIT OWNER EXECUTION GATE ONLY**
 **CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
-
-**IO_EXECUTION_STRATEGY =
-CONTROLLED_PAUSE_ELIGIBLE_BUT_NOT_YET_AUTHORIZED**
-
-Capsule source/CI merge does **not** authorize production 052.
-The runner blocker and the IO safety gate remain separate.
 
 ## Future C2 pre-build resource gate (ACTIVE / MANDATORY)
 
@@ -137,7 +110,7 @@ Normal pre-maintenance gates:
 - available RAM ≥ 4 GiB
 - root free ≥ 10 GiB
 
-Reject the build if **any** of:
+Reject if **any** of:
 
 - swap-out (`so`) > 0 on a majority of samples
 - **median** data-device (`dm-0`) `%util` ≥ 80 **AND** median iowait ≥ 10
@@ -147,14 +120,20 @@ One favorable sample must not override a bad observation window.
 
 ## Next Owner gate
 
-**C2 CAPSULE POST-MERGE MAIN
-VERIFY-ONLY + ARTIFACT SHA FREEZE**
+**C2 PRODUCTION CAPSULE RETRIEVAL
++ OFFLINE SELF-TEST
++ CONTROLLED MAINTENANCE PREFLIGHT**
 
-This next gate authorizes only:
+This gate may authorize:
 
-- `workflow_dispatch` VERIFY_ONLY on actual merged main
-- final artifact SHA derivation
-- artifact provenance/integrity review
+- public Release retrieval to an exact production maintenance staging path
+- SHA verification
+- safe extraction
+- capsule self-test WITHOUT DB connection
+- fresh production READY_TO_APPLY proof
+- fresh five-minute resource baseline
+- controlled collector-pause readiness
 
-It does **not** authorize D2 publication, production staging,
-collector pause, 052 execution, 050, or 051.
+It does **not** automatically authorize 052 execution.
+052 remains a separate explicit Owner gate after resource-recovery proof
+unless a later Owner task specifically combines them.
