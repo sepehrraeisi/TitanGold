@@ -1,0 +1,18 @@
+{
+  "name": "titangold-c2-migration-runner-capsule",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated offline node-pg-migrate runner for TitanGold C2 052 only. Not a global migration framework.",
+  "engines": {
+    "node": "20.19.5"
+  },
+  "bin": {
+    "c2-migrate": "./bin/c2-migrate.mjs",
+    "c2-self-test": "./bin/c2-self-test.mjs"
+  },
+  "dependencies": {
+    "node-pg-migrate": "8.0.4",
+    "pg": "8.16.3"
+  }
+}
