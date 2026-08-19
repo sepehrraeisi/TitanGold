@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; post-pause IO RCA complete; foreground query remediation DESIGN next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A exact-pair design corrected; source-only implementation + CI next
 alwaysApply: true
 ---
 
@@ -8,9 +8,9 @@ alwaysApply: true
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
-POST-PAUSE IO RCA COMPLETE /
-PRIMARY DRIVER POSTGRES_FOREGROUND_QUERY_IO /
-FOREGROUND QUERY REMEDIATION DESIGN NEXT**
+FOREGROUND QUERY REMEDIATION DESIGN CORRECTED + COMPLETE /
+E6A EXACT-PAIR ENGINE SOURCE REMEDIATION SELECTED /
+SOURCE-ONLY IMPLEMENTATION + CI NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -66,6 +66,21 @@ bytes = 18109
 
 The RCA packet is the current attribution authority. It does not replace
 retry #2 as the collector-off gate measurement.
+
+Historical foreground-query design packet (immutable / PARTIALLY_VALID):
+`/home/ubuntu/TITANGOLD_C2_FOREGROUND_QUERY_REMEDIATION_DESIGN_20260819T162711Z.txt`
+SHA256:
+`2870095b1b4c527f6ccf6b8c7931ca1a306b567e6736b2ad1e893bc8871a04ce`
+bytes = 22072
+Do not modify this historical packet.
+
+Corrected design authority:
+`/home/ubuntu/TITANGOLD_C2_FOREGROUND_QUERY_REMEDIATION_DESIGN_CORRECTION_20260819T164716Z.txt`
+SHA256:
+`dee892ec840d25189e923055a797b05ee095dd2e0e0a45855d75981861fd2c13`
+bytes = 10124
+
+**C2 FOREGROUND QUERY REMEDIATION DESIGN = COMPLETE WITH CORRECTION**
 
 ## Production capsule staging
 
@@ -131,6 +146,9 @@ Do not rebuild, download, run, or connect the capsule to DB in this closeout.
 **C2 POST-PAUSE IO BLOCKER RCA = COMPLETE**
 **RCA_CONFIDENCE = HIGH**
 **C2_IO_PRIMARY_DRIVER = POSTGRES_FOREGROUND_QUERY_IO**
+**C2 FOREGROUND QUERY REMEDIATION DESIGN = COMPLETE WITH CORRECTION**
+**E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
+**SELECTED_SEQUENCE = SEQUENCE_B**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
@@ -425,28 +443,94 @@ NOT SUPPORTED:
 
 Do not invent percentages.
 
-## Design candidates only — no implementation
+## Corrected E6A design (selected; not implemented)
 
-**CANDIDATE_1 (DESIGN ONLY)** = telegram-processor unprocessed-fetch remediation  
-Target: NOT EXISTS / sequential-scan foreground query pressure  
-Surfaces may include query semantics, processed_telegram_messages lookup path,
-telegram_messages unprocessed path, statistics state, and temp-spill behavior.  
-Exact SQL rewrite, exact index, exact migration, ANALYZE, and restart plan are
-**not** decided here. Potential migration = MAYBE. No migration is authorized.
+**PREVIOUS E6 INPUT ASSUMPTION = FALSE / SUPERSEDED**
 
-**CANDIDATE_2 (DESIGN ONLY)** = collected_data telegram-message lookup remediation  
-Target: JSONB membership lookup causing collected_data sequential reads  
-Surfaces may include typed/indexable representation, query-shape redesign,
-existing schema/index capability, and confirmed canonical source ownership.  
-Potential migration = LIKELY / TO BE DESIGNED.  
-Do not choose generated column, side table, expression index, typed physical
-column, or specific index shape yet.
+Incorrect historical assumption: callers already pass positionally aligned
+parallel arrays.
 
-**DESIGN PRIORITY = POSTGRES FOREGROUND QUERY REMEDIATION**
+Current canonical source (`backend/services/telegramPipeline.js`
+`processSubBatch()`):
 
-The next design gate must evaluate **both** families before selecting
-implementation ordering. It may conclude candidate #1 first, candidate #2
-first, or a staged combination. Do not pre-authorize either implementation.
+- sourceIds = `[...new Set(resolved.map((r) => r.source.id))]`
+- messageIds = `resolved.map((r) => String(r.message.message_id))`
+
+**CURRENT_SOURCE_ARRAYS_POSITIONALLY_ALIGNED = NO**
+**PREVIOUS_E6_DESIGN = NOT IMPLEMENTATION ELIGIBLE AS WRITTEN**
+
+**TELEGRAM_TRANSFER_DEFAULT_BATCH = 700**
+**TELEGRAM_TRANSFER_SUB_BATCH = 100**
+loadExistingTelegramKeys direct runtime pair cardinality = **<=100**
+N=700 lookup plan = **NON_REPRESENTATIVE_FOR_DIRECT_RUNTIME_LOOKUP**
+Primary representative evidence: N=1 / 10 / 50 / 100
+
+**REQUESTED_DEDUPE_PAIR = (source.id, String(message.message_id))**
+Pairs must be derived 1:1 from `resolved[]`. Dedupe only by the complete pair.
+Never unique(sourceId) independently.
+
+Preferred conceptual API (DESIGN ONLY, not implemented):
+`loadExistingTelegramKeys(requestedPairs)`
+Fail closed unless pairSourceIds.length == pairMessageIds.length == requestedPairs.length.
+
+Corrected SQL is eligible only when `$1` and `$2` come from the same ordered
+requestedPairs list. Reusing unique source IDs + all message IDs is forbidden.
+
+**FIRST REMEDIATION NEW INDEX = NONE**
+Reuse `idx_collected_data_telegram_msg_dedupe`
+UNIQUE btree `(source_id, (raw_data->>'telegram_message_id'))`
+WHERE `raw_data ? 'telegram_message_id'`
+Corrected SQL matches expression and partial predicate.
+
+Runtime-representative EXPLAIN (no ANALYZE):
+N=1 / 10 / 50 / 100 = Nested Loop + Index Scan
+whole-table seq scan = NO
+**E6_RUNTIME_REPRESENTATIVE_PLAN = INDEX_BACKED_AT_N_LE_100**
+
+Semantic design-level: same-source/multiple-message PASS; same-message/multiple-source
+PASS; duplicate exact pair PASS; missing pair PASS; exact Set intersection PASS.
+23505 unique-violation handling = DEFENSE IN DEPTH, not the desired normal lookup path.
+
+**E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
+Selected design name = **E6A EXACT-PAIR ENGINE LOOKUP SOURCE-ONLY DESIGN**
+**SELECTED_SEQUENCE = SEQUENCE_B**
+1. E6A engine source-only exact-pair remediation
+2. production measurement in a separately authorized later task
+3. processor remediation only if still required
+
+E6A does **not** resolve the processor blocker.
+
+Processor findings preserved:
+**IS_PROCESSED_EQUIVALENCE = PROVEN_UNSAFE**
+processed_telegram_messages(raw_message_id) lookup index = ABSENT
+processor plan = PARALLEL SEQ SCAN / HASH ANTI JOIN / SORT / LIMIT
+**TEMP_SPILL_PRIMARY_FAMILY = PROCESSOR** (HIGH)
+Later candidate non-unique btree `processed_telegram_messages(raw_message_id)`
+requires TIER3 DB migration + CREATE INDEX CONCURRENTLY + separate authorization.
+No migration number assigned. Not authorized now.
+
+E6A targets collected_data JSONB dedupe lookup / engine heap pressure.
+E6A does not solve processor NOT EXISTS, processor temp spill, missing
+raw_message_id path, collector MAX, or global swap/reclaim by itself.
+The production resource gate may still fail after E6A.
+
+Future verification must score ENGINE_LOOKUP_EFFECT separately from
+GLOBAL_RESOURCE_GATE. Do not invent unapproved numeric success thresholds.
+
+**FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
+DB migration = NO
+DB stats mutation = NO
+new index = NO
+source change = YES
+runtime restart eventually required = YES
+
+PHASE 1 = repository source + tests + CI only
+PHASE 2 = separate production deploy / engine-worker controlled restart / measurement
+Do not combine those phases in this governance task.
+
+**CLOSED_BASELINE_CHANGE = REQUIRES EXACT OWNER AUTHORIZATION**
+Future implementation surface: `backend/services/telegramPipeline.js`
+This closeout does **not** authorize source modification.
 
 ## 052 safety
 
@@ -474,54 +558,22 @@ implementation is proposed.
 
 ## Next Owner gate
 
-**C2 POST-PAUSE IO BLOCKER
-POSTGRES FOREGROUND QUERY REMEDIATION DESIGN**
+**C2 FOREGROUND IO
+COLLECTED_DATA LOOKUP E6A
+SOURCE-ONLY IMPLEMENTATION + CI AUTHORIZATION**
 
-This gate may authorize:
+This future gate is repository implementation only, after separate Owner
+authorization:
 
-- repository read-only source discovery
-- production read-only schema/index/statistics discovery
-- exact SQL/query-shape analysis
-- EXPLAIN WITHOUT ANALYZE only if demonstrably read-only and low-risk
-- source/runtime ownership mapping
-- comparison of remediation alternatives
-- migration/index DESIGN
-- statistics remediation DESIGN
-- service-restart DESIGN
-- sequencing/design of candidate #1 and #2
-- deterministic test-plan design
-- rollback design
-- production verification metric design
-- governance design evidence
+- modify `backend/services/telegramPipeline.js`
+- add/update narrowly scoped deterministic tests
+- run local/CI verification
+- create a source PR
 
-This gate does **not** authorize:
+It does **not** authorize:
 
-source implementation, migration implementation, CREATE/DROP INDEX,
-ANALYZE, VACUUM, EXPLAIN ANALYZE, DB mutation, capsule DB connection,
-processor/engine/collector restart, PM2 mutation, OS/swap tuning,
-052, 050, or 051.
+production deploy, engine-worker restart, PM2 mutation,
+production DB access/mutation, ANALYZE/VACUUM, CREATE/DROP/REINDEX,
+migration, 052, 050, or 051.
 
-## Remediation DESIGN hard requirements before implementation
-
-The design gate must resolve before any implementation:
-
-1. exact canonical current-main source owner of processor query
-2. exact canonical current-main source owner of engine JSONB query
-3. full table schemas for telegram_messages, processed_telegram_messages, collected_data
-4. all existing indexes for those tables
-5. exact constraints / uniqueness / nullability / data types
-6. exact processor SQL semantics and result ordering/limit semantics
-7. exact engine JSONB lookup semantics
-8. current read-only EXPLAIN plans where safe
-9. why idx_unprocessed_created scan delta was zero
-10. processed_telegram_messages access-path requirements
-11. whether stale stats remediation alone could materially change plan
-12. whether ANALYZE would be enough, insufficient, or only complementary
-13. whether candidate #1 requires a migration
-14. whether candidate #2 requires a migration
-15. migration sequencing relative to existing 050/051/052
-16. concurrent-index requirements for live production
-17. rollback strategy
-18. deterministic test plan
-19. source/service restart requirements
-20. verification against dm-0 / temp_bytes / seq_scan / physical-read metrics
+After source/CI merge, a separate production deployment/restart gate is required.
