@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 capsule staged; pause attempt #1 restored; post-pause IO not measured
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; pause retry #2 restored; post-pause gate FAIL_IO_PRESSURE
 alwaysApply: true
 ---
 
@@ -7,9 +7,10 @@ alwaysApply: true
 
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
-C2 CAPSULE STAGED + READY_TO_APPLY /
-CONTROLLED PAUSE ATTEMPT #1 RESTORED /
-POST-PAUSE RESOURCE PROOF INCOMPLETE**
+C2 READY_TO_APPLY /
+CONTROLLED PAUSE RETRY #2 COMPLETE + RESTORED /
+POST-PAUSE RESOURCE GATE FAIL_IO_PRESSURE /
+IO BLOCKER RCA NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -49,10 +50,16 @@ Pause attempt #1 evidence packet:
 SHA256:
 `17e3e6a5ba428803d1d1efdd6e8261558248a28403428e6c486f1a3c4b5ed360`
 
-That pause packet retains the original execution report, including the
-unsupported `NO_MATERIAL_RECOVERY` label. Rule02 interpretation supersedes
-that label with **NOT_MEASURED** because post-pause sample_count = 0.
-Do not alter the historical evidence packet.
+That historical packet is unchanged. Attempt #1 remains incomplete for
+post-pause resource proof (`sample_count = 0` / `NOT_MEASURED`).
+
+Pause retry #2 evidence packet:
+`/home/ubuntu/TITANGOLD_C2_CONTROLLED_PAUSE_RETRY2_20260819T145718Z.txt`
+SHA256:
+`e9eb59f5f9238509a0139a93f6cb66ec8f3679494631d4c7bb1b9c9cb2255d8e`
+bytes = 6243
+
+Retry #2 is the current formal post-pause measurement authority.
 
 ## Production capsule staging
 
@@ -69,14 +76,13 @@ Execution-eligible staging:
 Capsule root:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86_CLEAN1/payload/titangold-c2-runner`
 
-**NEW_STAGING_CLASS = FRESH_STAGED_HASH_VERIFIED_OFFLINE_SELF_TEST_PASS**
+**PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
 Manifest source = `13bd0b5def6d14584be4a4fa5c2ef5d58c252266`
 Node = `v20.19.5`
 node-pg-migrate = `8.0.4`
 pg = `8.16.3`
 package-lock SHA256 = `740a49a2722139446b3f925429e18681510f42c75c9e67568b15befca3e53e8a`
 Offline self-test = PASS
-Production self-test inet connect = 0 / PASS
 Capsule DB connection attempted = NO
 
 ## State
@@ -86,6 +92,7 @@ Capsule DB connection attempted = NO
 **C2 D2 PUBLICATION = PASS**
 **PRODUCTION CAPSULE = FRESH CLEAN1 STAGED / HASH VERIFIED / OFFLINE SELF-TEST PASS**
 **C2 052 = NOT EXECUTED**
+**C2_052_EXECUTION_AUTHORIZED = NO**
 **C2_PRODUCTION_EXECUTION_VERIFICATION = NOT STARTED**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **PRODUCTION DB MUTATION = 0**
@@ -96,9 +103,11 @@ Capsule DB connection attempted = NO
 **051 objects = ABSENT**
 **same-name C2 index = ABSENT**
 **equivalent channel-leading index = NONE**
-**CONTROLLED COLLECTOR PAUSE ATTEMPT = #1 EXECUTED AND COLLECTOR RESTORED ONLINE**
+**CONTROLLED COLLECTOR PAUSE ATTEMPT = #2 COMPLETE AND COLLECTOR RESTORED ONLINE**
 **CURRENT COLLECTOR PAUSE = NO**
 **CURRENT COLLECTOR PAUSE AUTHORIZATION = NO**
+**C2_POST_PAUSE_RESOURCE_GATE = FAIL_IO_PRESSURE**
+**C2 RESOURCE BLOCKER = ACTIVE**
 **RESOURCE STABILIZATION COMPLETE = NO**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
@@ -126,90 +135,169 @@ swap-out positive = 5/6
 consecutive severe pair = YES
 **C2_PRE_MAINTENANCE_RESOURCE_GATE = FAIL_IO_PRESSURE**
 
-This remains the currently proven IO state with collector online.
+This remains the proven collector-online IO baseline. It is not replaced by
+the post-pause window; the post-pause window is a separate measurement.
 
-## Controlled pause attempt #1
+## Controlled pause attempt #1 (historical / incomplete proof)
 
-PM2 process = `telegram-collector`
-PM2 id = 16
-pre-stop PID = 854649
-pre-stop restart count = 13553
-PAUSE_START_UTC = `2026-08-19T14:10:24Z`
-pm2 stop = SUCCESS
-collector stopped confirmed = YES
-old PID exited = YES
-PAUSE_END_UTC = `2026-08-19T14:10:27Z`
-stop-to-restart = 2.9 seconds
-recovery command = `pm2 restart 16`
-emergency fallback = NO
-post-recovery PID = 1469107
-post-recovery PM2 id = 16
-post-recovery status = online
-functional polling resume = PASS (`attempted=10 succeeded=10`)
-post-recovery 5002 = 200
-post-recovery 5003 = 200
-potential Telegram ingestion gap = YES (bounded; Owner-accepted)
-exact lost-message count = NOT PROVEN
+Attempt #1 executed and restored the collector, but collected **zero**
+post-pause resource samples because the test contract incorrectly required
+collector-owned port 5003 to remain healthy while the collector was stopped.
 
-**COLLECTOR = RESTORED ONLINE**
-**COLLECTOR FUNCTIONAL RESUME = PASS**
+**C2_POST_PAUSE_RESOURCE_GATE (attempt #1) = INCOMPLETE_BOUNDED_WINDOW**
+**COLLECTOR_PAUSE_IO_EFFECT (attempt #1) = NOT_MEASURED**
 
-## Port 5003 discovery and corrected health semantics
+Do not use attempt #1 as the current post-pause resource authority.
+
+## Port 5003 corrected health semantics
 
 **PORT 5003 OWNERSHIP = TELEGRAM COLLECTOR**
-
-Observed: 5003=200 before stop; 5003 unavailable during intentional stop;
-5003=200 after same collector recovery.
-
 **COLLECTOR_PORT_5003_DURING_INTENTIONAL_PAUSE = EXPECTED_UNAVAILABLE**
 
 Do not classify 5003 unavailability during an intentional collector stop as
 backend health failure.
 
-Future health contract:
+Health contract:
 
 - Pre-pause: 5002=200 mandatory; 5003=200 mandatory
 - During intentional collector pause: 5002=200 mandatory; 5003 expected unavailable; no unexpected replacement listener on 5003
 - Post-recovery: 5002=200 mandatory; 5003=200 mandatory; 5003 listener must belong to the restored intended collector
 
-## Attempt #1 post-pause resource proof
+Retry #2 used this contract and it **passed**.
 
-post-pause sample count = 0
-post-pause observation span = 0
-**C2_POST_PAUSE_RESOURCE_GATE = INCOMPLETE_BOUNDED_WINDOW**
+## Controlled pause retry #2
 
-Reason: the test contract incorrectly required collector-owned port 5003 to
-remain healthy while the collector itself was intentionally stopped.
+**CONTROLLED COLLECTOR PAUSE ATTEMPT = #2 COMPLETE**
+collector identity = UNAMBIGUOUS
+PM2 process = `telegram-collector`
+PM2 id = 16
+pre-stop PID = 1469107
+pre-stop restart count = 13553
+pre-stop 5002 = 200
+pre-stop 5003 = 200
+pre-stop 5003 owner = collector PID 1469107
+PAUSE2_START_UTC = `2026-08-19T14:50:29Z`
+pm2 stop = SUCCESS
+collector stopped = YES
+during pause 5002 = 200
+during pause 5003 listener = ABSENT / EXPECTED
+unexpected replacement listener = NO
 
-**COLLECTOR_PAUSE_IO_EFFECT = NOT_MEASURED**
+**DRAIN_RESULT = PASS_WITH_UNATTRIBUTED_SELECTS**
 
-Do not retain `NO_MATERIAL_RECOVERY`. That statement is unsupported because
-no post-pause resource samples exist. Do not infer recovery or non-recovery
-from the 2.9-second pause.
+Facts:
 
-## Owner gap policy
+- idle-in-transaction = 0
+- unexpected transaction ≥60s = 0
+- active CREATE INDEX / REINDEX = NO
+- telegram_messages queries initially = 6, then 0, later 3 SELECTs without application_name
+- attribution of those final SELECTs to the stopped collector = NOT PROVEN
 
-**ZERO_LOSS_COLLECTOR_PAUSE_CATCHUP_SAFETY = UNSAFE**
+Do not claim those SELECTs were collector queries.
+Do not turn unattributed SELECTs into a retroactive blocker.
+
+## Retry #2 complete post-pause resource window
+
+formal sample count = 6
+sample #1 = `2026-08-19T14:51:12Z`
+sample #6 = `2026-08-19T14:56:31Z`
+formal observation span = 319.0 seconds
+collector = STOPPED throughout formal window
+5002 = 200 throughout
+5003 intended listener = ABSENT throughout
+unexpected 5003 replacement = NO
+MemAvailable ≈ 13.5–13.6 GiB
+root free ≈ 85–87 GiB
+idle-in-transaction = 0 throughout
+active index build = NO throughout
+
+Formal samples:
+
+1. so=5296 iowait=12 dm-0 util=100.0
+2. so=352 iowait=3 dm-0 util=92.4
+3. so=0 iowait=6 dm-0 util=33.6
+4. so=28 iowait=19 dm-0 util=98.8
+5. so=36 iowait=17 dm-0 util=99.2
+6. so=0 iowait=10 dm-0 util=50.0
+
+median dm-0 util = 95.6
+median iowait = 11.0
+swap-out positive = 4/6
+severe consecutive pair = YES (samples 4 and 5)
+
+## Post-pause resource gate verdict
+
+**C2_POST_PAUSE_RESOURCE_GATE = FAIL_IO_PRESSURE**
+
+This formal gate result is the decision authority. All three independent
+rejection clauses fired:
+
+- A: swap-out > 0 on majority = YES (4/6)
+- B: median dm-0 util ≥ 80 AND median iowait ≥ 10 = YES (95.6 / 11.0)
+- C: two consecutive severe samples = YES (samples 4–5)
+
+## IO effect interpretation
+
+**COLLECTOR_PAUSE_IO_EFFECT = NO_MATERIAL_RECOVERY**
+
+This is a **descriptive interpretation of the complete window**, not a new
+numeric policy threshold.
+
+Do **not** record or adopt invented thresholds such as util improvement ≥ 10,
+iowait improvement ≥ 5, or any other quantitative "material recovery" rule.
+Those thresholds are **not** Owner-approved and are **not** part of Rule 02.
+
+Observed comparison only:
+
+- pre median util = 97.71 → post = 95.6
+- pre median iowait = 12.5 → post = 11.0
+- pre swap-out positive = 5/6 → post = 4/6
+
+Collector removal did not make the host pass the mandatory resource gate.
+
+**COLLECTOR_REMOVAL_SUFFICIENT_TO_PASS_RESOURCE_GATE = NO**
+
+This does **not** prove the collector contributes zero IO.
+It proves that removing the collector for the complete test window was **not**
+sufficient to bring production below the mandatory C2 resource thresholds.
+
+Therefore: **do not execute 052.** A broader post-pause IO blocker RCA is required.
+
+## Collector recovery (retry #2)
+
+recovery command = `pm2 restart 16`
+emergency fallback = NO
+PAUSE2_RESTART_COMMAND_UTC = `2026-08-19T14:56:31Z`
+PAUSE2_ONLINE_UTC = `2026-08-19T14:56:31Z`
+stop-to-restart = 361.944 seconds
+stop-to-online = 362.355 seconds
+480-second boundary exceeded = NO
+post-recovery PM2 id = 16
+post-recovery PID = 1481973
+post-recovery status = online
+post-recovery 5002 = 200
+post-recovery 5003 = 200
+5003 ownership restored = YES
+polling resumed = YES
+polling attempted/succeeded/failed = 10 / 10 / 0
+Telegram reauth prompt = NO
+session reuse = PASS / decrypt YES
+**COLLECTOR_RECOVERY = PASS**
+**COLLECTOR = RESTORED ONLINE + FUNCTIONAL**
+
+## Data gap
+
+**POTENTIAL_TELEGRAM_INGESTION_GAP = YES**
+bounded duration = 362.355 seconds
 **OWNER_ACCEPTED_BOUNDED_MAINTENANCE_DATA_GAP = YES**
-
-Do not claim lossless recovery or zero lost messages.
-A future controlled pause still requires a new exact Owner execution gate.
+**ZERO_LOSS_CATCHUP = NOT GUARANTEED**
+exact lost-message count = NOT PROVEN
 
 ## Resource gate (ACTIVE / MANDATORY; thresholds unchanged)
 
 Minimum observation: **≥5 minutes**, ≥5 samples, ~60 seconds apart.
 For ~60-second spacing, collect enough samples to prove first-to-last span
 **≥300 seconds**.
-
-Normal pre-maintenance gates:
-
-- HTTP health = 200 under the corrected port semantics above
-- collector initially = exactly one intended online target / no restart loop
-- idle-in-transaction = 0
-- no unexpected transaction ≥60s
-- no active CREATE INDEX / REINDEX on `telegram_messages`
-- available RAM ≥ 4 GiB
-- root free ≥ 10 GiB
 
 Reject if **any** of:
 
@@ -220,34 +308,36 @@ Reject if **any** of:
 One favorable sample must not override a bad observation window.
 Do not weaken these thresholds.
 
-## Future post-pause test contract
-
-A future authorized collector pause must:
-
-1. freshly prove READY_TO_APPLY
-2. prove exactly one intended collector
-3. prove port 5003 belongs to that collector before stop
-4. require pre-stop 5002=200 and 5003=200
-5. stop exactly that PM2 collector
-6. prove collector stopped
-7. require during pause 5002=200 and 5003 expected unavailable
-8. require no replacement/unexpected listener on 5003
-9. drain prior collector DB activity
-10. collect a complete ≥300-second post-pause resource window
-11. evaluate unchanged resource thresholds
-12. always restart collector before task end
-13. require post-recovery 5002=200, 5003=200, exactly one collector online, polling resumed
-14. **not** execute 052 in that resource-proof task
-
 ## Next Owner gate
 
-**C2 CONTROLLED COLLECTOR PAUSE RETRY
-+ CORRECTED HEALTH SEMANTICS
-+ POST-PAUSE RESOURCE RECOVERY PROOF**
+**C2 POST-PAUSE IO BLOCKER RCA**
 
-This gate may authorize exactly one bounded collector stop, the corrected
-health semantics, complete post-pause IO measurement, and mandatory collector
-recovery.
+This gate may authorize read-only production investigation,
+process/device/DB attribution, query/IO correlation, an RCA evidence packet,
+and candidate remediation design.
 
-It does **not** authorize 052 execution, capsule DB connection,
-CREATE/DROP INDEX, pgmigrations mutation, 050, or 051.
+Read-only RCA should at minimum investigate:
+
+- PostgreSQL IO independent of the collector
+- currently active query families after collector-removal evidence
+- telegram_messages and other high-IO relations
+- buffer/cache miss pressure
+- checkpoint / background writer / WAL pressure
+- autovacuum/vacuum/analyze state
+- swap pressure / memory reclaim
+- filesystem/device queueing and latency
+- other TitanGold processes
+- non-TitanGold host processes if material
+- unexplained telegram_messages SELECTs without application_name
+- whether MAX(message_id) remains material when collector is not the source
+- whether host/device saturation is driven by another workload
+- whether a safe time-window change alone could solve the gate
+- whether a technical remediation is required before 052
+
+RCA is read-only discovery unless a later exact Owner task authorizes a fix.
+
+This gate does **not** authorize:
+
+052, capsule DB connection, CREATE/DROP INDEX, VACUUM/ANALYZE,
+query cancellation, process kill/restart, PM2 mutation, OS tuning,
+swap mutation, DB config mutation, pgmigrations, 050, or 051.
