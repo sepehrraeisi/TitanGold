@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A source+CI merged; production deploy + engine-worker restart + targeted measurement DESIGN next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A runtime deployment design corrected+complete; runtime deployment + engine/backend refresh + measurement AUTHORIZATION next
 alwaysApply: true
 ---
 
@@ -9,8 +9,8 @@ Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
 E6A SOURCE + CI MERGED /
-PRODUCTION NOT DEPLOYED /
-E6A RUNTIME DEPLOYMENT + MEASUREMENT DESIGN NEXT**
+E6A RUNTIME DEPLOYMENT DESIGN CORRECTED + COMPLETE /
+RUNTIME EXECUTION AUTHORIZATION NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -88,8 +88,21 @@ bytes = 10124
 **E6A CANONICAL SOURCE MERGE = `1c4e85af36bc5924f4b2f75c41319f8b20fbe6b7`**
 **E6A BACKEND TESTS RUN = `32282174640`**
 **E6A BACKEND TESTS = PASS**
+**C2 E6A RUNTIME DEPLOYMENT DESIGN = COMPLETE WITH RESTART-SCOPE CORRECTION**
 
-## Production capsule staging
+Historical E6A runtime design packet (immutable):
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_DEPLOYMENT_DESIGN_20260821T074524Z.txt`
+SHA256 =
+`48c3d7f5eefa237cd2b424f27c731b99d8b499eb73843c7f886601ae265c266c`
+classification =
+**HISTORICAL / MOSTLY_VALID / RESTART-SCOPE CORRECTION REQUIRED**
+
+Corrected E6A runtime design authority:
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_DEPLOYMENT_DESIGN_CORRECTION_20260821T075646Z.txt`
+SHA256 =
+`7a71b289f65759a3369dd17c007b940004c9e753ff3d2cff2068db4bd89e2df2`
+bytes = 16973
+
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -176,8 +189,13 @@ Do not rebuild, download, run, or connect the capsule to DB in this closeout.
 **E6A PRODUCTION MEASUREMENT = NOT STARTED**
 **E6A ENGINE_LOOKUP_EFFECT = NOT MEASURED**
 **GLOBAL_RESOURCE_GATE_AFTER_E6A = NOT MEASURED**
+**C2 E6A RUNTIME DEPLOYMENT DESIGN = COMPLETE WITH RESTART-SCOPE CORRECTION**
+**RUNTIME DEPLOYMENT AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
 **PHASE 1 = E6A SOURCE + TESTS + CI / COMPLETE / MERGED**
-**PHASE 2 = PRODUCTION DEPLOY / ENGINE-WORKER CONTROLLED RESTART / TARGETED E6A MEASUREMENT / NOT AUTHORIZED / NOT STARTED**
+**PHASE 2 = RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH + TARGETED MEASUREMENT / DESIGN COMPLETE / EXECUTION NOT AUTHORIZED**
 **E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
 **SELECTED_SEQUENCE = SEQUENCE_B**
 **FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
@@ -650,10 +668,332 @@ One favorable sample cannot override a bad window.
 **PHASE 1 = E6A SOURCE + TESTS + CI**
 status = COMPLETE / MERGED
 
-**PHASE 2 = PRODUCTION DEPLOY / ENGINE-WORKER CONTROLLED RESTART / TARGETED E6A MEASUREMENT**
-status = NOT AUTHORIZED / NOT STARTED
+**PHASE 2 = RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH + TARGETED MEASUREMENT**
+status = DESIGN CORRECTED + COMPLETE / EXECUTION NOT AUTHORIZED / NOT STARTED
 
 These phases remain separate.
+Production deployed = NO.
+Runtime verification = PENDING.
+Resource stabilization = NO.
+
+## E6A runtime deployment design authority
+
+**C2 E6A RUNTIME DEPLOYMENT DESIGN = COMPLETE WITH RESTART-SCOPE CORRECTION**
+
+Historical runtime design packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_DEPLOYMENT_DESIGN_20260821T074524Z.txt`
+SHA256 =
+`48c3d7f5eefa237cd2b424f27c731b99d8b499eb73843c7f886601ae265c266c`
+bytes = 25306
+classification =
+**HISTORICAL / MOSTLY_VALID / RESTART-SCOPE CORRECTION REQUIRED**
+
+Current corrected design authority:
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_DEPLOYMENT_DESIGN_CORRECTION_20260821T075646Z.txt`
+SHA256 =
+`7a71b289f65759a3369dd17c007b940004c9e753ff3d2cff2068db4bd89e2df2`
+bytes = 16973
+
+Do not alter either packet.
+
+## Production provenance design snapshot
+
+**PRODUCTION_APP_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PRODUCTION_REPO_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PROD_APP_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+**PROD_BRANCH = main / attached**
+Production dirty count = 490
+Production tree = **BROADLY DIRTY**
+Critical distinction:
+`backend/services/telegramPipeline.js` = **TRACKED + CLEAN**
+
+Do not interpret broad dirty-tree status as authorization to clean, stash,
+reset, or perform commit-level deployment.
+
+## Target file provenance
+
+Production target:
+`/home/ubuntu/webapp/TitanGold/backend/services/telegramPipeline.js`
+
+**PROD_TARGET_TRACKED = YES**
+**PROD_TARGET_DIRTY = NO**
+production working SHA256 =
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+production HEAD target SHA256 =
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+E6A parent target SHA256 =
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+canonical E6A target SHA256 =
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+current-main target SHA256 =
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+canonical E6A Git blob =
+`95041aaa4bc5279e4cc08997ff7997513567c886`
+
+Do not confuse Git blob SHA with SHA256.
+
+Target metadata snapshot: owner=`ubuntu` group=`ubuntu` mode=`664`
+Future deployment must preserve owner/group/mode and verify after replacement.
+
+## Deployment compatibility and unit
+
+**PROD_E6A_DEPLOYMENT_COMPATIBILITY = TARGET_CLEAN_AND_E6A_PARENT_EXACT**
+Exact E6A patch isolated = YES
+read-only patch compatibility = PASS
+**WHOLE_FILE_REPLACEMENT_SAFE = YES**
+**E6A_PATCH_ONLY_SAFE = YES**
+**COMMIT_LEVEL_DEPLOY_SAFE = NO**
+Reason: production repo is broadly dirty; commit/repository update would have
+a larger unrelated mutation surface.
+
+**RECOMMENDED_DEPLOYMENT_UNIT = D1 WHOLE CANONICAL FILE REPLACEMENT**
+
+D1 is safe ONLY under the execution-time preimage gate.
+Future execution MUST require target SHA256 immediately before mutation:
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+If target SHA differs: **STOP**. No deployment. No fallback to patch/commit
+deployment without new Owner authority.
+
+## PM2 / engine runtime model
+
+PM2 version snapshot = `6.0.13`
+**PM2 IDs / PIDs are DESIGN SNAPSHOT ONLY**
+**EXECUTION_REQUIRES_FRESH_PM2_RESOLUTION = YES**
+Future execution must identify processes by compound identity:
+name + cwd + entrypoint + exec mode + current PM2 id + current PID
+Stop on material drift.
+
+Engine design snapshot:
+app = `titan-engine-worker`
+snapshot pm_ids = `5`, `9`
+snapshot PIDs = `1942263`, `1942240`
+status = online / online
+exec mode = **fork_mode**
+instance count = 2
+cwd = `/home/ubuntu/webapp/TitanGold/backend`
+entrypoint = `backend/workers/engineWorkerLeader.js`
+
+**ENGINE_INSTANCE_MODEL = ACTIVE_ACTIVE**
+leader election = **NONE PROVEN**
+Telegram transfer single-flight mechanism = **PostgreSQL advisory lock**
+Do not confuse engine instance model with single-flight transfer operation.
+
+## Fork-mode restart correction
+
+**FORK_MODE_RELOAD_SEMANTICS = EQUIVALENT_OR_FALLBACK_TO_RESTART**
+Previous `MULTI_INSTANCE_CONTROLLED_RELOAD` is superseded for engine workers.
+
+**RESTART_METHOD_ENGINE = PM2_RESTART_EXACT_ID_SEQUENTIAL**
+Future procedure conceptually:
+1. freshly identify engine instance A
+2. restart exact A
+3. verify A online/healthy
+4. verify engine B remained online
+5. restart exact B
+6. verify B online/healthy
+
+No restart all / reload all / name-wide unbounded restart / ecosystem-wide mutation.
+
+**SEQUENTIAL_ENGINE_RESTART_SAFETY = SAFE_WITH_BOUNDED_DELAY**
+**ENGINE_RESTART_DATA_EFFECT = BOUNDED_GAP_WITH_RETRY**
+Do NOT claim zero delay.
+Do NOT claim permanent loss is proven absent beyond design evidence.
+
+## Shared consumer inventory
+
+Material runtime consumer families = 2.
+
+Consumer #1:
+PROCESS = `titan-engine-worker`
+SOURCE = `backend/engine/scheduler.js`
+CALL = `transferTelegramMessagesToPipeline(...)`
+TRIGGER = SCHEDULED
+
+Consumer #2:
+PROCESS = `titan-backend`
+SOURCE = `backend/routes/data-sources.js`
+ROUTE = `POST /api/v1/data-sources/telegram-transfer-messages`
+CALL = `transferTelegramMessagesToPipeline(...)`
+TRIGGER = AUTHENTICATED WRITE HTTP
+AUTHORIZATION = **admin OR trader**
+Do NOT record this as admin-only.
+
+Tests = TEST_ONLY
+telegram-processor = NOT CONSUMER
+telegram-collector = NOT CONSUMER
+
+## Backend runtime consumer / refresh
+
+**TITAN_BACKEND_E6A_CONSUMER = MANUAL_OR_AUTHENTICATED_WRITE_RUNTIME_PATH**
+The route is runtime-callable.
+If shared source on disk is replaced and titan-backend remains running, old
+in-memory module state may remain.
+
+**MIXED_RUNTIME_RISK = PRESENT**
+**TITAN_BACKEND_RESTART_REQUIRED_FOR_E6A_CONSISTENCY = YES**
+
+Backend design snapshot:
+name = `titan-backend`
+snapshot pm_ids = `1–4`
+exec mode = **cluster_mode**
+cwd = `/home/ubuntu/webapp/TitanGold/backend`
+entrypoint = `server.js`
+Snapshot IDs are NOT execution authority.
+
+**BACKEND_RUNTIME_REFRESH = CONTROLLED CLUSTER RELOAD**
+Future runtime authorization must freshly resolve exact backend app/instances,
+verify cluster_mode remains true, verify port 5002 ownership/topology, and
+stop on drift.
+
+## Full runtime refresh scope and order
+
+After canonical source replacement, every material runtime process capable of
+using the affected module must be refreshed.
+
+**RUNTIME_REFRESH_SCOPE = ENGINE + BACKEND**
+(not engine-only)
+
+Required future runtime consumers:
+1. all current online `titan-engine-worker` instances
+2. all current online `titan-backend` cluster workers
+
+No processor restart.
+No collector restart.
+
+Recommended design order:
+1. D1 canonical source replacement
+2. fresh engine instance A exact-ID restart
+3. engine A health proof
+4. fresh engine instance B exact-ID restart
+5. engine B health proof
+6. controlled titan-backend cluster reload
+7. backend/5002 health proof
+8. global/non-target health proof
+
+This is DESIGN authority only.
+Future execution must freshly recalculate identities before each mutation.
+
+## Non-interference contract
+
+Future execution must NOT intentionally restart/mutate:
+telegram-processor
+telegram-collector
+
+Before mutation record their name / PM2 id / PID / restart count.
+After runtime refresh require:
+processor restart count unchanged
+collector restart count unchanged
+collector 5003 remains healthy
+backend 5002 restored/healthy
+No collector pause.
+
+## Rollback / atomicity
+
+Rollback design complete.
+Future execution must preserve BEFORE mutation:
+exact old target bytes
+SHA256 = `63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+owner / group / mode
+PROD_APP_HEAD
+target dirty status
+
+Rollback artifact must reside OUTSIDE application repo.
+After source rollback, every runtime consumer previously refreshed to E6A and
+requiring old-module consistency must itself be refreshed/restarted back onto
+restored code.
+**ROLLBACK_RUNTIME_SCOPE_COMPLETE = YES**
+
+Deployment atomicity (future):
+canonical file staged outside target
+canonical SHA256 verified
+production-compatible Node syntax check PASS
+rollback artifact already verified
+same-filesystem atomic replacement where feasible
+no interactive editing / no sed/perl in-place / no partial writes
+post-write SHA256 exact canonical E6A SHA
+owner/group/mode preserved
+
+## Health / measurement contracts
+
+Pre-deploy health:
+backend 5002 = HTTP 200
+collector 5003 = HTTP 200
+engine workers = ONLINE
+backend workers = ONLINE
+processor = ONLINE
+collector = ONLINE
+CURRENT COLLECTOR PAUSE = NO
+Record process IDs/restart counters before execution.
+Engine scheduler/activity evidence must be available.
+No invented health endpoint.
+
+Post-runtime-refresh health must prove:
+engine workers ONLINE with intended PIDs refreshed
+expected engine restart-count changes only
+backend cluster healthy; backend 5002 = HTTP 200
+collector 5003 = HTTP 200
+collector/processor PID/restart count unchanged
+no crash loop / no module-syntax-import errors / no E6A SQL parameter-type errors
+engine Telegram work resumes
+authenticated HTTP path remains serviceable
+
+Targeted measurement preserved:
+Pre/post windows: >=5 minutes, >=5 samples, first-to-last >=300 seconds,
+approximately 60 sec device samples
+Capture comparable deltas for collected_data seq_scan/seq_tup_read/heap_blks_read/heap_blks_hit;
+idx_collected_data_telegram_msg_dedupe idx_scan/idx_tup_read/idx_tup_fetch where useful;
+DB blks_read/blks_hit/temp_bytes/temp_files;
+device dm-0 util/iowait/rkB/s/wkB/s/aqu-sz/swap in-out/PSI IO/PSI memory
+No reset. No ANALYZE. No mutation.
+
+**ENGINE_WORK_ACTIVITY_PROXY = Redis `pipeline:scheduler:heartbeat:transfer` + transfer-cycle evidence**
+Confidence = LIMITED-TO-MODERATE
+Targeted measurement may be INCONCLUSIVE if workloads are not reasonably comparable.
+Do not force PASS/FAIL from weak workload evidence.
+
+**ENGINE_LOOKUP_EFFECT = PASS / FAIL / INCONCLUSIVE**
+PASS requires: canonical E6A deployed and loaded; meaningful relevant workload;
+existing dedupe expression index exercised; no old engine ANY/ANY behavior;
+favorable collected_data read/seq behavior; no semantic/runtime E6A regression.
+INCONCLUSIVE != PASS.
+
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS / FAIL_IO_PRESSURE / INCONCLUSIVE**
+Mandatory thresholds unchanged (Reject A/B/C). Threshold weakening = NOT AUTHORIZED.
+
+**ENGINE_LOOKUP_EFFECT = PASS** may coexist with
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = FAIL_IO_PRESSURE**
+because processor blocker remains independent/open.
+Global PASS does NOT automatically authorize 052.
+
+## Processor blocker preserved
+
+telegram-processor foreground blocker = **OPEN / NOT REMEDIATED BY E6A**
+**IS_PROCESSED_EQUIVALENCE = PROVEN_UNSAFE**
+processed_telegram_messages(raw_message_id) lookup index = ABSENT
+**TEMP_SPILL_PRIMARY_FAMILY = PROCESSOR**
+Do not implement processor remediation here.
+
+## Future execution stop gates
+
+The future runtime execution task MUST stop before mutation if any of:
+origin/main governance drift
+Rule02 execution gate absent
+production root/provenance drift
+target becomes dirty
+target preimage SHA != `63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+canonical E6A SHA mismatch
+file owner/group/mode unresolved
+PM2 engine topology materially changed
+backend topology materially changed
+unexpected additional telegramPipeline runtime consumer appears
+rollback artifact cannot be created/verified
+Node syntax check fails
+pre-health fails
+collector/processor identity ambiguous
+production DB provenance ambiguous
+ability to remain fail-closed lost
+
+No improvisation.
 
 ## 052 safety
 
@@ -663,7 +1003,7 @@ These phases remain separate.
 **C2 052 = NOT EXECUTED**
 **RESOURCE STABILIZATION COMPLETE = NO**
 
-E6A source merge does **not** make 052 safe.
+E6A source merge / runtime design closeout does **not** make 052 safe.
 Do not weaken resource thresholds.
 Do not interpret this closeout as authorization to build the C2 index.
 No 052 execution.
@@ -690,73 +1030,56 @@ Fresh origin/main verification for this closeout:
 - `backend/services/telegramIngest.js` = ABSENT; do not use it
 
 Any later source move must be rediscovered on then-current main before
-runtime deployment is designed.
+runtime deployment is executed.
+
+## This PR does NOT authorize execution
+
+**RUNTIME DEPLOYMENT AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+
+The next Owner gate NAME describes the next separately approvable task.
+It is NOT self-authorization.
 
 ## Next Owner gate
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-PRODUCTION DEPLOY + ENGINE-WORKER RESTART + TARGETED MEASUREMENT DESIGN**
+RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH
++ TARGETED MEASUREMENT AUTHORIZATION**
 
-This gate is **DESIGN / READ-ONLY DISCOVERY ONLY**.
+This FUTURE gate may authorize only after separate Owner approval:
 
-It may authorize after separate Owner approval:
+- fresh execution-time provenance gates
+- rollback artifact creation outside app tree
+- stage canonical single source file
+- verify canonical SHA + syntax
+- atomic D1 target replacement
+- sequential exact-ID engine restarts after fresh resolution
+- controlled backend cluster reload after fresh resolution
+- health checks
+- formal post-deployment measurement
+- rollback if defined triggers fire
+- evidence packet
 
-- fresh read-only production provenance discovery
-- exact deployed-file/hash comparison
-- identify exact engine-worker PM2 process/id
-- determine exact deployment mechanism
-- design source-file deployment boundaries
-- design pre-deploy health checks
-- design rollback
-- design engine-worker controlled restart
-- design post-restart health verification
-- design targeted E6A DB/read metrics
-- design global resource observation
-- design evidence packet
-- design Human QA/re-close criteria
+It must NOT authorize:
 
-It does **NOT** authorize:
-
-actual source deployment,
-file copy to production,
-git pull/reset on production,
-engine-worker restart/reload/stop/start,
-PM2 mutation,
-DB mutation,
-ANALYZE,
-VACUUM,
+processor remediation,
+processor restart,
+collector pause/restart,
+DB schema mutation,
+ANALYZE/VACUUM,
 CREATE/DROP/REINDEX,
 migration,
-collector pause,
-processor restart,
 052,
 050,
 or 051.
 
-The next design task must resolve before runtime authorization:
-
-1. exact current production source provenance
-2. whether production app tree is dirty and whether preexisting dirt is unrelated
-3. exact canonical file SHA/content to deploy
-4. exact production destination path
-5. whether single-file deployment is safe or commit-level deployment is required
-6. exact engine-worker PM2 name/id/PID
-7. whether more than one worker instance consumes telegramPipeline.js
-8. restart scope required to load new source
-9. pre-restart health contract
-10. post-restart health contract
-11. rollback source artifact
-12. rollback restart procedure
-13. how to avoid restarting collector/processor
-14. how to verify only intended engine process changed
-15. whether E6A query can be identified read-only after deployment
-16. targeted collected_data relation/index counters
-17. formal >=300-second measurement window
-18. global resource-gate comparison
-19. how to classify ENGINE_LOOKUP_EFFECT vs GLOBAL_RESOURCE_GATE
-20. evidence packet and Human QA/re-close requirements
-
-No runtime mutation before this design is approved and governance authority
-updated.
 **IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+production deployed = NO
+runtime verification = PENDING
+resource stabilization = NO
