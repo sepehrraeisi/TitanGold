@@ -365,14 +365,14 @@ class SchedulerService {
         this.telegramBackgroundArmed = false;
 
         if (this.isRunning) {
-            void recordTelegramLifecycleEvidence({
-                state: TELEGRAM_LIFECYCLE_OUTCOMES.STOPPED,
+            // Full scheduler owns the live timer — do not publish STOPPED or overwrite tick evidence
+            logger.info('Telegram background ownership cleared; full scheduler retains timer', {
                 reason: 'full_scheduler_owns_timer',
-                pid: process.pid,
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
             });
-            logger.info('Telegram background armed cleared; full scheduler retains timer');
             return {
-                stopped: true,
+                stopped: false,
+                backgroundOwnershipCleared: true,
                 timerCleared: false,
                 reason: 'full_scheduler_owns_timer',
                 timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,

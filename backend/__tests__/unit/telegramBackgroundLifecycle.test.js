@@ -272,20 +272,30 @@ describe('telegramBackgroundLifecycle (Candidate B / B1)', () => {
   it('background-only stop clears Telegram timer', async () => {
     await scheduler.ensureTelegramBackgroundLifecycle();
     expect(scheduler.intervals.has('telegramPipeline')).toBe(true);
+    mockRecordLifecycle.mockClear();
     const result = await scheduler.stopTelegramBackgroundLifecycle();
+    expect(result.stopped).toBe(true);
     expect(result.timerCleared).toBe(true);
     expect(scheduler.telegramBackgroundArmed).toBe(false);
     expect(scheduler.intervals.has('telegramPipeline')).toBe(false);
+    expect(mockRecordLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'STOPPED' }),
+    );
   });
 
   it('stop while full isRunning leaves Telegram timer intact', async () => {
     await scheduler.ensureTelegramBackgroundLifecycle();
     scheduler.isRunning = true;
+    mockRecordLifecycle.mockClear();
     const result = await scheduler.stopTelegramBackgroundLifecycle();
-    expect(result.reason).toBe('full_scheduler_owns_timer');
+    expect(result.stopped).toBe(false);
+    expect(result.backgroundOwnershipCleared).toBe(true);
     expect(result.timerCleared).toBe(false);
+    expect(result.reason).toBe('full_scheduler_owns_timer');
+    expect(result.timerCount).toBe(1);
     expect(scheduler.telegramBackgroundArmed).toBe(false);
     expect(scheduler.intervals.has('telegramPipeline')).toBe(true);
+    expect(mockRecordLifecycle).not.toHaveBeenCalled();
     scheduler.isRunning = false;
   });
 
