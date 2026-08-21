@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; passive evidence COMPLETE INCONCLUSIVE; scheduler liveness RCA DESIGN next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; scheduler technical root cause PROVEN; product defect NOT YET PROVEN; liveness CONTRACT OWNER DECISION next
 alwaysApply: true
 ---
 
@@ -9,10 +9,12 @@ Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
-PASSIVE EVIDENCE REPEAT COMPLETE /
-TARGETED EFFECT INCONCLUSIVE — NO SCHEDULER TRANSFER ACTIVITY /
-TELEGRAM BACKLOG GREW DURING IDLE OBSERVATION /
-SCHEDULER LIVENESS RCA DESIGN NEXT**
+TARGETED EFFECT STILL INCONCLUSIVE /
+TELEGRAM SCHEDULER TECHNICAL ROOT CAUSE PROVEN /
+IDLE GATE PREVENTS SCHEDULER INITIALIZATION /
+ARCHITECTURAL CONTRACT CONFLICT PROVEN /
+PRODUCT DEFECT NOT YET PROVEN /
+LIVENESS CONTRACT OWNER DECISION NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -142,6 +144,19 @@ EXEC directory:
 `/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_RUN_20260821T115046Z`
 **ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
 **E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
+**TARGETED_ATTRIBUTION_CONFIDENCE = LOW / NOT ESTABLISHED**
+
+Telegram transfer scheduler liveness RCA design packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_SCHEDULER_LIVENESS_RCA_DESIGN_20260821T183631Z.txt`
+SHA256 =
+`732767d95e45e62c244e82a76cd526e8e74718db400ad365c488c2c36fbe0c24`
+bytes = 26378
+**TELEGRAM TRANSFER SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
+**SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
+**TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT**
+**RECOMMENDED_REMEDIATION = NONE_YET**
+**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
+**SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -1600,20 +1615,141 @@ telegram-processor blocker = **OPEN / NOT REMEDIATED BY E6A**
 **B10 050 = BLOCKED**
 **B10 051 = NOT AUTHORIZED**
 
-### Next technical objective
+## Telegram transfer scheduler liveness RCA (COMPLETE)
 
-Do **NOT** authorize another four-hour passive repeat.
-Evidence now shows:
-- substantial Telegram backlog exists and increased
-- transfer heartbeat remained absent for full bounded horizon
-- engine worker `hasWork` gating does not use Telegram backlog
-  according to current verified source
-- therefore the next task is read-only RCA/design of scheduler liveness
-  and workload gating
-Do **NOT** conclude defect before RCA.
+RCA design packet:
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_SCHEDULER_LIVENESS_RCA_DESIGN_20260821T183631Z.txt`
+SHA256 =
+`732767d95e45e62c244e82a76cd526e8e74718db400ad365c488c2c36fbe0c24`
+bytes = 26378
+Do not modify this artifact.
+**TELEGRAM TRANSFER SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
+**RCA MUTATION = 0**
 
-Do **not** state: E6A failed; E6A passed targeted validation;
-resource stabilization complete; scheduler defect proven; 052 safe.
+### Proven technical root cause
+
+**SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
+RCA evidence confidence for technical cause = **HIGH / PROVEN**
+Do **NOT** convert this into a product-defect claim.
+
+Proven chain:
+1. `titan-engine-worker` boots
+2. idle checker starts
+3. `checkForWork()` evaluates only active exchange connections, recent users,
+   pending/running AI jobs
+4. Telegram backlog is **NOT** part of `hasWork`
+5. collector activity is **NOT** part of `hasWork`
+6. observed `hasWork` remained false
+7. `startEngines()` was never called
+8. scheduler module therefore remained uninitialized
+9. Telegram Pipeline Scheduler never started
+10. Normalization Worker Scheduler also never started
+11. transfer heartbeat remained absent
+12. Telegram backlog continued growing
+
+Preserved four-hour evidence: backlog `14978` → `27754` (`+12776`);
+LEVEL0/1/2 = `0`/`0`/`0`.
+RCA snapshot backlog = `35186`.
+Do **NOT** claim backlog itself proves defect.
+
+### Competing hypotheses
+
+**H1_IDLE_GATE_PREVENTED_SCHEDULER_INITIALIZATION = PROVEN**
+**H2_SCHEDULER_OR_TELEGRAM_PIPELINE_DISABLED = REFUTED**
+**H3_SCHEDULER_STARTUP_OR_DYNAMIC_IMPORT_FAILED = REFUTED**
+**H4_TRANSFER_LOCK_OR_STALL = REFUTED**
+**H5_REDIS_OBSERVABILITY_ONLY = REFUTED**
+**TRANSFER_ADVISORY_LOCK_CURRENTLY_HELD = NO**
+**EMERGENCY_STOP_PRIMARY_CAUSE = NO**
+**NORMALIZATION_SCHEDULER_ACTIVITY = ABSENT IN CURRENT ENGINE GENERATION**
+No alternate automatic Telegram transfer owner was found.
+
+### Runtime / source continuity (RCA read-only)
+
+production engine worker semantics match current main = **YES**
+production scheduler semantics match current main = **YES**
+canonical deployed E6A SHA256 =
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+**SCHEDULER_ENABLED runtime = TRUE**
+telegramPipeline effective enabled = **YES**
+effective Telegram interval = `300000` ms
+No production mutation occurred during RCA.
+
+### Historical intent / liveness contract
+
+**IDLE_GATING_ORIGINAL_INTENT = PROVEN**
+(Historical P0: dynamic imports; engines start only when generic work exists;
+progressive Idle Mode; query-storm prevention; API/engine separation.)
+Do **NOT** describe original Idle Mode as inherently defective.
+
+**TELEGRAM_TRANSFER_LIVENESS_EXPECTATION = C — AMBIGUOUS / CONFLICTING CONTRACT**
+**ARCHITECTURAL_INTENT_CONFLICT = PROVEN**
+
+**TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT**
+Distinction: **TECHNICAL ROOT CAUSE = PROVEN** ·
+**PRODUCT / ARCHITECTURAL DEFECT = NOT YET PROVEN**
+Do **not** state: scheduler defect proven; Idle Mode is wrong;
+Telegram transfer must be always-on; implementation is authorized.
+
+### Remediation candidates (design only; none authorized)
+
+**CANDIDATE A = ADD TELEGRAM BACKLOG DIRECTLY TO checkForWork()**
+**CANDIDATE_A_SAFETY = HIGH_RISK / REJECT**
+(`startEngines()` couples Autopilot + Scheduler + Trading Engine;
+`AUTOPILOT_ENABLED=true`, `TRADING_ENGINE_ENABLED=true`, `SCHEDULER_ENABLED=true`.)
+Candidate A must **NOT** become an implementation gate.
+
+**CANDIDATE B = DECOUPLE SAFE BACKGROUND SCHEDULERS FROM GENERIC hasWork**
+Feasibility = **HIGH** · Risk = **MEDIUM**
+PREFERRED DESIGN DIRECTION **IF** contract resolves to always-on.
+**NOT** approved implementation.
+
+**CANDIDATE C = DEDICATED TELEGRAM TRANSFER WORKER / PM2 OWNER**
+Feasibility = **POSSIBLE** · Risk = **HIGH** · Not selected.
+
+**RECOMMENDED_REMEDIATION = NONE_YET**
+Technical cause known; intended Telegram liveness contract unresolved.
+
+### Frozen / closed surfaces (future implementation, if ever)
+
+likely `engineWorkerLeader` change = **CLOSED / CONTROLLED RUNTIME SURFACE**
+scheduler change = **POSSIBLE**
+AI Shared Foundation overlap = **POSSIBLE IF Emergency Stop semantics change**
+Agents Shell = **NOT REQUIRED**
+Data Hub frozen baseline = **DO NOT MODIFY**
+DB schema = **NOT REQUIRED FOR LIVENESS DECOUPLING**
+PM2 topology = **ONLY Candidate C**
+Any future closed/frozen change requires:
+REPRODUCED DEFECT + SCOPED RCA + EXPLICIT OWNER APPROVAL +
+REGRESSION TESTS + RUNTIME PROVENANCE + HUMAN QA / RE-CLOSE
+
+### E6A status (do not conflate with scheduler liveness RCA)
+
+**CANONICAL E6A DEPLOYED = YES**
+**ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
+**TARGETED_ATTRIBUTION_CONFIDENCE = LOW / NOT ESTABLISHED**
+**E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
+**PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
+E6A = **NOT PROVEN FAILED** · **NOT TARGETED-VALIDATED PASS**
+
+### Authorization state after RCA closeout
+
+**SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
+**SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
+**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
+**SOURCE MUTATION AUTHORIZED = NO**
+**NEW PASSIVE OBSERVATION AUTHORIZED = NO**
+**MANUAL TRANSFER AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+**DB MUTATION AUTHORIZED = NO**
+**ROLLBACK AUTHORIZED = NO**
+**052 AUTHORIZED = NO**
+**DETERMINISTIC_TEST_DESIGN_COMPLETE = YES** (design only; no production tests)
+
+Do **not** state: RESOURCE STABILIZATION COMPLETE; 052 SAFE;
+SCHEDULER FIX AUTHORIZED; CANDIDATE B APPROVED.
 
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
@@ -1622,27 +1758,39 @@ It is NOT self-authorization.
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-PASSIVE EVIDENCE GAP
-TELEGRAM TRANSFER SCHEDULER LIVENESS RCA DESIGN**
+TELEGRAM TRANSFER LIVENESS CONTRACT
+OWNER DECISION**
 
-Classification: **DESIGN / READ-ONLY DISCOVERY ONLY**
+Classification: **GOVERNANCE / CONTRACT RESOLUTION ONLY**
 
-Future RCA design may inspect READ ONLY:
+This gate must decide exactly one:
 
-- `engineWorkerLeader` `checkForWork` contract
-- scheduler start lifecycle
-- `enginesStarted` / Idle Mode behavior
-- `SCHEDULER_ENABLED` runtime evidence
-- emergency-stop separation interaction
-- Telegram pipeline interval/config
-- Redis transfer heartbeat lifecycle
-- production engine logs
-- PM2 identity/status
-- Telegram backlog growth
-- whether backlog is intentionally excluded from `hasWork`
-- whether scheduler can be active independently of trading/user/AI work
-- consequences for ingestion liveness and E6A validation
-- smallest safe remediation options **IF** a reproduced defect is proven
+**A.** TELEGRAM TRANSFER IS AN ALWAYS-ON SAFE BACKGROUND INGESTION DUTY
+INDEPENDENT OF EXCHANGE / USER / AI WORK
+
+**or**
+
+**B.** TELEGRAM TRANSFER IS INTENTIONALLY GENERIC-WORK-GATED
+
+**or**
+
+**C.** A DIFFERENT EXPLICIT LIVENESS CONTRACT WITH PRECISE CONDITIONS
+
+No source implementation is authorized merely by choosing a contract.
+
+Future Owner contract decision must explicitly define:
+- whether backlog must drain without active user/trading/AI work
+- whether Telegram transfer remains active during Emergency Stop
+- whether normalization belongs to the same safe-background class
+- whether Data Hub behavior is included or excluded
+- exact runtime owner
+- behavior with zero backlog / nonzero backlog
+- query-storm limits
+- Live-adjacent engine isolation
+- dual-instance ownership / single-flight semantics
+- observability requirements
+- acceptable recovery after process restart
+Do **NOT** decide these implicitly in this closeout.
 
 It must NOT authorize:
 
@@ -1662,6 +1810,8 @@ collector mutation,
 050,
 or 051.
 
+**SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
+**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
 **PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
 **NEW PASSIVE OBSERVATION AUTHORIZED = NO**
 **NEW OBSERVER AUTHORIZED = NO**
@@ -1677,6 +1827,8 @@ or 051.
 production deployed = YES
 runtime health = PASS (previously verified)
 targeted lookup effect = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY
-passive evidence repeat = COMPLETE
+scheduler technical root cause = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION (PROVEN)
+product defect = NOT_PROVEN_AMBIGUOUS_CONTRACT
+recommended remediation = NONE_YET
 resource stabilization = NO
 
