@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+refreshed; targeted lookup effect INCONCLUSIVE; evidence-repeat DESIGN next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; targeted effect INCONCLUSIVE; passive repeat design COMPLETE; passive evidence AUTHORIZATION next
 alwaysApply: true
 ---
 
@@ -8,12 +8,10 @@ alwaysApply: true
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
-E6A CANONICAL SOURCE DEPLOYED /
-ENGINE + BACKEND REFRESH COMPLETE /
-RUNTIME HEALTH PASS /
-TARGETED LOOKUP EFFECT INCONCLUSIVE /
-GLOBAL RESOURCE WINDOW PASS /
-TARGETED EFFECT EVIDENCE REPEAT DESIGN NEXT**
+E6A DEPLOYED + HEALTHY /
+TARGETED EFFECT INCONCLUSIVE /
+PASSIVE NATURAL-WORKLOAD REPEAT DESIGN COMPLETE /
+PASSIVE EVIDENCE REPEAT AUTHORIZATION NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -122,6 +120,15 @@ classification =
 **E6A ENGINE_LOOKUP_EFFECT = INCONCLUSIVE**
 **GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS**
 **E6A_CAUSAL_CONTRIBUTION_TO_GLOBAL_PASS = NOT PROVEN**
+
+E6A targeted effect repeat design packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_DESIGN_20260821T090944Z.txt`
+SHA256 =
+`bdfc64080a5b1d0578c4f224c4f31d50755f8f59a8732cfab5bf38218f1fc157`
+**C2 E6A TARGETED EFFECT REPEAT DESIGN = COMPLETE**
+**EVIDENCE MODEL = POST-DEPLOY ACTIVE-WORKLOAD VALIDATION**
+**Observation model = PASSIVE / NATURAL WORKLOAD ONLY**
+**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -1222,6 +1229,271 @@ Processor restart = NOT AUTHORIZED
 unless a future explicit Owner incident/rollback gate grants it.
 
 The completed execution gate must **not** remain generally reusable.
+
+## E6A targeted effect evidence-repeat design (COMPLETE)
+
+**C2 E6A TARGETED EFFECT REPEAT DESIGN = COMPLETE**
+Design packet:
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_DESIGN_20260821T090944Z.txt`
+SHA256 =
+`bdfc64080a5b1d0578c4f224c4f31d50755f8f59a8732cfab5bf38218f1fc157`
+Do not modify the packet.
+
+**EVIDENCE MODEL = POST-DEPLOY ACTIVE-WORKLOAD VALIDATION**
+**Observation model = PASSIVE / NATURAL WORKLOAD ONLY**
+Not a new pre/post deploy experiment. No old-code baseline via rollback.
+
+Design-time production continuity:
+**PROD_APP_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+target = `/home/ubuntu/webapp/TitanGold/backend/services/telegramPipeline.js`
+**CURRENT EXPECTED PRODUCTION E6A SHA256 =
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`**
+git status = ` M backend/services/telegramPipeline.js`
+**PRODUCTION_TARGET_STATE = INTENTIONAL AUTHORIZED E6A WORKING-TREE MODIFICATION**
+Future observation must freshly verify this SHA before accepting evidence.
+No modification authorized by this closeout.
+
+### Scheduler cadence (design snapshot)
+
+**SOURCE_DEFAULT_TRANSFER_INTERVAL_MS = 300000**
+**PRODUCTION_EFFECTIVE_TRANSFER_INTERVAL_MS = 300000**
+**TRANSFER_SCHEDULER_ENABLED CONFIG = YES**
+DB telegramPipeline override = **NONE OBSERVED**
+Future execution must rediscover effective interval read-only.
+Do not assume it is permanently fixed.
+
+### Heartbeat contract
+
+**TRANSFER_HEARTBEAT_KEY = `pipeline:scheduler:heartbeat:transfer`**
+**SCHEDULER_FRESHNESS_GRACE = 2.5**
+Resolved design-time freshness limit =
+`750000` ms = `750` sec = `12.5` min
+(`EFFECTIVE_TRANSFER_INTERVAL_MS × 2.5`)
+Heartbeat payload fields: `at`, `selected`, `processed`, `inserted`, `errors`,
+`durationMs`, `skipped_run`
+**HEARTBEAT ALONE PROVES WORKLOAD = NO**
+Fresh heartbeat proves scheduler cycle/liveness only.
+`selected = 0` is not representative E6A workload.
+`skipped_run = true` does not write heartbeat.
+
+Design-time Redis discovery:
+transfer heartbeat key = **ABSENT**
+TTL = `-2`
+latest heartbeat = **ABSENT / STALE**
+selected/processed/inserted/errors = N/A
+Do **not** treat current absence as an E6A failure.
+
+### Idle / hasWork semantics (mandatory)
+
+Source: `backend/workers/engineWorkerLeader.js`
+Engine scheduler initialization is gated by `checkForWork()`.
+Current hasWork inputs:
+1. active exchange connection
+2. user with recent login
+3. pending/running AI job
+**TELEGRAM_BACKLOG_WAKES_ENGINE = NO**
+Telegram backlog alone does **not** guarantee scheduler startup.
+Design-time backlog = `7387` =
+**CANDIDATE TRANSFER WORK IF SCHEDULER BECOMES ACTIVE**
+not proof that a natural transfer cycle will occur during observation.
+
+Because startup depends on unrelated natural hasWork signals:
+future passive observation may legitimately reach its horizon without ever
+seeing a new transfer heartbeat.
+**NO LEVEL 0 DURING OBSERVATION =
+INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
+This is **not** E6A FAIL.
+No artificial work may be created to escape this state.
+
+### Evidence levels
+
+**LEVEL 0** = NEW transfer heartbeat timestamp observed
+(proves transfer scheduler cycle/liveness; not meaningful workload)
+Detect a NEW heartbeat `at`, not the same payload repeatedly.
+
+**LEVEL 1** = NEW transfer heartbeat AND `selected > 0` AND
+`skipped_run = false` AND no cycle failure indication
+(candidate Telegram transfer workload; does **not** prove exact-pair lookup)
+
+Why LEVEL 1 is insufficient:
+selected messages may fail source resolution; if `resolved[]` is empty,
+`loadExistingTelegramKeys(requestedPairs)` is not invoked.
+`selected > 0` does **not** imply E6A exact-pair lookup executed.
+
+**LEVEL 2** (pg_stat_statements unavailable):
+LEVEL 1
+PLUS positive relevant delta of
+`idx_collected_data_telegram_msg_dedupe.idx_scan`
+within the tightly bounded cycle observation interval
+PLUS canonical E6A SHA remains present
+PLUS no E6A SQL/type/runtime error observed.
+Relation/index counters are shared statistics → observational evidence,
+not perfect query-call identity.
+
+### Attribution / counters
+
+**PG_STAT_STATEMENTS_AVAILABLE = NO**
+QUERY-SPECIFIC DATABASE EXECUTION COUNTER = **UNAVAILABLE**
+Maximum practical targeted attribution confidence for this design =
+**MODERATE**
+Do **not** claim HIGH attribution from idx_scan alone.
+
+**idx_collected_data_telegram_msg_dedupe = PRESENT + VALID**
+Observe `idx_scan` / `idx_tup_read` / `idx_tup_fetch` before/after cycles.
+Positive idx_scan delta = index exercised.
+Do **not** infer one idx_scan = one pair or idx_scan delta = requestedPairs count.
+
+Relation counters (`seq_scan`, `seq_tup_read`, `heap_blks_read`,
+`heap_blks_hit`) are relation-wide shared / corroborating only.
+
+### Passive detector / backlog / window
+
+**PASSIVE_DETECTOR_POLL_INTERVAL_SEC = 60**
+(well below ~300s scheduler interval; no transfer trigger)
+
+**BACKLOG SIGNAL USABLE = YES**
+design-time backlog = 7387
+Backlog = PREDICTIVE / CANDIDATE SIGNAL only.
+It does not start the engine, prove scheduler activity, prove exact-pair
+lookup, or qualify a cycle.
+
+**REPRESENTATIVE_WINDOW_START_CONDITION** = all of:
+- current canonical E6A SHA verified
+- production health PASS
+- no mutation/restart occurred
+- first NEW LEVEL 0 heartbeat observed
+Do not start classification from a historical/stale heartbeat.
+
+**MIN_QUALIFYING_E6A_CYCLES = 3 LEVEL 2 cycles**
+This is a **DESIGN-SELECTED CONSERVATIVE OPERATIONAL EVIDENCE THRESHOLD**.
+It is **NOT** a statistical significance claim, power calculation,
+long-term performance proof, or SLA sample size.
+
+Minimum numeric selected cardinality above 0 = **NOT REQUIRED**
+(candidate needs `selected > 0`; LEVEL 2 uses independent index evidence)
+
+**MAX_PASSIVE_OBSERVATION_DURATION = 4 HOURS**
+This is a **BOUNDED OPERATIONAL OBSERVATION HORIZON**.
+It is **NOT** a guarantee natural workload will occur,
+a statistical coverage guarantee, or evidence of scheduler availability.
+Because Telegram backlog does not wake the engine, expiration with zero
+qualifying activity remains possible.
+
+Horizon outcomes:
+- zero LEVEL 0 → `INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY`
+- LEVEL 0 only → `INCONCLUSIVE_LIVENESS_ONLY`
+- LEVEL 1 but insufficient LEVEL 2 → `INCONCLUSIVE_LOOKUP_NOT_PROVEN`
+- fewer than 3 LEVEL 2 → `INCONCLUSIVE_INSUFFICIENT_QUALIFYING_CYCLES`
+- low attribution → `INCONCLUSIVE_ATTRIBUTION`
+Do **not** manufacture work.
+
+### Observation sequence (future, when separately authorized)
+
+1. fresh Rule02/main gate
+2. fresh canonical production SHA
+3. fresh health
+4. fresh effective scheduler interval
+5. fresh heartbeat baseline
+6. fresh index/relation/database counters
+7. begin 60-second passive polling
+8. detect NEW heartbeat
+9. read sanitized heartbeat payload
+10. snapshot counters immediately around/after cycle
+11. classify LEVEL 0/1/2
+12. repeat until 3 LEVEL 2 cycles or 4-hour horizon
+13. collect formal concurrent global resource window
+14. classify targeted effect
+15. classify global resource gate separately
+16. write evidence packet
+17. STOP for governance/Human QA
+No manual trigger.
+
+### Targeted attribution confidence
+
+**HIGH** = NOT REACHABLE under current design solely from relation/index counters
+**MODERATE** = at least 3 natural LEVEL 2 cycles with tight heartbeat/index
+temporal correlation, canonical E6A verified, no SQL errors, and no evidence
+of dominant unrelated collected_data index activity that invalidates attribution
+**LOW** = counters cannot be temporally associated with candidate cycles or
+unrelated activity dominates
+Minimum confidence for **ENGINE_LOOKUP_EFFECT_REPEAT = PASS** = **MODERATE**
+
+### ENGINE_LOOKUP_EFFECT_REPEAT contract
+
+**PASS** requires ALL:
+1. canonical E6A still deployed
+2. runtime health PASS
+3. minimum 3 natural LEVEL 2 cycles
+4. `idx_collected_data_telegram_msg_dedupe` demonstrably exercised
+5. no E6A SQL/type/runtime errors
+6. no evidence old ANY/ANY path is active
+7. collected_data access behavior consistent with indexed exact-pair lookup
+8. TARGETED_ATTRIBUTION_CONFIDENCE >= MODERATE
+PASS proves targeted post-deploy E6A path operational under representative
+natural workload. PASS does **not** prove E6A caused all global IO improvement.
+
+**FAIL** requires positive adverse evidence (SQL/type error under qualifying
+workload; source/runtime mismatch; proven old ANY/ANY; meaningful qualifying
+workload with proof expected index path unused; semantic duplicate regression;
+reproducible targeted regression).
+Do **not** FAIL for no workload, absent heartbeat, selected=0, idx_scan=0
+without qualifying workload, or pg_stat_activity miss.
+
+### Global resource window (separate)
+
+Formal window: >=5 minutes, >=5 samples, first-to-last >=300 sec,
+approximately 60-second resource samples.
+Metrics: dm-0 util, iowait, rkB/s, wkB/s, aqu-sz, swap in/out, PSI IO, PSI memory
+If horizon is longer, choose an explicitly timestamped >=300-second sub-window
+that includes qualifying E6A activity.
+Do not silently use an idle-only window as the qualifying-workload resource window.
+
+**GLOBAL_RESOURCE_GATE_DURING_QUALIFYING_E6A =
+PASS / FAIL_IO_PRESSURE / INCONCLUSIVE**
+Reject A: swap-out >0 on majority
+Reject B: median dm-0 util >=80 AND median iowait >=10
+Reject C: two consecutive dm-0 util >=95 AND iowait >=10
+One favorable sample cannot override a bad window. No weakening.
+
+**ENGINE_LOOKUP_EFFECT_REPEAT = PASS** may coexist with
+**GLOBAL_RESOURCE_GATE_DURING_QUALIFYING_E6A = FAIL_IO_PRESSURE**
+because processor blocker remains open.
+Global PASS alone does not prove E6A effect, close processor blocker, or
+authorize 052.
+
+### Processor / re-close / 052
+
+**PROCESSOR_CONFOUNDING = PRESENT / OPEN**
+telegram-processor blocker = **OPEN / NOT REMEDIATED BY E6A**
+No processor mutation/restart.
+
+Future full E6A runtime re-close (**PRODUCTION RUNTIME RE-CLOSE = COMPLETE**)
+requires ALL:
+canonical E6A still deployed; production health PASS; representative natural
+workload QUALIFIED; ENGINE_LOOKUP_EFFECT_REPEAT = PASS; no E6A semantic/runtime
+regression; processor/collector non-interference PASS; evidence packet COMPLETE;
+Human/Owner QA acceptance YES.
+This does **not** mean RESOURCE STABILIZATION COMPLETE.
+
+**C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+Even if future targeted effect PASS and global qualifying window PASS:
+052 still requires separate governance and Owner authority.
+
+### Execution authorization state (this closeout)
+
+**TARGETED EFFECT REPEAT DESIGN = COMPLETE**
+**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
+**MANUAL TRANSFER AUTHORIZED = NO**
+**SOURCE MUTATION AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+**DB MUTATION AUTHORIZED = NO**
+
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
 
@@ -1229,42 +1501,33 @@ It is NOT self-authorization.
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-TARGETED LOOKUP EFFECT EVIDENCE REPEAT DESIGN**
+TARGETED LOOKUP EFFECT PASSIVE EVIDENCE REPEAT AUTHORIZATION**
 
-Classification: **DESIGN / READ-ONLY DISCOVERY ONLY**
+This is the next separately approvable **observational** task.
 
-The next technical objective is **not** another deployment, restart, or
-processor remediation.
-It is to obtain representative, non-mutating, workload-aware targeted evidence
-for the **already-deployed** E6A path, preferring NATURALLY OCCURRING Telegram
-transfer workload.
+It may authorize ONLY after separate Owner approval:
 
-Do **not** artificially invoke
-`POST /api/v1/data-sources/telegram-transfer-messages`
-merely to manufacture test load unless a future explicit Owner authorization
-specifically permits such a runtime side effect.
-
-The future design may define:
-- how to detect a naturally active transfer period
-- how fresh the Redis transfer heartbeat must be
-- minimum transfer-cycle activity evidence
-- representative workload qualification
-- read-only DB/index counter snapshots
-- read-only device/resource sampling
-- no-restart / no-deploy observation
-- PASS / FAIL / INCONCLUSIVE repeat criteria
-- Human QA / full runtime re-close criteria
+- read-only production health
+- current E6A SHA verification
+- effective interval discovery
+- passive Redis heartbeat reads
+- passive logs/activity reads
+- read-only PostgreSQL statistics/counters
+- read-only backlog aggregate
+- 60-second passive detector
+- resource sampling
+- up to 4-hour bounded observation
+- evidence packet
 
 It must NOT authorize:
 
-source deployment,
-source rollback,
-engine restart,
-backend reload,
+manual transfer,
+admin/trader HTTP transfer call,
+source deploy,
+rollback,
+restart/reload,
 PM2 mutation,
-manual/admin/trader transfer invocation,
-processor remediation,
-collector pause/restart,
+processor/collector mutation,
 DB mutation,
 ANALYZE/VACUUM,
 CREATE/DROP/REINDEX,
@@ -1273,14 +1536,18 @@ migration,
 050,
 or 051.
 
+**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
+**MANUAL TRANSFER AUTHORIZED = NO**
 **IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
 **NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
 **ROLLBACK AUTHORIZED = NO**
+**DB MUTATION AUTHORIZED = NO**
 production deployed = YES
 runtime health = PASS
 targeted lookup effect = INCONCLUSIVE
+passive repeat design = COMPLETE
 resource stabilization = NO
 
