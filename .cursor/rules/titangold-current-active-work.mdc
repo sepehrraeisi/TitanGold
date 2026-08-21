@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; targeted effect INCONCLUSIVE; passive repeat design COMPLETE; passive evidence AUTHORIZATION next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; passive evidence COMPLETE INCONCLUSIVE; scheduler liveness RCA DESIGN next
 alwaysApply: true
 ---
 
@@ -9,9 +9,10 @@ Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
-TARGETED EFFECT INCONCLUSIVE /
-PASSIVE NATURAL-WORKLOAD REPEAT DESIGN COMPLETE /
-PASSIVE EVIDENCE REPEAT AUTHORIZATION NEXT**
+PASSIVE EVIDENCE REPEAT COMPLETE /
+TARGETED EFFECT INCONCLUSIVE — NO SCHEDULER TRANSFER ACTIVITY /
+TELEGRAM BACKLOG GREW DURING IDLE OBSERVATION /
+SCHEDULER LIVENESS RCA DESIGN NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -128,7 +129,19 @@ SHA256 =
 **C2 E6A TARGETED EFFECT REPEAT DESIGN = COMPLETE**
 **EVIDENCE MODEL = POST-DEPLOY ACTIVE-WORKLOAD VALIDATION**
 **Observation model = PASSIVE / NATURAL WORKLOAD ONLY**
-**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
+**PASSIVE EVIDENCE REPEAT = COMPLETE**
+**PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
+**NEW PASSIVE OBSERVATION AUTHORIZED = NO**
+
+Final passive evidence packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_FINAL_20260821_20260821T175618Z.txt`
+SHA256 =
+`c7e6ce63707d042d8513ce014924315bfe8d5e280b2f57d40e030ca1c770547a`
+bytes = 5950
+EXEC directory:
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_RUN_20260821T115046Z`
+**ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
+**E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -1483,16 +1496,124 @@ This does **not** mean RESOURCE STABILIZATION COMPLETE.
 Even if future targeted effect PASS and global qualifying window PASS:
 052 still requires separate governance and Owner authority.
 
-### Execution authorization state (this closeout)
+### Execution authorization state (consumed)
 
 **TARGETED EFFECT REPEAT DESIGN = COMPLETE**
-**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
+**PASSIVE EVIDENCE REPEAT = COMPLETE**
+**PASSIVE EVIDENCE REPEAT EXECUTION = COMPLETE**
+**PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
+**NEW PASSIVE OBSERVATION AUTHORIZED = NO**
+**NEW OBSERVER AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
 **SOURCE MUTATION AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
 **DB MUTATION AUTHORIZED = NO**
+**ROLLBACK AUTHORIZED = NO**
+
+The completed passive observation authorization must **not** remain reusable.
+Do **not** authorize another four-hour passive repeat from this closeout.
+
+## Passive evidence repeat observation (COMPLETE / INCONCLUSIVE)
+
+Final evidence packet:
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_FINAL_20260821_20260821T175618Z.txt`
+SHA256 =
+`c7e6ce63707d042d8513ce014924315bfe8d5e280b2f57d40e030ca1c770547a`
+bytes = 5950
+EXEC:
+`/home/ubuntu/TITANGOLD_C2_E6A_TARGETED_EFFECT_REPEAT_RUN_20260821T115046Z`
+Do not modify these artifacts.
+
+**PASSIVE EVIDENCE REPEAT = COMPLETE**
+**OBSERVER COMPLETION = NATURAL / BOUNDED HORIZON COMPLETE**
+Observation start = `2026-08-21T11:53:19.999992Z`
+Observation end = `2026-08-21T15:53:30.411871Z`
+duration = `14410.412` sec
+polls = `240`
+last successful poll = `2026-08-21T15:52:32.723839Z`
+Environment changed during observation = **NO**
+
+### Target workload result
+
+LEVEL0 = `0`
+LEVEL1 = `0`
+LEVEL2 = `0`
+VALID LEVEL2 = `0`
+**NATURAL TRANSFER SCHEDULER ACTIVITY OBSERVED = NO**
+**TARGETED_ATTRIBUTION_CONFIDENCE = LOW / NOT ESTABLISHED**
+**ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
+Explicitly: **NOT PASS** · **NOT FAIL**
+Reason: no natural scheduler transfer cycle occurred; therefore E6A exact-pair
+lookup was not exercised under representative target workload.
+Absence of workload is **not** evidence of E6A failure.
+
+### Backlog finding (material evidence-gap observation)
+
+telegram backlog baseline = `14978`
+telegram backlog final = `27754`
+telegram backlog delta = `+12776`
+During the complete four-hour passive horizon:
+backlog increased materially
+WHILE LEVEL0 = 0
+transfer heartbeat remained absent
+idx_scan remained zero.
+This is a material **evidence-gap / scheduler-liveness observation**.
+Do **NOT** yet classify it as a source defect.
+Do **NOT** fix it here.
+
+### Target index / table counters
+
+`idx_collected_data_telegram_msg_dedupe` idx_scan: `0` → `0` (delta `0`)
+collected_data seq_scan: `74144` → `74144` (delta `0`)
+collected_data heap_blks_read: `35130219296` → `35130219296` (delta `0`)
+Target collected_data lookup was not exercised during observation.
+Do not interpret zero activity as E6A failure.
+
+### Global resource result
+
+**FORMAL_GLOBAL_QUALIFYING_WINDOW_AVAILABLE = NO**
+Reject A = **N/A — NO QUALIFYING E6A WINDOW**
+Reject B = **N/A — NO QUALIFYING E6A WINDOW**
+Reject C = **N/A — NO QUALIFYING E6A WINDOW**
+**GLOBAL_RESOURCE_GATE_DURING_QUALIFYING_E6A = INCONCLUSIVE**
+Do not substitute an idle-only resource window.
+
+### Runtime re-close
+
+**CANONICAL E6A DEPLOYED = YES**
+E6A production deployment/refresh = **HEALTH PREVIOUSLY VERIFIED**
+**PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
+**E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
+Reason: representative natural transfer workload was not observed.
+
+### Processor / 052 preserved
+
+**PROCESSOR_CONFOUNDING = PRESENT / OPEN**
+telegram-processor blocker = **OPEN / NOT REMEDIATED BY E6A**
+**C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+**B10 050 = BLOCKED**
+**B10 051 = NOT AUTHORIZED**
+
+### Next technical objective
+
+Do **NOT** authorize another four-hour passive repeat.
+Evidence now shows:
+- substantial Telegram backlog exists and increased
+- transfer heartbeat remained absent for full bounded horizon
+- engine worker `hasWork` gating does not use Telegram backlog
+  according to current verified source
+- therefore the next task is read-only RCA/design of scheduler liveness
+  and workload gating
+Do **NOT** conclude defect before RCA.
+
+Do **not** state: E6A failed; E6A passed targeted validation;
+resource stabilization complete; scheduler defect proven; 052 safe.
 
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
@@ -1501,53 +1622,61 @@ It is NOT self-authorization.
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-TARGETED LOOKUP EFFECT PASSIVE EVIDENCE REPEAT AUTHORIZATION**
+PASSIVE EVIDENCE GAP
+TELEGRAM TRANSFER SCHEDULER LIVENESS RCA DESIGN**
 
-This is the next separately approvable **observational** task.
+Classification: **DESIGN / READ-ONLY DISCOVERY ONLY**
 
-It may authorize ONLY after separate Owner approval:
+Future RCA design may inspect READ ONLY:
 
-- read-only production health
-- current E6A SHA verification
-- effective interval discovery
-- passive Redis heartbeat reads
-- passive logs/activity reads
-- read-only PostgreSQL statistics/counters
-- read-only backlog aggregate
-- 60-second passive detector
-- resource sampling
-- up to 4-hour bounded observation
-- evidence packet
+- `engineWorkerLeader` `checkForWork` contract
+- scheduler start lifecycle
+- `enginesStarted` / Idle Mode behavior
+- `SCHEDULER_ENABLED` runtime evidence
+- emergency-stop separation interaction
+- Telegram pipeline interval/config
+- Redis transfer heartbeat lifecycle
+- production engine logs
+- PM2 identity/status
+- Telegram backlog growth
+- whether backlog is intentionally excluded from `hasWork`
+- whether scheduler can be active independently of trading/user/AI work
+- consequences for ingestion liveness and E6A validation
+- smallest safe remediation options **IF** a reproduced defect is proven
 
 It must NOT authorize:
 
+source implementation,
 manual transfer,
-admin/trader HTTP transfer call,
-source deploy,
-rollback,
-restart/reload,
+artificial hasWork creation,
+login generation,
+AI job creation,
+exchange activation,
+deploy / rollback,
+restart / reload,
 PM2 mutation,
-processor/collector mutation,
 DB mutation,
-ANALYZE/VACUUM,
-CREATE/DROP/REINDEX,
-migration,
+processor remediation,
+collector mutation,
 052,
 050,
 or 051.
 
-**PASSIVE EVIDENCE REPEAT EXECUTION AUTHORIZED = NO**
+**PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
+**NEW PASSIVE OBSERVATION AUTHORIZED = NO**
+**NEW OBSERVER AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
 **IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
 **NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
+**SOURCE MUTATION AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
 **ROLLBACK AUTHORIZED = NO**
 **DB MUTATION AUTHORIZED = NO**
 production deployed = YES
-runtime health = PASS
-targeted lookup effect = INCONCLUSIVE
-passive repeat design = COMPLETE
+runtime health = PASS (previously verified)
+targeted lookup effect = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY
+passive evidence repeat = COMPLETE
 resource stabilization = NO
 
