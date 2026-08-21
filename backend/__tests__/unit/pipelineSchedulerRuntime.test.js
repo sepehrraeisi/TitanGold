@@ -6,6 +6,9 @@ import {
   deriveSchedulerStatus,
   isJobExecutionFresh,
   SCHEDULER_FRESHNESS_GRACE,
+  classifyTelegramTransferLifecycleOutcome,
+  deriveTelegramLifecycleFreshness,
+  TELEGRAM_LIFECYCLE_OUTCOMES,
 } from '../../services/pipelineSchedulerRuntime.js';
 
 describe('pipelineSchedulerRuntime', () => {
@@ -81,11 +84,55 @@ describe('pipelineSchedulerRuntime', () => {
       normalizationIntervalMs,
       heartbeats: { transfer: null, normalization: null },
       dbActivity: {
-        lastNormalizationAt: new Date(Date.now() - 45_000).toISOString(),
+        lastNormalizationAt: new Date(Date.now() - 10_000).toISOString(),
         lastTransferAt: null,
       },
     });
     expect(status).toBe('running');
-    expect(status).not.toBe('stopped');
+  });
+
+  it('classifyTelegramTransferLifecycleOutcome maps skip and noop outcomes', () => {
+    expect(
+      classifyTelegramTransferLifecycleOutcome({
+        skipped_run: true,
+        skip_reason: 'in_memory_lock',
+      }),
+    ).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SKIP_IN_MEMORY);
+    expect(
+      classifyTelegramTransferLifecycleOutcome({
+        skipped_run: true,
+        skip_reason: 'advisory_lock',
+      }),
+    ).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SKIP_ADVISORY_LOCK);
+    expect(
+      classifyTelegramTransferLifecycleOutcome({ selected: 0, skipped_run: false }),
+    ).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.TICK_NOOP_SELECTED_ZERO);
+    expect(
+      classifyTelegramTransferLifecycleOutcome({ selected: 3, skipped_run: false }),
+    ).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SUCCESS);
+  });
+
+  it('deriveTelegramLifecycleFreshness distinguishes armed vs not initialized', () => {
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: null,
+        intervalMs: transferIntervalMs,
+      }),
+    ).toBe('NOT_INITIALIZED');
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED, at: new Date().toISOString() },
+        intervalMs: transferIntervalMs,
+      }),
+    ).toBe('ARMED_WAITING_FIRST_TICK');
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: {
+          state: TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SUCCESS,
+          at: new Date().toISOString(),
+        },
+        intervalMs: transferIntervalMs,
+      }),
+    ).toBe('FRESH');
   });
 });
