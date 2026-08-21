@@ -8,6 +8,7 @@ import {
   SCHEDULER_FRESHNESS_GRACE,
   classifyTelegramTransferLifecycleOutcome,
   deriveTelegramLifecycleFreshness,
+  buildTelegramLifecycleDegradedRead,
   TELEGRAM_LIFECYCLE_OUTCOMES,
 } from '../../services/pipelineSchedulerRuntime.js';
 
@@ -112,19 +113,101 @@ describe('pipelineSchedulerRuntime', () => {
     ).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SUCCESS);
   });
 
-  it('deriveTelegramLifecycleFreshness distinguishes armed vs not initialized', () => {
+  it('A1 fresh ARMED => ARMED_WAITING_FIRST_TICK', () => {
+    const age = transferIntervalMs; // < interval × 2.5
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: {
+          state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED,
+          at: new Date(now - age).toISOString(),
+        },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe('ARMED_WAITING_FIRST_TICK');
+  });
+
+  it('A2 stale ARMED => STALE_STOPPED', () => {
+    const age = transferIntervalMs * SCHEDULER_FRESHNESS_GRACE + 1000;
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: {
+          state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED,
+          at: new Date(now - age).toISOString(),
+        },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe('STALE_STOPPED');
+  });
+
+  it('A3 ARMED at exact interval×2.5 boundary follows isJobExecutionFresh', () => {
+    const age = transferIntervalMs * SCHEDULER_FRESHNESS_GRACE;
+    const at = new Date(now - age).toISOString();
+    const expectedFresh = isJobExecutionFresh(at, transferIntervalMs, now);
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED, at },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe(expectedFresh ? 'ARMED_WAITING_FIRST_TICK' : 'STALE_STOPPED');
+    // Document current isJobExecutionFresh: age <= interval*grace is fresh
+    expect(expectedFresh).toBe(true);
+  });
+
+  it('A4 malformed ARMED missing/invalid timestamp => STALE_STOPPED', () => {
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe('STALE_STOPPED');
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED, at: 'not-a-date' },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe('STALE_STOPPED');
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED, at: null },
+        intervalMs: transferIntervalMs,
+        nowMs: now,
+      }),
+    ).toBe('STALE_STOPPED');
+  });
+
+  it('null lifecycle => NOT_INITIALIZED (Redis healthy, key absent)', () => {
     expect(
       deriveTelegramLifecycleFreshness({
         lifecycle: null,
         intervalMs: transferIntervalMs,
       }),
     ).toBe('NOT_INITIALIZED');
+  });
+
+  it('OBSERVABILITY_DEGRADED lifecycle is distinguishable from NOT_INITIALIZED', () => {
+    const degraded = buildTelegramLifecycleDegradedRead('redis_unavailable');
+    expect(degraded.state).toBe(TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED);
+    expect(degraded.reason).toBe('redis_unavailable');
     expect(
       deriveTelegramLifecycleFreshness({
-        lifecycle: { state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED, at: new Date().toISOString() },
+        lifecycle: degraded,
         intervalMs: transferIntervalMs,
       }),
-    ).toBe('ARMED_WAITING_FIRST_TICK');
+    ).toBe('OBSERVABILITY_DEGRADED');
+    expect(
+      deriveTelegramLifecycleFreshness({
+        lifecycle: buildTelegramLifecycleDegradedRead('redis_read_failed'),
+        intervalMs: transferIntervalMs,
+      }),
+    ).toBe('OBSERVABILITY_DEGRADED');
+  });
+
+  it('fresh TICK_SUCCESS remains FRESH', () => {
     expect(
       deriveTelegramLifecycleFreshness({
         lifecycle: {

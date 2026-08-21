@@ -357,15 +357,32 @@ class SchedulerService {
     }
 
     /**
-     * Stop only the Telegram background timer when not relying on full isRunning.
-     * Idempotent. Does not stop unrelated full-scheduler intervals.
+     * Stop Telegram background ownership.
+     * Idempotent. When full scheduler isRunning, clears telegramBackgroundArmed only
+     * and leaves the telegramPipeline interval owned by the full scheduler intact.
      */
     async stopTelegramBackgroundLifecycle() {
+        this.telegramBackgroundArmed = false;
+
+        if (this.isRunning) {
+            void recordTelegramLifecycleEvidence({
+                state: TELEGRAM_LIFECYCLE_OUTCOMES.STOPPED,
+                reason: 'full_scheduler_owns_timer',
+                pid: process.pid,
+            });
+            logger.info('Telegram background armed cleared; full scheduler retains timer');
+            return {
+                stopped: true,
+                timerCleared: false,
+                reason: 'full_scheduler_owns_timer',
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            };
+        }
+
         if (this.intervals.has('telegramPipeline')) {
             clearInterval(this.intervals.get('telegramPipeline'));
             this.intervals.delete('telegramPipeline');
         }
-        this.telegramBackgroundArmed = false;
         void recordTelegramLifecycleEvidence({
             state: TELEGRAM_LIFECYCLE_OUTCOMES.STOPPED,
             pid: process.pid,
@@ -373,6 +390,8 @@ class SchedulerService {
         logger.info('Telegram background lifecycle stopped');
         return {
             stopped: true,
+            timerCleared: true,
+            reason: 'background_stopped',
             timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
         };
     }
@@ -816,6 +835,22 @@ class SchedulerService {
                 else if (section === 'maintenance') this.startMaintenanceScheduler();
                 else if (section === 'telegramPipeline') this.startTelegramPipelineScheduler();
                 else if (section === 'normalization') this.startNormalizationScheduler();
+            }
+
+            // B1: keep telegramBackgroundArmed consistent with enabled + timer ownership
+            if (section === 'telegramPipeline') {
+                if (this.config.telegramPipeline?.enabled !== true) {
+                    if (this.intervals.has('telegramPipeline')) {
+                        clearInterval(this.intervals.get('telegramPipeline'));
+                        this.intervals.delete('telegramPipeline');
+                    }
+                    this.telegramBackgroundArmed = false;
+                } else if (
+                    (this.isRunning || this.telegramBackgroundArmed) &&
+                    !this.intervals.has('telegramPipeline')
+                ) {
+                    this.startTelegramPipelineScheduler();
+                }
             }
             await this.publishStatus();
         }

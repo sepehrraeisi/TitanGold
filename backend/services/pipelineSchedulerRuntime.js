@@ -189,24 +189,48 @@ export async function recordTelegramLifecycleEvidence(payload) {
 }
 
 /**
+ * Sanitized diagnostic payload when Redis cannot be observed.
+ * Observational only — never execution entitlement.
+ * @param {'redis_unavailable'|'redis_read_failed'|string} reason
+ */
+export function buildTelegramLifecycleDegradedRead(reason) {
+  return {
+    state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+    at: new Date().toISOString(),
+    reason: String(reason || 'redis_unavailable'),
+    runtimeOwner: 'titan-engine-worker',
+  };
+}
+
+/**
  * @returns {Promise<object|null>}
+ *   null = Redis path healthy enough to read, but no lifecycle key (NOT_INITIALIZED)
+ *   OBSERVABILITY_DEGRADED object = Redis unavailable / read failed
  */
 export async function readTelegramLifecycleEvidence() {
-  if (process.env.NODE_ENV === 'test' || !isRedisAvailable()) {
+  if (process.env.NODE_ENV === 'test') {
     return null;
+  }
+  if (!isRedisAvailable()) {
+    return buildTelegramLifecycleDegradedRead('redis_unavailable');
   }
   try {
     const client = await getRedisClient();
     const raw = await client.get(TELEGRAM_LIFECYCLE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
-    logger.warn('PIPELINE_TELEGRAM_LIFECYCLE_READ_SKIPPED', { error: error.message });
-    return null;
+    logger.warn('PIPELINE_TELEGRAM_LIFECYCLE_READ_SKIPPED', {
+      state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+      reason: 'redis_read_failed',
+      error: error.message,
+    });
+    return buildTelegramLifecycleDegradedRead('redis_read_failed');
   }
 }
 
 /**
  * Diagnostic freshness for Telegram lifecycle (not execution entitlement).
+ * Redis TTL is storage cleanup only — liveness uses intervalMs × SCHEDULER_FRESHNESS_GRACE.
  * @param {{ lifecycle: object|null, intervalMs: number, nowMs?: number }} input
  * @returns {'NOT_INITIALIZED'|'ARMED_WAITING_FIRST_TICK'|'FRESH'|'STALE_STOPPED'|'OBSERVABILITY_DEGRADED'}
  */
@@ -228,7 +252,11 @@ export function deriveTelegramLifecycleFreshness({
     return 'STALE_STOPPED';
   }
   if (lifecycle.state === TELEGRAM_LIFECYCLE_OUTCOMES.ARMED) {
-    return 'ARMED_WAITING_FIRST_TICK';
+    // Fresh ARMED = waiting first tick; stale/malformed ARMED must not linger forever
+    if (isJobExecutionFresh(lifecycle.at, intervalMs, nowMs)) {
+      return 'ARMED_WAITING_FIRST_TICK';
+    }
+    return 'STALE_STOPPED';
   }
   if (isJobExecutionFresh(lifecycle.at, intervalMs, nowMs)) {
     return 'FRESH';

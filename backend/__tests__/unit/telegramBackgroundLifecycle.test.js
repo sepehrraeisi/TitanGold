@@ -103,6 +103,11 @@ describe('telegramBackgroundLifecycle (Candidate B / B1)', () => {
     scheduler.telegramBackgroundArmed = false;
     scheduler.isRunning = false;
     scheduler.emergencyStopSeparation = false;
+    // Reset in-memory telegram config so prior updateConfig tests cannot leak
+    scheduler.config.telegramPipeline = {
+      enabled: true,
+      interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS, 10) || 5 * 60 * 1000,
+    };
   });
 
   afterEach(async () => {
@@ -267,9 +272,43 @@ describe('telegramBackgroundLifecycle (Candidate B / B1)', () => {
   it('background-only stop clears Telegram timer', async () => {
     await scheduler.ensureTelegramBackgroundLifecycle();
     expect(scheduler.intervals.has('telegramPipeline')).toBe(true);
-    await scheduler.stopTelegramBackgroundLifecycle();
+    const result = await scheduler.stopTelegramBackgroundLifecycle();
+    expect(result.timerCleared).toBe(true);
     expect(scheduler.telegramBackgroundArmed).toBe(false);
     expect(scheduler.intervals.has('telegramPipeline')).toBe(false);
+  });
+
+  it('stop while full isRunning leaves Telegram timer intact', async () => {
+    await scheduler.ensureTelegramBackgroundLifecycle();
+    scheduler.isRunning = true;
+    const result = await scheduler.stopTelegramBackgroundLifecycle();
+    expect(result.reason).toBe('full_scheduler_owns_timer');
+    expect(result.timerCleared).toBe(false);
+    expect(scheduler.telegramBackgroundArmed).toBe(false);
+    expect(scheduler.intervals.has('telegramPipeline')).toBe(true);
+    scheduler.isRunning = false;
+  });
+
+  it('updateConfig disable clears armed + timer (no inconsistent armed-without-timer)', async () => {
+    await scheduler.ensureTelegramBackgroundLifecycle();
+    expect(scheduler.telegramBackgroundArmed).toBe(true);
+    mockQuery.mockResolvedValue({ rows: [] }); // saveConfig
+    await scheduler.updateConfig('telegramPipeline', { enabled: false });
+    expect(scheduler.config.telegramPipeline.enabled).toBe(false);
+    expect(scheduler.telegramBackgroundArmed).toBe(false);
+    expect(scheduler.intervals.has('telegramPipeline')).toBe(false);
+  });
+
+  it('updateConfig re-enable while armed restores missing timer', async () => {
+    await scheduler.ensureTelegramBackgroundLifecycle();
+    // Simulate inconsistent armed-without-timer (pre-fix defect surface)
+    clearInterval(scheduler.intervals.get('telegramPipeline'));
+    scheduler.intervals.delete('telegramPipeline');
+    expect(scheduler.telegramBackgroundArmed).toBe(true);
+    mockQuery.mockResolvedValue({ rows: [] });
+    await scheduler.updateConfig('telegramPipeline', { enabled: true, interval: 300000 });
+    expect(scheduler.telegramBackgroundArmed).toBe(true);
+    expect(scheduler.intervals.has('telegramPipeline')).toBe(true);
   });
 
   it('loadConfig default throwOnError=false still swallows errors for full scheduler', async () => {
