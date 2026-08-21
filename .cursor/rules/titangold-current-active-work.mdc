@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; always-on Telegram liveness contract DECIDED; Candidate B DESIGN next; implementation NOT authorized
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; Candidate B design COMPLETE with ownership correction; source implementation AUTHORIZATION next; no production deploy
 alwaysApply: true
 ---
 
@@ -10,11 +10,13 @@ Current outcome:
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
 TARGETED EFFECT STILL INCONCLUSIVE /
-TELEGRAM ALWAYS-ON SAFE BACKGROUND CONTRACT DECIDED /
-LIVENESS DEFECT PROVEN AGAINST OWNER CONTRACT /
-CANDIDATE B DESIGN AUTHORIZED /
-IMPLEMENTATION NOT AUTHORIZED /
-REMEDIATION DESIGN NEXT**
+TELEGRAM ALWAYS-ON CONTRACT DECIDED /
+LIVENESS DEFECT PROVEN /
+CANDIDATE B DESIGN COMPLETE WITH OWNERSHIP CORRECTION /
+B1 TELEGRAM-ONLY LIFECYCLE SELECTED /
+REDIS OBSERVABILITY-ONLY /
+CANONICAL SINGLE ENGINE WORKER REQUIRED BEFORE PROD ACTIVATION /
+SOURCE IMPLEMENTATION AUTHORIZATION NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -158,9 +160,33 @@ bytes = 26378
 **TELEGRAM LIVENESS CONTRACT DECIDED = YES**
 **OWNER CONTRACT DECISION = A**
 **SELECTED_REMEDIATION_DIRECTION = CANDIDATE_B**
+**SELECTED_CANDIDATE_B_VARIANT = B1**
+**CANDIDATE_B_REMEDIATION_DESIGN = COMPLETE WITH OWNERSHIP CORRECTION**
 **CANDIDATE_B_DESIGN_AUTHORIZED = YES**
+**CANDIDATE_B_SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
 **CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
-**RECOMMENDED_REMEDIATION = CANDIDATE_B (DESIGN ONLY)**
+**CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+**PM2_TOPOLOGY_RECONCILIATION_REQUIRED = YES / MANDATORY BEFORE CANDIDATE_B PRODUCTION ACTIVATION**
+**O2_REDIS_CADENCE_EXECUTION_AUTHORITY = REJECTED**
+**NEW_REDIS_AUTHORITY = NO**
+**REDIS_ROLE_FOR_CANDIDATE_B = OBSERVABILITY_ONLY / NON_AUTHORITATIVE**
+**DETERMINISTIC_OWNERSHIP_DESIGN = O3_CANONICAL_SINGLE_ENGINE_WORKER**
+**RECOMMENDED_REMEDIATION = CANDIDATE_B B1 (SOURCE IMPLEMENTATION NOT YET AUTHORIZED)**
+
+Candidate B historical design packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_ALWAYS_ON_CANDIDATE_B_REMEDIATION_DESIGN_20260821T195508Z.txt`
+SHA256 =
+`4d55a1ad30ebe9a7b0529e7b9dda61eb285bdfc39c64a4bf7f122cc4d546829d`
+bytes = 28137
+Classification = **HISTORICAL / MOSTLY_VALID / OWNERSHIP-AUTHORITY CORRECTION REQUIRED**
+
+Candidate B corrected design authority (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_ALWAYS_ON_CANDIDATE_B_REMEDIATION_DESIGN_CORRECTION_20260821T200318Z.txt`
+SHA256 =
+`3deaa1784de6b9ad90ac9ba4c1cddb1279218cfae512b49adb7fd76458584da7`
+bytes = 13406
+Classification = **CURRENT CORRECTED REMEDIATION DESIGN AUTHORITY**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -1695,7 +1721,7 @@ Previous pre-decision classification was
 and `TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT`.
 That ambiguity is superseded by the Owner Decision below.
 
-### Remediation candidates (status after Owner Decision)
+### Remediation candidates (status after design closeout)
 
 **CANDIDATE A = ADD TELEGRAM BACKLOG DIRECTLY TO checkForWork()**
 **CANDIDATE_A_SAFETY = HIGH_RISK / REJECT**
@@ -1703,27 +1729,31 @@ Candidate A must **NOT** become an implementation gate.
 
 **CANDIDATE B = DECOUPLE TELEGRAM SAFE BACKGROUND LIFECYCLE FROM GENERIC hasWork**
 **SELECTED_REMEDIATION_DIRECTION = CANDIDATE_B**
+**SELECTED_CANDIDATE_B_VARIANT = B1**
+**CANDIDATE_B_REMEDIATION_DESIGN = COMPLETE WITH OWNERSHIP CORRECTION**
 **CANDIDATE_B_DESIGN_AUTHORIZED = YES**
+**CANDIDATE_B_SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
 **CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
-Feasibility = **HIGH** · Risk = **MEDIUM**
-Likely surfaces (design only): `backend/workers/engineWorkerLeader.js`,
-possibly `backend/engine/scheduler.js`. Do **NOT** edit source in this closeout.
+**CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
+
+Conceptual Telegram-only API (design only — not implemented):
+`ensureTelegramBackgroundLifecycle()` / `stopTelegramBackgroundLifecycle()`
 
 **CANDIDATE C = DEDICATED TELEGRAM TRANSFER WORKER / PM2 OWNER**
 Feasibility = **POSSIBLE** · Risk = **HIGH** · **NOT SELECTED**
 **NEW PM2 PROCESS = NO** · **DEDICATED TELEGRAM WORKER = NOT SELECTED**
 
-**RECOMMENDED_REMEDIATION = CANDIDATE_B (DESIGN ONLY)**
+**RECOMMENDED_REMEDIATION = CANDIDATE_B B1 (SOURCE IMPLEMENTATION NOT YET AUTHORIZED)**
 
 ### Frozen / closed surfaces (future implementation, if ever)
 
 likely `engineWorkerLeader` change = **CLOSED / CONTROLLED RUNTIME SURFACE**
-scheduler change = **POSSIBLE**
-AI Shared Foundation overlap = **POSSIBLE IF Emergency Stop semantics change**
+scheduler change = **REQUIRED for B1**
+AI Shared Foundation overlap = **POSSIBLE** (adjacent; must not weaken Emergency Stop)
 Agents Shell = **NOT REQUIRED**
-Data Hub frozen baseline = **DO NOT MODIFY** / **OUT_OF_SCOPE / FORBIDDEN** for this contract
-DB schema = **NOT REQUIRED FOR LIVENESS DECOUPLING**
-PM2 topology = **ONLY Candidate C** (not selected)
+Data Hub frozen baseline = **DO NOT MODIFY** / **OUT_OF_SCOPE / FORBIDDEN**
+DB schema = **NOT REQUIRED** / **NO MIGRATION**
+PM2 topology = **separate Owner gate** (O3 mandatory before prod activation; not Candidate C)
 Any future closed/frozen change requires:
 REPRODUCED DEFECT + SCOPED RCA + EXPLICIT OWNER APPROVAL +
 REGRESSION TESTS + RUNTIME PROVENANCE + HUMAN QA / RE-CLOSE
@@ -1736,11 +1766,11 @@ REGRESSION TESTS + RUNTIME PROVENANCE + HUMAN QA / RE-CLOSE
 **E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
 **PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
 E6A = **NOT PROVEN FAILED** · **NOT TARGETED-VALIDATED PASS**
-After Candidate B remediation is eventually implemented **AND** deployed to
-production, E6A targeted validation must be rerun under actual Telegram
-transfer workload. Do **NOT** forget production deployment/runtime verification.
+After Candidate B is eventually implemented **AND** topology-reconciled **AND**
+deployed to production, E6A targeted natural validation = **REQUIRED**.
+Resource gate = **REQUIRED**. Do **NOT** weaken Reject A/B/C.
 
-### Authorization state after RCA (pre-contract; superseded where noted)
+### Authorization state (preserved until source-authorization gate)
 
 **SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
 **SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
@@ -1754,6 +1784,7 @@ transfer workload. Do **NOT** forget production deployment/runtime verification.
 **ROLLBACK AUTHORIZED = NO**
 **052 AUTHORIZED = NO**
 **DETERMINISTIC_TEST_DESIGN_COMPLETE = YES** (design only; no production tests)
+**CI_PLAN_COMPLETE = YES**
 
 ## Owner Decision — Telegram transfer liveness contract (AUTHORITATIVE)
 
@@ -1781,116 +1812,154 @@ Telegram transfer is safe background ingestion, not Live/financial execution.
 Future remediation **MUST** preserve Emergency Stop suppression of Autopilot,
 Trading Engine, and Live-adjacent behavior.
 Do **NOT** weaken Emergency Stop.
+Telegram background readiness alone **MUST NOT** invoke
+`applyEmergencyStopSeparation()` / `ensureAnalyticalAgentScheduler()` /
+`clearEmergencyStopSeparation()` until analytical/full scheduler readiness
+is independently established.
 
 ### Normalization / Data Hub scope
 
 **NORMALIZATION_LIVENESS_CHANGE = OUT_OF_SCOPE / UNCHANGED**
 **DATA_HUB_CHANGE = OUT_OF_SCOPE / FORBIDDEN**
 Do **NOT** implicitly couple normalization or Data Hub to this decision.
-Normalization liveness later needs a separate governance decision if required.
 
-### Runtime owner
+### Runtime owner / topology
 
 Logical runtime owner remains: **titan-engine-worker scheduler subsystem**
 **NEW PM2 PROCESS = NO**
 **DEDICATED TELEGRAM WORKER = NOT SELECTED**
-No PM2 topology change authorized.
+**CANONICAL_TELEGRAM_SCHEDULE_OWNER_COUNT = 1** (ecosystem: instances=1, fork)
+Latest RCA evidence observed production engine worker count = **2**
+**SOURCE_CAN_GUARANTEE_CONFIGURED_FLEET_CADENCE_WITH_2_WORKERS = NO**
+**TWO_WORKER_PRODUCTION_ACTIVATION = BLOCKED**
+**PM2_TOPOLOGY_RECONCILIATION_REQUIRED = YES / MANDATORY BEFORE CANDIDATE_B PRODUCTION ACTIVATION**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+Do **NOT** hardcode historical pm_ids for future execution.
 
-### Zero backlog / nonzero backlog
+### Dual instance / advisory lock
 
-When Telegram backlog = `0`:
-- scheduler lifecycle may remain armed
-- scheduled tick may perform bounded no-op
-- no busy loop
-- no generic engine activation
-- no Autopilot / Trading Engine start
-- no query storm
-Preserve current configured cadence semantics unless future design explicitly
-justifies a bounded alternative.
-
-When Telegram backlog > `0`:
-Telegram transfer must be able to execute its bounded scheduled duty
-**WITHOUT** requiring user login, exchange activity, or AI job creation.
-Transfer remains subject to existing bounded batch semantics, advisory-lock
-single-flight, ingestion/filter/dedupe safety, and explicit
-`SCHEDULER_ENABLED` semantics.
-
-### Dual instance / locking
-
-Existing dual engine-runtime topology must not create duplicate effects.
-Future design **MUST** preserve single-flight transfer, no duplicate processing,
-deterministic ownership, and existing advisory locking unless a safer equivalent
-is separately approved.
-Do **NOT** remove locking.
-
-### Observability
-
-Future design must make scheduler liveness externally distinguishable.
-A scheduled transfer attempt must provide enough evidence to distinguish:
-successful transfer; selected=0 bounded no-op; in-memory overlap skip;
-advisory-lock skip; actual execution error; scheduler not initialized.
-Do not permit another state where several hours of missing heartbeat cannot
-be distinguished from lock-skip or scheduler inactivity.
-Exact observability implementation belongs to remediation DESIGN.
-
-### Restart recovery
-
-After `titan-engine-worker` process restart, Telegram safe-background lifecycle
-must recover automatically **WITHOUT** user login, exchange activation,
-AI job creation, or manual Telegram transfer.
-Future design must define a bounded liveness SLO based on the configured
-Telegram scheduler interval and existing freshness semantics.
+Existing PostgreSQL transfer advisory lock `8392741`:
+**PREVENTS_CONCURRENT_TRANSFER = YES**
+**GUARANTEES_ONE_SCHEDULED_EXECUTION_PER_CONFIGURED_INTERVAL = NO**
+Purpose = **DEFENSIVE SINGLE-FLIGHT** (NOT scheduler ownership).
+Do **NOT** remove it.
 
 ### Defect classification after Owner contract
 
 Technical root cause remains:
 **SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
 (technical cause = **PROVEN**)
-
 **TELEGRAM_TRANSFER_LIVENESS_DEFECT = PROVEN_AGAINST_OWNER_LIVENESS_CONTRACT**
-
-Evidence basis: reproduced four-hour no-transfer generation; backlog
-`14978` → `27754`; current-generation scheduler never initialized; H1 proven;
-H2/H3/H4/H5 refuted; Owner now explicitly requires always-on safe background
-transfer.
-
-This classification authorizes **DESIGN progression only**.
-It does **NOT** authorize source implementation.
 
 ### Server / production completion contract
 
 **GITHUB SOURCE MERGE ALONE DOES NOT COMPLETE THIS REMEDIATION.**
-Any future implemented remediation requires a separate authorized production
-sequence:
-1. canonical source merge verified
-2. production target provenance verified
-3. exact production source update/deploy
-4. controlled required engine refresh/restart
-5. deployed source SHA verification
-6. health verification
-7. prove Autopilot/Trading were not activated by Telegram duty
-8. prove Telegram scheduler liveness
-9. prove backlog can make progress
-10. re-run E6A targeted effect evidence
-11. collect resource evidence
-12. Human/Owner QA
-13. governance runtime re-close
-
-No server action is authorized by **this** governance task.
-**server deployment required later = YES**
+**SERVER_DEPLOYMENT_REQUIRED_LATER = YES**
+Known app path: `/home/ubuntu/webapp/TitanGold`
+Historical PROD_APP_HEAD: `a100f7ba21131c351b561fb66554e90990da8725`
+Intentional E6A SHA256:
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+Future deployment MUST rediscover all runtime provenance.
+Never `git reset --hard` / blind clean / blind stash.
 
 ### Processor / 052 preserved
 
 **PROCESSOR_CONFOUNDING = PRESENT / OPEN**
+telegram-processor blocker = **OPEN / NOT REMEDIATED BY E6A**
 **C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
 **C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
 **C2_052_EXECUTION_AUTHORIZED = NO**
 **C2 052 = NOT EXECUTED**
 **RESOURCE STABILIZATION COMPLETE = NO**
+**B10 050 = BLOCKED**
+**B10 051 = NOT AUTHORIZED**
 
-Do **not** state: RESOURCE STABILIZATION COMPLETE; 052 SAFE;
-SCHEDULER FIX AUTHORIZED; Candidate B implementation approved;
-GitHub merge alone completes remediation.
+## Candidate B remediation design closeout (COMPLETE WITH OWNERSHIP CORRECTION)
+
+Historical original design packet:
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_ALWAYS_ON_CANDIDATE_B_REMEDIATION_DESIGN_20260821T195508Z.txt`
+SHA256 =
+`4d55a1ad30ebe9a7b0529e7b9dda61eb285bdfc39c64a4bf7f122cc4d546829d`
+Corrected design authority:
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_ALWAYS_ON_CANDIDATE_B_REMEDIATION_DESIGN_CORRECTION_20260821T200318Z.txt`
+SHA256 =
+`3deaa1784de6b9ad90ac9ba4c1cddb1279218cfae512b49adb7fd76458584da7`
+Do not modify these artifacts.
+
+**CANDIDATE_B_REMEDIATION_DESIGN = COMPLETE WITH OWNERSHIP CORRECTION**
+**SELECTED_CANDIDATE_B_VARIANT = B1**
+**FULL_SCHEDULER_EARLY_START = REJECT**
+
+### B1 contracts
+
+**TELEGRAM_BACKGROUND_READY = SEPARATE STATE**
+**ANALYTICAL_SCHEDULER_READY = SEPARATE STATE**
+Telegram-only arming **MUST NOT** set `analyticalSchedulerReady = true`.
+**TELEGRAM_TIMER_TRANSITION = 1 -> 1** (no duplicate interval)
+**BACKGROUND_ONLY_SHUTDOWN = MUST STOP TELEGRAM LIFECYCLE**
+Startup recovery = **BOUNDED RETRY** (idle/backoff; no busy loop)
+Design SLO targets (not production PASS evidence):
+**ARMED_SLO** = target ≤ initial `IDLE_CHECK_INTERVAL_MS` with bounded retry
+**FIRST_TICK_SLO** = telegram interval × 2.5 freshness grace
+**RECOVERY_SLO** = ARMED_SLO + FIRST_TICK_SLO
+
+### Ownership correction (supersedes original O2)
+
+**O2_REDIS_CADENCE_EXECUTION_AUTHORITY = REJECTED**
+**NEW_REDIS_AUTHORITY = NO**
+**REDIS_EXECUTION_SEMANTICS_CHANGED = NO**
+**REDIS_ROLE_FOR_CANDIDATE_B = OBSERVABILITY_ONLY / NON_AUTHORITATIVE**
+Redis outage: Telegram execution authority **UNCHANGED**; observability **DEGRADED**.
+**DETERMINISTIC_OWNERSHIP_DESIGN = O3_CANONICAL_SINGLE_ENGINE_WORKER**
+
+### Observability
+
+**LAYER_A_LIFECYCLE_OBSERVABILITY = DESIGNED**
+Required outcomes: ARMED · TICK_SUCCESS · TICK_NOOP_SELECTED_ZERO ·
+TICK_SKIP_IN_MEMORY · TICK_SKIP_ADVISORY_LOCK · TICK_ERROR · DISABLED ·
+STOPPED · OBSERVABILITY_DEGRADED
+Do **NOT** use `TICK_SKIP_NOT_OWNER` in this selected design.
+**EXISTING_TRANSFER_HEARTBEAT_SEMANTICS = PRESERVED** (Layer B)
+
+### Exact future source surface
+
+REQUIRED: `backend/workers/engineWorkerLeader.js` ·
+`backend/engine/scheduler.js` · new/extended deterministic tests
+OPTIONAL: `backend/services/pipelineSchedulerRuntime.js` (observability only)
+NOT REQUIRED: `telegramPipeline.js` · `db.js` · `ecosystem.config.json`
+FORBIDDEN: Data Hub · Normalization liveness · DB migrations/table/index · new PM2 process
+**TELEGRAM_PIPELINE_SEMANTIC_CHANGE_REQUIRED = NO**
+(unless future implementation proves call-site observability impossible → STOP)
+
+### Ordering
+
+SOURCE IMPLEMENTATION MAY OCCUR BEFORE PM2 RECONCILIATION = **YES**
+SOURCE MERGE MAY OCCUR BEFORE PM2 RECONCILIATION = **YES**
+PRODUCTION ACTIVATION BEFORE PM2 RECONCILIATION = **NO**
+
+Future refresh (after authorized deploy):
+titan-engine-worker = **YES**
+titan-backend = **ONLY IF** `pipelineSchedulerRuntime.js` actually changed and
+backend consumer requires new code
+telegram-collector = **NO**
+telegram-processor = **NO**
+
+### Authorization after this closeout
+
+**CANDIDATE_B_SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
+**CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+**SOURCE MUTATION AUTHORIZED = NO**
+**DEPLOYMENT AUTHORIZED = NO**
+**ENGINE RESTART AUTHORIZED = NO**
+**BACKEND RELOAD AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+**DB MUTATION AUTHORIZED = NO**
+**MANUAL TRANSFER AUTHORIZED = NO**
+**052 AUTHORIZED = NO**
+
+Do **not** state: Candidate B implemented; Candidate B deployed; PM2 reconciled;
+E6A targeted PASS; resource stabilization complete; 052 safe.
 
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
@@ -1900,56 +1969,34 @@ It is NOT self-authorization.
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-REMEDIATION DESIGN**
+SOURCE IMPLEMENTATION AUTHORIZATION**
 
-Classification: **DESIGN ONLY / NO IMPLEMENTATION**
+Classification: **TIER 3 SOURCE IMPLEMENTATION AUTHORIZATION / NO PRODUCTION DEPLOYMENT**
 
-The future design may define:
-- smallest Candidate B source surface
-- safe Telegram-only lifecycle initialization
-- Live-engine isolation
-- Emergency Stop compatibility
-- dual-instance ownership
-- advisory-lock semantics
-- observability improvements
-- restart recovery
-- deterministic tests
-- source rollout plan
-- production deployment plan
-- rollback plan
-- runtime validation plan
+This gate may authorize only the approved B1 source implementation and tests.
 
-It must **NOT** implement source.
+It MUST NOT by itself authorize:
 
-It must NOT authorize:
-
-source implementation,
+production deploy,
+PM2 topology mutation,
+engine restart,
+backend reload,
 manual transfer,
-artificial hasWork creation,
-login generation,
-AI job creation,
-exchange activation,
-deploy / rollback,
-restart / reload,
-PM2 mutation,
 DB mutation,
-processor remediation,
-collector mutation,
 052,
 050,
 or 051.
 
+**CANDIDATE_B_REMEDIATION_DESIGN = COMPLETE WITH OWNERSHIP CORRECTION**
+**CANDIDATE_B_SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
+**CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
 **TELEGRAM LIVENESS CONTRACT DECIDED = YES**
 **TELEGRAM_TRANSFER_LIVENESS_CONTRACT = ALWAYS_ON_SAFE_BACKGROUND**
-**CANDIDATE_B_DESIGN_AUTHORIZED = YES**
-**CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
-**SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
 **PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
 **NEW PASSIVE OBSERVATION AUTHORIZED = NO**
-**NEW OBSERVER AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
 **IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
-**NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
 **SOURCE MUTATION AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
@@ -1959,8 +2006,8 @@ or 051.
 production deployed = YES
 runtime health = PASS (previously verified)
 targeted lookup effect = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY
-scheduler technical root cause = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION (PROVEN)
-product defect = PROVEN_AGAINST_OWNER_LIVENESS_CONTRACT
-selected remediation direction = CANDIDATE_B (DESIGN ONLY)
+selected variant = B1
+deterministic ownership = O3_CANONICAL_SINGLE_ENGINE_WORKER
+Redis role = OBSERVABILITY_ONLY / NON_AUTHORITATIVE
 resource stabilization = NO
 
