@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; scheduler technical root cause PROVEN; product defect NOT YET PROVEN; liveness CONTRACT OWNER DECISION next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; always-on Telegram liveness contract DECIDED; Candidate B DESIGN next; implementation NOT authorized
 alwaysApply: true
 ---
 
@@ -10,11 +10,11 @@ Current outcome:
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
 TARGETED EFFECT STILL INCONCLUSIVE /
-TELEGRAM SCHEDULER TECHNICAL ROOT CAUSE PROVEN /
-IDLE GATE PREVENTS SCHEDULER INITIALIZATION /
-ARCHITECTURAL CONTRACT CONFLICT PROVEN /
-PRODUCT DEFECT NOT YET PROVEN /
-LIVENESS CONTRACT OWNER DECISION NEXT**
+TELEGRAM ALWAYS-ON SAFE BACKGROUND CONTRACT DECIDED /
+LIVENESS DEFECT PROVEN AGAINST OWNER CONTRACT /
+CANDIDATE B DESIGN AUTHORIZED /
+IMPLEMENTATION NOT AUTHORIZED /
+REMEDIATION DESIGN NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -153,10 +153,14 @@ SHA256 =
 bytes = 26378
 **TELEGRAM TRANSFER SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
 **SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
-**TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT**
-**RECOMMENDED_REMEDIATION = NONE_YET**
-**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
-**SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
+**TELEGRAM_TRANSFER_LIVENESS_DEFECT = PROVEN_AGAINST_OWNER_LIVENESS_CONTRACT**
+**TELEGRAM_TRANSFER_LIVENESS_CONTRACT = ALWAYS_ON_SAFE_BACKGROUND**
+**TELEGRAM LIVENESS CONTRACT DECIDED = YES**
+**OWNER CONTRACT DECISION = A**
+**SELECTED_REMEDIATION_DIRECTION = CANDIDATE_B**
+**CANDIDATE_B_DESIGN_AUTHORIZED = YES**
+**CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
+**RECOMMENDED_REMEDIATION = CANDIDATE_B (DESIGN ONLY)**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -1630,7 +1634,8 @@ Do not modify this artifact.
 
 **SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
 RCA evidence confidence for technical cause = **HIGH / PROVEN**
-Do **NOT** convert this into a product-defect claim.
+Owner contract ambiguity is now resolved (see Owner Decision section below).
+Do **NOT** authorize source implementation from RCA alone.
 
 Proven chain:
 1. `titan-engine-worker` boots
@@ -1675,40 +1680,40 @@ telegramPipeline effective enabled = **YES**
 effective Telegram interval = `300000` ms
 No production mutation occurred during RCA.
 
-### Historical intent / liveness contract
+### Historical intent (preserved)
 
 **IDLE_GATING_ORIGINAL_INTENT = PROVEN**
 (Historical P0: dynamic imports; engines start only when generic work exists;
 progressive Idle Mode; query-storm prevention; API/engine separation.)
 Do **NOT** describe original Idle Mode as inherently defective.
+**IDLE_MODE_GLOBAL_REMOVAL = FORBIDDEN**
+**QUERY_STORM_PROTECTION = MUST_PRESERVE**
+GENERIC `hasWork` = **MUST NOT** be broadened naively with Telegram backlog.
 
-**TELEGRAM_TRANSFER_LIVENESS_EXPECTATION = C — AMBIGUOUS / CONFLICTING CONTRACT**
-**ARCHITECTURAL_INTENT_CONFLICT = PROVEN**
+Previous pre-decision classification was
+`TELEGRAM_TRANSFER_LIVENESS_EXPECTATION = C — AMBIGUOUS / CONFLICTING CONTRACT`
+and `TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT`.
+That ambiguity is superseded by the Owner Decision below.
 
-**TELEGRAM_TRANSFER_LIVENESS_DEFECT = NOT_PROVEN_AMBIGUOUS_CONTRACT**
-Distinction: **TECHNICAL ROOT CAUSE = PROVEN** ·
-**PRODUCT / ARCHITECTURAL DEFECT = NOT YET PROVEN**
-Do **not** state: scheduler defect proven; Idle Mode is wrong;
-Telegram transfer must be always-on; implementation is authorized.
-
-### Remediation candidates (design only; none authorized)
+### Remediation candidates (status after Owner Decision)
 
 **CANDIDATE A = ADD TELEGRAM BACKLOG DIRECTLY TO checkForWork()**
 **CANDIDATE_A_SAFETY = HIGH_RISK / REJECT**
-(`startEngines()` couples Autopilot + Scheduler + Trading Engine;
-`AUTOPILOT_ENABLED=true`, `TRADING_ENGINE_ENABLED=true`, `SCHEDULER_ENABLED=true`.)
 Candidate A must **NOT** become an implementation gate.
 
-**CANDIDATE B = DECOUPLE SAFE BACKGROUND SCHEDULERS FROM GENERIC hasWork**
+**CANDIDATE B = DECOUPLE TELEGRAM SAFE BACKGROUND LIFECYCLE FROM GENERIC hasWork**
+**SELECTED_REMEDIATION_DIRECTION = CANDIDATE_B**
+**CANDIDATE_B_DESIGN_AUTHORIZED = YES**
+**CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
 Feasibility = **HIGH** · Risk = **MEDIUM**
-PREFERRED DESIGN DIRECTION **IF** contract resolves to always-on.
-**NOT** approved implementation.
+Likely surfaces (design only): `backend/workers/engineWorkerLeader.js`,
+possibly `backend/engine/scheduler.js`. Do **NOT** edit source in this closeout.
 
 **CANDIDATE C = DEDICATED TELEGRAM TRANSFER WORKER / PM2 OWNER**
-Feasibility = **POSSIBLE** · Risk = **HIGH** · Not selected.
+Feasibility = **POSSIBLE** · Risk = **HIGH** · **NOT SELECTED**
+**NEW PM2 PROCESS = NO** · **DEDICATED TELEGRAM WORKER = NOT SELECTED**
 
-**RECOMMENDED_REMEDIATION = NONE_YET**
-Technical cause known; intended Telegram liveness contract unresolved.
+**RECOMMENDED_REMEDIATION = CANDIDATE_B (DESIGN ONLY)**
 
 ### Frozen / closed surfaces (future implementation, if ever)
 
@@ -1716,14 +1721,14 @@ likely `engineWorkerLeader` change = **CLOSED / CONTROLLED RUNTIME SURFACE**
 scheduler change = **POSSIBLE**
 AI Shared Foundation overlap = **POSSIBLE IF Emergency Stop semantics change**
 Agents Shell = **NOT REQUIRED**
-Data Hub frozen baseline = **DO NOT MODIFY**
+Data Hub frozen baseline = **DO NOT MODIFY** / **OUT_OF_SCOPE / FORBIDDEN** for this contract
 DB schema = **NOT REQUIRED FOR LIVENESS DECOUPLING**
-PM2 topology = **ONLY Candidate C**
+PM2 topology = **ONLY Candidate C** (not selected)
 Any future closed/frozen change requires:
 REPRODUCED DEFECT + SCOPED RCA + EXPLICIT OWNER APPROVAL +
 REGRESSION TESTS + RUNTIME PROVENANCE + HUMAN QA / RE-CLOSE
 
-### E6A status (do not conflate with scheduler liveness RCA)
+### E6A status (do not conflate with scheduler liveness remediation)
 
 **CANONICAL E6A DEPLOYED = YES**
 **ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
@@ -1731,12 +1736,14 @@ REGRESSION TESTS + RUNTIME PROVENANCE + HUMAN QA / RE-CLOSE
 **E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
 **PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
 E6A = **NOT PROVEN FAILED** · **NOT TARGETED-VALIDATED PASS**
+After Candidate B remediation is eventually implemented **AND** deployed to
+production, E6A targeted validation must be rerun under actual Telegram
+transfer workload. Do **NOT** forget production deployment/runtime verification.
 
-### Authorization state after RCA closeout
+### Authorization state after RCA (pre-contract; superseded where noted)
 
 **SCHEDULER LIVENESS RCA DESIGN = COMPLETE**
 **SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
-**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
 **SOURCE MUTATION AUTHORIZED = NO**
 **NEW PASSIVE OBSERVATION AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
@@ -1748,8 +1755,142 @@ E6A = **NOT PROVEN FAILED** · **NOT TARGETED-VALIDATED PASS**
 **052 AUTHORIZED = NO**
 **DETERMINISTIC_TEST_DESIGN_COMPLETE = YES** (design only; no production tests)
 
+## Owner Decision — Telegram transfer liveness contract (AUTHORITATIVE)
+
+**OWNER CONTRACT DECISION = A**
+**TELEGRAM_TRANSFER_LIVENESS_CONTRACT = ALWAYS_ON_SAFE_BACKGROUND**
+**TELEGRAM LIVENESS CONTRACT DECIDED = YES**
+
+TELEGRAM TRANSFER IS AN ALWAYS-ON SAFE BACKGROUND INGESTION DUTY
+INDEPENDENT OF EXCHANGE / USER / AI WORK.
+
+Telegram transfer **MUST NOT** depend on:
+- active exchange connections
+- recent user login
+- pending/running AI jobs
+
+Telegram backlog / transfer duty **MUST NOT** indirectly activate:
+- Autopilot
+- Trading Engine
+- Live-capable execution
+
+### Emergency Stop
+
+**TELEGRAM_TRANSFER_DURING_EMERGENCY_STOP = REMAINS AVAILABLE**
+Telegram transfer is safe background ingestion, not Live/financial execution.
+Future remediation **MUST** preserve Emergency Stop suppression of Autopilot,
+Trading Engine, and Live-adjacent behavior.
+Do **NOT** weaken Emergency Stop.
+
+### Normalization / Data Hub scope
+
+**NORMALIZATION_LIVENESS_CHANGE = OUT_OF_SCOPE / UNCHANGED**
+**DATA_HUB_CHANGE = OUT_OF_SCOPE / FORBIDDEN**
+Do **NOT** implicitly couple normalization or Data Hub to this decision.
+Normalization liveness later needs a separate governance decision if required.
+
+### Runtime owner
+
+Logical runtime owner remains: **titan-engine-worker scheduler subsystem**
+**NEW PM2 PROCESS = NO**
+**DEDICATED TELEGRAM WORKER = NOT SELECTED**
+No PM2 topology change authorized.
+
+### Zero backlog / nonzero backlog
+
+When Telegram backlog = `0`:
+- scheduler lifecycle may remain armed
+- scheduled tick may perform bounded no-op
+- no busy loop
+- no generic engine activation
+- no Autopilot / Trading Engine start
+- no query storm
+Preserve current configured cadence semantics unless future design explicitly
+justifies a bounded alternative.
+
+When Telegram backlog > `0`:
+Telegram transfer must be able to execute its bounded scheduled duty
+**WITHOUT** requiring user login, exchange activity, or AI job creation.
+Transfer remains subject to existing bounded batch semantics, advisory-lock
+single-flight, ingestion/filter/dedupe safety, and explicit
+`SCHEDULER_ENABLED` semantics.
+
+### Dual instance / locking
+
+Existing dual engine-runtime topology must not create duplicate effects.
+Future design **MUST** preserve single-flight transfer, no duplicate processing,
+deterministic ownership, and existing advisory locking unless a safer equivalent
+is separately approved.
+Do **NOT** remove locking.
+
+### Observability
+
+Future design must make scheduler liveness externally distinguishable.
+A scheduled transfer attempt must provide enough evidence to distinguish:
+successful transfer; selected=0 bounded no-op; in-memory overlap skip;
+advisory-lock skip; actual execution error; scheduler not initialized.
+Do not permit another state where several hours of missing heartbeat cannot
+be distinguished from lock-skip or scheduler inactivity.
+Exact observability implementation belongs to remediation DESIGN.
+
+### Restart recovery
+
+After `titan-engine-worker` process restart, Telegram safe-background lifecycle
+must recover automatically **WITHOUT** user login, exchange activation,
+AI job creation, or manual Telegram transfer.
+Future design must define a bounded liveness SLO based on the configured
+Telegram scheduler interval and existing freshness semantics.
+
+### Defect classification after Owner contract
+
+Technical root cause remains:
+**SCHEDULER_LIVENESS_ROOT_CAUSE = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION**
+(technical cause = **PROVEN**)
+
+**TELEGRAM_TRANSFER_LIVENESS_DEFECT = PROVEN_AGAINST_OWNER_LIVENESS_CONTRACT**
+
+Evidence basis: reproduced four-hour no-transfer generation; backlog
+`14978` → `27754`; current-generation scheduler never initialized; H1 proven;
+H2/H3/H4/H5 refuted; Owner now explicitly requires always-on safe background
+transfer.
+
+This classification authorizes **DESIGN progression only**.
+It does **NOT** authorize source implementation.
+
+### Server / production completion contract
+
+**GITHUB SOURCE MERGE ALONE DOES NOT COMPLETE THIS REMEDIATION.**
+Any future implemented remediation requires a separate authorized production
+sequence:
+1. canonical source merge verified
+2. production target provenance verified
+3. exact production source update/deploy
+4. controlled required engine refresh/restart
+5. deployed source SHA verification
+6. health verification
+7. prove Autopilot/Trading were not activated by Telegram duty
+8. prove Telegram scheduler liveness
+9. prove backlog can make progress
+10. re-run E6A targeted effect evidence
+11. collect resource evidence
+12. Human/Owner QA
+13. governance runtime re-close
+
+No server action is authorized by **this** governance task.
+**server deployment required later = YES**
+
+### Processor / 052 preserved
+
+**PROCESSOR_CONFOUNDING = PRESENT / OPEN**
+**C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+
 Do **not** state: RESOURCE STABILIZATION COMPLETE; 052 SAFE;
-SCHEDULER FIX AUTHORIZED; CANDIDATE B APPROVED.
+SCHEDULER FIX AUTHORIZED; Candidate B implementation approved;
+GitHub merge alone completes remediation.
 
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
@@ -1758,39 +1899,27 @@ It is NOT self-authorization.
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-TELEGRAM TRANSFER LIVENESS CONTRACT
-OWNER DECISION**
+TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
+REMEDIATION DESIGN**
 
-Classification: **GOVERNANCE / CONTRACT RESOLUTION ONLY**
+Classification: **DESIGN ONLY / NO IMPLEMENTATION**
 
-This gate must decide exactly one:
+The future design may define:
+- smallest Candidate B source surface
+- safe Telegram-only lifecycle initialization
+- Live-engine isolation
+- Emergency Stop compatibility
+- dual-instance ownership
+- advisory-lock semantics
+- observability improvements
+- restart recovery
+- deterministic tests
+- source rollout plan
+- production deployment plan
+- rollback plan
+- runtime validation plan
 
-**A.** TELEGRAM TRANSFER IS AN ALWAYS-ON SAFE BACKGROUND INGESTION DUTY
-INDEPENDENT OF EXCHANGE / USER / AI WORK
-
-**or**
-
-**B.** TELEGRAM TRANSFER IS INTENTIONALLY GENERIC-WORK-GATED
-
-**or**
-
-**C.** A DIFFERENT EXPLICIT LIVENESS CONTRACT WITH PRECISE CONDITIONS
-
-No source implementation is authorized merely by choosing a contract.
-
-Future Owner contract decision must explicitly define:
-- whether backlog must drain without active user/trading/AI work
-- whether Telegram transfer remains active during Emergency Stop
-- whether normalization belongs to the same safe-background class
-- whether Data Hub behavior is included or excluded
-- exact runtime owner
-- behavior with zero backlog / nonzero backlog
-- query-storm limits
-- Live-adjacent engine isolation
-- dual-instance ownership / single-flight semantics
-- observability requirements
-- acceptable recovery after process restart
-Do **NOT** decide these implicitly in this closeout.
+It must **NOT** implement source.
 
 It must NOT authorize:
 
@@ -1810,8 +1939,11 @@ collector mutation,
 050,
 or 051.
 
+**TELEGRAM LIVENESS CONTRACT DECIDED = YES**
+**TELEGRAM_TRANSFER_LIVENESS_CONTRACT = ALWAYS_ON_SAFE_BACKGROUND**
+**CANDIDATE_B_DESIGN_AUTHORIZED = YES**
+**CANDIDATE_B_IMPLEMENTATION_AUTHORIZED = NO**
 **SCHEDULER LIVENESS RCA IMPLEMENTATION AUTHORIZED = NO**
-**TELEGRAM LIVENESS CONTRACT DECIDED = NO**
 **PASSIVE EVIDENCE REPEAT AUTHORIZATION = CONSUMED / COMPLETE**
 **NEW PASSIVE OBSERVATION AUTHORIZED = NO**
 **NEW OBSERVER AUTHORIZED = NO**
@@ -1828,7 +1960,7 @@ production deployed = YES
 runtime health = PASS (previously verified)
 targeted lookup effect = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY
 scheduler technical root cause = IDLE_GATE_PREVENTS_SCHEDULER_INITIALIZATION (PROVEN)
-product defect = NOT_PROVEN_AMBIGUOUS_CONTRACT
-recommended remediation = NONE_YET
+product defect = PROVEN_AGAINST_OWNER_LIVENESS_CONTRACT
+selected remediation direction = CANDIDATE_B (DESIGN ONLY)
 resource stabilization = NO
 
