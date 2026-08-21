@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A runtime deployment design corrected+complete; runtime deployment + engine/backend refresh + measurement AUTHORIZATION next
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+refreshed; targeted lookup effect INCONCLUSIVE; evidence-repeat DESIGN next
 alwaysApply: true
 ---
 
@@ -8,9 +8,12 @@ alwaysApply: true
 Current outcome:
 **PRODUCTION RESOURCE STABILIZATION —
 C2 READY_TO_APPLY /
-E6A SOURCE + CI MERGED /
-E6A RUNTIME DEPLOYMENT DESIGN CORRECTED + COMPLETE /
-RUNTIME EXECUTION AUTHORIZATION NEXT**
+E6A CANONICAL SOURCE DEPLOYED /
+ENGINE + BACKEND REFRESH COMPLETE /
+RUNTIME HEALTH PASS /
+TARGETED LOOKUP EFFECT INCONCLUSIVE /
+GLOBAL RESOURCE WINDOW PASS /
+TARGETED EFFECT EVIDENCE REPEAT DESIGN NEXT**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -103,6 +106,22 @@ SHA256 =
 `7a71b289f65759a3369dd17c007b940004c9e753ff3d2cff2068db4bd89e2df2`
 bytes = 16973
 
+E6A runtime execution evidence packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_EXECUTION_20260821T084016Z.txt`
+SHA256 =
+`1fd7f43e890aff24ba35b9126f93a259caa4a0da0ac11e17c8a104acaccda5a4`
+Execution directory:
+`/home/ubuntu/TITANGOLD_C2_E6A_EXEC_20260821T082252Z`
+classification =
+**E6A RUNTIME EXECUTION EVIDENCE = CURRENT EXECUTION AUTHORITY**
+
+**C2 E6A RUNTIME EXECUTION = COMPLETE**
+**D1 DEPLOYMENT = EXECUTED**
+**CANONICAL E6A DEPLOYED = YES**
+**RUNTIME REFRESH = ENGINE + BACKEND COMPLETE**
+**E6A ENGINE_LOOKUP_EFFECT = INCONCLUSIVE**
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS**
+**E6A_CAUSAL_CONTRIBUTION_TO_GLOBAL_PASS = NOT PROVEN**
 
 Old staging:
 `/home/ubuntu/TITANGOLD_C2_RUNNER_4b501544ee86`
@@ -182,20 +201,25 @@ Do not rebuild, download, run, or connect the capsule to DB in this closeout.
 **DB schema change = NO**
 **CLOSED_BASELINE_SOURCE_CHANGE = IMPLEMENTED + CI VERIFIED + MERGED**
 **SOURCE/CI CLOSED = YES**
-**PRODUCTION RUNTIME RE-CLOSE = PENDING**
-**Human/production verification = PENDING**
-**E6A PRODUCTION DEPLOYED = NO**
-**E6A ENGINE RESTARTED = NO**
-**E6A PRODUCTION MEASUREMENT = NOT STARTED**
-**E6A ENGINE_LOOKUP_EFFECT = NOT MEASURED**
-**GLOBAL_RESOURCE_GATE_AFTER_E6A = NOT MEASURED**
+**PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
+**Human/production verification = PENDING TARGETED EFFECT EVIDENCE**
+**E6A PRODUCTION DEPLOYED = YES**
+**E6A ENGINE RESTARTED = YES (authorized sequential exact-ID; CONSUMED)**
+**E6A PRODUCTION MEASUREMENT = FORMAL PRE/POST WINDOWS COMPLETE / TARGETED EFFECT INCONCLUSIVE**
+**E6A ENGINE_LOOKUP_EFFECT = INCONCLUSIVE**
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS**
+**E6A_CAUSAL_CONTRIBUTION_TO_GLOBAL_PASS = NOT PROVEN**
 **C2 E6A RUNTIME DEPLOYMENT DESIGN = COMPLETE WITH RESTART-SCOPE CORRECTION**
+**C2 E6A RUNTIME EXECUTION = COMPLETE**
+**E6A RUNTIME DEPLOYMENT AUTHORIZATION = CONSUMED / COMPLETE**
+**NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
 **RUNTIME DEPLOYMENT AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
+**ROLLBACK AUTHORIZED = NO**
 **PHASE 1 = E6A SOURCE + TESTS + CI / COMPLETE / MERGED**
-**PHASE 2 = RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH + TARGETED MEASUREMENT / DESIGN COMPLETE / EXECUTION NOT AUTHORIZED**
+**PHASE 2 = RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH + TARGETED MEASUREMENT / EXECUTION COMPLETE / TARGETED EFFECT INCONCLUSIVE**
 **E6_CORRECTED_STATUS = SEMANTICALLY_SAFE_AND_PLAN_SUPPORTED**
 **SELECTED_SEQUENCE = SEQUENCE_B**
 **FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
@@ -549,8 +573,8 @@ N=700 lookup plan remains **NON_REPRESENTATIVE_FOR_DIRECT_RUNTIME_LOOKUP**
 
 **FIRST_REMEDIATION = E6A EXACT-PAIR ENGINE LOOKUP**
 source implementation = COMPLETE / MERGED
-production runtime application = PENDING
-runtime restart eventually required = YES
+production runtime application = **DEPLOYED / HEALTH VERIFIED / TARGETED EFFECT INCONCLUSIVE**
+runtime restart eventually required = **CONSUMED (engine sequential exact-ID + backend cluster reload COMPLETE)**
 
 ## E6A source CI
 
@@ -589,20 +613,26 @@ This source merge does not itself prove production behavior.
 
 **CLOSED_BASELINE_SOURCE_CHANGE = IMPLEMENTED + CI VERIFIED + MERGED**
 **SOURCE/CI CLOSED = YES**
-**PRODUCTION RUNTIME RE-CLOSE = PENDING**
-**Human/production verification = PENDING**
-**PRODUCTION VERIFIED = NO**
+**PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
+**Human/production verification = PENDING TARGETED EFFECT EVIDENCE**
+**PRODUCTION VERIFIED = NO (targeted lookup effect not proven)**
 
 ## Production deployment state
 
-Do not claim a fresh production app HEAD from this closeout.
-Do not claim current production contains pre- or post-E6A code.
+**PROD_APP_HEAD BEFORE = `a100f7ba21131c351b561fb66554e90990da8725`**
+**PROD_APP_HEAD AFTER = `a100f7ba21131c351b561fb66554e90990da8725`**
+Production HEAD did **NOT** move.
 
-**E6A PRODUCTION DEPLOYED = NO**
-**E6A ENGINE RESTARTED = NO**
-**E6A PRODUCTION MEASUREMENT = NOT STARTED**
-**E6A ENGINE_LOOKUP_EFFECT = NOT MEASURED**
-**GLOBAL_RESOURCE_GATE_AFTER_E6A = NOT MEASURED**
+**E6A PRODUCTION DEPLOYED = YES**
+**E6A ENGINE RESTARTED = YES (CONSUMED)**
+**E6A PRODUCTION MEASUREMENT = FORMAL WINDOWS COMPLETE**
+**E6A ENGINE_LOOKUP_EFFECT = INCONCLUSIVE**
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS**
+**E6A_CAUSAL_CONTRIBUTION_TO_GLOBAL_PASS = NOT PROVEN**
+**FINAL RUNTIME STATE = E6A**
+**ROLLBACK TRIGGERED = NO**
+**ROLLBACK COMPLETED = N/A**
+**ROLLBACK REQUIRED NOW = NO**
 
 ## Processor blocker remains open
 
@@ -669,12 +699,14 @@ One favorable sample cannot override a bad window.
 status = COMPLETE / MERGED
 
 **PHASE 2 = RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH + TARGETED MEASUREMENT**
-status = DESIGN CORRECTED + COMPLETE / EXECUTION NOT AUTHORIZED / NOT STARTED
+status = EXECUTION COMPLETE / TARGETED EFFECT INCONCLUSIVE
 
 These phases remain separate.
-Production deployed = NO.
-Runtime verification = PENDING.
+Production deployed = YES.
+Runtime health = PASS.
+Targeted lookup effect = INCONCLUSIVE.
 Resource stabilization = NO.
+E6A causality for global PASS = NOT PROVEN.
 
 ## E6A runtime deployment design authority
 
@@ -702,10 +734,15 @@ Do not alter either packet.
 **PRODUCTION_REPO_ROOT = `/home/ubuntu/webapp/TitanGold`**
 **PROD_APP_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
 **PROD_BRANCH = main / attached**
-Production dirty count = 490
-Production tree = **BROADLY DIRTY**
+Production dirty count before execution = 490
+Production dirty count after execution = 491
+Production tree = **BROADLY DIRTY** plus **one authorized E6A target modification**
 Critical distinction:
-`backend/services/telegramPipeline.js` = **TRACKED + CLEAN**
+`backend/services/telegramPipeline.js` =
+**INTENTIONAL AUTHORIZED E6A WORKING-TREE MODIFICATION**
+**PRODUCTION_TARGET_STATE = INTENTIONAL AUTHORIZED E6A WORKING-TREE MODIFICATION**
+Do **not** classify this target as unexpected dirt.
+Do **not** clean, reset, stash, or commit the production target.
 
 Do not interpret broad dirty-tree status as authorization to clean, stash,
 reset, or perform commit-level deployment.
@@ -716,13 +753,18 @@ Production target:
 `/home/ubuntu/webapp/TitanGold/backend/services/telegramPipeline.js`
 
 **PROD_TARGET_TRACKED = YES**
-**PROD_TARGET_DIRTY = NO**
-production working SHA256 =
+**PROD_TARGET_DIRTY = YES (AUTHORIZED E6A)**
+final target git status = ` M backend/services/telegramPipeline.js`
+**CURRENT EXPECTED PRODUCTION E6A SHA256 =
+`5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`**
+**ROLLBACK BASELINE SHA256 =
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`**
+
+Historical pre-deploy required preimage
 `63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
-production HEAD target SHA256 =
-`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
-E6A parent target SHA256 =
-`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
+is now **ROLLBACK BASELINE SHA256**.
+It is **NO LONGER** the expected current production target SHA.
+
 canonical E6A target SHA256 =
 `5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
 current-main target SHA256 =
@@ -733,7 +775,9 @@ canonical E6A Git blob =
 Do not confuse Git blob SHA with SHA256.
 
 Target metadata snapshot: owner=`ubuntu` group=`ubuntu` mode=`664`
-Future deployment must preserve owner/group/mode and verify after replacement.
+Future read-only measurement must require current target = canonical E6A SHA.
+Future rollback, if separately authorized, uses rollback baseline.
+Do not treat rollback baseline as the current expected production SHA.
 
 ## Deployment compatibility and unit
 
@@ -748,11 +792,13 @@ a larger unrelated mutation surface.
 
 **RECOMMENDED_DEPLOYMENT_UNIT = D1 WHOLE CANONICAL FILE REPLACEMENT**
 
-D1 is safe ONLY under the execution-time preimage gate.
-Future execution MUST require target SHA256 immediately before mutation:
-`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
-If target SHA differs: **STOP**. No deployment. No fallback to patch/commit
-deployment without new Owner authority.
+D1 execution was completed under the then-valid preimage gate.
+That historical preimage is now **ROLLBACK BASELINE** only.
+Future **new** source replacement is **NOT AUTHORIZED**.
+If a future Owner rollback is granted, restore
+`63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`.
+If a future Owner re-deploy is granted, require then-current target SHA
+freshly; do not reuse consumed execution authorization.
 
 ## PM2 / engine runtime model
 
@@ -829,8 +875,11 @@ The route is runtime-callable.
 If shared source on disk is replaced and titan-backend remains running, old
 in-memory module state may remain.
 
-**MIXED_RUNTIME_RISK = PRESENT**
+**MIXED_RUNTIME_RISK BEFORE REFRESH = PRESENT**
 **TITAN_BACKEND_RESTART_REQUIRED_FOR_E6A_CONSISTENCY = YES**
+**MIXED_RUNTIME CLOSED = YES**
+No known material telegramPipeline runtime consumer intentionally remained on
+old in-memory code after execution.
 
 Backend design snapshot:
 name = `titan-backend`
@@ -890,17 +939,21 @@ No collector pause.
 ## Rollback / atomicity
 
 Rollback design complete.
-Future execution must preserve BEFORE mutation:
-exact old target bytes
+**ROLLBACK TRIGGERED = NO**
+**ROLLBACK COMPLETED = N/A**
+**ROLLBACK REQUIRED NOW = NO**
+**ROLLBACK AUTHORIZED = NO**
+Do not roll back merely because targeted measurement is INCONCLUSIVE.
+
+Rollback baseline (historical pre-E6A bytes):
 SHA256 = `63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
 owner / group / mode
-PROD_APP_HEAD
-target dirty status
+PROD_APP_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`
 
-Rollback artifact must reside OUTSIDE application repo.
-After source rollback, every runtime consumer previously refreshed to E6A and
-requiring old-module consistency must itself be refreshed/restarted back onto
-restored code.
+Rollback artifact resides OUTSIDE application repo (execution directory).
+If a future Owner rollback is granted, after source restore every runtime
+consumer previously refreshed to E6A and requiring old-module consistency
+must itself be refreshed/restarted back onto restored code.
 **ROLLBACK_RUNTIME_SCOPE_COMPLETE = YES**
 
 Deployment atomicity (future):
@@ -975,13 +1028,15 @@ Do not implement processor remediation here.
 
 ## Future execution stop gates
 
-The future runtime execution task MUST stop before mutation if any of:
+The consumed runtime execution task stopped before mutation unless gates passed.
+Future **new** mutation remains unauthorized.
+If a future Owner incident/rollback/redeploy gate is granted, stop before
+mutation if any of:
 origin/main governance drift
 Rule02 execution gate absent
 production root/provenance drift
-target becomes dirty
-target preimage SHA != `63b17aa5b55bf06dc6a47ab1c5f856ecdd6869433a1f1d863c3e8e5ea54ccc93`
-canonical E6A SHA mismatch
+current expected E6A SHA not present when remaining on E6A
+rollback baseline SHA mismatch when rolling back
 file owner/group/mode unresolved
 PM2 engine topology materially changed
 backend topology materially changed
@@ -1003,10 +1058,15 @@ No improvisation.
 **C2 052 = NOT EXECUTED**
 **RESOURCE STABILIZATION COMPLETE = NO**
 
-E6A source merge / runtime design closeout does **not** make 052 safe.
+E6A source merge / runtime design closeout / runtime execution closeout
+does **not** make 052 safe.
+One formal global PASS window with insufficient target workload does **NOT**
+automatically transition `C2_052_CURRENT_SAFETY`.
 Do not weaken resource thresholds.
 Do not interpret this closeout as authorization to build the C2 index.
 No 052 execution.
+Do not state E6A solved global IO pressure.
+Do not state processor blocker resolved.
 
 ## B10 boundary
 
@@ -1032,13 +1092,136 @@ Fresh origin/main verification for this closeout:
 Any later source move must be rediscovered on then-current main before
 runtime deployment is executed.
 
-## This PR does NOT authorize execution
+## E6A runtime execution evidence (CONSUMED)
 
-**RUNTIME DEPLOYMENT AUTHORIZED = NO**
+**C2 E6A RUNTIME EXECUTION = COMPLETE**
+**D1 DEPLOYMENT = EXECUTED**
+**CANONICAL E6A DEPLOYED = YES**
+**RUNTIME REFRESH = ENGINE + BACKEND COMPLETE**
+**E6A DEPLOYMENT/REFRESH = PRODUCTION HEALTH VERIFIED**
+**E6A TARGETED EFFECT = NOT VERIFIED / INCONCLUSIVE**
+**PRODUCTION RUNTIME RE-CLOSE = PARTIAL / TARGETED EFFECT EVIDENCE PENDING**
+**Human/Owner production acceptance = PENDING TARGETED EFFECT EVIDENCE**
+Do **not** set full E6A runtime re-close COMPLETE.
+
+Execution packet:
+`/home/ubuntu/TITANGOLD_C2_E6A_RUNTIME_EXECUTION_20260821T084016Z.txt`
+SHA256 =
+`1fd7f43e890aff24ba35b9126f93a259caa4a0da0ac11e17c8a104acaccda5a4`
+**E6A RUNTIME EXECUTION EVIDENCE = CURRENT EXECUTION AUTHORITY**
+Do not modify the packet.
+
+Engine execution evidence (HISTORICAL, not stable future authority):
+fresh engine instance count = 2
+execution pm_ids = `5`, `9`
+Engine A: PID `1942263` -> `1972309`; restart `1` -> `2`; result = PASS
+Engine B: PID `1942240` -> `1972587`; restart `1` -> `2`; result = PASS
+**ENGINE RUNTIME REFRESH = COMPLETE**
+**ENGINE HEALTH AFTER REFRESH = PASS**
+
+Backend execution evidence (HISTORICAL, not stable future authority):
+backend cluster instance count = 4
+execution pm_ids = `1,2,3,4`
+controlled cluster reload = PASS
+backend restart generation `9` -> `10`
+backend worker PIDs refreshed = YES
+Port 5002 after reload = HTTP 200
+**BACKEND RUNTIME REFRESH = COMPLETE**
+**BACKEND HEALTH AFTER REFRESH = PASS**
+
+**MIXED_RUNTIME CLOSED = YES**
+**PROCESSOR/COLLECTOR NON-INTERFERENCE = PASS**
+telegram-processor intentionally restarted = NO
+processor restart-count delta = 0
+telegram-collector intentionally restarted = NO
+collector restart-count delta = 0
+collector pause = NO
+Post-health: backend 5002 = HTTP 200; collector 5003 = HTTP 200
+
+PRODUCTION DB MUTATION = 0
+ANALYZE = NO
+VACUUM = NO
+CREATE INDEX = NO
+DROP INDEX = NO
+REINDEX = NO
+migration = NO
+pg_stat_reset = NO
+C2 052 = NOT EXECUTED
+
+Formal windows:
+PRE-WINDOW span ≈ 303 seconds / samples = 6
+POST-WINDOW span ≈ 302 seconds / samples = 6
+Both meet formal minimum duration/sample-count.
+Do **not** infer workload comparability merely from duration.
+
+**PRE-WINDOW TRANSFER WORKLOAD = INSUFFICIENT / NO FRESH TRANSFER OBSERVED**
+**POST-WINDOW TRANSFER WORKLOAD = INSUFFICIENT / NO FRESH TRANSFER OBSERVED**
+Heartbeat observed = `2026-08-21T06:41:07.921Z`
+classification = **STALE DURING EXECUTION WINDOWS**
+Post runtime state included Idle Mode.
+No meaningful fresh Telegram transfer workload was observed.
+**WORKLOAD NORMALIZATION = INSUFFICIENT FOR TARGETED E6A EFFECT PROOF**
+Do **not** describe the targeted pre/post windows as comparable active-transfer
+windows.
+
+Targeted counters:
+dedupe idx_scan pre delta = 0 / post delta = 0
+collected_data heap_blks_read pre delta = 0 / post delta = 0
+collected_data seq_scan pre delta = 0 / post delta = 0
+These zeros are consistent with absence of relevant transfer workload.
+They do **not** prove E6A ineffective or E6A effective.
+
+**E6A ENGINE_LOOKUP_EFFECT = INCONCLUSIVE**
+Reason: canonical source deployed; engine/backend refreshed; no module/syntax/SQL
+errors observed; runtime health preserved; BUT no meaningful Telegram transfer
+workload; idx_scan remained zero; collected_data lookup counters remained zero;
+targeted access-path was not exercised enough to prove the remediation effect.
+Forbid **ENGINE_LOOKUP_EFFECT = PASS** based only on deployment/health.
+Forbid **ENGINE_LOOKUP_EFFECT = FAIL** based only on zero idx_scan during zero
+workload.
+
+**GLOBAL_RESOURCE_GATE_AFTER_E6A = PASS** for the observed post-deployment
+resource window.
+Reject A = NO
+Reject B = NO
+Reject C = NO
+This classifies THAT observed global resource window only.
+**E6A_CAUSAL_CONTRIBUTION_TO_GLOBAL_PASS = NOT PROVEN**
+because relevant engine transfer workload was absent/insufficient.
+Do **not** state E6A solved global IO pressure.
+Do **not** state processor blocker resolved.
+
+DB-wide activity (do not attribute to E6A):
+pg_stat_database blks_read pre delta = 19379790 / post delta = 19239630
+temp_bytes pre delta = 25612222464 / post delta = 25604554752
+Small relative differences are not an E6A effect.
+Relevant collected_data E6A family had no measured workload.
+
+telegram-processor foreground blocker =
+**OPEN / NOT REMEDIATED BY E6A**
+**IS_PROCESSED_EQUIVALENCE = PROVEN_UNSAFE**
+processed_telegram_messages(raw_message_id) lookup index = ABSENT
+**TEMP_SPILL_PRIMARY_FAMILY = PROCESSOR**
+Processor remediation = NOT AUTHORIZED
+Processor restart = NOT AUTHORIZED
+
+**C2_SCHEMA_LEDGER_STATE = READY_TO_APPLY**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+
+## Previous execution authorization consumed
+
+**E6A RUNTIME DEPLOYMENT AUTHORIZATION = CONSUMED / COMPLETE**
+**NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
+**ROLLBACK AUTHORIZED = NO**
+unless a future explicit Owner incident/rollback gate grants it.
 
+The completed execution gate must **not** remain generally reusable.
 The next Owner gate NAME describes the next separately approvable task.
 It is NOT self-authorization.
 
@@ -1046,29 +1229,43 @@ It is NOT self-authorization.
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
-RUNTIME DEPLOYMENT + CONTROLLED ENGINE/BACKEND REFRESH
-+ TARGETED MEASUREMENT AUTHORIZATION**
+TARGETED LOOKUP EFFECT EVIDENCE REPEAT DESIGN**
 
-This FUTURE gate may authorize only after separate Owner approval:
+Classification: **DESIGN / READ-ONLY DISCOVERY ONLY**
 
-- fresh execution-time provenance gates
-- rollback artifact creation outside app tree
-- stage canonical single source file
-- verify canonical SHA + syntax
-- atomic D1 target replacement
-- sequential exact-ID engine restarts after fresh resolution
-- controlled backend cluster reload after fresh resolution
-- health checks
-- formal post-deployment measurement
-- rollback if defined triggers fire
-- evidence packet
+The next technical objective is **not** another deployment, restart, or
+processor remediation.
+It is to obtain representative, non-mutating, workload-aware targeted evidence
+for the **already-deployed** E6A path, preferring NATURALLY OCCURRING Telegram
+transfer workload.
+
+Do **not** artificially invoke
+`POST /api/v1/data-sources/telegram-transfer-messages`
+merely to manufacture test load unless a future explicit Owner authorization
+specifically permits such a runtime side effect.
+
+The future design may define:
+- how to detect a naturally active transfer period
+- how fresh the Redis transfer heartbeat must be
+- minimum transfer-cycle activity evidence
+- representative workload qualification
+- read-only DB/index counter snapshots
+- read-only device/resource sampling
+- no-restart / no-deploy observation
+- PASS / FAIL / INCONCLUSIVE repeat criteria
+- Human QA / full runtime re-close criteria
 
 It must NOT authorize:
 
+source deployment,
+source rollback,
+engine restart,
+backend reload,
+PM2 mutation,
+manual/admin/trader transfer invocation,
 processor remediation,
-processor restart,
 collector pause/restart,
-DB schema mutation,
+DB mutation,
 ANALYZE/VACUUM,
 CREATE/DROP/REINDEX,
 migration,
@@ -1077,9 +1274,13 @@ migration,
 or 051.
 
 **IMPLEMENTATION / DEPLOYMENT AUTHORIZED = NO**
+**NEW SOURCE DEPLOYMENT AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
-production deployed = NO
-runtime verification = PENDING
+**ROLLBACK AUTHORIZED = NO**
+production deployed = YES
+runtime health = PASS
+targeted lookup effect = INCONCLUSIVE
 resource stabilization = NO
+
