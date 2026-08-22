@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; PM2 design+correction COMPLETE; Owner T2 authorized; T2 one-shot execution next; no source deploy
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; T2 one-shot CONSUMED FAILED/ROLLED_BACK; topology NOT reconciled; incident RCA next; no retry; no source deploy
 alwaysApply: true
 ---
 
@@ -12,15 +12,17 @@ E6A DEPLOYED + HEALTHY /
 B1 SOURCE MERGED /
 INDEX REMEDIATION COMPLETE /
 PM2 DESIGN + CORRECTION COMPLETE /
-FULL T2 ROLLBACK DETERMINISTIC /
-OWNER EXPLICITLY AUTHORIZED T2 PRODUCTION /
-T2 ONE-SHOT EXECUTION AUTHORIZED /
-ENGINE TOPOLOGY 2→1 NOT YET EXECUTED /
-SECURE BACKUP NOT YET CREATED /
+T2 ONE-SHOT AUTHORIZATION CONSUMED /
+T2 RESULT FAILED_S2 / ROLLED_BACK /
+ENGINE TOPOLOGY 2→1 NOT EXECUTED /
+ROLLBACK PRE-EQUIVALENT SAFE STATE /
+SECURE BACKUP RETAINED /
+ORCHESTRATOR MISCLASSIFICATION RCA OPEN /
+SECRET-EXPOSURE REVIEW REQUIRED /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
-T2 EXECUTION NEXT /
-NO SOURCE DEPLOYMENT AUTHORIZED**
+RETRY UNAUTHORIZED /
+NO PM2 OR DEPLOYMENT MUTATION CURRENTLY AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -2600,12 +2602,13 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 3. ~~PM2 persistence + engine topology rollback execution design~~ **COMPLETE (20260822T090247Z)**
 4. ~~PM2 persistence / rollback design correction~~ **COMPLETE (20260822T092134Z)**
 5. ~~engine topology reconciliation 2 → 1 EXECUTION AUTHORIZATION~~ **COMPLETE (Owner explicit T2 authorization)**
-6. engine topology reconciliation 2 → 1 **EXECUTION** (**NEXT** — one-shot T2 authorized, not yet executed)
-7. production B1 exact-file deployment (NOT YET AUTHORIZED)
-8. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-9. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
-10. runtime validation / Human QA / governance reclose
-11. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+6. ~~engine topology reconciliation 2 → 1 EXECUTION~~ **CONSUMED / FAILED_S2 / ROLLED_BACK (20260822T160149Z)** — topology **NOT** reconciled
+7. T2 failed-exec RCA + re-authorization design (**NEXT** — read-only; includes security exposure / credential rotation review)
+8. production B1 exact-file deployment (NOT YET AUTHORIZED)
+9. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+10. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+11. runtime validation / Human QA / governance reclose
+12. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
 #### E6A preservation
 
@@ -2680,10 +2683,10 @@ collector restart = **NO** · processor restart = **NO**
 **CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
 **CANDIDATE_B_PRODUCTION_ACTIVATION = BLOCKED**
 **PRODUCTION DEPLOYMENT AUTHORIZED = NO**
-**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = YES / ONE-SHOT / T2 ONLY**
-**PM2 MUTATION AUTHORIZED = YES / EXACT T2 SCOPE ONLY**
-**PM2 SAVE AUTHORIZED = YES / ONCE / T2 ONLY**
-**PM2 STOP AUTHORIZED = YES / ONE EXTRA OWNER ONLY**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO** (HISTORICAL one-shot superseded — see failed T2 closeout)
+**PM2 MUTATION AUTHORIZED = NO**
+**PM2 SAVE AUTHORIZED = NO**
+**PM2 STOP AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **DB MUTATION AUTHORIZED = NO**
@@ -2710,154 +2713,212 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-ENGINE PM2 TOPOLOGY RECONCILIATION EXECUTION**
+ENGINE PM2 T2 FAILED EXECUTION
+ORCHESTRATOR + CONTROL-PATH RCA
+SECURITY EXPOSURE / CREDENTIAL ROTATION DECISION
+RE-AUTHORIZATION DESIGN**
 
-Classification: **TIER 3 PRODUCTION PM2 TOPOLOGY MUTATION / T2 STOP+SAVE ONE-SHOT / ENGINE ONLINE OWNER 2→1 / TEMPORARY STOPPED ROLLBACK ENTRY / NO SOURCE DEPLOYMENT**
+Classification: **TIER 3 READ-ONLY INCIDENT CORRECTION / SECURITY REVIEW / NO MUTATION**
 
-This gate executes the already-authorized one-shot T2 transaction after governance merge.
+This gate MUST cover:
+- save-success conditional fix
+- terminal-state mutation guard
+- secret-safe evidence writer
+- dry-run/state-machine tests
+- exposure scope review
+- credential-class inventory without values
+- credential rotation decision
+- explicit new Owner reauthorization requirement
 
-**IMPORTANT: THIS GOVERNANCE AUTHORIZATION TASK DID NOT EXECUTE T2.**
+It MUST NOT retry T2.
 
-### Engine PM2 T2 execution authorization closeout (Owner explicit / governance only)
+Security review is **required** (not optional) before any reauthorization.
+Credential rotation review is **required** and **not complete**.
 
-Owner explicit decision recorded:
-**"T2 STOP+SAVE را برای production authorize می‌کنم"**
+### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
-**OWNER_T2_PRODUCTION_AUTHORIZATION = YES / EXPLICIT**
-**OWNER_T2_PRODUCTION_AUTHORIZATION = YES / CONSUMED INTO EXECUTION AUTHORITY**
-**OWNER_AUTHORIZATION_SCOPE = ENGINE PM2 ONLINE OWNER 2→1 / T2 STOP+SAVE / TEMPORARY STOPPED ROLLBACK ENTRY / NO SOURCE DEPLOYMENT**
+Sanitized execution evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_ENGINE_PM2_T2_EXEC_20260822T160149Z.txt`
+SHA256 = `38ecb8696eee51872eca96b4a424a4d247a55a3d32ec16115443b9a9979d9f4d`
+bytes = 3577
+**SECRET_LIKE_VALUE_COUNT = 0** · **RAW_PM2_ENV_OBJECT_PRESENT = NO** · **SANITIZED_EVIDENCE_SAFE_TO_QUOTE = YES**
 
-Correction evidence authority (immutable):
-`/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_PM2_PERSISTENCE_ROLLBACK_CORRECTION_20260822T092134Z.txt`
-SHA256 = `b7da60b82920f51e2babaa91da31aa0bd8f67dbade0dfca629813108b501e8f2`
-bytes = 12193
-
-**PM2_PERSISTENCE_ROLLBACK_DESIGN = COMPLETE**
-**PM2_PERSISTENCE_ROLLBACK_DESIGN_CORRECTION = CONSUMED / COMPLETE / CLOSED**
-**SELECTED_PM2_RECONCILIATION_TRANSACTION = T2 / STOP EXACT EXTRA PM_ID + VALIDATE LIVE + PM2 SAVE + VALIDATE PERSISTENCE**
-**ENGINE_PM2_RECONCILIATION_EXECUTION_READY = YES**
-**ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = YES**
-**STOP_SAVE_FULL_ROLLBACK_DETERMINISTIC = YES**
-**T2 NOT EXECUTED**
-**SECURE_BACKUP_CREATED = NO**
-
-##### One-shot authorization (ACTIVE after governance merge)
-
-**ENGINE_PM2_TOPOLOGY_RECONCILIATION_AUTHORIZATION = ACTIVE / ONE-SHOT / T2 ONLY**
-**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = YES / ONE-SHOT / ENGINE T2 ONLY**
-**PM2 MUTATION AUTHORIZED = YES / EXACT T2 SCOPE ONLY**
-**PM2 STOP AUTHORIZED = YES / EXACTLY ONE FRESHLY RESOLVED EXTRA ENGINE OWNER ONLY**
-**PM2 SAVE AUTHORIZED = YES / EXACTLY ONCE AFTER SUCCESSFUL LIVE STOP VALIDATION**
-**PM2 START ROLLBACK AUTHORIZED = YES / EXACT STOPPED EXTRA ENGINE ID ONLY / ROLLBACK ONLY**
-**SECURE_BACKUP_CREATION_AUTHORIZED = YES / EXACT PRE-MUTATION DUMP BACKUP ONLY**
-**ACTIVE_DUMP_ATOMIC_RESTORE_AUTHORIZED = YES / ROLLBACK ONLY / FROM VERIFIED SECURE PRE-MUTATION BACKUP**
-**PM2_DUMP_MUTATION_AUTHORIZED = YES / ONLY: (1) pm2 save in T2 (2) atomic active-dump restore during rollback**
+Verified secure backup retained (DO NOT DELETE):
+`/home/ubuntu/TITANGOLD_PM2_SECURE_BACKUPS/TITANGOLD_PM2_ENGINE_RECON_20260822T160149Z/dump.pm2.pre`
+SHA256 = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f`
+bytes = 208942 · mode **0600** · owner **ubuntu:ubuntu** · dir mode **0700**
+**SECURE_BACKUP_RETENTION = PRESERVE / NO CLEANUP AUTHORITY**
 **SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
 
-**PM2 DELETE AUTHORIZED = NO**
-**PM2 RESTART AUTHORIZED = NO**
-**PM2 RELOAD AUTHORIZED = NO**
-**PM2 RESURRECT AUTHORIZED = NO**
-**ENGINE RESTART AUTHORIZED = NO**
-**BACKEND RELOAD AUTHORIZED = NO**
-**PRODUCTION DEPLOYMENT AUTHORIZED = NO**
+#### Execution outcome
 
-**AUTHORIZATION_CONSUMED = NO** (until first production mutation — secure backup creation begins)
+**T2_TRANSACTION_RESULT = FAILED_S2 / ROLLED_BACK**
+**ENGINE_PM2_TOPOLOGY_RECONCILIATION_EXECUTED = NO**
+**T2_ONE_SHOT_AUTHORIZATION = CONSUMED**
+**AUTHORIZATION_CONSUMED = YES**
+**RETRY_AUTHORIZED = NO**
+**ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO / INCIDENT REVIEW PENDING**
 
-Rejected: DELETE+SAVE · NO-SAVE · manual dump edit · backend topology mutation · NODE_ENV normalization · source deployment · restart/reload
+##### Exact incident sequence (two phases)
 
-##### Authorized T2 sequence (future execution)
+**AUTHORIZED T2 PHASE:**
+1. secure backup created/verified
+2. `pm2 stop 9` (extra)
+3. live stop validation PASS (online count 1; retained unchanged)
+4. authorized `pm2 save` #1 · exit **0**
+5. post-save dump SHA changed to `72a1ad08…` (**expected** after successful save) · dump parse = **true**
+6. orchestrator incorrectly classified **S2**
+7. semantic validation = **NOT_EXECUTED**
+8. atomic restore #1 (authorized rollback path)
+9. `pm2 start 9` rollback
 
-PRECHECKS → SECURE PRE-DUMP BACKUP → EXACT EXTRA ENGINE STOP → LIVE VALIDATION → PM2 SAVE → PERSISTENCE SEMANTIC VALIDATION → LIVE/HEALTH/NON-INTERFERENCE VALIDATION → COMMIT
+**POST-INCIDENT INVESTIGATION PHASE:**
+10. diagnostic `pm2 save` #2
+11. diagnostic save was **NOT** authorized by consumed one-shot authority
+12. diagnostic save altered active dump
+13. atomic restore #2 returned persistence to PRE exact bytes
 
-##### Fresh execution preconditions (mandatory before any mutation)
+**DIAGNOSTIC_SAVE_TEMPORAL_BOUNDARY = A**
+(diagnostic save occurred inside the original T2 execution task after it should have STOPped — not a full T2 retry)
 
-**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
-**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`** (if differs: STOP / NO MUTATION / authorization not consumed)
-**PM2_VERSION = 6.0.13** · **PM2_HOME = `/home/ubuntu/.pm2`** · **STARTUP_MODEL = RESURRECT**
-**ACTIVE_PRE_DUMP_SHA256 = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f`**
-**ACTIVE_PRE_DUMP_OWNER = ubuntu:ubuntu** · **ACTIVE_PRE_DUMP_MODE = 0664** (do **not** normalize)
-**PRE_HEALTH_5002 = HTTP 200** · **PRE_HEALTH_5003 = HTTP 200**
+**POST_INCIDENT_DIAGNOSTIC_PM2_SAVE_COUNT = 1**
+**POST_INCIDENT_DIAGNOSTIC_PM2_SAVE_AUTHORIZED = NO**
+**POST_INCIDENT_DIAGNOSTIC_DUMP_MUTATION_AUTHORIZED = NO**
+**POST_INCIDENT_DIAGNOSTIC_MUTATION_CLASS = UNAUTHORIZED CONTROL-PATH MUTATION / GOVERNANCE VIOLATION**
+Classification: **UNAUTHORIZED DIAGNOSTIC PM2 PERSISTENCE MUTATION** (not a T2 retry)
 
-Fresh engine topology: exactly **2 ONLINE** `titan-engine-worker` owners; compound identity cwd `/home/ubuntu/webapp/TitanGold/backend` · script `engineWorkerLeader.js` · exec_mode `fork`
-Historical pm_id **5** / **9** = evidence only / **NOT mutation authority**
-**EXECUTION_REQUIRES_FRESH_PM2_RESOLUTION = YES**
+##### Mutation ledgers (authorized vs total)
 
-Source read-only preconditions:
-engineWorkerLeader.js SHA256 = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
-scheduler.js SHA256 = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
-telegramPipeline E6A SHA256 = `5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+**A — AUTHORIZED T2 TRANSACTION LEDGER:**
+**AUTHORIZED_T2_PM2_STOP_COUNT = 1**
+**AUTHORIZED_T2_PM2_SAVE_COUNT = 1**
+**AUTHORIZED_T2_PM2_START_ROLLBACK_COUNT = 1**
+**AUTHORIZED_T2_ATOMIC_RESTORE_COUNT = 1**
 
-**BACKEND_TOPOLOGY_TARGET_THIS_TRANSACTION = UNCHANGED** (live count **4** · persisted **4** — preserved drift)
-**ENGINE_NODE_ENV_TARGET_THIS_TRANSACTION = UNCHANGED** (development — preserved drift)
-**NODE_ENV normalization = UNAUTHORIZED**
+**B — COMPLETE INCIDENT WINDOW LEDGER:**
+**TOTAL_INCIDENT_PM2_STOP_COUNT = 1**
+**TOTAL_INCIDENT_PM2_SAVE_COUNT = 2**
+**TOTAL_INCIDENT_PM2_START_COUNT = 1**
+**TOTAL_INCIDENT_ATOMIC_RESTORE_COUNT = 2**
 
-##### Secure backup authorization
+**ATOMIC_RESTORE_LEDGER_ACCURATE = YES**
+Restore #2 is **not** part of the original authorized rollback; it repaired unauthorized diagnostic dump mutation.
+Do **not** report “only one pm2 save occurred in the whole incident window.”
 
-Pattern = `/home/ubuntu/TITANGOLD_PM2_SECURE_BACKUPS/TITANGOLD_PM2_ENGINE_RECON_<UTC>/dump.pm2.pre`
-dir **0700** · file **0600** · owner **ubuntu:ubuntu** · umask **077**
-backup SHA256/bytes = exact active PRE dump · **RAW_BACKUP_CONTAINS_SECRETS = YES** (never print raw content)
-**MUST be created and verified BEFORE `pm2 stop`**
+#### Orchestrator RCA
 
-##### Retained owner hard invariant
+**ORCHESTRATOR_RCA_CLASS = CONDITIONAL_BRANCH_BUG / STATE_MACHINE_BUG**
 
-**RETAINED_ENGINE_RESTARTED = NO REQUIRED**
-retained PID · start time · restart count · effective env · source/worktree bytes unchanged throughout T2
+**BAD_CONDITION (sanitized pseudocode):**
+```
+IF save_exit != 0 OR dump_missing OR dump_unparseable:
+  S1/S2 by PRE-SHA match
+ELIF post_dump_sha != PRE_SHA:
+  classify S2   # <-- FAULTY: treats successful save SHA change as failure
+```
 
-##### Engine persistence allowed delta
+**CORRECT_CONDITION (sanitized pseudocode):**
+```
+IF save_exit != 0 OR dump_missing OR dump_unparseable:
+  classify S1/S2
+ELSE:
+  continue engine/non-engine semantic validation
+# changed SHA alone MUST NOT classify S2 after successful parseable save
+```
 
-**ENGINE_EXTRA_ALLOWED_PERSISTENCE_DELTA = STATUS ONLINE → STOPPED ONLY**
-**ENGINE_OTHER_PERSISTENT_SEMANTICS_CHANGED = NO REQUIRED**
-**NON_ENGINE_RESURRECT_SEMANTICS_CHANGED = NO REQUIRED**
+**POST_SAVE_DUMP_PARSE_RESULT = PASS**
+**SEMANTIC_VALIDATION = NOT_EXECUTED**
+Do **not** claim T2 would have passed.
 
-##### Rollback authority (S1–S4 proven)
+#### Control-path RCA (second failure)
 
-**S1_ROLLBACK_DETERMINISTIC = YES** · **S2_ROLLBACK_DETERMINISTIC = YES** · **S3_ROLLBACK_DETERMINISTIC = YES** · **S4_ROLLBACK_DETERMINISTIC = YES**
-**HEALTH_FAILURE_ROLLBACK_DETERMINISTIC = YES**
-No second `pm2 save` · no broad `pm2 resurrect` · no ecosystem restart · do **not** modify `dump.pm2.bak`
+**CONTROL_RCA_CLASS = POST-STOP FAIL-CLOSED ENFORCEMENT FAILURE / UNAUTHORIZED DIAGNOSTIC MUTATION**
 
-##### Transaction commit point
+Root control failure:
+after one-shot authorization was consumed and execution entered FAILED/ROLLED_BACK/STOP state,
+diagnostic investigation still permitted a state-mutating `pm2 save`.
 
-**T2_TRANSACTION_RESULT = PASS** only after all 20 commit criteria (see correction closeout) including:
-secure backup verified · extra stopped · retained unchanged · live owner count = 1 · pm2 save success · dump parse · engine delta PASS · non-engine multiset PASS · health 5002/5003 = 200 · source/worktree unchanged
+**POST_FAILURE_MUTATION_GUARD_REQUIRED = YES**
 
-##### Expected success state (future execution only)
+Required future invariant:
+AFTER T2 FAILURE OR ROLLBACK: ALL PM2/DUMP MUTATION MUST BE HARD-DISABLED
+unless a brand-new explicit governance authorization is merged.
 
-LIVE: retained **ONLINE** · extra **STOPPED** · online owner count **1**
-PERSISTENCE: retained **online** · extra **stopped** · backend **4** · NODE_ENV **development** preserved
-Stopped extra = **TEMPORARY ROLLBACK ARTIFACT / NOT LONG-TERM CANONICAL** (cleanup = separate future authority)
+Future state-machine must include two independent protections:
+1. **SAVE-SUCCESS BRANCH FIX** — successful parseable save with changed SHA → semantic validation
+2. **TERMINAL-STATE MUTATION GUARD** — once FAILED / ROLLED_BACK / COMMITTED / STOPPED_FOR_OWNER_REVIEW:
+   mutating primitives inaccessible (`pm2 save` · `pm2 stop` · `pm2 start` · dump restore · backup mutation)
+   except only while an already-authorized rollback path is still executing before terminal state.
+   After rollback completes: mutation capability = **CLOSED**.
 
-##### After successful execution (future)
+#### Rollback outcome (current production read-only)
 
-Do **not** jump directly to B1 deployment inside PM2 execution task.
-Next recommend: **ENGINE PM2 TOPOLOGY RECONCILIATION EXECUTION CLOSEOUT** (governance only)
-Then B1 production exact-file deployment remains mandatory.
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+Active dump SHA = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f` · **PRE exact match** · mode **0664** · owner **ubuntu:ubuntu**
+Engine online count = **2** · backend online = **4** · health **200/200**
+Retained: pm_id **5** / pid **1972309** / restart **2** — **generation preserved**
+Extra: pm_id **9** / pid **2403323** — **generation changed** (expected after rollback start)
+**T2_ROLLBACK_RESULT = PASS / PRE_EQUIVALENT SAFE STATE**
+**ROLLBACK_LIVE_STATE = PRE_EQUIVALENT** (engine/backend/dump/health; extra PID not required equal PRE)
 
-**THIS GOVERNANCE AUTHORIZATION TASK MUTATION = 0**
+Source hashes unchanged · engine/scheduler targeted clean · telegramPipeline intentional E6A dirty remains.
 
-### Authorization state after T2 execution authorization (governance)
+#### Secret-exposure RCA
 
-**CANDIDATE_B_PRODUCTION_DEPLOYED = NO**
-**CANDIDATE_B_PRODUCTION_ACTIVATION = BLOCKED**
-**CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
-**ENGINE_REFRESH_REQUIRED_AFTER_B1_DEPLOY = YES**
-**BACKEND_RELOAD_REQUIRED_AFTER_B1_DEPLOY = YES**
-**ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = YES**
-**ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO**
-collector restart = **NO** · processor restart = **NO**
+**INITIAL_UNSANITIZED_ARTIFACT_CREATED = YES**
+Logical paths (no values):
+- TMP_FILE = **YES** (initial; later replaced with sanitized bytes)
+- HOME_FILE = **YES** (initial; later replaced with sanitized bytes)
+- TERMINAL_STDOUT = **YES** (agent-tools capture of unsanitized JSON dump)
+- CURSOR_AGENT_TRANSCRIPT = **NO** (secret-key line scan = 0)
+- CHAT_RESPONSE = **NO** (final user report sanitized)
+- SHELL_HISTORY = **NO**
+- OTHER_PERSISTED_LOG = **YES** (Cursor agent-tools artifact still present locally with secret-bearing dump JSON)
+- GIT = **NO** (no add/commit/push of evidence/backup/dump)
 
-**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
-**C2_052_EXECUTION_AUTHORIZED = NO**
-**C2 052 = NOT EXECUTED**
-**RESOURCE STABILIZATION COMPLETE = NO**
+Content classification (counts only; no values):
+**RAW_DUMP_JSON = YES** · **RAW_ENV_VALUES = YES** · **CREDENTIAL_LIKE_VALUES = YES** · **TOKEN/API_KEY/PASSWORD_LIKE_VALUES = YES**
 
-Do **not** state: T2 executed; secure backup already created; extra worker stopped;
-pm2 save executed; engine topology reconciled; B1 deployed; NODE_ENV normalized;
-backend reconciled; 052 executed/safe; resource stabilization complete.
+**UNSANITIZED_ACTIVE_FILE_PRESENT_NOW = YES** (local agent-tools capture; home/tmp evidence now sanitized)
+**SANITIZED_REPLACEMENT_SHA = `38ecb8696eee51872eca96b4a424a4d247a55a3d32ec16115443b9a9979d9f4d`**
+Deletion terminology: **LOGICAL FILE REMOVAL / REPLACEMENT** (not cryptographic secure erase)
 
-**GITHUB SOURCE MERGE ALONE DOES NOT COMPLETE THIS REMEDIATION.**
+**SECRET_EXPOSURE_CLASS = S2**
+**SECRET_BEARING_ARTIFACT_IN_GIT = NO**
+**CREDENTIAL_ROTATION_REVIEW_REQUIRED = YES**
+Do **not** rotate credentials in this closeout.
+Do **not** delete agent-tools artifacts in this closeout.
+No reauthorization may occur before **SECURITY EXPOSURE REVIEW / CREDENTIAL ROTATION DECISION**.
 
-### Closed / still forbidden (outside exact T2 scope)
+#### Authorization state after failed T2 closeout
+
+**ENGINE_PM2_TOPOLOGY_RECONCILIATION_AUTHORIZATION = CONSUMED / FAILED / CLOSED**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+**PM2 STOP AUTHORIZED = NO**
+**PM2 SAVE AUTHORIZED = NO**
+**PM2 START ROLLBACK AUTHORIZED = NO**
+**ACTIVE_DUMP_ATOMIC_RESTORE_AUTHORIZED = NO**
+**SECURE_BACKUP_CREATION_AUTHORIZED = NO**
+**SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
+**AUTHORIZATION_CONSUMED = YES**
+**RETRY_AUTHORIZED = NO**
+
+**PM2 DELETE AUTHORIZED = NO** · **ENGINE RESTART AUTHORIZED = NO** · **BACKEND RELOAD AUTHORIZED = NO**
+**PRODUCTION DEPLOYMENT AUTHORIZED = NO** · **CANDIDATE_B_PRODUCTION_DEPLOYED = NO**
+**ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO** · **ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = YES**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO** · **C2 052 = NOT EXECUTED** · **RESOURCE STABILIZATION COMPLETE = NO**
+
+Historical note: Owner T2 authorization / ACTIVE one-shot state = **HISTORICAL / SUPERSEDED / CONSUMED FAILED**.
+
+Do **not** state: T2 PASS; topology reconciled; retry authorized; B1 deployed; NODE_ENV normalized;
+credential rotation completed; diagnostic save authorized; restore #2 part of original authorized rollback;
+only one pm2 save in the incident window; security review optional; resource stabilization complete.
+
+**THIS GOVERNANCE RULE02 EDIT/COMMIT ITSELF PERFORMED NO PRODUCTION MUTATION,
+BUT THE INCIDENT WINDOW INCLUDED AN UNAUTHORIZED DIAGNOSTIC SAVE.**
+
+### Closed / still forbidden
 
 **WORKTREE MUTATION AUTHORIZED = NO**
 **SOURCE WRITE AUTHORIZED = NO**
@@ -2871,4 +2932,5 @@ backend reconciled; 052 executed/safe; resource stabilization complete.
 **MANUAL TRANSFER AUTHORIZED = NO**
 **052 AUTHORIZED = NO**
 **SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
+**T2_RETRY_AUTHORIZED = NO**
 
