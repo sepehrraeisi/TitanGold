@@ -2,6 +2,10 @@
 /**
  * Engine Worker - Leader Process for Autopilot, Scheduler, and Trading Engine
  * با قابلیت Idle Mode: وقتی کاری نیست، backoff می‌کند (نه query storm)
+ *
+ * Candidate B / B1: Telegram safe-background lifecycle arms independently of
+ * generic hasWork. Kill-switch analytical methods remain gated on
+ * analyticalSchedulerReady (not Telegram-only readiness).
  */
 
 import dotenv from 'dotenv';
@@ -34,7 +38,13 @@ let consecutiveIdleChecks = 0;
 
 // Engine instances (loaded dynamically)
 let autopilot = null;
+/** Full/analytical scheduler reference — assigned only by startEngines() */
 let scheduler = null;
+/**
+ * Telegram-only scheduler module reference (may be same singleton object).
+ * Must NOT make kill-switch believe analytical scheduler is ready.
+ */
+let telegramScheduler = null;
 let tradingEngine = null;
 
 class EngineWorkerLeader {
@@ -47,6 +57,8 @@ class EngineWorkerLeader {
     this._lastKillSwitchActive = null;
     this._lastTradingStopLogAt = 0;
     this._lastStatusHeartbeatAt = 0;
+    /** Non-retryable Telegram background disable (config/env) — avoid idle query storms */
+    this._telegramBackgroundNonRetryable = false;
   }
 
   /**
@@ -72,8 +84,53 @@ class EngineWorkerLeader {
     // Safety-critical: always monitor kill switch, even in idle mode
     this.startKillSwitchMonitor();
 
+    // Candidate B / B1: arm Telegram background independently of generic hasWork
+    await this.ensureTelegramBackgroundIndependent();
+
     // Start idle mode checker
     this.startIdleChecker();
+  }
+
+  /**
+   * Import scheduler module for Telegram-only lifecycle without assigning the
+   * kill-switch/full `scheduler` reference or setting analyticalSchedulerReady.
+   */
+  async ensureTelegramBackgroundIndependent() {
+    if (process.env.SCHEDULER_ENABLED !== 'true') {
+      this._telegramBackgroundNonRetryable = true;
+      logger.info('⏸️ Telegram background skipped — SCHEDULER_ENABLED is not true');
+      return { armed: false, disabled: true, retryable: false, reason: 'SCHEDULER_ENABLED_false' };
+    }
+
+    if (this._telegramBackgroundNonRetryable) {
+      return { armed: false, disabled: true, retryable: false, reason: 'already_disabled' };
+    }
+
+    try {
+      if (!telegramScheduler) {
+        const mod = await import('../engine/scheduler.js');
+        telegramScheduler = mod.scheduler;
+      }
+      const result = await telegramScheduler.ensureTelegramBackgroundLifecycle();
+      if (result?.armed) {
+        this._telegramBackgroundNonRetryable = false;
+        logger.info('✅ Telegram background lifecycle armed independently of hasWork', {
+          intervalMs: result.intervalMs,
+          timerCount: result.timerCount,
+        });
+      } else if (result?.disabled) {
+        this._telegramBackgroundNonRetryable = true;
+        logger.info('⏸️ Telegram background disabled by config', { reason: result.reason });
+      } else if (result?.retryable) {
+        logger.warn('⚠️ Telegram background arm deferred (retryable)', {
+          reason: result.reason,
+        });
+      }
+      return result;
+    } catch (error) {
+      logger.error('❌ Telegram background ensure failed (worker continues):', error.message);
+      return { armed: false, retryable: true, reason: 'ensure_threw', error: error.message };
+    }
   }
 
   /**
@@ -86,6 +143,15 @@ class EngineWorkerLeader {
       if (!this.isRunning) return;
 
       try {
+        // Bounded Telegram background retry via existing idle cadence (no busy loop)
+        if (
+          process.env.SCHEDULER_ENABLED === 'true' &&
+          !this._telegramBackgroundNonRetryable &&
+          (!telegramScheduler || !telegramScheduler.telegramBackgroundArmed)
+        ) {
+          await this.ensureTelegramBackgroundIndependent();
+        }
+
         // Check if there are active users/connections/jobs
         const hasWork = await this.checkForWork();
 
@@ -134,6 +200,7 @@ class EngineWorkerLeader {
 
   /**
    * بررسی: آیا کاری هست؟
+   * Generic work signals only — Candidate A (pipeline backlog in hasWork) remains rejected.
    */
   async checkForWork() {
     try {
@@ -203,9 +270,10 @@ class EngineWorkerLeader {
         import('../engine/tradingEngine.js')
       ]);
 
-      // Store references
+      // Store references — reuse Telegram-only module singleton when already loaded
       autopilot = autopilotModule;
-      scheduler = schedulerModule;
+      scheduler = telegramScheduler || schedulerModule;
+      telegramScheduler = telegramScheduler || schedulerModule;
       tradingEngine = tradingEngineModule;
 
       // Runtime state for Emergency Stop separation (AI-FOUNDATION-R2)
@@ -241,6 +309,7 @@ class EngineWorkerLeader {
           await scheduler.start();
           logger.info('✅ Scheduler started');
         }
+        // Analytical/full readiness only after startEngines scheduler path
         this.analyticalSchedulerReady = true;
       } else {
         logger.info('⏸️ Scheduler disabled');
@@ -261,6 +330,7 @@ class EngineWorkerLeader {
       logger.info('✅ All engines initialized', {
         killSwitchActive,
         analyticalSchedulerReady: this.analyticalSchedulerReady,
+        telegramTimerCount: scheduler.intervals?.has?.('telegramPipeline') ? 1 : 0,
       });
       
     } catch (error) {
@@ -271,6 +341,7 @@ class EngineWorkerLeader {
 
   /**
    * Immediate pub/sub + fallback poll for kill-switch propagation.
+   * Analytical/full scheduler methods run ONLY when analyticalSchedulerReady.
    */
   startKillSwitchMonitor() {
     if (this.killSwitchMonitorStarted) return;
@@ -287,10 +358,10 @@ class EngineWorkerLeader {
 
         if (killActive) {
           // AI-FOUNDATION-R2: do NOT call scheduler.stop() — preserve safe analytical timers
-          if (scheduler?.applyEmergencyStopSeparation) {
+          // Candidate B: do NOT invoke analytical methods from Telegram-only readiness
+          if (this.analyticalSchedulerReady && scheduler?.applyEmergencyStopSeparation) {
             await scheduler.applyEmergencyStopSeparation();
-            this.analyticalSchedulerReady = true;
-          } else if (scheduler?.ensureAnalyticalAgentScheduler) {
+          } else if (this.analyticalSchedulerReady && scheduler?.ensureAnalyticalAgentScheduler) {
             await scheduler.ensureAnalyticalAgentScheduler();
           }
 
@@ -310,16 +381,20 @@ class EngineWorkerLeader {
 
           // Keep worker status fresh between long agent intervals (TTL 700s; refresh ≤60s)
           const nowHb = Date.now();
-          if (scheduler?.publishStatus && nowHb - this._lastStatusHeartbeatAt > 60000) {
+          if (
+            this.analyticalSchedulerReady &&
+            scheduler?.publishStatus &&
+            nowHb - this._lastStatusHeartbeatAt > 60000
+          ) {
             this._lastStatusHeartbeatAt = nowHb;
             await scheduler.publishStatus();
           }
         } else if (transitioned) {
-          if (scheduler?.clearEmergencyStopSeparation) {
+          if (this.analyticalSchedulerReady && scheduler?.clearEmergencyStopSeparation) {
             await scheduler.clearEmergencyStopSeparation();
           }
           logger.info(`Kill switch cleared (${source}) — analytical separation lifted`);
-        } else if (scheduler?.ensureAnalyticalAgentScheduler) {
+        } else if (this.analyticalSchedulerReady && scheduler?.ensureAnalyticalAgentScheduler) {
           // Steady state: keep analytical timer healthy without spam
           await scheduler.ensureAnalyticalAgentScheduler();
         }
@@ -368,6 +443,7 @@ class EngineWorkerLeader {
     }
 
     this.enginesStarted = false;
+    this.analyticalSchedulerReady = false;
   }
 
   /**
@@ -381,7 +457,16 @@ class EngineWorkerLeader {
       clearInterval(this.idleCheckInterval);
     }
 
-    // Stop engines
+    // Background-only: stop Telegram lifecycle when full engines never started
+    if (!this.enginesStarted && telegramScheduler?.stopTelegramBackgroundLifecycle) {
+      try {
+        await telegramScheduler.stopTelegramBackgroundLifecycle();
+      } catch (error) {
+        logger.error('Error stopping Telegram background lifecycle:', error.message);
+      }
+    }
+
+    // Stop engines (full path clears all intervals via scheduler.stop)
     await this.stopEngines();
 
     // Close message queue

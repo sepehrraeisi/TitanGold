@@ -22,10 +22,19 @@ import {
 } from '../services/analyticalSchedulerStatus.js';
 import { isKillSwitchActive } from '../services/runtimeExecutionStateService.js';
 import { isLiveCapableAgent } from '../services/agentCapabilityRegistry.js';
+import {
+    classifyTelegramTransferLifecycleOutcome,
+    recordTelegramLifecycleEvidence,
+    TELEGRAM_LIFECYCLE_OUTCOMES,
+} from '../services/pipelineSchedulerRuntime.js';
+
+const DEFAULT_TELEGRAM_PIPELINE_INTERVAL_MS = 5 * 60 * 1000;
 
 class SchedulerService {
     constructor() {
         this.isRunning = false;
+        /** Candidate B / B1 — independent of full scheduler isRunning */
+        this.telegramBackgroundArmed = false;
         this.intervals = new Map();
         this.jobs = new Map();
         this.inFlight = new Set();
@@ -66,7 +75,7 @@ class SchedulerService {
             },
             telegramPipeline: {
                 enabled: true,
-                interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || 5 * 60 * 1000
+                interval: parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS) || DEFAULT_TELEGRAM_PIPELINE_INTERVAL_MS
             },
             normalization: {
                 enabled: true,
@@ -201,6 +210,7 @@ class SchedulerService {
 
     async stop() {
         this.isRunning = false;
+        this.telegramBackgroundArmed = false;
         this.intervals.forEach((intervalId) => {
             clearInterval(intervalId);
         });
@@ -211,7 +221,13 @@ class SchedulerService {
         await this.publishStatus();
     }
 
-    async loadConfig() {
+    /**
+     * Load scheduler_config id=1 into this.config.
+     * @param {{ throwOnError?: boolean }} [options]
+     *   throwOnError=false preserves historical full-scheduler behavior (log + continue).
+     *   throwOnError=true is required for Telegram background arming (fail closed).
+     */
+    async loadConfig({ throwOnError = false } = {}) {
         try {
             const result = await query(
                 'SELECT config FROM scheduler_config WHERE id = 1'
@@ -227,6 +243,200 @@ class SchedulerService {
             }
         } catch (error) {
             logger.error('Failed to load scheduler config:', error);
+            if (throwOnError) {
+                throw error;
+            }
+        }
+    }
+
+    /**
+     * Bounded positive Telegram interval — never 0 / NaN / negative (busy-loop guard).
+     */
+    resolveTelegramPipelineIntervalMs() {
+        const fromConfig = Number(this.config.telegramPipeline?.interval);
+        if (Number.isFinite(fromConfig) && fromConfig > 0) {
+            return fromConfig;
+        }
+        const fromEnv = parseInt(process.env.TELEGRAM_PIPELINE_INTERVAL_MS, 10);
+        if (Number.isFinite(fromEnv) && fromEnv > 0) {
+            return fromEnv;
+        }
+        return DEFAULT_TELEGRAM_PIPELINE_INTERVAL_MS;
+    }
+
+    /**
+     * Candidate B / B1 — arm Telegram transfer timer without full scheduler start.
+     * Does NOT start Data Hub, Normalization, agents, Autopilot, or Trading.
+     */
+    async ensureTelegramBackgroundLifecycle() {
+        if (process.env.SCHEDULER_ENABLED !== 'true') {
+            void recordTelegramLifecycleEvidence({
+                state: TELEGRAM_LIFECYCLE_OUTCOMES.DISABLED,
+                reason: 'SCHEDULER_ENABLED_false',
+                pid: process.pid,
+            });
+            return {
+                armed: false,
+                disabled: true,
+                retryable: false,
+                reason: 'SCHEDULER_ENABLED_false',
+                intervalMs: null,
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            };
+        }
+
+        if (this.telegramBackgroundArmed && this.intervals.has('telegramPipeline')) {
+            const intervalMs = this.resolveTelegramPipelineIntervalMs();
+            return {
+                armed: true,
+                disabled: false,
+                retryable: false,
+                reason: 'already_armed',
+                intervalMs,
+                timerCount: 1,
+            };
+        }
+
+        try {
+            await this.loadConfig({ throwOnError: true });
+        } catch (error) {
+            logger.error('Telegram background config load failed (fail-closed):', error.message);
+            return {
+                armed: false,
+                disabled: false,
+                retryable: true,
+                reason: 'config_query_failed',
+                intervalMs: null,
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+                error: error.message,
+            };
+        }
+
+        if (this.config.telegramPipeline?.enabled !== true) {
+            void recordTelegramLifecycleEvidence({
+                state: TELEGRAM_LIFECYCLE_OUTCOMES.DISABLED,
+                reason: 'telegramPipeline_disabled',
+                pid: process.pid,
+            });
+            return {
+                armed: false,
+                disabled: true,
+                retryable: false,
+                reason: 'telegramPipeline_disabled',
+                intervalMs: null,
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            };
+        }
+
+        const intervalMs = this.resolveTelegramPipelineIntervalMs();
+        this.config.telegramPipeline.interval = intervalMs;
+        this.telegramBackgroundArmed = true;
+        this.startTelegramPipelineScheduler();
+
+        const obs = await recordTelegramLifecycleEvidence({
+            state: TELEGRAM_LIFECYCLE_OUTCOMES.ARMED,
+            intervalMs,
+            pid: process.pid,
+        });
+
+        logger.info('Telegram background lifecycle armed', {
+            intervalMs,
+            timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            observabilityDegraded: obs.degraded,
+        });
+
+        return {
+            armed: true,
+            disabled: false,
+            retryable: false,
+            reason: 'armed',
+            intervalMs,
+            timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            observabilityDegraded: obs.degraded,
+        };
+    }
+
+    /**
+     * Stop Telegram background ownership.
+     * Idempotent. When full scheduler isRunning, clears telegramBackgroundArmed only
+     * and leaves the telegramPipeline interval owned by the full scheduler intact.
+     */
+    async stopTelegramBackgroundLifecycle() {
+        this.telegramBackgroundArmed = false;
+
+        if (this.isRunning) {
+            // Full scheduler owns the live timer — do not publish STOPPED or overwrite tick evidence
+            logger.info('Telegram background ownership cleared; full scheduler retains timer', {
+                reason: 'full_scheduler_owns_timer',
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            });
+            return {
+                stopped: false,
+                backgroundOwnershipCleared: true,
+                timerCleared: false,
+                reason: 'full_scheduler_owns_timer',
+                timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+            };
+        }
+
+        if (this.intervals.has('telegramPipeline')) {
+            clearInterval(this.intervals.get('telegramPipeline'));
+            this.intervals.delete('telegramPipeline');
+        }
+        void recordTelegramLifecycleEvidence({
+            state: TELEGRAM_LIFECYCLE_OUTCOMES.STOPPED,
+            pid: process.pid,
+        });
+        logger.info('Telegram background lifecycle stopped');
+        return {
+            stopped: true,
+            timerCleared: true,
+            reason: 'background_stopped',
+            timerCount: this.intervals.has('telegramPipeline') ? 1 : 0,
+        };
+    }
+
+    async _runTelegramPipelineTick() {
+        const telegramEnabled = this.config.telegramPipeline?.enabled === true;
+        const gateOpen = this.isRunning || this.telegramBackgroundArmed;
+        if (!gateOpen || !telegramEnabled) return;
+
+        try {
+            const summary = await transferTelegramMessagesToPipeline(
+                TELEGRAM_TRANSFER_DEFAULT_BATCH,
+            );
+            const outcome = classifyTelegramTransferLifecycleOutcome(summary);
+            void recordTelegramLifecycleEvidence({
+                state: outcome,
+                intervalMs: this.resolveTelegramPipelineIntervalMs(),
+                pid: process.pid,
+                selected: summary.selected ?? null,
+                inserted: summary.inserted ?? null,
+                processed: summary.processed ?? null,
+                errors: summary.errors ?? null,
+                durationMs: summary.durationMs ?? null,
+                skipped_run: Boolean(summary.skipped_run),
+                skip_reason: summary.skip_reason ?? null,
+                backlogRemaining: summary.backlogRemaining ?? null,
+            });
+            if (
+                summary.inserted > 0 ||
+                summary.duplicates > 0 ||
+                summary.skipped_no_source > 0 ||
+                summary.skipped_filtered > 0
+            ) {
+                logger.info(
+                    `Telegram pipeline: selected=${summary.selected} inserted=${summary.inserted} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
+                );
+            }
+        } catch (error) {
+            logger.error('Telegram pipeline scheduler error:', error);
+            void recordTelegramLifecycleEvidence({
+                state: TELEGRAM_LIFECYCLE_OUTCOMES.TICK_ERROR,
+                intervalMs: this.resolveTelegramPipelineIntervalMs(),
+                pid: process.pid,
+                error: error?.message ?? String(error),
+            });
         }
     }
 
@@ -426,29 +636,17 @@ class SchedulerService {
         }
         if (this.intervals.has('telegramPipeline')) return;
 
-        const intervalId = setInterval(async () => {
-            if (!this.isRunning || !this.config.telegramPipeline?.enabled) return;
-            try {
-                const summary = await transferTelegramMessagesToPipeline(
-                    TELEGRAM_TRANSFER_DEFAULT_BATCH,
-                );
-                if (
-                    summary.inserted > 0 ||
-                    summary.duplicates > 0 ||
-                    summary.skipped_no_source > 0 ||
-                    summary.skipped_filtered > 0
-                ) {
-                    logger.info(
-                        `Telegram pipeline: selected=${summary.selected} inserted=${summary.inserted} backlog=${summary.backlogRemaining} durationMs=${summary.durationMs}`,
-                    );
-                }
-            } catch (error) {
-                logger.error('Telegram pipeline scheduler error:', error);
-            }
-        }, this.config.telegramPipeline.interval);
+        const intervalMs = this.resolveTelegramPipelineIntervalMs();
+        this.config.telegramPipeline.interval = intervalMs;
+
+        const intervalId = setInterval(() => {
+            this._runTelegramPipelineTick().catch((error) => {
+                logger.error('Telegram pipeline tick fatal:', error);
+            });
+        }, intervalMs);
 
         this.intervals.set('telegramPipeline', intervalId);
-        logger.info(`Telegram Pipeline Scheduler started (interval: ${this.config.telegramPipeline.interval / 1000}s)`);
+        logger.info(`Telegram Pipeline Scheduler started (interval: ${intervalMs / 1000}s)`);
     }
 
     startNormalizationScheduler() {
@@ -637,6 +835,22 @@ class SchedulerService {
                 else if (section === 'maintenance') this.startMaintenanceScheduler();
                 else if (section === 'telegramPipeline') this.startTelegramPipelineScheduler();
                 else if (section === 'normalization') this.startNormalizationScheduler();
+            }
+
+            // B1: keep telegramBackgroundArmed consistent with enabled + timer ownership
+            if (section === 'telegramPipeline') {
+                if (this.config.telegramPipeline?.enabled !== true) {
+                    if (this.intervals.has('telegramPipeline')) {
+                        clearInterval(this.intervals.get('telegramPipeline'));
+                        this.intervals.delete('telegramPipeline');
+                    }
+                    this.telegramBackgroundArmed = false;
+                } else if (
+                    (this.isRunning || this.telegramBackgroundArmed) &&
+                    !this.intervals.has('telegramPipeline')
+                ) {
+                    this.startTelegramPipelineScheduler();
+                }
             }
             await this.publishStatus();
         }

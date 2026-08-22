@@ -4,9 +4,24 @@ import { logger } from './logger.js';
 
 export const TRANSFER_HEARTBEAT_KEY = 'pipeline:scheduler:heartbeat:transfer';
 export const NORMALIZATION_HEARTBEAT_KEY = 'pipeline:scheduler:heartbeat:normalization';
+/** Layer A — diagnostic only; never execution entitlement. */
+export const TELEGRAM_LIFECYCLE_KEY = 'pipeline:scheduler:lifecycle:telegram';
 const HEARTBEAT_TTL_SEC = 7200;
+const LIFECYCLE_TTL_SEC = 7200;
 /** Allow scheduler ticks to slip ~2.5× before treating as stopped. */
 export const SCHEDULER_FRESHNESS_GRACE = 2.5;
+
+export const TELEGRAM_LIFECYCLE_OUTCOMES = Object.freeze({
+  ARMED: 'ARMED',
+  TICK_SUCCESS: 'TICK_SUCCESS',
+  TICK_NOOP_SELECTED_ZERO: 'TICK_NOOP_SELECTED_ZERO',
+  TICK_SKIP_IN_MEMORY: 'TICK_SKIP_IN_MEMORY',
+  TICK_SKIP_ADVISORY_LOCK: 'TICK_SKIP_ADVISORY_LOCK',
+  TICK_ERROR: 'TICK_ERROR',
+  DISABLED: 'DISABLED',
+  STOPPED: 'STOPPED',
+  OBSERVABILITY_DEGRADED: 'OBSERVABILITY_DEGRADED',
+});
 
 /**
  * @typedef {'transfer' | 'normalization'} PipelineJobKind
@@ -109,6 +124,147 @@ export function isJobExecutionFresh(isoTimestamp, intervalMs, nowMs = Date.now()
 }
 
 /**
+ * Classify transfer summary into Layer A lifecycle outcome (no Redis authority).
+ * @param {{ skipped_run?: boolean, skip_reason?: string|null, selected?: number|null }} summary
+ * @returns {string}
+ */
+export function classifyTelegramTransferLifecycleOutcome(summary) {
+  if (!summary || typeof summary !== 'object') {
+    return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_ERROR;
+  }
+  if (summary.skipped_run === true) {
+    if (summary.skip_reason === 'in_memory_lock') {
+      return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SKIP_IN_MEMORY;
+    }
+    if (summary.skip_reason === 'advisory_lock') {
+      return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SKIP_ADVISORY_LOCK;
+    }
+    return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_ERROR;
+  }
+  if (Number(summary.selected) === 0) {
+    return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_NOOP_SELECTED_ZERO;
+  }
+  return TELEGRAM_LIFECYCLE_OUTCOMES.TICK_SUCCESS;
+}
+
+/**
+ * Best-effort Layer A lifecycle write. Never throws; never gates execution.
+ * @param {Record<string, unknown>} payload
+ * @returns {Promise<{ written: boolean, degraded: boolean }>}
+ */
+export async function recordTelegramLifecycleEvidence(payload) {
+  if (process.env.NODE_ENV === 'test') {
+    return { written: false, degraded: false };
+  }
+  const body = {
+    at: new Date().toISOString(),
+    runtimeOwner: 'titan-engine-worker',
+    pid: process.pid,
+    ...payload,
+  };
+  if (!isRedisAvailable()) {
+    logger.warn('PIPELINE_TELEGRAM_LIFECYCLE_WRITE_SKIPPED', {
+      state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+      reason: 'redis_unavailable',
+    });
+    return { written: false, degraded: true };
+  }
+  try {
+    const client = await getRedisClient();
+    await client.set(TELEGRAM_LIFECYCLE_KEY, JSON.stringify(body), {
+      EX: LIFECYCLE_TTL_SEC,
+    });
+    if (payload?.pid != null) {
+      const perProc = `${TELEGRAM_LIFECYCLE_KEY}:proc:${payload.pid}`;
+      await client.set(perProc, JSON.stringify(body), { EX: LIFECYCLE_TTL_SEC });
+    }
+    return { written: true, degraded: false };
+  } catch (error) {
+    logger.warn('PIPELINE_TELEGRAM_LIFECYCLE_WRITE_SKIPPED', {
+      state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+      error: error.message,
+    });
+    return { written: false, degraded: true };
+  }
+}
+
+/**
+ * Sanitized diagnostic payload when Redis cannot be observed.
+ * Observational only — never execution entitlement.
+ * @param {'redis_unavailable'|'redis_read_failed'|string} reason
+ */
+export function buildTelegramLifecycleDegradedRead(reason) {
+  return {
+    state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+    at: new Date().toISOString(),
+    reason: String(reason || 'redis_unavailable'),
+    runtimeOwner: 'titan-engine-worker',
+  };
+}
+
+/**
+ * @returns {Promise<object|null>}
+ *   null = Redis path healthy enough to read, but no lifecycle key (NOT_INITIALIZED)
+ *   OBSERVABILITY_DEGRADED object = Redis unavailable / read failed
+ */
+export async function readTelegramLifecycleEvidence() {
+  if (process.env.NODE_ENV === 'test') {
+    return null;
+  }
+  if (!isRedisAvailable()) {
+    return buildTelegramLifecycleDegradedRead('redis_unavailable');
+  }
+  try {
+    const client = await getRedisClient();
+    const raw = await client.get(TELEGRAM_LIFECYCLE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    logger.warn('PIPELINE_TELEGRAM_LIFECYCLE_READ_SKIPPED', {
+      state: TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED,
+      reason: 'redis_read_failed',
+      error: error.message,
+    });
+    return buildTelegramLifecycleDegradedRead('redis_read_failed');
+  }
+}
+
+/**
+ * Diagnostic freshness for Telegram lifecycle (not execution entitlement).
+ * Redis TTL is storage cleanup only — liveness uses intervalMs × SCHEDULER_FRESHNESS_GRACE.
+ * @param {{ lifecycle: object|null, intervalMs: number, nowMs?: number }} input
+ * @returns {'NOT_INITIALIZED'|'ARMED_WAITING_FIRST_TICK'|'FRESH'|'STALE_STOPPED'|'OBSERVABILITY_DEGRADED'}
+ */
+export function deriveTelegramLifecycleFreshness({
+  lifecycle,
+  intervalMs,
+  nowMs = Date.now(),
+}) {
+  if (!lifecycle || typeof lifecycle !== 'object') {
+    return 'NOT_INITIALIZED';
+  }
+  if (lifecycle.state === TELEGRAM_LIFECYCLE_OUTCOMES.OBSERVABILITY_DEGRADED) {
+    return 'OBSERVABILITY_DEGRADED';
+  }
+  if (
+    lifecycle.state === TELEGRAM_LIFECYCLE_OUTCOMES.DISABLED ||
+    lifecycle.state === TELEGRAM_LIFECYCLE_OUTCOMES.STOPPED
+  ) {
+    return 'STALE_STOPPED';
+  }
+  if (lifecycle.state === TELEGRAM_LIFECYCLE_OUTCOMES.ARMED) {
+    // Fresh ARMED = waiting first tick; stale/malformed ARMED must not linger forever
+    if (isJobExecutionFresh(lifecycle.at, intervalMs, nowMs)) {
+      return 'ARMED_WAITING_FIRST_TICK';
+    }
+    return 'STALE_STOPPED';
+  }
+  if (isJobExecutionFresh(lifecycle.at, intervalMs, nowMs)) {
+    return 'FRESH';
+  }
+  return 'STALE_STOPPED';
+}
+
+/**
  * Derive scheduler status from heartbeats + DB activity — never from in-process isRunning.
  * @param {{
  *   transferIntervalMs: number,
@@ -155,9 +311,10 @@ export function deriveSchedulerStatus({
  * @param {{ transferIntervalMs: number, normalizationIntervalMs: number }} intervals
  */
 export async function resolveSchedulerRuntimeStatus(intervals) {
-  const [heartbeats, dbActivity] = await Promise.all([
+  const [heartbeats, dbActivity, telegramLifecycle] = await Promise.all([
     readPipelineJobHeartbeats(),
     queryPipelineActivityEvidence(),
+    readTelegramLifecycleEvidence(),
   ]);
 
   const status = deriveSchedulerStatus({
@@ -170,6 +327,11 @@ export async function resolveSchedulerRuntimeStatus(intervals) {
   const normHeartbeat = heartbeats.normalization;
   const lastNormalizationRun =
     normHeartbeat?.at ?? dbActivity.lastNormalizationAt ?? null;
+
+  const telegramLifecycleFreshness = deriveTelegramLifecycleFreshness({
+    lifecycle: telegramLifecycle,
+    intervalMs: intervals.transferIntervalMs,
+  });
 
   return {
     status,
@@ -185,5 +347,8 @@ export async function resolveSchedulerRuntimeStatus(intervals) {
             typeof normHeartbeat.durationMs === 'number' ? normHeartbeat.durationMs : null,
         }
       : null,
+    // Diagnostic only — never treat ARMED as full-scheduler "running"
+    telegramLifecycle,
+    telegramLifecycleFreshness,
   };
 }

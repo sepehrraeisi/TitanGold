@@ -60,9 +60,43 @@ describe('engineWorkerLeader kill switch monitor', () => {
     expect(workerSource).toContain('applyEmergencyStopSeparation');
     // Ensure the kill-switch branch does not wipe analytical timers
     const handleIdx = workerSource.indexOf('const handleState');
-    const handleSlice = workerSource.slice(handleIdx, handleIdx + 2500);
+    const handleSlice = workerSource.slice(handleIdx, handleIdx + 3500);
     expect(handleSlice).not.toMatch(/scheduler\?\.stop\)\s*scheduler\.stop/);
     expect(handleSlice).not.toMatch(/if \(scheduler\?\.stop\)\s*scheduler\.stop/);
+  });
+
+  it('gates analytical kill-switch methods on analyticalSchedulerReady', () => {
+    expect(workerSource).toContain('this.analyticalSchedulerReady');
+    const handleIdx = workerSource.indexOf('const handleState');
+    const handleSlice = workerSource.slice(handleIdx, handleIdx + 3500);
+    expect(handleSlice).toMatch(
+      /analyticalSchedulerReady\s*&&\s*scheduler\?\.applyEmergencyStopSeparation/,
+    );
+    expect(handleSlice).toMatch(
+      /analyticalSchedulerReady\s*&&\s*scheduler\?\.clearEmergencyStopSeparation/,
+    );
+  });
+
+  it('arms Telegram background independently of hasWork (Candidate B / B1)', () => {
+    expect(workerSource).toContain('ensureTelegramBackgroundIndependent');
+    expect(workerSource).toContain('telegramScheduler');
+    // Must not add pipeline backlog into checkForWork (Candidate A rejected)
+    const checkIdx = workerSource.indexOf('async checkForWork');
+    const checkEnd = workerSource.indexOf('async startEngines', checkIdx);
+    const checkSlice = workerSource.slice(checkIdx, checkEnd);
+    expect(checkSlice).not.toMatch(/telegram_messages|collected_data|backlogRemaining/i);
+    const startIdx = workerSource.indexOf('async start()');
+    const callIdx = workerSource.indexOf('await this.ensureTelegramBackgroundIndependent()');
+    expect(callIdx).toBeGreaterThan(startIdx);
+    expect(callIdx).toBeLessThan(checkIdx);
+  });
+
+  it('stops Telegram background on worker.stop when engines never started', () => {
+    expect(workerSource).toContain('stopTelegramBackgroundLifecycle');
+    const stopIdx = workerSource.indexOf('async stop()');
+    const stopSlice = workerSource.slice(stopIdx, stopIdx + 1200);
+    expect(stopSlice).toContain('!this.enginesStarted');
+    expect(stopSlice).toContain('stopTelegramBackgroundLifecycle');
   });
 
   it('stops trading engine under kill switch', () => {
