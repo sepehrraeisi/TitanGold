@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; index-only remediation AUTHORIZED one-shot; execution next; worktree/PM2/deploy forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; index-only remediation EXECUTED PASS; PM2 persistence+rollback design next; worktree/PM2/deploy forbidden
 alwaysApply: true
 ---
 
@@ -12,14 +12,16 @@ E6A DEPLOYED + HEALTHY /
 B1 SOURCE MERGED /
 DIRTY TARGET RCA COMPLETE /
 OWNER DECISION A COMPLETE /
-STALE INDEX ENTRIES REJECTED /
-INDEX-ONLY REMEDIATION AUTHORIZED /
-INDEX REMEDIATION NOT YET EXECUTED /
-WORKTREE MUTATION FORBIDDEN /
+INDEX-ONLY REMEDIATION EXECUTED PASS /
+TARGET INDEX == HEAD /
+WORKTREE BYTE IDENTITY PRESERVED /
+NON-TARGET INDEX UNCHANGED /
+DIRTY TARGET BLOCKER CLOSED /
 ENGINE TOPOLOGY 2→1 STILL OPEN /
+PM2 PERSISTENCE + ROLLBACK DESIGN NEXT /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
-INDEX-ONLY EXECUTION NEXT**
+NO PM2 OR DEPLOYMENT MUTATION AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -2144,11 +2146,11 @@ scheduler index:
 **DIRTY_TARGET_OWNER_DISPOSITION = REJECT STALE LEGACY STAGED INDEX ENTRIES / APPROVE FUTURE INDEX-ONLY REMEDIATION GATE**
 **STAGED_INDEX_BYTES_AUTHORITY = REJECTED / NON-AUTHORITATIVE HISTORICAL ARTIFACT**
 
-Rejected staged blobs (still physically present in production Git index **until** later authorized mutation):
-engineWorker staged blob = `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a`
-scheduler staged blob = `5aaef2b40af68fdb1a212b2e0c219064f414854a`
+Rejected staged blobs (historical pre-remediation; **SUPERSEDED by execution**):
+engineWorker stale INDEX was = `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a` → now `314db7639d468f325a9ace0ae8996a5f6fb02dab`
+scheduler stale INDEX was = `5aaef2b40af68fdb1a212b2e0c219064f414854a` → now `be54a94cf0004fc20c1f32870fa795cfa9660fac`
 
-Do **not** falsely state index remediation **COMPLETE** or index == HEAD currently.
+Index remediation **COMPLETE** as of execution closeout (20260822T084328Z); both target paths now INDEX == HEAD == WORKTREE.
 
 #### Worktree safety contract (future remediation invariant)
 
@@ -2195,14 +2197,21 @@ scheduler local-only hunks vs HEAD = **0**
 **SCHEDULER_B1_REPLACEMENT_OWNER_DECISION = REQUIRED**
 
 **B1_DIRTY_TARGET_RCA_COMPLETE = YES**
-**B1_DIRTY_TARGET_PROVENANCE_BLOCKER = ACTIVE** (index remediation authorized; not yet executed)
+**B1_DIRTY_TARGET_PROVENANCE_BLOCKER = CLOSED** (index remediation executed PASS)
+**DIRTY_TARGET_PROVENANCE_BLOCKER = CLOSED**
 **DIRTY_TARGET_PROVENANCE_UNKNOWN = NO**
 **DIRTY_TARGET_PROVENANCE_OWNER_DECISION = A / CONSUMED / COMPLETE**
 **OWNER_DECISION_GATE = CONSUMED**
-**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = NO**
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = YES / ONE-SHOT / TWO-PATH INDEX ONLY**
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = ACTIVE / ONE-SHOT**
-**DIRTY TARGET INDEX MUTATION AUTHORIZED = YES / EXACTLY TWO APPROVED PATHS ONLY**
+**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = YES / PASS / COMPLETE**
+**DIRTY_TARGET_INDEX_REMEDIATION_RESULT = PASS**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO / CONSUMED**
+**DIRTY TARGET INDEX MUTATION AUTHORIZED = NO / CONSUMED**
+**REPEAT_INDEX_REMEDIATION_AUTHORIZED = NO**
+**AUTHORIZATION_CONSUMED = YES**
+**TARGET_INDEX_HEAD_MATCH = YES**
+**WORKTREE_BYTE_IDENTITY_PRESERVED = YES**
+**NON_TARGET_INDEX_ENTRIES_CHANGED = NO**
 
 #### PM2 persistence RCA
 
@@ -2251,7 +2260,7 @@ retained engine restart required = **NO**
 **ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO**
 
 Reasons include:
-- index remediation not yet executed (Owner A consumed; execution gate separate)
+- ~~index remediation not yet executed~~ **CLOSED (execution PASS 20260822T084328Z)**
 - secure PM2 dump rollback artifact not yet created
 - persistence/save strategy not yet authorized
 - current dump would resurrect 2 engines
@@ -2305,10 +2314,9 @@ Reject stale legacy staged Git index entries for
 `backend/workers/engineWorkerLeader.js` · `backend/engine/scheduler.js`
 as **NON-AUTHORITATIVE HISTORICAL / LEGACY ARTIFACTS**.
 
-Owner intends a **FUTURE SEPARATE** index-only remediation gate to restore **ONLY** Git index
-entries for those two paths to production HEAD, preserving WORKTREE bytes exactly unchanged.
+Owner intended a **FUTURE SEPARATE** index-only remediation gate — **EXECUTED PASS 20260822T084328Z**.
 
-**THIS OWNER DECISION DOES NOT ITSELF AUTHORIZE INDEX MUTATION.**
+**THIS OWNER DECISION DID NOT ITSELF AUTHORIZE INDEX MUTATION.** (Historical; execution consumed separate one-shot authorization.)
 
 Basis for Owner decision A:
 - worktree equals production HEAD for both files
@@ -2322,84 +2330,80 @@ Basis for Owner decision A:
 
 **RECOMMENDED_OWNER_DECISION = A** (**HISTORICAL / SUPERSEDED — Owner chose A**)
 
-#### Index-only remediation authorization (ACTIVE — NOT executed by this governance)
+#### Index-only remediation authorization (HISTORICAL / SUPERSEDED — consumed by execution)
 
-**DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION = CONSUMED / COMPLETE** (governance gate)
+**DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO / CONSUMED**
+**DIRTY TARGET INDEX MUTATION AUTHORIZED = NO / CONSUMED**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**REPEAT_INDEX_REMEDIATION_AUTHORIZED = NO**
 
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = YES / ONE-SHOT / TWO-PATH INDEX ONLY**
-**DIRTY TARGET INDEX MUTATION AUTHORIZED = YES / EXACTLY TWO APPROVED PATHS ONLY**
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = ACTIVE / ONE-SHOT**
-**AUTHORIZATION_CONSUMED = NO** (until future execution reaches mutation phase)
-
-Exact approved paths **ONLY** (no third path; no directory-wide Git operation):
+Historical one-shot paths (execution complete):
 1. `backend/workers/engineWorkerLeader.js`
 2. `backend/engine/scheduler.js`
 
-Known pre-mutation identities (**PRECONDITIONS — not assumptions; mismatch = STOP / NO AUTHORITY**):
+Do **not** re-authorize index remediation without a new Owner gate.
 
-**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
-**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+#### Index-only remediation execution closeout (COMPLETE / PASS)
 
-engineWorkerLeader.js:
-HEAD = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
-stale INDEX = `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a`
-WORKTREE = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
-WORKTREE SHA256 = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
+Execution evidence packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_INDEX_ONLY_REMEDIATION_EXEC_20260822T084328Z.txt`
+SHA256 = `24dea2f41734f65f9aa02e9896c2030a5206c3673e6e9791651545d023495849`
+bytes = 35129
+/tmp-home equality = YES
 
-scheduler.js:
-HEAD = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
-stale INDEX = `5aaef2b40af68fdb1a212b2e0c219064f414854a`
-WORKTREE = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
-WORKTREE SHA256 = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
+**INDEX_REMEDIATION_RESULT = PASS**
+**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = YES / PASS / COMPLETE**
+**AUTHORIZATION_CONSUMED = YES**
+**ROLLBACK_EXECUTED = NO**
+**INDEX_REMEDIATION_RUNTIME_NON_INTERFERENCE = PASS_BY_HEALTH_AND_BYTE_IDENTITY**
 
-Fresh execution-time preconditions (must reverify immediately before mutation):
-- worktree == HEAD for both paths
-- no unresolved merge stages · no intent-to-add/sparse-index anomaly · regular tracked files
-- INDEX blob/mode/WORKTREE SHA256 match exact preconditions above
-- any mismatch consumes **NO** authority; execution **STOP**
+Execution root: **PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`** (unchanged)
+**INDEX_LOCK_PRECONDITION = ABSENT / PASS**
 
-Target post-state (INDEX only):
-engine INDEX = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
-scheduler INDEX = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
-→ **INDEX == HEAD** for both paths; WORKTREE bytes unchanged.
+**ENGINE_INDEX_REMEDIATION = PASS / COMPLETE**
+engineWorkerLeader.js INDEX pre = `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a` → post = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
+WORKTREE SHA256 pre/post = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
+**ENGINE_WORKTREE_BYTE_IDENTITY_PRESERVED = YES**
 
-Preferred index-only primitive:
-`git update-index --cacheinfo <EXACT_EXISTING_MODE> <HEAD_BLOB> <PATH>` per path separately.
-Mode MUST be freshly obtained from existing tracked HEAD/index entry; do not hardcode unless proven.
+**SCHEDULER_INDEX_REMEDIATION = PASS / COMPLETE**
+scheduler.js INDEX pre = `5aaef2b40af68fdb1a212b2e0c219064f414854a` → post = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
+WORKTREE SHA256 pre/post = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
+**SCHEDULER_WORKTREE_BYTE_IDENTITY_PRESERVED = YES**
 
-**FORBIDDEN:** `git reset` · `git reset --hard` · `git restore` · `git restore --staged` ·
-`git checkout` · `git switch` · `git clean` · `git stash` · `git add` · `git commit` ·
-`git pull` · `git merge` · `git rebase` · any broad index reset.
+Both targets: targeted unstaged/staged/HEAD diff = **EMPTY** · targeted status = **EMPTY**
 
-Pre-mutation evidence packet required **outside app repo** (sanitized; may finalize after post-checks).
+**NON_TARGET_INDEX_FINGERPRINT_PRE = `437c297c4705105acc30e04fa271c3586f888b7da4e58ed6660c92e63df9f54e`**
+**NON_TARGET_INDEX_FINGERPRINT_POST = `437c297c4705105acc30e04fa271c3586f888b7da4e58ed6660c92e63df9f54e`**
+**NON_TARGET_INDEX_ENTRIES_CHANGED = NO**
 
-Post-mutation hard gates (both paths):
-INDEX blob == HEAD blob · WORKTREE blob/SHA256 unchanged · `git diff`/`git diff --cached`/`git diff HEAD` empty · no M/MM status · **NON_TARGET_INDEX_ENTRIES_CHANGED = NO**
+**DIRTY_COUNT_PRE = 491** · **DIRTY_COUNT_POST = 489** (exactly −2 from target MM removal only)
+Production repo remains **NOT globally clean**.
 
-**WORKTREE_BYTE_IDENTITY_PRESERVED = YES** required; else FAIL/STOP.
+Execution-time health (read-only): backend 5002 = HTTP 200 · collector 5003 = HTTP 200
 
-Runtime: no PM2/process/restart/reload/service mutation; read-only identity/health confirmation allowed.
+Mutation ledger (execution):
+**PRODUCTION_GIT_INDEX_MUTATION = 2 TARGET ENTRY UPDATES / COMPLETE**
+WORKTREE_MUTATION = 0 · SOURCE_CONTENT_MUTATION = 0 · NON_TARGET_INDEX_MUTATION = 0
+PM2_MUTATION = 0 · RESTART_RELOAD_MUTATION = 0 · DB_QUERY = 0 · DB_MUTATION = 0
+REDIS_MUTATION = 0 · MANUAL_TRANSFER = 0 · RULE02_MUTATION_DURING_EXECUTION = 0 · 052_EXECUTION = 0
 
-Index rollback (index-only emergency): restore original index blobs
-engine `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a` · scheduler `5aaef2b40af68fdb1a212b2e0c219064f414854a`
-via same cache-entry semantics; **must not touch worktree**; if rollback required:
-**INDEX_REMEDIATION_RESULT = FAILED / ROLLED_BACK** · no automatic retry.
-
-**WORKTREE_MUTATION_ALLOWED = NO**
 **WORKTREE MUTATION AUTHORIZED = NO**
 **SOURCE WRITE AUTHORIZED = NO**
+**REPEAT_INDEX_REMEDIATION_AUTHORIZED = NO**
 
-Do **not** execute index remediation in this governance task.
+Index remediation did **NOT** deploy B1. Current production WORKTREE for both targets remains pre-B1.
 
 #### PM2 future ordering
 
 1. ~~Owner disposition of staged legacy index~~ **COMPLETE (Owner A)**
-2. Index-only remediation execution + governance closeout (**AUTHORIZED — NEXT EXECUTION GATE**)
-3. PM2 persistence/rollback execution design/authorization
-4. engine topology reconciliation 2 → 1
-5. production B1 exact-file deployment
-6. authorized engine refresh + backend reload
-7. NODE_ENV normalization under explicit authority
+2. ~~Index-only remediation execution + governance closeout~~ **COMPLETE (PASS 20260822T084328Z)**
+3. PM2 persistence + engine topology rollback execution design (**NEXT**)
+4. engine topology reconciliation 2 → 1 authorization/execution (NOT YET AUTHORIZED)
+5. production B1 exact-file deployment (NOT YET AUTHORIZED)
+6. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+7. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
 8. runtime validation / Human QA / governance reclose
 
 #### E6A preservation
@@ -2439,15 +2443,22 @@ collector restart = **NO** · processor restart = **NO**
 **TWO_WORKER_PRODUCTION_ACTIVATION = BLOCKED**
 **COMMIT_LEVEL_DEPLOY_SAFE = NO**
 
-### Authorization state after index remediation authorization (governance)
+### Authorization state after index remediation execution closeout (governance)
 
 **DIRTY_TARGET_PROVENANCE_OWNER_DECISION = A / CONSUMED / COMPLETE**
 **OWNER_DECISION_GATE = CONSUMED**
-**DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION = CONSUMED / COMPLETE**
-**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = NO**
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = YES / ONE-SHOT / TWO-PATH INDEX ONLY**
-**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = ACTIVE / ONE-SHOT**
-**DIRTY TARGET INDEX MUTATION AUTHORIZED = YES / EXACTLY TWO APPROVED PATHS ONLY**
+**DIRTY TARGET INDEX-ONLY REMEDIATION EXECUTION = CONSUMED / COMPLETE / CLOSED**
+**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = YES / PASS / COMPLETE**
+**DIRTY_TARGET_INDEX_REMEDIATION_RESULT = PASS**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO / CONSUMED**
+**DIRTY TARGET INDEX MUTATION AUTHORIZED = NO / CONSUMED**
+**REPEAT_INDEX_REMEDIATION_AUTHORIZED = NO**
+**AUTHORIZATION_CONSUMED = YES**
+**TARGET_INDEX_HEAD_MATCH = YES**
+**WORKTREE_BYTE_IDENTITY_PRESERVED = YES**
+**NON_TARGET_INDEX_ENTRIES_CHANGED = NO**
+**DIRTY_TARGET_PROVENANCE_BLOCKER = CLOSED**
 **WORKTREE MUTATION AUTHORIZED = NO**
 **SOURCE WRITE AUTHORIZED = NO**
 
@@ -2460,7 +2471,7 @@ collector restart = **NO** · processor restart = **NO**
 **BACKEND_TOPOLOGY_RECONCILIATION_FOR_B1 = DEFER**
 
 **DIRTY_TARGET_PROVENANCE_DESIGN_RCA_AUTHORIZATION = CONSUMED / COMPLETE**
-**NEW PRODUCTION READ AUTHORIZED = NO** (except fresh execution-time reads in execution gate)
+**NEW PRODUCTION READ AUTHORIZED = NO** (except fresh reads in future authorized gates)
 **CANDIDATE_B_PRODUCTION_DEPLOYED = NO**
 **CANDIDATE_B_PRODUCTION_DEPLOYMENT_READY = NO**
 **CANDIDATE_B_SOURCE_IMPLEMENTATION = COMPLETE / MERGED**
@@ -2497,25 +2508,59 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-DIRTY TARGET INDEX-ONLY REMEDIATION EXECUTION**
+PM2 PERSISTENCE + ENGINE TOPOLOGY ROLLBACK EXECUTION DESIGN**
 
-Classification: **TIER 3 PRODUCTION GIT INDEX MUTATION / EXACT TWO-PATH EXECUTION / NO WORKTREE OR RUNTIME MUTATION**
+Classification: **TIER 3 READ-ONLY PM2 EXECUTION DESIGN / NO MUTATION**
 
-This gate authorizes **one-shot** execution of the approved index-only remediation **after merge of this authorization governance**, subject to fresh precondition match.
+This gate may authorize ONLY:
+- fresh read-only PM2 live/dump/startup discovery
+- sanitized PM2 persistence analysis
+- exact dump backup/rollback DESIGN
+- exact delete/save transaction DESIGN
+- retained-engine no-restart proof
+- semantic non-engine dump preservation model
+- rollback trigger and rollback sequence design
+- health/provenance postcondition design
+- evidence packet creation outside app repo
 
-Execution may:
-- fresh read-only precondition verification
-- pre/post evidence packet outside app repo
-- path-scoped `git update-index --cacheinfo` for exactly the two approved paths
-- post-verification INDEX == HEAD · WORKTREE SHA256 unchanged · non-target index unchanged
+This gate MUST NOT authorize:
+pm2 delete · pm2 stop · pm2 save · pm2 start · pm2 restart · pm2 reload · pm2 resurrect
+dump file write/copy · systemd mutation · source/index/worktree mutation · deployment
+DB/Redis mutation · manual transfer · 052
 
-Execution MUST NOT:
-- touch worktree bytes · use forbidden broad Git commands (see authorization section)
-- PM2 mutation · pm2 save · restart/reload · deployment · Redis/DB mutation · manual transfer · 052
+### Required design questions (minimum)
 
-After successful execution + governance closeout, PM2 topology gates may follow separately.
+A. Can engine 2→1 be performed by exact deletion of one duplicate worker without restarting retained worker?
+B. How is `/home/ubuntu/.pm2/dump.pm2` backed up securely before future mutation without exposing secrets?
+C. After exact engine deletion, how will `pm2 save` be validated so ONLY engine count 2→1 changes while backend remains 4?
+D. How will NODE_ENV=development be prevented from being silently normalized/approved merely because it remains in saved dump?
+E. How will non-engine PM2 app identity/env semantics be compared before/after without dumping secrets?
+F. If delete succeeds but `pm2 save` or post-save validation fails, what exact rollback is deterministic without restarting unrelated apps?
+G. Is live restoration of the removed engine necessary for rollback, or is persistence metadata restoration sufficient?
+H. Can rollback complete without loading different worktree bytes or changing effective NODE_ENV?
+I. What is the exact next mutation gate if and only if this design becomes deterministic?
 
-**THIS GOVERNANCE TASK DID NOT EXECUTE INDEX MUTATION.**
+### Possible follow-up (NOT pre-authorized)
+
+If design becomes deterministic, possible next gate:
+**ENGINE PM2 TOPOLOGY RECONCILIATION EXECUTION AUTHORIZATION**
+Classification: **TIER 3 PM2 TOPOLOGY MUTATION / ENGINE 2→1 ONLY / NO SOURCE DEPLOYMENT**
+
+If design remains non-deterministic:
+next gate remains **PM2 PERSISTENCE / ROLLBACK DESIGN CORRECTION** · No mutation.
+
+**ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO**
+**ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = NO**
+**SECURE_PM2_DUMP_ROLLBACK_ARTIFACT_REQUIRED = YES**
+**PM2_SAVE_REQUIRED_TO_PERSIST_RECONCILIATION = YES**
+**PM2_SAVE_WOULD_PERSIST_OTHER_DRIFT = YES**
+
+Engine selection design snapshot (**HISTORICAL DESIGN SNAPSHOT / NOT CURRENT MUTATION AUTHORITY**):
+retained candidate = pm_id **5** · removal candidate = pm_id **9**
+preferred primitive = exact extra process delete · retained restart required = **NO**
+unique runtime responsibility proven = **NO**
+
+**THIS GOVERNANCE CLOSEOUT DID NOT EXECUTE INDEX OR PM2 MUTATION.**
 
 ### Closed / still forbidden (unchanged)
 
