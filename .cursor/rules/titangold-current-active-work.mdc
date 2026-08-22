@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; preflight+PM2/dirty RCA COMPLETE; stale staged index proven; Owner index disposition next; no mutation authorized
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; Owner decision A recorded; stale index rejected; index-only remediation auth next; no mutation authorized
 alwaysApply: true
 ---
 
@@ -12,15 +12,17 @@ E6A DEPLOYED + HEALTHY /
 TARGETED EFFECT INCONCLUSIVE /
 B1 SOURCE MERGED /
 PRODUCTION PREFLIGHT COMPLETE /
-PM2 + DIRTY TARGET DESIGN/RCA COMPLETE /
+PM2 + DIRTY TARGET RCA COMPLETE /
 WORKTREE DIRT REFUTED /
 STALE LEGACY STAGED INDEX PROVEN /
-ENGINE TOPOLOGY 2→1 STILL REQUIRED /
-PM2 RESURRECT PERSISTS 2 ENGINE + 4 BACKEND /
+OWNER DECISION A COMPLETE /
+STALE INDEX ENTRIES REJECTED AS NON-AUTHORITATIVE /
+INDEX REMEDIATION NOT EXECUTED /
+ENGINE TOPOLOGY 2→1 STILL OPEN /
 NODE_ENV DRIFT OPEN /
-OWNER INDEX DISPOSITION NEXT /
 B1 NOT DEPLOYED /
-NO MUTATION AUTHORIZED**
+INDEX-ONLY REMEDIATION AUTHORIZATION NEXT /
+NO MUTATION CURRENTLY AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -2140,9 +2142,32 @@ scheduler index:
 - returns toward legacy autoSchedule interval behavior
 
 **STAGED_INDEX_BYTES = LEGACY / NON-CURRENT / NOT RUNTIME AUTHORITY**
-**STAGED_INDEX_DISPOSITION_OWNER_DECISION = PENDING**
+**STAGED_INDEX_DISPOSITION_OWNER_DECISION = A / CONSUMED / COMPLETE** (historical gate superseded)
+**DIRTY_TARGET_OWNER_DECISION = A**
+**DIRTY_TARGET_OWNER_DISPOSITION = REJECT STALE LEGACY STAGED INDEX ENTRIES / APPROVE FUTURE INDEX-ONLY REMEDIATION GATE**
+**STAGED_INDEX_BYTES_AUTHORITY = REJECTED / NON-AUTHORITATIVE HISTORICAL ARTIFACT**
 
-Do **not** claim Owner rejected/discarded staged index bytes yet.
+Rejected staged blobs (still physically present in production Git index **until** later authorized mutation):
+engineWorker staged blob = `d7aa8a6180c4ae1ffb2c46a6ed0fc5f2f5c44f1a`
+scheduler staged blob = `5aaef2b40af68fdb1a212b2e0c219064f414854a`
+
+Do **not** falsely state index remediation **COMPLETE** or index == HEAD currently.
+
+#### Worktree safety contract (future remediation invariant)
+
+**engineWorkerLeader.js**
+HEAD = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
+WORKTREE = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
+WORKTREE SHA256 = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
+
+**scheduler.js**
+HEAD = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
+WORKTREE = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
+WORKTREE SHA256 = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
+
+**WORKTREE_MUTATION_ALLOWED = NO**
+**WORKTREE_BYTE_IDENTITY_MUST_BE_PRESERVED = YES**
+INDEX-only remediation means exactly that.
 
 #### Runtime source authority
 
@@ -2169,16 +2194,16 @@ Do **not** mistake worktree cleanliness vs HEAD for B1 deployment.
 engineWorker local-only hunks vs HEAD = **0**
 scheduler local-only hunks vs HEAD = **0**
 
-**ENGINE_B1_REPLACEMENT_OWNER_DECISION = REQUIRED**
+**ENGINE_B1_REPLACEMENT_OWNER_DECISION = REQUIRED** (future exact-file deploy gate; separate from index disposition)
 **SCHEDULER_B1_REPLACEMENT_OWNER_DECISION = REQUIRED**
 
-Reason: stale staged index provenance must receive explicit Owner disposition before future
-exact-file deployment. Do **not** authorize replacement now.
-
 **B1_DIRTY_TARGET_RCA_COMPLETE = YES**
-**B1_DIRTY_TARGET_PROVENANCE_BLOCKER = ACTIVE** (index disposition pending, not worktree unknown bytes)
+**B1_DIRTY_TARGET_PROVENANCE_BLOCKER = ACTIVE** (index remediation not executed; worktree dirt refuted)
 **DIRTY_TARGET_PROVENANCE_UNKNOWN = NO**
-**DIRTY_TARGET_OWNER_DISPOSITION = PENDING**
+**DIRTY_TARGET_PROVENANCE_OWNER_DECISION = A / CONSUMED / COMPLETE**
+**OWNER_DECISION_GATE = CONSUMED**
+**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = NO**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO**
 
 #### PM2 persistence RCA
 
@@ -2227,7 +2252,7 @@ retained engine restart required = **NO**
 **ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO**
 
 Reasons include:
-- staged-index Owner disposition pending
+- index remediation not yet executed (Owner A consumed; execution gate separate)
 - secure PM2 dump rollback artifact not yet created
 - persistence/save strategy not yet authorized
 - current dump would resurrect 2 engines
@@ -2273,49 +2298,52 @@ Do **not** authorize backend scale/reload.
 **B1_PRODUCTION_DEPLOYMENT_READY = NO**
 **CANDIDATE_B_PRODUCTION_ACTIVATION = BLOCKED**
 
-#### Owner decision to be requested (NOT decided in this closeout)
+#### Owner decision recorded (20260822 — Decision A)
 
-Should the two stale legacy staged index entries for:
+Owner explicitly chose **A**:
+
+Reject stale legacy staged Git index entries for
 `backend/workers/engineWorkerLeader.js` · `backend/engine/scheduler.js`
-be rejected as non-authoritative historical artifacts and later removed from the production Git
-INDEX only, restoring index entries to production HEAD, while preserving WORKTREE bytes exactly
-unchanged?
+as **NON-AUTHORITATIVE HISTORICAL / LEGACY ARTIFACTS**.
 
-**A = YES** — reject stale staged legacy blobs; authorize a **FUTURE SEPARATE** index-only remediation gate; worktree must remain byte-identical.
-**B = NO** — preserve staged legacy blobs pending another provenance/design task.
-**C = DEFER / investigate further.**
+Owner intends a **FUTURE SEPARATE** index-only remediation gate to restore **ONLY** Git index
+entries for those two paths to production HEAD, preserving WORKTREE bytes exactly unchanged.
 
-No mutation occurs from choosing A/B/C alone.
+**THIS OWNER DECISION DOES NOT ITSELF AUTHORIZE INDEX MUTATION.**
 
-**RECOMMENDED_OWNER_DECISION = A** (**RECOMMENDATION ONLY / NOT OWNER DECISION YET**)
-
-Reason (recommendation only):
-- worktree equals HEAD
-- runtime uses worktree, not Git index
-- staged blobs are older historical source
-- staged blobs regress important safety/lifecycle semantics
+Basis for Owner decision A:
+- worktree equals production HEAD for both files
+- runtime authority is worktree, not Git index
+- staged blobs are older historical Jul-2026 source
+- staged engine blob regresses EmergencyStop/readiness separation
+- staged scheduler blob regresses newer scheduling/resolver behavior
 - local-only worktree hunks vs HEAD = 0
-- preserving stale staged legacy state creates future deployment/provenance risk
+- preserving stale staged legacy entries increases provenance/deployment risk
+- future remediation can be index-only without touching runtime source bytes
 
-#### After possible Owner decision A (NOT pre-authorized)
+**RECOMMENDED_OWNER_DECISION = A** (**HISTORICAL / SUPERSEDED — Owner chose A**)
 
-If Owner later explicitly chooses **A**, a separate future gate will be required:
+#### Index-only remediation gate (NOT pre-authorized / NOT executed)
 
-**DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION**
+Future gate: **DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION**
 
-That future execution must:
-- reverify production HEAD · reverify index blobs exactly · reverify worktree blobs exactly
-- preserve worktree SHA256 exactly
-- modify **ONLY** Git index entries for the two approved paths
-- prove post-state index == HEAD for both paths · prove worktree bytes unchanged
-- perform no source deployment · perform no PM2 action
+Future execution must:
+- fresh read-only precondition verification · secure evidence packet
+- modify **ONLY** Git INDEX for the two approved paths
+- restore INDEX entries to exact production HEAD blobs
+- prove post-state INDEX == HEAD · prove worktree blob/SHA256 unchanged
+- no source/worktree write · no PM2 action
 
-Do **not** execute it now.
+Preferred conceptual primitive: path-scoped index-only mechanism (e.g. `git update-index --cacheinfo …`).
+Do **not** pre-authorize broad `git reset` / `git restore --staged` unless future execution design
+proves exact path/worktree semantics and Owner gate explicitly permits.
 
-#### PM2 future ordering (no step authorized by this closeout)
+Do **not** execute index remediation now.
 
-1. Owner disposition of staged legacy index
-2. If A: separate index-only remediation execution + governance closeout
+#### PM2 future ordering (no step authorized by Owner decision A)
+
+1. ~~Owner disposition of staged legacy index~~ **COMPLETE (Owner A)**
+2. Index-only remediation execution + governance closeout (**NEXT GATE — NOT AUTHORIZED YET**)
 3. PM2 persistence/rollback execution design/authorization
 4. engine topology reconciliation 2 → 1
 5. production B1 exact-file deployment
@@ -2359,11 +2387,17 @@ collector restart = **NO** · processor restart = **NO**
 **TWO_WORKER_PRODUCTION_ACTIVATION = BLOCKED**
 **COMMIT_LEVEL_DEPLOY_SAFE = NO**
 
-### Authorization state after PM2 + dirty-target RCA closeout
+### Authorization state after Owner decision A (governance recording)
+
+**DIRTY_TARGET_PROVENANCE_OWNER_DECISION = A / CONSUMED / COMPLETE**
+**OWNER_DECISION_GATE = CONSUMED**
+**DIRTY_TARGET_INDEX_REMEDIATION_EXECUTED = NO**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO**
+**DIRTY TARGET INDEX MUTATION AUTHORIZED = NO**
+**WORKTREE MUTATION AUTHORIZED = NO**
 
 **DIRTY_TARGET_PROVENANCE_DESIGN_RCA_AUTHORIZATION = CONSUMED / COMPLETE**
 **NEW PRODUCTION READ AUTHORIZED = NO**
-**DIRTY TARGET INDEX MUTATION AUTHORIZED = NO**
 **SOURCE WRITE AUTHORIZED = NO**
 **CANDIDATE_B_SOURCE_IMPLEMENTATION = COMPLETE / MERGED**
 **CANDIDATE_B_SOURCE_CI = PASS**
@@ -2398,32 +2432,42 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-DIRTY TARGET PROVENANCE OWNER DECISION**
+DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION**
 
-Classification: **TIER 3 OWNER DECISION / NO MUTATION**
+Classification: **TIER 3 PRODUCTION GIT INDEX MUTATION / TWO-PATH INDEX ONLY / NO WORKTREE OR RUNTIME MUTATION**
 
-This gate authorizes only an explicit Owner choice **A / B / C**.
+This gate may later authorize ONLY:
 
-It does **NOT** itself authorize:
+fresh read-only precondition verification,
+secure evidence packet creation,
+Git INDEX mutation for exactly:
+`backend/workers/engineWorkerLeader.js` · `backend/engine/scheduler.js`,
+restoring those INDEX entries to exact production HEAD blobs,
+post-verification INDEX == HEAD,
+verification worktree blob/SHA256 unchanged.
 
-git restore --staged · git reset · git index mutation · source write · PM2 mutation ·
-pm2 save · pm2 delete · restart/reload · deployment · Redis mutation · DB mutation ·
-manual transfer · 052.
+It MUST NOT authorize:
+
+source/worktree write · git checkout · git restore affecting worktree · git reset --hard ·
+git clean · git stash · git pull · git commit · PM2 mutation · pm2 save · restart/reload ·
+deployment · Redis mutation · DB mutation · manual transfer · 052.
+
+**THIS GOVERNANCE CLOSEOUT DOES NOT AUTHORIZE INDEX MUTATION.**
 
 ### Future mutation gates (NOT pre-authorized)
 
-After Owner disposition, possible next gates include:
-
-**A-follow-on:** DIRTY TARGET INDEX-ONLY REMEDIATION AUTHORIZATION (only if Owner chose A)
+After index remediation (when separately authorized and executed):
 
 **PM2:** PM2 PERSISTENCE / ROLLBACK EXECUTION AUTHORIZATION · ENGINE PM2 TOPOLOGY RECONCILIATION EXECUTION AUTHORIZATION
 
-**Deploy:** PRODUCTION DEPLOYMENT AUTHORIZATION (only after topology + index + provenance blockers closed)
+**Deploy:** PRODUCTION DEPLOYMENT AUTHORIZATION (only after topology + index remediation + provenance blockers closed)
 
 **CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
 **PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
 **PRODUCTION DEPLOYMENT AUTHORIZED = NO**
+**DIRTY_TARGET_INDEX_REMEDIATION_AUTHORIZED = NO**
 **DIRTY TARGET INDEX MUTATION AUTHORIZED = NO**
+**WORKTREE MUTATION AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
 **PM2 SAVE AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
