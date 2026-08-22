@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; T2 FAILED/ROLLED_BACK; security redesign COMPLETE; rotation REQUIRED but EXECUTION_READY=NO; next=rotation DESIGN CORRECTION; no T2 retry
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; T2 FAILED/ROLLED_BACK; credential rotation DESIGN CORRECTION COMPLETE; EXECUTION_READY=NO (MASTER_KEY tooling); next=DESIGN CORRECTION II; no T2 retry
 alwaysApply: true
 ---
 
@@ -25,7 +25,9 @@ SECRET-SAFE EVIDENCE MODEL PROVEN /
 SYNTHETIC STATE-MACHINE TESTS PASS /
 CREDENTIAL ROTATION REQUIRED (S2) /
 ROTATION EXECUTION READY = NO /
-ROTATION DESIGN CORRECTION REQUIRED /
+ROTATION DESIGN CORRECTION COMPLETE /
+MASTER_KEY REENCRYPT TOOLING BLOCKER OPEN /
+OWNER DECISIONS REQUIRED = 7 /
 PM2 DUPLICATE CONSUMER TOPOLOGY MATERIAL /
 PERSISTED SECRET STALENESS RISK = YES /
 ROTATION EXECUTION NOT AUTHORIZED /
@@ -2616,13 +2618,14 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 6. ~~engine topology reconciliation 2 → 1 EXECUTION~~ **CONSUMED / FAILED_S2 / ROLLED_BACK (20260822T160149Z)** — topology **NOT** reconciled
 7. ~~T2 failed-exec orchestrator + control-path RCA + security exposure / credential rotation decision + re-authorization design~~ **COMPLETE (20260822T162135Z)** — read-only; no retry
 8. ~~rotation readiness + PM2 consumer topology material correction~~ **COMPLETE (20260822T163514Z)** — EXECUTION_READY remains **NO**
-9. credential rotation design correction (**NEXT** — Tier 3 read-only security design; NOT execution; NOT T2 retry)
-10. credential rotation execution authorization (NOT YET — blocked until design correction proves readiness)
-11. production B1 exact-file deployment (NOT YET AUTHORIZED)
-12. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-13. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
-14. runtime validation / Human QA / governance reclose
-15. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+9. ~~credential rotation design correction~~ **COMPLETE (20260822T170203Z)** — campaign design proven; EXECUTION_READY remains **NO**
+10. credential rotation design correction II (**NEXT** — MASTER_KEY reencrypt tooling + Owner decision intake; NOT execution; NOT T2)
+11. credential rotation campaign Owner decisions + execution authorization (NOT YET)
+12. production B1 exact-file deployment (NOT YET AUTHORIZED)
+13. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+14. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+15. runtime validation / Human QA / governance reclose
+16. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
 #### E6A preservation
 
@@ -2727,11 +2730,11 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-SECURITY CREDENTIAL ROTATION DESIGN CORRECTION**
+SECURITY CREDENTIAL ROTATION DESIGN CORRECTION II**
 
 Classification: **TIER 3 READ-ONLY SECURITY DESIGN / NO MUTATION**
 
-This gate must resolve remaining rotation-design blockers (overlap/revoke semantics, provider groups, PM2 persisted/stopped secret consumers, duplicate topology refresh scope) before any execution authorization.
+This gate must close the remaining hard blocker (MASTER_KEY reencrypt migrator / dual-read tooling design+spec, or separately authorized implementation planning) and intake Owner decisions.
 It MUST NOT rotate credentials.
 It MUST NOT retry T2.
 It MUST NOT deploy B1.
@@ -2739,7 +2742,12 @@ It MUST NOT perform PM2 topology reconciliation.
 
 Prior gates:
 - T2 incident redesign + security review = **COMPLETE (20260822T162135Z)**
-- Rotation readiness + PM2 consumer topology material correction = **COMPLETE (20260822T163514Z)** — **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+- Rotation readiness + PM2 consumer topology material correction = **COMPLETE (20260822T163514Z)**
+- Credential rotation design correction = **COMPLETE (20260822T170203Z)** — **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+
+After MASTER_KEY tooling is proven, next candidate gate becomes:
+**SECURITY CREDENTIAL ROTATION CAMPAIGN / OWNER DECISIONS + EXECUTION AUTHORIZATION**
+(Tier 3 secret/runtime mutation Owner gate · NO T2 retry · NO B1 deploy)
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
@@ -3132,6 +3140,103 @@ Rollback classification must be known before any class is EXECUTION_READY; curre
 **ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO** · **C2 052 = NOT EXECUTED**
 
 **PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **SECRET_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0**
+
+### Credential rotation design correction (20260822T170203Z)
+
+Sanitized design evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_T2_CREDENTIAL_ROTATION_DESIGN_CORRECTION_20260822T170203Z.txt`
+SHA256 = `576f1d98641bba9ce681745ec151dc400b038f3f2823e5191439aaffc79d960d`
+bytes = 13885
+tmp/home equality = **YES**
+
+Restricted credential map (0600 · key names only · no values · OUTSIDE REPO):
+`/home/ubuntu/TITANGOLD_C2_T2_CREDENTIAL_CLASS_MAP_DESIGN_20260822T170203Z.json`
+
+**CREDENTIAL_ROTATION_DESIGN_CORRECTION = COMPLETE**
+**CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**ACTIVE_CREDENTIALS_REQUIRING_ROTATION = 19** · **ACTIVE_UNKNOWN_CREDENTIAL_COUNT = 0**
+**SECRET_EXPOSURE_CLASS = S2**
+
+#### Consumer precedence (proven)
+
+**VALUE_PRECEDENCE = PM2_ENV > DOTENV_FILE**
+`dotenv.config()` default does **not** override existing process env (dotenv 16.x).
+Editing `.env` alone does **not** change PM2-injected effective secrets.
+
+#### PM2 6.0.13 env semantics (source-proven)
+
+- restart/reload without `--update-env` → env immutable
+- `--update-env` → merge via `Utility.extend` (absent keys **retained**, not removed)
+- `Utility.extendMix` removes key only when value is string `"null"`
+- dump/save persists live God env including stopped entries
+- **CAN_REMOVE_COMPROMISED_ENV_FROM_STOPPED_WITHOUT_STARTING = YES** via `pm2 delete <stopped_id>` then guarded security-scoped save
+- surgical key removal without delete/start = **NO** via normal restart merge
+
+#### Stopped/persisted purge design
+
+| Entry class | Treatment (design only) |
+|---|---|
+| processor pm_id15 STOPPED | **A DELETE** (redundant historical) |
+| collector pm_id12 STOPPED | **A DELETE** |
+| frontend STOPPED ×2 | **A DELETE** (or B recreate if product requires) |
+| collector-monitor dual ONLINE | **D BLOCK** until Owner keep-one vs keep-both |
+| engine ONLINE ×2 | **PRESERVE** (do not T2-reconcile during security) |
+| backend ONLINE ×4 | **PRESERVE** |
+
+**SECURITY_PM2_PERSISTENCE_ROTATION_DESIGN = PROVEN** (independent of T2)
+
+#### Per-class design / ready
+
+| Area | Design | Execution ready |
+|---|---|---|
+| DATABASE (DB-B new role overlap) | **PROVEN** | **YES** (design) |
+| REDIS PATH_A purge-only | **PROVEN** | **YES** (design); PATH_B hardening needs Owner |
+| ENCRYPTION MASTER_KEY | **PROVEN** campaign | **NO** — reencrypt tooling missing |
+| ENCRYPTION_KEY config-only | **PROVEN** | **YES** purge/rotate |
+| JWT/session | **PROVEN** | **YES** pending logout acceptance |
+| SESSION_INVALIDATION_EXPECTED | **YES** | Owner acceptance required |
+| TELEGRAM bot token | **PROVEN** (non-overlap) | **YES** pending interruption + handoff |
+| Providers MEXC/OpenAI/Gemini/DeepSeek/OpenRouter | **PROVEN** create-before-revoke | **YES** |
+| OTHER_SECRET / TEST_QA | **PROVEN** remove-from-prod-PM2 | **YES** (design) |
+
+#### Campaign phases (DAG)
+
+P0 Owner decisions → P1 staging → P2 TEST_QA purge → P3 provider overlap rotates → P4 JWT → P5 DB-B → P6 Redis PATH_A → P7 MASTER_KEY reencrypt → P8 ENCRYPTION_KEY → P9 Telegram non-overlap → P10 security PM2 persistence commit → P11 absence+health
+
+**IRREVERSIBLE phases:** provider revokes · DB old-role revoke · MASTER_KEY old discard · BotFather revoke  
+Each requires **PRE_REVOCATION_COMMIT_GATE**.
+
+#### Secure handoff
+
+**MODEL_VISIBLE_NEW_SECRET_VALUE = FORBIDDEN**  
+Staging dir design: `/home/ubuntu/TITANGOLD_SECRET_STAGING/<campaign_id>/` · 0700/0600 · not created in this task.
+
+#### Owner decisions required (7)
+
+1. Accept forced JWT/session logout  
+2. Accept short Telegram downtime  
+3. Accept DB role cutover window  
+4. Redis PATH_A vs PATH_B  
+5. Approve deleting proven-redundant STOPPED PM2 entries  
+6. collector-monitor keep-one vs keep-both  
+7. Authorize MASTER_KEY reencrypt maintenance + migrator implementation package  
+
+#### Hard blockers keeping EXECUTION_READY=NO
+
+1. MASTER_KEY reencrypt migrator / dual-read **not implemented** (ciphertext would become unreadable)  
+2. Owner decisions 1–7 not accepted  
+
+#### Authorization preserved
+
+**T2_REAUTHORIZATION_ELIGIBLE_NOW = NO** · **T2_RETRY_AUTHORIZED = NO**  
+**ENGINE_PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**  
+**PM2_MUTATION_AUTHORIZED = NO** · **CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**  
+**B1_DEPLOY_AUTHORIZED = NO** · **PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**  
+**DB_MUTATION_AUTHORIZED = NO** · **REDIS_MUTATION_AUTHORIZED = NO**  
+**ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO** · **C2 052 = NOT EXECUTED**
+
+**THIS TASK MUTATION LEDGER:** production=0 · PM2=0 · secret=0 · DB=0 · Redis=0 · env_write=0
 
 ### Closed / still forbidden
 
