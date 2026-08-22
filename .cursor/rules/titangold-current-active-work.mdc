@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; index-only remediation EXECUTED PASS; PM2 persistence+rollback design next; worktree/PM2/deploy forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; index remediation PASS; PM2 rollback design COMPLETE; T2 STOP+SAVE selected; correction next; worktree/PM2/deploy forbidden
 alwaysApply: true
 ---
 
@@ -10,15 +10,16 @@ Current outcome:
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
 B1 SOURCE MERGED /
-DIRTY TARGET RCA COMPLETE /
-OWNER DECISION A COMPLETE /
-INDEX-ONLY REMEDIATION EXECUTED PASS /
-TARGET INDEX == HEAD /
-WORKTREE BYTE IDENTITY PRESERVED /
-NON-TARGET INDEX UNCHANGED /
+INDEX REMEDIATION COMPLETE /
 DIRTY TARGET BLOCKER CLOSED /
+PM2 PERSISTENCE + ROLLBACK DESIGN COMPLETE /
+T2 STOP+SAVE SELECTED /
+LIVE ROLLBACK DETERMINISTIC /
+FULL PERSISTENCE ROLLBACK NOT YET PROVEN /
+ENGINE EXECUTION NOT READY /
+NORMALIZATION PARTIAL /
+SECURE BACKUP/RESTORE CORRECTION NEXT /
 ENGINE TOPOLOGY 2→1 STILL OPEN /
-PM2 PERSISTENCE + ROLLBACK DESIGN NEXT /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
 NO PM2 OR DEPLOYMENT MUTATION AUTHORIZED**
@@ -2242,33 +2243,52 @@ backend count = **4** · engine NODE_ENV = **development**
 **BARE_PM2_SAVE_WITHOUT_EXPLICIT_DRIFT_ACCEPTANCE = NOT AUTHORIZED**
 
 **PM2_PERSISTENCE_RCA = COMPLETE**
+**PM2_PERSISTENCE_ROLLBACK_DESIGN = COMPLETE**
 **PM2_PERSISTENCE_EXECUTION_PLAN = NOT YET AUTHORIZED**
+**T2 NOT EXECUTED**
 
 #### Engine topology design
 
-**CURRENT_ENGINE_OWNER_COUNT = 2**
+**CURRENT_ENGINE_OWNER_COUNT = 2** (design snapshot 20260822T090247Z — NOT future mutation authority)
 **CANONICAL_ENGINE_OWNER_COUNT = 1**
 **ENGINE_PM2_RECONCILIATION_DESIGN = COMPLETE**
 
-Preferred primitive design: **pm2 delete (exact-extra-pm_id)** — design only
+**SELECTED_PM2_RECONCILIATION_TRANSACTION = T2 / STOP EXTRA EXACT PM_ID + VALIDATE + PM2 SAVE**
+**TRANSACTION_SELECTION_CONFIDENCE = HIGH**
+**SELECTED_TRANSACTION ≠ EXECUTION AUTHORIZATION**
+
+Historical primitive superseded: ~~pm2 delete (exact-extra-pm_id)~~ — **DELETE+SAVE rejected** (rollback non-deterministic)
 
 Design snapshot (**DESIGN SNAPSHOT ONLY — future execution must freshly re-resolve identities**):
-retained candidate = pm_id **5** · removal candidate = pm_id **9**
+retained candidate = pm_id **5** / pid **1972309** · extra candidate = pm_id **9** / pid **1972587**
 selection confidence = **HIGH** · unique runtime responsibility proven = **NO**
 retained engine restart required = **NO**
 
+**DELETE_EXTRA_RESTARTS_RETAINED = NO / PROVEN**
+**STOP_EXTRA_RESTARTS_RETAINED = NO / PROVEN**
+**DELETE_SAVE_FAILURE_ROLLBACK_DETERMINISTIC = NO**
+**STOP_SAVE_LIVE_ROLLBACK_DETERMINISTIC = YES**
+**T2_LIVE_ROLLBACK_DETERMINISTIC = YES**
+**T2_FULL_LIVE_PLUS_PERSISTENCE_ROLLBACK_DETERMINISTIC = NOT YET PROVEN**
+**STOPPED_DUPLICATE_ENTRY_COMPATIBLE_WITH_CANONICAL_SINGLE_ONLINE_OWNER = YES**
+**STOPPED_DUPLICATE_ENTRY_ACCEPTABLE_AS_TEMPORARY_ROLLBACK_STATE = YES / TEMPORARY ONLY / NOT LONG-TERM CANONICAL**
+**STOPPED_ENGINE_ROLLBACK_ENTRY_CLEANUP = SEPARATE FUTURE AUTHORITY**
+**NO_SAVE_TOPOLOGY_RECONCILIATION = REJECT**
+
 **ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO**
 
-Reasons include:
-- ~~index remediation not yet executed~~ **CLOSED (execution PASS 20260822T084328Z)**
-- secure PM2 dump rollback artifact not yet created
-- persistence/save strategy not yet authorized
-- current dump would resurrect 2 engines
-- pm2 save would snapshot unrelated drift
-- engine rollback currently non-deterministic
+Execution blockers:
+- **PM2_EXECUTION_BLOCKER_1 = DUMP NORMALIZATION MODEL PARTIAL**
+- **PM2_EXECUTION_BLOCKER_2 = SAVE ATOMICITY PARTIAL / IN-PLACE WRITE FAILURE MODEL REQUIRES DETERMINISTIC RESTORE**
+- **PM2_EXECUTION_BLOCKER_3 = SECURE RAW DUMP BACKUP / RESTORE TRANSACTION NOT YET FULLY PROVEN**
+- **PM2_EXECUTION_BLOCKER_4 = FULL PERSISTENCE ROLLBACK AFTER SAVE FAILURE OR BAD SAVE NOT YET DETERMINISTICALLY CLOSED**
 
-**ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = NO**
+**ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = NO** (full live + persistence rollback not yet proven)
 **SECURE_PM2_DUMP_ROLLBACK_ARTIFACT_REQUIRED = YES**
+**SECURE_DUMP_BACKUP_DESIGN = COMPLETE IN PRINCIPLE**
+**SECURE_DUMP_BACKUP_EXECUTION_PROVEN = NO**
+**SECURE_DUMP_BACKUP_DETERMINISTIC = NOT YET CLOSED FOR EXECUTION**
+**PERSISTENCE_RESTORE_DETERMINISTIC = NO / NOT YET PROVEN**
 
 #### Engine NODE_ENV RCA
 
@@ -2284,10 +2304,13 @@ exact-ID restart = **development** · ecosystem recreate = **production** · res
 
 **ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = YES**
 **ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_DRIFT = PRESERVED EXISTING DRIFT / NOT NORMALIZED / NOT ACCEPTED AS CANONICAL**
 
 Recommended correction phase: **SEPARATE ENVIRONMENT NORMALIZATION GATE** or explicitly included in later authorized B1 runtime refresh. Do **not** silently normalize.
 
 **ENGINE_ENVIRONMENT_DRIFT = YES**
+**ACTIVE_DUMP_MODE_NORMALIZATION_AUTHORIZED = NO**
+**CURRENT_ACTIVE_PM2_DUMP_MODE = 0664** (observed — do **not** chmod active dump)
 
 #### Backend topology
 
@@ -2295,6 +2318,8 @@ Recommended correction phase: **SEPARATE ENVIRONMENT NORMALIZATION GATE** or exp
 **CANONICAL_BACKEND_INSTANCE_COUNT = 2**
 **BACKEND_TOPOLOGY_DRIFT = YES**
 **BACKEND_TOPOLOGY_RECONCILIATION_FOR_B1 = DEFER**
+**BACKEND_TOPOLOGY_TARGET_THIS_GATE = UNCHANGED**
+**BACKEND_4 = PRESERVED EXISTING DRIFT / NOT APPROVED CANONICAL**
 **BACKEND_PM2_RECONCILIATION_DESIGN = DEFER**
 **ENGINE_AND_BACKEND_TOPOLOGY_SHOULD_BE_BUNDLED = NO**
 
@@ -2395,16 +2420,62 @@ REDIS_MUTATION = 0 · MANUAL_TRANSFER = 0 · RULE02_MUTATION_DURING_EXECUTION = 
 
 Index remediation did **NOT** deploy B1. Current production WORKTREE for both targets remains pre-B1.
 
+#### PM2 persistence + rollback execution design closeout (COMPLETE / READ-ONLY)
+
+Design evidence packet (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_PM2_PERSISTENCE_ROLLBACK_DESIGN_20260822T090247Z.txt`
+SHA256 = `ade4b2614adb092bdad210687b9eaed69342cf25af06b0dd880a0b7103ba9acd`
+bytes = 16833
+/tmp-home equality = YES
+
+**PM2_PERSISTENCE_ROLLBACK_DESIGN = COMPLETE**
+**PM2_PERSISTENCE_ROLLBACK_DESIGN_MUTATION = 0**
+**T2 NOT EXECUTED**
+
+Fresh design-time topology (20260822T090247Z — **NOT future mutation authority**):
+engine pm_id **5** pid **1972309** · pm_id **9** pid **1972587** — both `fork_mode`, `engineWorkerLeader.js`
+retained design candidate = pm_id **5** · extra = pm_id **9** · **SELECTION_CONFIDENCE = HIGH**
+**ENGINE_UNIQUE_RUNTIME_RESPONSIBILITY_PROVEN = NO**
+
+Dump design evidence:
+**CURRENT_DUMP_SHA256 = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f`**
+**CURRENT_DUMP_MODE = 0664** · owner **ubuntu:ubuntu** · bytes **208942**
+**DUMP_ENGINE_COUNT = 2** · **DUMP_BACKEND_COUNT = 4**
+**LIVE_DUMP_ENGINE_MATCH = YES** · **LIVE_DUMP_BACKEND_MATCH = YES**
+**STARTUP_MODEL = RESURRECT**
+
+PM2 6.0.13 source semantics (design — do **not** convert PARTIAL to PASS):
+**PM2_DUMP_NORMALIZATION_MODEL = PARTIAL**
+**PM2_SAVE_ATOMICITY = PARTIAL**
+**PM2_SAVE_MANAGED_BACKUP = YES** (`dump.pm2.bak` before write)
+**PM2_SAVE_INCLUDES_STOPPED_APPS = YES**
+**PM2_SAVE_REMOVES_DELETED_APPS = YES**
+**RESURRECT_STOPPED_ENTRY_BEHAVIOR = PROVEN / STOPPED REMAINS STOPPED**
+**RESURRECT_ENV_SOURCE = DUMP**
+
+Secure backup design (NOT executed):
+pattern = `/home/ubuntu/TITANGOLD_PM2_SECURE_BACKUPS/TITANGOLD_PM2_ENGINE_RECON_<UTC>/dump.pm2.pre`
+dir mode **0700** · file mode **0600** · **RAW_BACKUP_CONTAINS_SECRETS = YES**
+**SECURE_DUMP_BACKUP_EXECUTION_PROVEN = NO**
+
+Future execution target (if correction succeeds):
+LIVE = **1 ONLINE** engine owner · PERSISTENCE = retained online + extra **stopped** (temporary rollback state)
+backend = **4 unchanged** · NODE_ENV **development preserved** · retained PID/start/restart unchanged
+
+**THIS GOVERNANCE CLOSEOUT DID NOT EXECUTE PM2 OR DUMP MUTATION.**
+
 #### PM2 future ordering
 
 1. ~~Owner disposition of staged legacy index~~ **COMPLETE (Owner A)**
 2. ~~Index-only remediation execution + governance closeout~~ **COMPLETE (PASS 20260822T084328Z)**
-3. PM2 persistence + engine topology rollback execution design (**NEXT**)
-4. engine topology reconciliation 2 → 1 authorization/execution (NOT YET AUTHORIZED)
-5. production B1 exact-file deployment (NOT YET AUTHORIZED)
-6. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-7. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
-8. runtime validation / Human QA / governance reclose
+3. ~~PM2 persistence + engine topology rollback execution design~~ **COMPLETE (20260822T090247Z)**
+4. PM2 persistence / rollback design correction (**NEXT**)
+5. engine topology reconciliation 2 → 1 authorization/execution (NOT YET AUTHORIZED)
+6. production B1 exact-file deployment (NOT YET AUTHORIZED)
+7. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+8. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+9. runtime validation / Human QA / governance reclose
+10. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
 #### E6A preservation
 
@@ -2508,59 +2579,66 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-PM2 PERSISTENCE + ENGINE TOPOLOGY ROLLBACK EXECUTION DESIGN**
+PM2 PERSISTENCE / ROLLBACK DESIGN CORRECTION**
 
-Classification: **TIER 3 READ-ONLY PM2 EXECUTION DESIGN / NO MUTATION**
+Classification: **TIER 3 READ-ONLY DESIGN / NO MUTATION**
 
-This gate may authorize ONLY:
-- fresh read-only PM2 live/dump/startup discovery
-- sanitized PM2 persistence analysis
-- exact dump backup/rollback DESIGN
-- exact delete/save transaction DESIGN
-- retained-engine no-restart proof
-- semantic non-engine dump preservation model
-- rollback trigger and rollback sequence design
-- health/provenance postcondition design
-- evidence packet creation outside app repo
+This gate may:
+- read PM2 source/help
+- fresh read filesystem/stat/ownership (read-only)
+- read sanitized dump metadata
+- refine normalization model (PARTIAL → PROVEN or narrower proven invariant set)
+- design backup restore transaction
+- close save-failure / corrupt-dump / semantic-validation failure matrix (S1–S4)
+- close reboot/crash safety windows
+- create evidence packet outside app repo
 
-This gate MUST NOT authorize:
-pm2 delete · pm2 stop · pm2 save · pm2 start · pm2 restart · pm2 reload · pm2 resurrect
-dump file write/copy · systemd mutation · source/index/worktree mutation · deployment
-DB/Redis mutation · manual transfer · 052
+This gate MUST NOT:
+pm2 stop · pm2 delete · pm2 save · pm2 start · pm2 restart · pm2 reload · pm2 resurrect
+write/copy active or backup dump · create secure backup directory (unless separately authorized)
+systemd mutation · source/index/worktree mutation · deployment · DB/Redis mutation · manual transfer · 052
 
-### Required design questions (minimum)
+### Correction scope (must close)
 
-A. Can engine 2→1 be performed by exact deletion of one duplicate worker without restarting retained worker?
-B. How is `/home/ubuntu/.pm2/dump.pm2` backed up securely before future mutation without exposing secrets?
-C. After exact engine deletion, how will `pm2 save` be validated so ONLY engine count 2→1 changes while backend remains 4?
-D. How will NODE_ENV=development be prevented from being silently normalized/approved merely because it remains in saved dump?
-E. How will non-engine PM2 app identity/env semantics be compared before/after without dumping secrets?
-F. If delete succeeds but `pm2 save` or post-save validation fails, what exact rollback is deterministic without restarting unrelated apps?
-G. Is live restoration of the removed engine necessary for rollback, or is persistence metadata restoration sufficient?
-H. Can rollback complete without loading different worktree bytes or changing effective NODE_ENV?
-I. What is the exact next mutation gate if and only if this design becomes deterministic?
+A. Normalization model PARTIAL → PROVEN or sufficient narrower semantic model
+B. Secure backup path filesystem/ownership feasibility (read-only evidence)
+C. Exact backup restore primitive and permission model
+D. S1–S4 save failure matrix with persistence + live rollback sequences
+E. Deterministic persistence restore from secure byte-identical backup
+F. Combine persistence restore with `pm2 start <stopped-extra-id>` when live rollback required
+G. Retained worker untouched throughout rollback
+H. Non-engine live processes untouched
+I. Exact transaction commit point
 
-### Possible follow-up (NOT pre-authorized)
+Do **not** repeat broad PM2 discovery in correction.
 
-If design becomes deterministic, possible next gate:
+### Possible gate after correction (NOT pre-authorized)
+
+Only if ALL proven:
+**PM2_DUMP_NORMALIZATION_MODEL = PROVEN** (or sufficient narrower model)
+**SECURE_DUMP_BACKUP_DETERMINISTIC = YES**
+**PERSISTENCE_RESTORE_DETERMINISTIC = YES**
+**STOP_SAVE_FULL_ROLLBACK_DETERMINISTIC = YES**
+**ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = YES**
+**ENGINE_PM2_RECONCILIATION_EXECUTION_READY = YES**
+
+Then possible next gate:
 **ENGINE PM2 TOPOLOGY RECONCILIATION EXECUTION AUTHORIZATION**
-Classification: **TIER 3 PM2 TOPOLOGY MUTATION / ENGINE 2→1 ONLY / NO SOURCE DEPLOYMENT**
+Classification: **TIER 3 PM2 TOPOLOGY MUTATION / ENGINE ONLINE OWNER 2→1 / TEMPORARY STOPPED ROLLBACK ENTRY / NO SOURCE DEPLOYMENT**
 
-If design remains non-deterministic:
-next gate remains **PM2 PERSISTENCE / ROLLBACK DESIGN CORRECTION** · No mutation.
+Otherwise: remain in read-only correction.
 
+### Design closeout state (current)
+
+**PM2_PERSISTENCE_ROLLBACK_DESIGN = COMPLETE**
+**SELECTED_PM2_RECONCILIATION_TRANSACTION = T2 STOP + SAVE**
 **ENGINE_PM2_RECONCILIATION_EXECUTION_READY = NO**
 **ENGINE_TOPOLOGY_ROLLBACK_DETERMINISTIC = NO**
-**SECURE_PM2_DUMP_ROLLBACK_ARTIFACT_REQUIRED = YES**
-**PM2_SAVE_REQUIRED_TO_PERSIST_RECONCILIATION = YES**
-**PM2_SAVE_WOULD_PERSIST_OTHER_DRIFT = YES**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+**PM2 MUTATION AUTHORIZED = NO**
+**PM2 SAVE AUTHORIZED = NO**
 
-Engine selection design snapshot (**HISTORICAL DESIGN SNAPSHOT / NOT CURRENT MUTATION AUTHORITY**):
-retained candidate = pm_id **5** · removal candidate = pm_id **9**
-preferred primitive = exact extra process delete · retained restart required = **NO**
-unique runtime responsibility proven = **NO**
-
-**THIS GOVERNANCE CLOSEOUT DID NOT EXECUTE INDEX OR PM2 MUTATION.**
+**THIS GOVERNANCE CLOSEOUT DID NOT EXECUTE PM2 OR DUMP MUTATION.**
 
 ### Closed / still forbidden (unchanged)
 
