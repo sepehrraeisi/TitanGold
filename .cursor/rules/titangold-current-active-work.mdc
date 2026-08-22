@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; Candidate B B1 source MERGED+CI PASS; production preflight next; no production deploy
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; Candidate B B1 source MERGED; production preflight COMPLETE; PM2+dirty-target design/RCA next; no mutation authorized
 alwaysApply: true
 ---
 
@@ -10,13 +10,15 @@ Current outcome:
 C2 READY_TO_APPLY /
 E6A DEPLOYED + HEALTHY /
 TARGETED EFFECT STILL INCONCLUSIVE /
-TELEGRAM ALWAYS-ON CONTRACT DECIDED /
-LIVENESS DEFECT PROVEN /
-CANDIDATE B B1 SOURCE IMPLEMENTED + CI PASS + MERGED /
-REDIS OBSERVABILITY-ONLY /
-PRODUCTION NOT DEPLOYED /
-CANONICAL SINGLE ENGINE WORKER REQUIRED BEFORE PROD ACTIVATION /
-PRODUCTION + PM2 READ-ONLY PREFLIGHT NEXT**
+CANDIDATE B B1 SOURCE MERGED /
+PRODUCTION READ-ONLY PREFLIGHT COMPLETE /
+B1 NOT DEPLOYED /
+ENGINE TOPOLOGY DRIFT 2→1 REQUIRED /
+BACKEND TOPOLOGY DRIFT 4→2 OBSERVED /
+ENGINE NODE_ENV DRIFT OBSERVED /
+B1 ENGINE/SCHEDULER DIRTY TARGET BLOCKER ACTIVE /
+PM2 + DIRTY-TARGET DESIGN/RCA NEXT /
+NO MUTATION AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -1992,6 +1994,15 @@ Implementation evidence packets (immutable):
   `/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_SOURCE_REVIEW_CORRECTION2_20260821T205634Z.txt`
   SHA256 = `5591ed9d588d753b05fe3142ce855113c915147b81320f6ce5afc0ba7febb9fe`
 
+Production read-only preflight evidence packet (immutable / CURRENT PREFLIGHT AUTHORITY):
+
+`/home/ubuntu/TITANGOLD_C2_TELEGRAM_B1_PROD_PM2_READONLY_PREFLIGHT_20260822T072417Z.txt`
+SHA256 = `ef5d8700e07b49d4b71abb4f30c3bdcd22ab5c87e0a89e7e00b97a195c182687`
+bytes = 15855
+/tmp-home equality = YES
+**PRODUCTION_READONLY_PREFLIGHT = PASS**
+(PASS = read-only discovery completed; **NOT** deployment/mutation authorization.)
+
 GitHub PR-head CI (verified):
 
 - Backend Tests run id = `32526071249` · run number = `151` · conclusion = SUCCESS
@@ -2048,45 +2059,203 @@ DB / PM2 / topology (source implementation):
 
 new DB table/index/migration = **NO** · PM2 config change = **NO** · new PM2 process = **NO**
 **CANONICAL_INTENDED_ENGINE_OWNER_COUNT = 1**
-Latest production RCA evidence observed engine worker count = **2 (HISTORICAL / MUST BE FRESHLY REDISCOVERED)**
-**TWO_WORKER_PRODUCTION_ACTIVATION = BLOCKED**
-**PM2_TOPOLOGY_RECONCILIATION_REQUIRED = YES / MANDATORY BEFORE CANDIDATE_B PRODUCTION ACTIVATION**
-**PM2_TOPOLOGY_RECONCILIATION_EXECUTED = NO**
+**CANONICAL_BACKEND_INSTANCE_COUNT = 2**
 
-Production state (explicit):
+### Production read-only preflight findings (20260822T072417Z)
+
+Observed runtime/preflight facts (**NOT GitHub canonical source authority**):
+
+**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+**PROD_BRANCH = `main`**
+**PROD_TREE_DIRTY_COUNT = 491**
 
 **CANDIDATE_B_PRODUCTION_DEPLOYED = NO**
 **CANDIDATE_B_PRODUCTION_ACTIVATED = NO**
 **CANDIDATE_B_RUNTIME_VALIDATED = NO**
+**THREE_B1_TARGETS_ALREADY_DEPLOYED = NO**
+
+Current production remains pre-B1 for:
+`backend/workers/engineWorkerLeader.js` · `backend/engine/scheduler.js` ·
+`backend/services/pipelineSchedulerRuntime.js`
+
+#### Target provenance findings
+
+**engineWorkerLeader.js**
+git status = **MM** · tracked = **YES**
+index/pre-B1 blob = `314db7639d468f325a9ace0ae8996a5f6fb02dab`
+working-tree SHA256 = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
+deployment compatibility = **BLOCKED_TARGET_DIRTY**
+
+**scheduler.js**
+git status = **MM** · tracked = **YES**
+index/pre-B1 blob = `be54a94cf0004fc20c1f32870fa795cfa9660fac`
+working-tree SHA256 = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
+deployment compatibility = **BLOCKED_TARGET_DIRTY**
+
+**pipelineSchedulerRuntime.js**
+status = **CLEAN**
+blob = `877556b14fa6628dca31d97c9c771fa076af38f0`
+SHA256 = `9930ca2d6b6220a6def99e540aa66aaa1e4776feaee1b3ab66eece6a6ec8c1f5`
+deployment compatibility = **PASS_TARGET_CLEAN_KNOWN_PREIMAGE**
+
+#### Dirty target safety classification
+
+**B1_DIRTY_TARGET_PROVENANCE_BLOCKER = ACTIVE**
+**B1_DIRTY_TARGET_RCA_COMPLETE = NO**
+**DIRTY_TARGET_BYTES_SAFE_TO_OVERWRITE = NOT PROVEN**
+
+Do **not** characterize `MM` files as disposable dirt.
+Do **not** clean/reset/stash/overwrite them.
+Before future deployment authorization, exact staged and unstaged modifications must be
+understood read-only.
+
+#### E6A preservation
+
+**telegramPipeline.js** status = **M** (intentional E6A exception)
+production SHA256 = `5f7d3e88874c82274eda0abccbc75ee0dfafddac5cc4005b668af3ca9f97bb2a`
+**EXPECTED E6A SHA MATCH = YES**
+E6A target remains intact. Do **not** conflate approved E6A dirt with unexpected B1 target dirt.
+
+#### Engine topology (fresh preflight)
+
+**CURRENT_ENGINE_NAME_MATCH_COUNT = 2**
+**CURRENT_ENGINE_COMPOUND_IDENTITY_COUNT = 2**
+**CURRENT_ENGINE_OWNER_COUNT = 2**
+**CANONICAL_ENGINE_OWNER_COUNT = 1**
+**ENGINE_TOPOLOGY_DRIFT = YES**
+**PM2_TOPOLOGY_RECONCILIATION_NEEDED_NOW = YES**
+**DUPLICATE_ENGINE_CLASSIFICATION = IDENTICAL_RUNTIME_OWNERS**
+
+Current observed engine PM2 entries (**CURRENT PREFLIGHT EVIDENCE ONLY / NOT FUTURE MUTATION AUTHORITY**):
+pm_id **5** / pid **1972309** · pm_id **9** / pid **1972587**
+
+#### Backend topology (fresh preflight)
+
+**CURRENT_BACKEND_INSTANCE_COUNT = 4**
+**CANONICAL_BACKEND_INSTANCE_COUNT = 2**
+**BACKEND_TOPOLOGY_DRIFT = YES**
+
+Current observed backend PM2 IDs: **1, 2, 3, 4**
+(**CURRENT PREFLIGHT EVIDENCE ONLY / NOT FUTURE MUTATION AUTHORITY**)
+
+#### Engine NODE_ENV drift
+
+Observed engine runtime safe-env: **NODE_ENV = development**
+Canonical ecosystem config declares: **NODE_ENV = production**
+**ENGINE_ENVIRONMENT_DRIFT = YES**
+
+Material finding. Do **not** silently normalize.
+Future topology design must determine PM2 process origin, effective env source, whether env
+came from stale PM2 metadata, whether restart would change NODE_ENV, and impact on runtime
+behavior. No mutation now.
+
+#### Health / Redis (fresh preflight)
+
+backend 5002 health = **PASS / HTTP 200**
+collector 5003 health = **PASS / HTTP 200**
+Redis = **AVAILABLE**
+transfer heartbeat = **ABSENT**
+Telegram lifecycle key = **ABSENT**
+Pre-B1 absence = **EXPECTED / NOT B1 FAILURE**
+**REDIS_EXECUTION_AUTHORITY = NO**
+
+#### Runtime refresh dependencies (proven)
+
+**ENGINE_REFRESH_REQUIRED_AFTER_B1_DEPLOY = YES**
+**BACKEND_RELOAD_REQUIRED_AFTER_B1_DEPLOY = YES**
+
+Proven backend dependency:
+`server.js` → `routes/v1/index.js` → `routes/data-sources.js` → `pipelineCapacity.js` →
+`pipelineSchedulerRuntime.js`
+
+collector restart = **NO**
+processor restart = **NO**
+No refresh authorized now.
+
+#### Why direct PM2 mutation is NOT next
+
+Although **PM2_TOPOLOGY_RECONCILIATION_NEEDED_NOW = YES**, do **not** immediately authorize
+PM2 mutation from this closeout. Tier 3 mutation still requires exact execution design.
+
+Material unresolved facts:
+
+1. two engine owners versus canonical one
+2. four backend workers versus canonical two
+3. engine NODE_ENV development versus canonical production
+4. engineWorkerLeader.js unexpected MM dirt
+5. scheduler.js unexpected MM dirt
+6. PM2 persistence/startup origin not yet proven
+7. retained engine identity not yet selected by deterministic rule
+8. backend reduction method and mixed-runtime effects not yet designed
+9. pm2 save/dump persistence semantics not yet resolved
+10. a restart could load currently dirty/unapproved source bytes
+
+**PM2_TOPOLOGY_RECONCILIATION_EXECUTION_READY = NO**
+**PM2_TOPOLOGY_RECONCILIATION_DESIGN_REQUIRED = YES**
+**DIRTY_TARGET_PROVENANCE_RCA_REQUIRED = YES**
+
+#### Next design/RCA must discover (read-only)
+
+PM2: fresh pm2 jlist · `~/.pm2/dump.pm2` read-only · systemd/startup unit read-only ·
+PM2_HOME · daemon PID/start time · how duplicate engine entries were created if inferable ·
+whether pm2 resurrect would restore 2 engines / 4 backend · whether pm2 save required after
+reconciliation · exact effects of pm2 delete / scale on persistence
+
+Engine: exact current pm_uptime / creation time · current PID identities · safe logs to
+choose retained engine · whether either worker has unique runtime responsibility ·
+advisory-lock implications · whether deletion of one worker can occur without restarting
+retained worker · expected health observation after removal
+
+Backend: exact cluster process ownership · whether canonical 2-instance reduction can be done
+without full reload · whether pm2 scale semantics would kill only excess workers · port 5002
+continuity implications · rollback/re-expansion strategy
+
+Dirty targets (engineWorkerLeader.js + scheduler.js): HEAD blob · index blob · worktree
+blob/hash · staged diff · unstaged diff · timestamps · ownership/mode · origin attribution
+if inferable · whether either contains earlier approved runtime changes · whether runtime
+processes currently loaded those bytes · whether future replacement can safely preserve/discard
+them. **NO EDIT.**
+
+#### PM2 design must separate two operations
+
+Do **not** automatically bundle engine and backend changes.
+
+**ENGINE_TOPOLOGY_RECONCILIATION = REQUIRED**
+**BACKEND_TOPOLOGY_RECONCILIATION = REQUIRED / OPTIONAL / DEFER**
+
+Backend drift is real; future design must prove whether reducing 4→2 is necessary before
+Candidate B deployment or may be safely separated. Do **not** decide only because ecosystem
+config says 2.
+
+**PM2_TOPOLOGY_RECONCILIATION_REQUIRED = YES / MANDATORY BEFORE CANDIDATE_B PRODUCTION ACTIVATION**
+**PM2_TOPOLOGY_RECONCILIATION_EXECUTED = NO**
+**TWO_WORKER_PRODUCTION_ACTIVATION = BLOCKED**
+
 **PRODUCTION_SOURCE_UPDATE_FOR_CANDIDATE_B = NOT EXECUTED**
 **ENGINE_REFRESH_FOR_CANDIDATE_B = NOT EXECUTED**
 **BACKEND_RELOAD_FOR_CANDIDATE_B = NOT EXECUTED**
 **SERVER_DEPLOYMENT_REQUIRED_LATER = YES**
 
-Known production path: `/home/ubuntu/webapp/TitanGold`
-Historical PROD_APP_HEAD: `a100f7ba21131c351b561fb66554e90990da8725` (**NOT execution authority**)
-Future deploy targets (NOT authorized now):
-`backend/workers/engineWorkerLeader.js` · `backend/engine/scheduler.js` ·
-`backend/services/pipelineSchedulerRuntime.js`
+**COMMIT_LEVEL_DEPLOY_SAFE = NO**
+No git pull/reset/clean/stash deployment. Future deployment remains exact-file/minimal-surface
+only, after dirty target provenance is explicitly closed.
 
-Runtime consumer expectation (future; **MUST BE FRESHLY VERIFIED IN PRODUCTION PREFLIGHT**):
+### Authorization state after production preflight closeout
 
-titan-engine-worker refresh = **YES**
-titan-backend reload = **LIKELY YES** (pipelineSchedulerRuntime changed)
-telegram-collector restart = **NO unless unexpected dependency discovered**
-telegram-processor restart = **NO unless unexpected dependency discovered**
-
-### Authorization state after source closeout
-
+**CANDIDATE_B_SOURCE_IMPLEMENTATION = COMPLETE / MERGED**
+**CANDIDATE_B_SOURCE_CI = PASS**
 **CANDIDATE_B_SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED / COMPLETE**
 **SOURCE IMPLEMENTATION = COMPLETE / MERGED**
 **NEW SOURCE MUTATION AUTHORIZED = NO**
 **CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
-**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
+**CANDIDATE_B_PRODUCTION_ACTIVATION = BLOCKED**
 **PRODUCTION DEPLOYMENT AUTHORIZED = NO**
+**PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
+**SOURCE WRITE AUTHORIZED = NO**
 **DB MUTATION AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
 **NEW PASSIVE OBSERVATION AUTHORIZED = NO**
@@ -2097,65 +2266,73 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 **GITHUB SOURCE MERGE ALONE DOES NOT COMPLETE THIS REMEDIATION.**
 
+**ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
+**E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
+**PROCESSOR_CONFOUNDING = PRESENT / OPEN**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2 052 = NOT EXECUTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+
 ## Next Owner gate
 
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-PRODUCTION DEPLOYMENT + PM2 TOPOLOGY READ-ONLY PREFLIGHT**
+PM2 TOPOLOGY RECONCILIATION + DIRTY TARGET PROVENANCE DESIGN/RCA**
 
-Classification: **TIER 3 PRODUCTION READ-ONLY PREFLIGHT / NO MUTATION**
+Classification: **TIER 3 READ-ONLY RUNTIME DESIGN/RCA / NO MUTATION**
 
 This gate may authorize ONLY:
 
-production provenance reads,
-PM2 metadata reads,
-source hash/stat reads,
-health reads,
-dependency verification,
+production read-only PM2 persistence discovery,
+source staged/unstaged diff reads,
+safe process/log reads,
+systemd/PM2 startup reads,
+topology reconciliation design,
+retained-owner selection design,
+backend topology decision,
+rollback design,
 deployment compatibility analysis,
-topology classification,
-rollback design inputs.
+evidence packet creation.
 
 It MUST NOT authorize:
 
 PM2 mutation,
-process stop/delete/restart/reload,
-production source write,
-deployment,
+pm2 save,
+pm2 delete,
+pm2 scale,
+restart,
+reload,
+source replacement,
+git cleanup,
 Redis mutation,
 DB mutation,
 manual transfer,
 052.
 
-Future read-only preflight must classify:
+### Future mutation gates (NOT pre-authorized)
 
-**CURRENT_ENGINE_OWNER_COUNT = <fresh value>**
-**CANONICAL_ENGINE_OWNER_COUNT = 1**
-**PM2_TOPOLOGY_RECONCILIATION_NEEDED_NOW = YES / NO**
+After design/RCA, possible next gates are:
 
-If fresh owner count != 1: Candidate B production activation remains BLOCKED; next gate after
-that preflight = PM2 TOPOLOGY RECONCILIATION AUTHORIZATION.
-If fresh owner count == 1: topology reconciliation may be unnecessary; next gate may instead
-be Candidate B production deployment authorization.
-Do not decide from historical IDs alone.
+**A.** PM2 TOPOLOGY RECONCILIATION EXECUTION AUTHORIZATION — only if topology execution
+design becomes deterministic and safe.
 
-**CANDIDATE_B_SOURCE_IMPLEMENTATION = COMPLETE / MERGED**
-**CANDIDATE_B_SOURCE_CI = PASS**
+**B.** DIRTY TARGET OWNER DECISION / PROVENANCE REMEDIATION — if dirty source provenance
+remains unresolved.
+
+**C.** PRODUCTION DEPLOYMENT AUTHORIZATION — only after topology + target provenance
+blockers are closed.
+
 **CANDIDATE_B_PRODUCTION_DEPLOYMENT_AUTHORIZED = NO**
 **PM2_TOPOLOGY_RECONCILIATION_AUTHORIZED = NO**
 **PRODUCTION DEPLOYMENT AUTHORIZED = NO**
 **ENGINE RESTART AUTHORIZED = NO**
 **BACKEND RELOAD AUTHORIZED = NO**
 **PM2 MUTATION AUTHORIZED = NO**
+**SOURCE WRITE AUTHORIZED = NO**
 **DB MUTATION AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
 **052 AUTHORIZED = NO**
 **RESOURCE STABILIZATION COMPLETE = NO**
-**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
-**C2_052_EXECUTION_AUTHORIZED = NO**
-**C2 052 = NOT EXECUTED**
-**ENGINE_LOOKUP_EFFECT_REPEAT = INCONCLUSIVE_NO_SCHEDULER_TRANSFER_ACTIVITY**
-**E6A_RUNTIME_RECLOSE_EVIDENCE = NOT_ELIGIBLE**
-**PROCESSOR_CONFOUNDING = PRESENT / OPEN**
 
