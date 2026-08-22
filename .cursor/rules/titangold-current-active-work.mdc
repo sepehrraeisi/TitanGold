@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; T2 one-shot CONSUMED FAILED/ROLLED_BACK; topology NOT reconciled; incident RCA next; no retry; no source deploy
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; E6A deployed+healthy; B1 source MERGED; T2 FAILED/ROLLED_BACK; security redesign COMPLETE; rotation REQUIRED but EXECUTION_READY=NO; next=rotation DESIGN CORRECTION; no T2 retry
 alwaysApply: true
 ---
 
@@ -17,8 +17,19 @@ T2 RESULT FAILED_S2 / ROLLED_BACK /
 ENGINE TOPOLOGY 2→1 NOT EXECUTED /
 ROLLBACK PRE-EQUIVALENT SAFE STATE /
 SECURE BACKUP RETAINED /
-ORCHESTRATOR MISCLASSIFICATION RCA OPEN /
-SECRET-EXPOSURE REVIEW REQUIRED /
+T2 INCIDENT REDESIGN + SECURITY REVIEW COMPLETE /
+ORCHESTRATOR + CONTROL-PATH RCA CLOSED (DESIGN) /
+SAVE-SUCCESS BRANCH FIX PROVEN /
+TERMINAL MUTATION GUARD PROVEN /
+SECRET-SAFE EVIDENCE MODEL PROVEN /
+SYNTHETIC STATE-MACHINE TESTS PASS /
+CREDENTIAL ROTATION REQUIRED (S2) /
+ROTATION EXECUTION READY = NO /
+ROTATION DESIGN CORRECTION REQUIRED /
+PM2 DUPLICATE CONSUMER TOPOLOGY MATERIAL /
+PERSISTED SECRET STALENESS RISK = YES /
+ROTATION EXECUTION NOT AUTHORIZED /
+T2 REAUTHORIZATION NOT ELIGIBLE /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
 RETRY UNAUTHORIZED /
@@ -2603,12 +2614,15 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 4. ~~PM2 persistence / rollback design correction~~ **COMPLETE (20260822T092134Z)**
 5. ~~engine topology reconciliation 2 → 1 EXECUTION AUTHORIZATION~~ **COMPLETE (Owner explicit T2 authorization)**
 6. ~~engine topology reconciliation 2 → 1 EXECUTION~~ **CONSUMED / FAILED_S2 / ROLLED_BACK (20260822T160149Z)** — topology **NOT** reconciled
-7. T2 failed-exec RCA + re-authorization design (**NEXT** — read-only; includes security exposure / credential rotation review)
-8. production B1 exact-file deployment (NOT YET AUTHORIZED)
-9. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-10. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
-11. runtime validation / Human QA / governance reclose
-12. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+7. ~~T2 failed-exec orchestrator + control-path RCA + security exposure / credential rotation decision + re-authorization design~~ **COMPLETE (20260822T162135Z)** — read-only; no retry
+8. ~~rotation readiness + PM2 consumer topology material correction~~ **COMPLETE (20260822T163514Z)** — EXECUTION_READY remains **NO**
+9. credential rotation design correction (**NEXT** — Tier 3 read-only security design; NOT execution; NOT T2 retry)
+10. credential rotation execution authorization (NOT YET — blocked until design correction proves readiness)
+11. production B1 exact-file deployment (NOT YET AUTHORIZED)
+12. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+13. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+14. runtime validation / Human QA / governance reclose
+15. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
 #### E6A preservation
 
@@ -2713,27 +2727,19 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-ENGINE PM2 T2 FAILED EXECUTION
-ORCHESTRATOR + CONTROL-PATH RCA
-SECURITY EXPOSURE / CREDENTIAL ROTATION DECISION
-RE-AUTHORIZATION DESIGN**
+SECURITY CREDENTIAL ROTATION DESIGN CORRECTION**
 
-Classification: **TIER 3 READ-ONLY INCIDENT CORRECTION / SECURITY REVIEW / NO MUTATION**
+Classification: **TIER 3 READ-ONLY SECURITY DESIGN / NO MUTATION**
 
-This gate MUST cover:
-- save-success conditional fix
-- terminal-state mutation guard
-- secret-safe evidence writer
-- dry-run/state-machine tests
-- exposure scope review
-- credential-class inventory without values
-- credential rotation decision
-- explicit new Owner reauthorization requirement
-
+This gate must resolve remaining rotation-design blockers (overlap/revoke semantics, provider groups, PM2 persisted/stopped secret consumers, duplicate topology refresh scope) before any execution authorization.
+It MUST NOT rotate credentials.
 It MUST NOT retry T2.
+It MUST NOT deploy B1.
+It MUST NOT perform PM2 topology reconciliation.
 
-Security review is **required** (not optional) before any reauthorization.
-Credential rotation review is **required** and **not complete**.
+Prior gates:
+- T2 incident redesign + security review = **COMPLETE (20260822T162135Z)**
+- Rotation readiness + PM2 consumer topology material correction = **COMPLETE (20260822T163514Z)** — **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
@@ -2808,6 +2814,7 @@ Do **not** report “only one pm2 save occurred in the whole incident window.”
 #### Orchestrator RCA
 
 **ORCHESTRATOR_RCA_CLASS = CONDITIONAL_BRANCH_BUG / STATE_MACHINE_BUG**
+**ORCHESTRATOR_RCA_STATUS = CLOSED (DESIGN FIX PROVEN — NOT YET IMPLEMENTED IN RUNTIME)**
 
 **BAD_CONDITION (sanitized pseudocode):**
 ```
@@ -2833,12 +2840,14 @@ Do **not** claim T2 would have passed.
 #### Control-path RCA (second failure)
 
 **CONTROL_RCA_CLASS = POST-STOP FAIL-CLOSED ENFORCEMENT FAILURE / UNAUTHORIZED DIAGNOSTIC MUTATION**
+**CONTROL_RCA_STATUS = CLOSED (DESIGN FIX PROVEN — NOT YET IMPLEMENTED IN RUNTIME)**
 
 Root control failure:
 after one-shot authorization was consumed and execution entered FAILED/ROLLED_BACK/STOP state,
 diagnostic investigation still permitted a state-mutating `pm2 save`.
 
 **POST_FAILURE_MUTATION_GUARD_REQUIRED = YES**
+**POST_FAILURE_MUTATION_GUARD_DESIGN = PROVEN (20260822T162135Z)**
 
 Required future invariant:
 AFTER T2 FAILURE OR ROLLBACK: ALL PM2/DUMP MUTATION MUST BE HARD-DISABLED
@@ -2885,10 +2894,12 @@ Deletion terminology: **LOGICAL FILE REMOVAL / REPLACEMENT** (not cryptographic 
 
 **SECRET_EXPOSURE_CLASS = S2**
 **SECRET_BEARING_ARTIFACT_IN_GIT = NO**
-**CREDENTIAL_ROTATION_REVIEW_REQUIRED = YES**
-Do **not** rotate credentials in this closeout.
-Do **not** delete agent-tools artifacts in this closeout.
-No reauthorization may occur before **SECURITY EXPOSURE REVIEW / CREDENTIAL ROTATION DECISION**.
+**CREDENTIAL_ROTATION_REVIEW_REQUIRED = YES** (historical flag at failed-exec closeout)
+**SECURITY_EXPOSURE_REVIEW = COMPLETE (20260822T162135Z)**
+**CREDENTIAL_ROTATION_DECISION = ROTATION_REQUIRED**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+Do **not** delete agent-tools artifacts without separate authorization.
+T2 reauthorization remains blocked until rotations executed+closed OR proven unnecessary + new Owner auth.
 
 #### Authorization state after failed T2 closeout
 
@@ -2917,6 +2928,210 @@ only one pm2 save in the incident window; security review optional; resource sta
 
 **THIS GOVERNANCE RULE02 EDIT/COMMIT ITSELF PERFORMED NO PRODUCTION MUTATION,
 BUT THE INCIDENT WINDOW INCLUDED AN UNAUTHORIZED DIAGNOSTIC SAVE.**
+
+### T2 incident security redesign closeout (20260822T162135Z)
+
+Sanitized redesign evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_T2_INCIDENT_SECURITY_REDESIGN_20260822T162135Z.txt`
+SHA256 = `d6c9c2fd0f10b2a09a04d88692ae9f0bbd2b1417953122fd92b164ddaff1193e`
+bytes = 4941
+tmp/home equality = **YES**
+
+Restricted credential-class key map (0600 · key names only · no values · OUTSIDE REPO):
+`/home/ubuntu/TITANGOLD_C2_T2_CREDENTIAL_CLASS_MAP_20260822T162135Z.json`
+mode **0600** · owner **ubuntu:ubuntu**
+Do **not** commit · do **not** quote key names in GitHub-facing Rule02.
+
+#### Fresh production rollback reverification (read-only)
+
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+Active dump SHA = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f` · **PRE exact match**
+Secure backup SHA = **same PRE exact match** · backup mode **0600** · dir **0700**
+Engine online = **2** · backend online = **4** · health **5002/5003 = 200**
+**ROLLBACK_LIVE_STATE = PRE_EQUIVALENT**
+Historical note at redesign closeout: duplicate PM2 processor/collector entries were observed but initially treated only as non-material rollback drift. **SUPERSEDED** by readiness correction (20260822T163514Z): duplicate topology is **material to credential rotation consumers**.
+
+#### Security exposure review
+
+**SECURITY_EXPOSURE_REVIEW = COMPLETE**
+**SECRET_EXPOSURE_CLASS = S2** (unchanged — do not downgrade)
+**GIT_EXPOSURE = NO**
+**UNSANITIZED_AGENT_TOOLS_CAPTURE = YES** (local; not deleted)
+**UNSANITIZED_ARTIFACT_CLEANUP_DECISION = RECOMMENDED_AFTER_ROTATION**
+**UNSANITIZED_ARTIFACT_CLEANUP_AUTHORIZED = NO**
+Artifact deletion is **not** a substitute for rotation.
+
+#### Credential rotation decision — HISTORICAL SNAPSHOT (20260822T162135Z; SUPERSEDED for readiness)
+
+Parsed active PM2 dump in memory only; no values emitted.
+
+| CLASS | COUNT | ROTATION_REQUIRED | NON_SECRET | UNKNOWN |
+|---|---:|---:|---:|---:|
+| DATABASE_CREDENTIAL | 4 | 3 | 0 | 1 |
+| ENCRYPTION_OR_SIGNING_SECRET | 1 | 1 | 0 | 0 |
+| JWT_OR_SESSION_SECRET | 1 | 1 | 0 | 0 |
+| TELEGRAM_BOT_TOKEN | 1 | 1 | 0 | 0 |
+| PROVIDER_API_CREDENTIAL | 5 | 5 | 0 | 0 |
+| OTHER_SECRET | 8 | 7 | 0 | 1 |
+| NON_SECRET_FALSE_POSITIVE | 119 | 0 | 119 | 0 |
+
+**CREDENTIAL_ROTATION_DECISION = ROTATION_REQUIRED** (still valid)
+**HISTORICAL_CREDENTIAL_ROTATION_EXECUTION_READY_CLAIM = YES** — **REVOKED / NOT PROVEN** (UNKNOWNs present; duplicate topology not modeled)
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+
+See **Rotation readiness + PM2 consumer topology material correction (20260822T163514Z)** for current authoritative readiness.
+
+#### Save-success state machine fix (design)
+
+Corrected flow:
+`PRECHECK → BACKUP_VERIFIED → EXTRA_STOPPED → LIVE_VALIDATED → SAVE_EXECUTED → DUMP_PARSE_VALIDATED → SEMANTIC_VALIDATION → HEALTH_NONINTERFERENCE_VALIDATION → COMMITTED`
+
+Invariant: after successful save with parseable dump, **changed POST SHA is EXPECTED/PERMITTED** — must **not** alone trigger S2.
+
+**SAVE_SUCCESS_BRANCH_FIX = PROVEN**
+**STATE_MACHINE_SYNTHETIC_TESTS = PASS** (T1–T10 · /tmp only · fake secrets · no PM2 commands)
+
+#### Terminal-state mutation guard (design)
+
+Terminal states: **COMMITTED · FAILED · ROLLED_BACK · STOPPED_FOR_OWNER_REVIEW**
+Once terminal: **MUTATION_CAPABILITY = CLOSED** (no pm2 stop/save/start · dump restore · backup mutation).
+Rollback mutations permitted **only** while **STATE = ROLLBACK_IN_PROGRESS** for already-authorized rollback sequence.
+
+**TERMINAL_STATE_MUTATION_GUARD_DESIGN = PROVEN**
+**TERMINAL_GUARD_SYNTHETIC_TESTS = PASS** (T7 post-ROLLED_BACK reject · T8 post-FAILED diagnostic save reject)
+
+#### Capability model (design)
+
+Each mutation requires **both**:
+1. governance authorization
+2. transaction state allows operation
+
+Separate interfaces:
+**READ_ONLY_DIAGNOSTIC** · **AUTHORIZED_TRANSACTION_MUTATION** · **AUTHORIZED_ROLLBACK_MUTATION**
+After terminal state: only **READ_ONLY_DIAGNOSTIC** remains.
+
+#### Secret-safe evidence writer (design)
+
+Whitelist-only output: counts · statuses · PIDs · approved non-secret env keys · file SHA256 · semantic hashes · credential-class counts · boolean classifications.
+Forbidden: raw dump JSON · raw env objects · secret values in stdout/evidence.
+
+**SECRET_SAFE_EVIDENCE_MODEL = PROVEN**
+**SECRET_WRITER_SYNTHETIC_TESTS = PASS** (T9)
+
+#### T2 re-authorization design (NOT authorized)
+
+**T2_REAUTHORIZATION_DESIGN = COMPLETE**
+**T2_REAUTHORIZATION_ELIGIBLE_NOW = NO**
+**T2_RETRY_AUTHORIZED = NO**
+
+Eligible only after ALL:
+security review complete · rotation decision resolved · required rotations executed+closed OR proven unnecessary · terminal guard tests PASS · save-success tests PASS · secret-safe writer tests PASS · fresh rollback reverified · **new explicit Owner production authorization**.
+
+#### This task mutation ledger
+
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **SECRET_MUTATION = 0**
+**SOURCE/INDEX/WORKTREE_MUTATION = 0** (governance Rule02 only)
+**DB_MUTATION = 0** · **REDIS_MUTATION = 0**
+
+### Rotation readiness + PM2 consumer topology material correction (20260822T163514Z)
+
+Sanitized correction evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_T2_ROTATION_READINESS_CORRECTION_20260822T163514Z.txt`
+SHA256 = `3093e3bcd372640e9f7e4d8b55d17706a120a541022e35205dea86c3df75a0b2`
+bytes = 9338
+tmp/home equality = **YES**
+
+Restricted credential-class key map (0600 · key names only · no values · OUTSIDE REPO):
+`/home/ubuntu/TITANGOLD_C2_T2_CREDENTIAL_CLASS_MAP_CORRECTION_20260822T163514Z.json`
+mode **0600** · owner **ubuntu:ubuntu**
+Do **not** commit · do **not** quote key names in GitHub-facing Rule02.
+
+#### Why prior EXECUTION_READY=YES was revoked
+
+1. Prior inventory contained **DATABASE_CREDENTIAL UNKNOWN=1** and **OTHER_SECRET UNKNOWN=1** — hard bar requires zero unidentified active credentials.
+2. Fresh PM2 topology shows duplicate processor/collector(/monitor) consumers material to rotation refresh and persisted-env secret staleness — not ignorable for rotation design.
+
+#### Unknown resolution (no key names)
+
+- Prior DATABASE UNKNOWN → resolved: empty discrete password-like env = **DEAD_UNUSED**; connection-string-like env = **ROTATION_REQUIRED**
+- Prior OTHER_SECRET UNKNOWN → fail-closed reclass: TOKEN-named nonempty live/persisted env = **ROTATION_REQUIRED** (short value does **not** prove non-secret)
+- **ACTIVE_UNKNOWN_CREDENTIAL_COUNT = 0** after correction
+- Classification complete ≠ execution ready
+
+#### Corrected class summary (authoritative now)
+
+| CLASS | COUNT | ROT_REQ | ACTIVE_SECRET | DEAD_UNUSED | UNKNOWN |
+|---|---:|---:|---:|---:|---:|
+| DATABASE_CREDENTIAL | 2 | 1 | 1 | 1 | 0 |
+| REDIS_AUTH_CREDENTIAL | 2 | 2 | 2 | 0 | 0 |
+| ENCRYPTION_OR_SIGNING_SECRET | 1 | 1 | 1 | 0 | 0 |
+| JWT_OR_SESSION_SECRET | 1 | 1 | 1 | 0 | 0 |
+| TELEGRAM_BOT_TOKEN | 1 | 1 | 1 | 0 | 0 |
+| PROVIDER_API_CREDENTIAL | 5 | 5 | 5 | 0 | 0 |
+| OTHER_SECRET | 9 | 8 | 8 | 1 | 0 |
+
+**CREDENTIAL_CLASSES_AFFECTED = 7** (Redis auth separated from encryption/signing)
+**ACTIVE_CREDENTIALS_REQUIRING_ROTATION = 19**
+**CREDENTIAL_ROTATION_DECISION = ROTATION_REQUIRED**
+**CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+
+#### Fresh PM2 consumer topology (sanitized)
+
+**ENGINE_ONLINE_COUNT = 2** · **ENGINE_STOPPED_COUNT = 0**
+**BACKEND_ONLINE_COUNT = 4** · **BACKEND_STOPPED_COUNT = 0**
+**PROCESSOR_ONLINE_COUNT = 1** · **PROCESSOR_STOPPED_COUNT = 1**
+**COLLECTOR_ONLINE_COUNT = 1** · **COLLECTOR_STOPPED_COUNT = 1**
+**COLLECTOR_MONITOR_ONLINE_COUNT = 2** · **COLLECTOR_MONITOR_STOPPED_COUNT = 0**
+**OTHER_AFFECTED** includes titan-error-watch online×2 · titan-frontend stopped×2
+
+Processor: pm_id **11** online / pm_id **15** stopped — same script/cwd; dump contains **2** entries (dump status online → resurrect risk).
+Collector: pm_id **16** online / pm_id **12** stopped — dump multiples.
+Collector-monitor: pm_id **8** and **14** both **online**.
+
+**PM2_DUPLICATE_TOPOLOGY_MATERIAL_TO_ROTATION = YES**
+**PERSISTED_SECRET_STALENESS_RISK = YES**
+Stopped PM2 entries still carry secret-bearing persisted env semantics. Rotation must cover **LIVE + PERSISTED** consumers. Blind `pm2 save` forbidden; persistence update requires separate guarded authorization and must **not** reopen T2 topology transaction.
+
+#### Per-class execution readiness (all NO until semantics proven)
+
+| CLASS | READY | PRIMARY BLOCKER |
+|---|---|---|
+| DATABASE_CREDENTIAL | **NO** | old/new overlap + pool/refresh semantics unproven |
+| REDIS_AUTH_CREDENTIAL | **NO** | dual-auth/ACL overlap unproven for this deployment |
+| ENCRYPTION_OR_SIGNING_SECRET | **NO** | decrypt/impact of single-key rotate unproven |
+| JWT_OR_SESSION_SECRET | **NO** | old/new verify overlap unproven; **SESSION_INVALIDATION_EXPECTED = YES** |
+| TELEGRAM_BOT_TOKEN | **NO** | BotFather revoke/overlap requires Owner; not invoked |
+| PROVIDER_API_CREDENTIAL | **NO** | create-before-revoke unproven per group (MEXC / EXTERNAL_AI / OTHER) |
+| OTHER_SECRET | classified | includes TEST_QA secrets in production PM2 env — removal/rotation plan still required |
+
+#### Dependency model (design only)
+
+Prefer per-credential: `ISSUE_NEW → INSTALL_LOCAL → REFRESH_MINIMAL → VALIDATE → UPDATE_PM2_PERSISTENCE_GUARDED → REVOKE_OLD → REVALIDATE`
+Do **not** assume fixed DB→Redis→JWT order without proven shared-outage dependency.
+Rollback classification must be known before any class is EXECUTION_READY; currently several classes remain **UNKNOWN** on overlap → overall ready **NO**.
+
+#### Exact blockers keeping EXECUTION_READY=NO
+
+- DB_OLD_NEW_OVERLAP_SEMANTICS_UNPROVEN
+- REDIS_DUAL_AUTH_OR_OVERLAP_UNPROVEN
+- ENCRYPTION_KEY_DECRYPT_IMPACT_UNPROVEN
+- JWT_OLD_NEW_VERIFY_OVERLAP_UNPROVEN
+- TELEGRAM_BOTFATHER_ROTATION_SEMANTICS_REQUIRE_OWNER
+- PROVIDER_CREATE_BEFORE_REVOKE_UNPROVEN_PER_GROUP
+- PM2_PERSISTED_STOPPED_ENTRIES_CARRY_SECRET_ENV
+- PM2_SAVE_AFTER_ROTATION_REQUIRES_SEPARATE_GUARDED_AUTH
+- DUPLICATE_PROCESSOR_COLLECTOR_MONITOR_TOPOLOGY_MATERIAL
+- TEST_QA_SECRETS_IN_PRODUCTION_PM2_ENV_REQUIRE_REMOVAL_OR_ROTATION_PLAN
+
+#### Authorization preserved
+
+**T2_REAUTHORIZATION_ELIGIBLE_NOW = NO** · **T2_RETRY_AUTHORIZED = NO**
+**PM2_MUTATION_AUTHORIZED = NO** · **CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**PRODUCTION_DEPLOYMENT_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_CORRECTION_AUTHORIZED = NO** · **C2 052 = NOT EXECUTED**
+
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **SECRET_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0**
 
 ### Closed / still forbidden
 
