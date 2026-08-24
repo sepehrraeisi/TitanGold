@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2 RETRY RE-ARM DESIGN COMPLETE; shared T2+collector save preferred; orchestrator source fix required; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — T2 ORCHESTRATOR FINAL AUDIT PASS; technically reauthorizable; Owner one-shot still required; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -55,13 +55,35 @@ PM2_SAVE_PERFORMED = NO /
 REBOOT_RESURRECT_REGRESSION_RISK = OPEN /
 T2_RETRY_REARM_DESIGN = COMPLETE /
 T2_REARM_DESIGN_COMPLETE = YES /
-T2_ORCHESTRATOR_CURRENTLY_SAFE = NO /
-T2_ORCHESTRATOR_FIX_REQUIRED = YES /
-T2_SOURCE_IMPLEMENTATION_REQUIRED = YES /
-T2_TECHNICALLY_REAUTHORIZABLE_NOW = NO /
+T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE /
+T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE /
+T2_ORCHESTRATOR_FINAL_AUDIT = PASS /
+SIDE_EFFECT_LEDGER = PASS /
+ROLLBACK_PRE_EQUIVALENT_PROOF = PASS /
+COLLECTOR_DB_EXACT_PERSIST_MATCH = PASS /
+STABLE_PM2_CONFIG_ALLOWLIST = PASS /
+EXPLICIT_EXECUTION_GATES = PASS /
+DURABLE_JOURNAL_FSYNC = PASS /
+PM2_DUMP_PERMISSION_PRESERVATION = PASS /
+ENGINE_FULL_SEMANTIC_EQUIVALENCE_GATE = PASS /
+ROLLBACK_FULL_LIVE_PRE_EQUIVALENT = PASS /
+LOW_LEVEL_PARSE_SECRET_SAFETY = PASS /
+T2_ORCHESTRATOR_CURRENTLY_SAFE = YES /
+T2_ORCHESTRATOR_FIX_REQUIRED = NO /
+T2_SOURCE_IMPLEMENTATION_REQUIRED = NO /
+T2_ORCHESTRATOR_TESTS = PASS /
+TERMINAL_MUTATION_GUARD = PASS /
+SAVE_SUCCESS_CHANGED_SHA_CASE = PASS /
+SECRET_SAFE_EVIDENCE = PASS /
+DURABLE_JOURNAL = PASS /
+ROLLBACK_GUARD = PASS /
+COMPLETE_ENV_ALLOWLIST = PASS /
+LIVE_ADAPTER_GATED = PASS /
+COLLECTOR_PERSISTENCE_EXPECTED_EFFECT_SUPPORTED = YES /
 T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES /
 COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES /
-NEXT_GATE = T2_RETRY_ORCHESTRATOR_SOURCE_FIX /
+T2_TECHNICALLY_REAUTHORIZABLE_NOW = YES /
+NEXT_GATE = T2_RETRY_ONE_SHOT_OWNER_AUTHORIZATION /
 T2_RETRY_AUTHORIZED = NO /
 PRODUCTION_MUTATION_CAPABILITY = CLOSED /
 NO NEW PRODUCTION MUTATION AUTHORIZED /
@@ -2778,15 +2800,69 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 **PRIMARY ROADMAP = Telegram completion → Artemis → Agents**
 
-**NEXT_GATE = T2_RETRY_ORCHESTRATOR_SOURCE_FIX**
-(design-proven corrected state machine exists only as `/tmp` synthetic proof; durable orchestrator tooling is **NOT** in the TitanGold production repo and must not be reused from the failed T2 agent script.)
+**NEXT_GATE = T2_RETRY_ONE_SHOT_OWNER_AUTHORIZATION**
 
-After durable orchestrator source + tests land (no production execution in that gate):
-future Owner one-shot may authorize **combined** T2 engine 2→1 **and** telegram-collector DB-B live-env persistence via **one** guarded `pm2 save`.
+Durable repo-owned T2 orchestrator source + unit tests are **COMPLETE**.
+Owner must still issue an explicit one-shot production envelope before any
+`pm2 stop/save/start` or dump restore. This closeout does **NOT** authorize T2.
 
 Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
 
-### T2 retry re-arm design closeout (COMPLETE / READ-ONLY / 20260824T153309Z)
+### T2 retry orchestrator source-fix closeout (COMPLETE / SOURCE+TESTS ONLY)
+
+**T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE**
+**T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE**
+**T2_ORCHESTRATOR_FINAL_AUDIT = PASS**
+**SIDE_EFFECT_LEDGER = PASS**
+**ROLLBACK_PRE_EQUIVALENT_PROOF = PASS**
+**COLLECTOR_DB_EXACT_PERSIST_MATCH = PASS**
+**STABLE_PM2_CONFIG_ALLOWLIST = PASS**
+**EXPLICIT_EXECUTION_GATES = PASS**
+**DURABLE_JOURNAL_FSYNC = PASS**
+**PM2_DUMP_PERMISSION_PRESERVATION = PASS**
+**ENGINE_FULL_SEMANTIC_EQUIVALENCE_GATE = PASS**
+**ROLLBACK_FULL_LIVE_PRE_EQUIVALENT = PASS**
+**LOW_LEVEL_PARSE_SECRET_SAFETY = PASS**
+**T2_ORCHESTRATOR_CURRENTLY_SAFE = YES**
+**T2_ORCHESTRATOR_TESTS = PASS** (T1–T67 + final merge-blocking matrix; suite green with pm2DeployGuard)
+**TERMINAL_MUTATION_GUARD = PASS**
+**SAVE_SUCCESS_CHANGED_SHA_CASE = PASS**
+**SECRET_SAFE_EVIDENCE = PASS**
+**DURABLE_JOURNAL = PASS**
+**ROLLBACK_GUARD = PASS**
+**COMPLETE_ENV_ALLOWLIST = PASS**
+**LIVE_ADAPTER_GATED = PASS**
+**COLLECTOR_PERSISTENCE_EXPECTED_EFFECT_SUPPORTED = YES**
+**T2_TECHNICALLY_REAUTHORIZABLE_NOW = YES**
+**T2_RETRY_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**THIS CLOSEOUT DID NOT EXECUTE T2 / DID NOT MUTATE PM2**
+
+Durable tooling paths:
+- `backend/scripts/t2-retry-orchestrator/` (`constants.mjs` · `semantics.mjs` · `commandBoundary.mjs` · `evidence.mjs` · `journal.mjs` · `sideEffectLedger.mjs` · `liveBoundary.mjs` · `orchestrator.mjs` · `cli.mjs` · `index.mjs` · `README.md`)
+- `backend/__tests__/unit/t2RetryOrchestrator.test.js`
+
+Final audit contracts (mandatory):
+- durable exclusive journal with temp→fsync→rename→fsync-dir; crash-after-consume / duplicate RUN_ID fail-closed
+- side-effect ledger drives rollback (no blind inverse); stale-before-stop = zero PM2 rollback mutation → FAILED
+- rollback only via nonterminal → `ROLLBACK_RUNNING` → PRE_EQUIVALENT proof → `ROLLED_BACK` else `FAIL_FORWARD_COMPLETE`
+- collector DB_* exact live→persist equality (evidence YES/NO only)
+- stable PM2 launch/config allowlist (script/cwd/args/exec_mode/…)
+- repo-owned `liveBoundary.mjs` only under complete explicit gates including `--expected-tool-version` + `--confirm-run-transaction`
+- auth consume persisted before backup filesystem writes
+
+**TOOL_VERSION = 1.3.0**
+
+**T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES**
+**COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES**
+
+This source-fix / final-audit / merge-blocking task mutation ledger:
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **SECRET_MUTATION = 0**
+
+### T2 retry re-arm design closeout (COMPLETE / READ-ONLY / 20260824T153309Z) — HISTORICAL / SUPERSEDED FOR ORCHESTRATOR SAFETY
 
 Sanitized design evidence (immutable / DO NOT MODIFY):
 `/home/ubuntu/TITANGOLD_T2_REARM_DESIGN_20260824T153309Z.txt`
@@ -2795,21 +2871,18 @@ bytes = 5460
 tmp/home equality = **YES**
 mode = **0600**
 
-Synthetic offline proof:
+Synthetic offline proof (historical design):
 `/tmp/TITANGOLD_T2_REARM_SYNTH_RESULTS.txt`
 **SYNTH_PASS = 13 / FAIL = 0 / TOTAL = 13**
-(includes mandatory T1–T12 + `hist_changed_sha_not_s2`)
 
 **T2_REARM_DESIGN_COMPLETE = YES**
-**T2_ORCHESTRATOR_CURRENTLY_SAFE = NO**
-**T2_ORCHESTRATOR_FIX_REQUIRED = YES**
-**T2_SOURCE_IMPLEMENTATION_REQUIRED = YES**
-**T2_TECHNICALLY_REAUTHORIZABLE_NOW = NO**
-**T2_RETRY_AUTHORIZED = NO**
-**THIS CLOSEOUT DID NOT AUTHORIZE T2 EXECUTION**
+Historical at re-arm closeout (now superseded by source-fix):
+~~T2_ORCHESTRATOR_CURRENTLY_SAFE = NO~~ → **YES (source-fix)**
+~~T2_TECHNICALLY_REAUTHORIZABLE_NOW = NO~~ → **YES (source-fix)**
+**T2_RETRY_AUTHORIZED = NO** (unchanged)
 
 Fresh read-only baseline (design snapshot — **NOT** mutation authority):
-- canonical GitHub main = `08f30c5eca44fac5f4cf7a4d3f22a6be8a43e421`
+- canonical GitHub main at re-arm = `08f30c5eca44fac5f4cf7a4d3f22a6be8a43e421`
 - PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`
 - active dump SHA256 = `6cbf24ca4293451c17d39b14a91bc3dcc52a6aa693c18af7f910b6df0c25b81f` (≠ historical T2 PRE)
 - historical T2 PRE backup retained = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f` · **DO NOT overwrite/delete**
@@ -2830,14 +2903,14 @@ Future Owner envelope **MUST** explicitly authorize **both** effects so collecto
 Allowlist expected durable diffs: engine extra online→stopped · collector DB_* keys appear · dump SHA change.
 Forbidden diffs: NODE_ENV change · backend topology · processor change · monitor change unless unavoidable.
 
-Corrected state-machine invariants (design + synthetic PASS):
+Corrected state-machine invariants (design + synthetic PASS; now also durable-source PASS):
 - auth consumed immediately before first production mutation
 - `pm2 save` exit=0 + parseable dump + changed SHA = **SUCCESS path** (NOT S2)
 - after COMPLETED/FAILED/ROLLED_BACK/FAIL_FORWARD_COMPLETE: mutation capability permanently **CLOSED**
 - no diagnostic `pm2 save` after terminal · no replay · stale pm_id blocked · unexpected allowlist diff blocked
 - secret-safe evidence only (no raw env/dump secrets)
 
-Fresh future backup contract (not created in this task):
+Fresh future backup contract (not created in re-arm or source-fix tasks):
 `/home/ubuntu/TITANGOLD_PM2_SECURE_BACKUPS/TITANGOLD_PM2_ENGINE_RECON_<UTC>/dump.pm2.pre`
 dir **0700** · file **0600** · SHA256 + parse + exact-byte rollback · never overwrite historical T2 backup.
 
@@ -2848,11 +2921,6 @@ dir **0700** · file **0600** · SHA256 + parse + exact-byte rollback · never o
 **NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
 **PM2_MUTATION_AUTHORIZED = NO**
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
-
-Bounded next source-fix surface (no production execution):
-- durable T2 retry orchestrator tooling (preferred outside ephemeral agent scripts; may live as ops tooling under a future authorized source path)
-- synthetic/unit tests covering T1–T12 + changed-SHA-not-S2 + collector DB-B expected-diff allowlist
-- do **not** execute `pm2 stop/save/start` in the source-fix gate
 
 Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
 Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
