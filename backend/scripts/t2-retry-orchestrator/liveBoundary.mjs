@@ -2,6 +2,7 @@
  * Audited live PM2/system boundary for T2 orchestrator.
  * Must not be selected accidentally — CLI requires full execution gates.
  * Never logs secret stdout/stderr into evidence; returns exit codes only for mutations.
+ * Never propagates raw JSON/parser snippets into errors.
  */
 
 import crypto from 'crypto';
@@ -15,9 +16,15 @@ function sha256Buffer(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+function fixedError(code) {
+  const err = new Error(code);
+  err.code = code;
+  return err;
+}
+
 /**
  * @param {object} opts
- * @param {boolean} opts.gatesSatisfied - caller must prove all Owner execution gates
+ * @param {boolean} opts.gatesSatisfied
  * @param {(cmd: string, args: string[], options?: object) => {status:number|null, stdout:string, stderr:string}} [opts.spawnSyncImpl]
  * @param {string} [opts.dumpPath]
  * @param {string} [opts.collectorBaseUrl]
@@ -28,7 +35,9 @@ export function createLiveBoundary(opts = {}) {
   }
 
   const spawnImpl = opts.spawnSyncImpl || spawnSync;
-  const dumpPath = opts.dumpPath || path.join(process.env.PM2_HOME || path.join(process.env.HOME || '', '.pm2'), 'dump.pm2');
+  const dumpPath =
+    opts.dumpPath ||
+    path.join(process.env.PM2_HOME || path.join(process.env.HOME || '', '.pm2'), 'dump.pm2');
   const collectorBase = opts.collectorBaseUrl || 'http://127.0.0.1:5003';
 
   function runPm2(args) {
@@ -37,10 +46,8 @@ export function createLiveBoundary(opts = {}) {
       env: process.env,
       timeout: 120000,
     });
-    // Do not return raw stdout/stderr to callers that might log evidence.
     return {
       exitCode: typeof result.status === 'number' ? result.status : 1,
-      // intentionally omit stdout/stderr payloads
     };
   }
 
@@ -54,19 +61,45 @@ export function createLiveBoundary(opts = {}) {
     return Number.isFinite(code) ? code : 0;
   }
 
+  async function fsyncPath(target) {
+    const fh = await fsp.open(target, 'r');
+    try {
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  }
+
   return {
     async listLiveProcesses() {
       const result = spawnImpl('pm2', ['jlist'], { encoding: 'utf8', timeout: 60000 });
       if (result.status !== 0) {
-        throw new Error('PM2_JLIST_FAILED');
+        throw fixedError('PM2_JLIST_FAILED');
       }
-      return JSON.parse(result.stdout || '[]');
+      try {
+        return JSON.parse(result.stdout || '[]');
+      } catch {
+        throw fixedError('PM2_JLIST_PARSE_FAILED');
+      }
     },
 
     async readDump() {
-      const bytes = await fsp.readFile(dumpPath);
-      const parsed = JSON.parse(bytes.toString('utf8'));
-      return { bytes, parsed, sha256: sha256Buffer(bytes) };
+      let bytes;
+      let st;
+      try {
+        st = await fsp.stat(dumpPath);
+        bytes = await fsp.readFile(dumpPath);
+      } catch {
+        throw fixedError('PM2_DUMP_READ_FAILED');
+      }
+      const mode = st.mode & 0o777;
+      let parsed;
+      try {
+        parsed = JSON.parse(bytes.toString('utf8'));
+      } catch {
+        throw fixedError('PM2_DUMP_PARSE_FAILED');
+      }
+      return { bytes, parsed, sha256: sha256Buffer(bytes), mode };
     },
 
     async writeBackup(bytes, destPath) {
@@ -75,17 +108,31 @@ export function createLiveBoundary(opts = {}) {
       return { sha256: sha256Buffer(bytes), bytes: bytes.length, mode: 0o600 };
     },
 
-    async restoreDump(backupBytes) {
+    /**
+     * Atomic restore using EXACT PRE active-dump mode (never invent 0664).
+     * @param {Buffer} backupBytes
+     * @param {{ mode: number }} opts
+     */
+    async restoreDump(backupBytes, opts = {}) {
+      if (typeof opts.mode !== 'number' || !Number.isFinite(opts.mode)) {
+        throw fixedError('RESTORE_MODE_REQUIRED');
+      }
+      const mode = opts.mode & 0o777;
       const dir = path.dirname(dumpPath);
       const tmp = path.join(dir, `dump.pm2.t2restore.${process.pid}.${Date.now()}`);
-      await fsp.writeFile(tmp, backupBytes, { mode: 0o600 });
-      await fsp.rename(tmp, dumpPath);
-      // preserve commonly observed active dump mode; do not normalize secrets
+      const fh = await fsp.open(tmp, 'w', mode);
       try {
-        await fsp.chmod(dumpPath, 0o664);
-      } catch {
-        /* ignore */
+        await fh.writeFile(backupBytes);
+        await fh.sync();
+        await fh.chmod(mode);
+      } finally {
+        await fh.close();
       }
+      await fsp.rename(tmp, dumpPath);
+      await fsyncPath(dir);
+      // Re-assert exact PRE mode after rename (filesystem may apply umask on create)
+      await fsp.chmod(dumpPath, mode);
+      return { ok: true, mode };
     },
 
     async stopProcessByPmId(pmId) {

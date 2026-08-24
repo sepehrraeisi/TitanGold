@@ -3,7 +3,7 @@
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.2.0';
+export const TOOL_VERSION = '1.3.0';
 
 export const AUTHORIZED_TRANSACTION =
   'T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST';

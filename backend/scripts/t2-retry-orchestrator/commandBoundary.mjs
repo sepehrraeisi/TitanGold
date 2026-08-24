@@ -15,9 +15,9 @@
 /**
  * @typedef {{
  *   listLiveProcesses: () => Promise<Array<Record<string, unknown>>>,
- *   readDump: () => Promise<{ bytes: Buffer, parsed: Array<Record<string, unknown>>, sha256: string }>,
+ *   readDump: () => Promise<{ bytes: Buffer, parsed: Array<Record<string, unknown>>, sha256: string, mode?: number }>,
  *   writeBackup: (bytes: Buffer, destPath: string) => Promise<{ sha256: string, bytes: number, mode: number }>,
- *   restoreDump: (backupBytes: Buffer) => Promise<void>,
+ *   restoreDump: (backupBytes: Buffer, opts?: { mode: number }) => Promise<{ ok?: boolean, mode?: number } | void>,
  *   stopProcessByPmId: (pmId: number) => Promise<CommandResult>,
  *   startProcessByPmId: (pmId: number) => Promise<CommandResult>,
  *   pm2Save: () => Promise<CommandResult>,

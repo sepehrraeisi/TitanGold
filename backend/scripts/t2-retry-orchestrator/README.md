@@ -34,4 +34,6 @@ Rollback path: nonterminal → `ROLLBACK_RUNNING` → conditional guarded restor
 precheck → journal → consume auth (persisted) → backup → stop extra → singleton →
 guarded `pm2 save` → allowlist + DB exact match → health → COMPLETE
 
-Tool version: `TOOL_VERSION` in `constants.mjs` (currently **1.2.0**).
+Tool version: `TOOL_VERSION` in `constants.mjs` (currently **1.3.0**).
+
+Active dump restore preserves **exact PRE mode** (never forces `0664`). Engine retain/extra selection requires full stable-config + env equivalence. Rollback proves full live PRE_EQUIVALENCE for all PM2 groups.

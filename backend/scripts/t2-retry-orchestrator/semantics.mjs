@@ -506,19 +506,24 @@ export function selectEngineRetainExtra(fp) {
     };
   }
   const [a, b] = [...online].sort((x, y) => x.pm_id - y.pm_id);
-  const sameIdentity =
-    a.script === b.script &&
-    a.cwd === b.cwd &&
-    a.exec_mode === b.exec_mode &&
-    a.NODE_ENV === b.NODE_ENV;
-  if (!sameIdentity) {
-    return { ok: false, error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH' };
+
+  // Full semantic equivalence except volatile identity/runtime metadata (pm_id/pid/timestamps/restarts).
+  const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
+  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
+  if (configDiffs.length > 0 || envDiffs.length > 0) {
+    const kinds = [...configDiffs, ...envDiffs].map((d) => d.kind);
+    return {
+      ok: false,
+      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: kinds,
+    };
   }
+
   return {
     ok: true,
     retained: a,
     extra: b,
-    selection_rule: 'lowest_pm_id_among_identical_online_workers',
+    selection_rule: 'lowest_pm_id_among_fully_equivalent_online_workers',
     unique_responsibility_proven: false,
   };
 }
@@ -724,9 +729,26 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   extraPmId,
   expectedDumpSha,
   actualDumpSha,
+  expectedDumpMode,
+  actualDumpMode,
 }) {
   if (expectedDumpSha !== actualDumpSha) {
     return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
+  }
+
+  if (
+    expectedDumpMode != null &&
+    actualDumpMode != null &&
+    (expectedDumpMode & 0o777) !== (actualDumpMode & 0o777)
+  ) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_MODE_MISMATCH',
+      details: {
+        expected_mode: expectedDumpMode & 0o777,
+        actual_mode: actualDumpMode & 0o777,
+      },
+    };
   }
 
   if ((postLiveFp.engine_online_count || 0) !== 2) {
@@ -744,37 +766,41 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   if (postRetained.status !== 'online' || postExtra.status !== 'online') {
     return { ok: false, error: 'ROLLBACK_ENGINE_NOT_BOTH_ONLINE' };
   }
-  if (
-    postRetained.script !== preRetained.script ||
-    postRetained.cwd !== preRetained.cwd ||
-    postRetained.exec_mode !== preRetained.exec_mode ||
-    postRetained.NODE_ENV !== preRetained.NODE_ENV ||
-    postExtra.script !== preExtra.script ||
-    postExtra.cwd !== preExtra.cwd ||
-    postExtra.exec_mode !== preExtra.exec_mode ||
-    postExtra.NODE_ENV !== preExtra.NODE_ENV
-  ) {
-    return { ok: false, error: 'ROLLBACK_ENGINE_CONFIG_DRIFT' };
-  }
 
-  // Persisted dump must match PRE dump semantics (collector DB_* absent again).
-  const { classified } = diffFingerprints(preDumpFp, postDumpFp, { extraPmId });
-  const unexpected = classified.filter(
-    (c) =>
-      c.kind !== 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED' &&
-      c.kind !== 'COLLECTOR_DB_KEYS_APPEAR' &&
-      c.kind !== 'DUMP_SHA_CHANGED',
-  );
-  // After rollback, dump should equal PRE — no allowed forward diffs.
-  if (classified.length > 0 || unexpected.length > 0) {
-    // exact: any semantic diff vs PRE dump is fail
-    if (classified.length > 0) {
+  // Full engine config+env equivalence vs PRE (volatile pm_id/pid/timestamps already excluded).
+  for (const [preE, postE, label] of [
+    [preRetained, postRetained, 'retained'],
+    [preExtra, postExtra, 'extra'],
+  ]) {
+    const cfg = diffStableConfig(preE, postE, { scope: `rollback-engine:${label}` });
+    const env = diffProcessEnv(preE, postE, { scope: `rollback-engine:${label}` });
+    if (cfg.length > 0 || env.length > 0) {
       return {
         ok: false,
-        error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
-        details: { kinds: classified.map((c) => c.kind) },
+        error: 'ROLLBACK_ENGINE_CONFIG_DRIFT',
+        details: { kinds: [...cfg, ...env].map((d) => d.kind) },
       };
     }
+  }
+
+  // Persisted dump must match PRE dump semantics exactly (no forward allowlist diffs).
+  const dumpDiff = diffFingerprints(preDumpFp, postDumpFp, { extraPmId });
+  if (dumpDiff.classified.length > 0) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
+      details: { kinds: dumpDiff.classified.map((c) => c.kind) },
+    };
+  }
+
+  // CURRENT LIVE must be semantically PRE-equivalent for ALL process groups.
+  const liveDiff = diffFingerprints(preLiveFp, postLiveFp, { extraPmId });
+  if (liveDiff.classified.length > 0) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_LIVE_SEMANTIC_DRIFT',
+      details: { kinds: liveDiff.classified.map((c) => c.kind) },
+    };
   }
 
   const postColLive = (postLiveFp.collectors || [])[0];
@@ -797,7 +823,6 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_STILL_PERSISTED' };
   }
 
-  // Unrelated process groups must match PRE dump topology/config.
   if (
     postDumpFp.backend_count !== preDumpFp.backend_count ||
     postDumpFp.processor_count !== preDumpFp.processor_count ||
@@ -806,7 +831,13 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     return { ok: false, error: 'ROLLBACK_UNRELATED_TOPOLOGY_DRIFT' };
   }
 
-  return { ok: true, details: { PRE_EQUIVALENT: 'YES' } };
+  return {
+    ok: true,
+    details: {
+      PRE_EQUIVALENT: 'YES',
+      dump_mode: expectedDumpMode != null ? expectedDumpMode & 0o777 : null,
+    },
+  };
 }
 
 export function assertCollectorPersistencePreconditions(liveFp, dumpFp) {

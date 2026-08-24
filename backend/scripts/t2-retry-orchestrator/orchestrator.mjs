@@ -76,6 +76,7 @@ export class T2Orchestrator {
     }
 
     this.preDumpSha = null;
+    this.preDumpMode = null;
     this.postDumpSha = null;
     this.preDumpFp = null;
     this.preLiveFp = null;
@@ -312,6 +313,11 @@ export class T2Orchestrator {
     this.preLiveFp = this.liveFp;
     this.preDumpFp = semanticFingerprint(dumpPack.parsed);
     this.preDumpSha = dumpPack.sha256;
+    if (typeof dumpPack.mode !== 'number' || !Number.isFinite(dumpPack.mode)) {
+      return this._failClosed('PRE_DUMP_MODE_MISSING');
+    }
+    this.preDumpMode = dumpPack.mode & 0o777;
+    this._log('PRE_DUMP_MODE', `mode=${this.preDumpMode}`);
 
     const selection = selectEngineRetainExtra(this.liveFp);
     if (!selection.ok) {
@@ -691,10 +697,17 @@ export class T2Orchestrator {
           throw new T2OrchestratorError('BACKUP_BYTES_MISSING');
         }
         const restoreResult = await this.guardedCall('restoreDump', () =>
-          this.commands.restoreDump(this.backupBytes),
+          this.commands.restoreDump(this.backupBytes, { mode: this.preDumpMode }),
         );
         if (restoreResult && restoreResult.ok === false) {
           throw new T2OrchestratorError('RESTORE_DUMP_FAILED');
+        }
+        if (
+          restoreResult &&
+          typeof restoreResult.mode === 'number' &&
+          (restoreResult.mode & 0o777) !== (this.preDumpMode & 0o777)
+        ) {
+          throw new T2OrchestratorError('ROLLBACK_DUMP_MODE_MISMATCH');
         }
       }
 
@@ -767,6 +780,8 @@ export class T2Orchestrator {
         extraPmId: this.selection?.extra?.pm_id,
         expectedDumpSha: this.preDumpSha,
         actualDumpSha: dumpPack.sha256,
+        expectedDumpMode: this.preDumpMode,
+        actualDumpMode: typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null,
       },
     );
   }
