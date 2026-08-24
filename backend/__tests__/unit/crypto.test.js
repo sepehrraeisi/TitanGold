@@ -12,15 +12,18 @@ describe('Crypto Utility Tests', () => {
 
     // Set environment variable for testing
     const originalMasterKey = process.env.MASTER_KEY;
+    const originalPreviousMasterKey = process.env.MASTER_KEY_PREVIOUS;
 
     beforeAll(() => {
         // defined a 32-byte hex key for testing
         process.env.MASTER_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+        delete process.env.MASTER_KEY_PREVIOUS;
     });
 
     afterAll(() => {
         // Restore environment
         process.env.MASTER_KEY = originalMasterKey;
+        process.env.MASTER_KEY_PREVIOUS = originalPreviousMasterKey;
     });
 
     describe('encryptSecret', () => {
@@ -30,7 +33,7 @@ describe('Crypto Utility Tests', () => {
 
             expect(encrypted).toBeDefined();
             expect(encrypted).not.toBe(plain);
-            expect(encrypted).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/); // iv:content:tag
+            expect(encrypted).toMatch(/^mk2:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
         });
 
         test('should throw error for empty input', () => {
@@ -77,6 +80,14 @@ describe('Crypto Utility Tests', () => {
         test('should return true for valid encrypted format', () => {
             const encrypted = cryptoUtils.encryptSecret('something');
             expect(cryptoUtils.isEncrypted(encrypted)).toBe(true);
+        });
+
+        test('should return true for valid legacy encrypted format', () => {
+            const legacy = cryptoUtils.encryptSecret('legacy-check').replace(/^mk2:/, '');
+            process.env.MASTER_KEY_PREVIOUS = process.env.MASTER_KEY;
+            expect(cryptoUtils.isEncrypted(legacy)).toBe(true);
+            expect(cryptoUtils.decryptSecret(legacy)).toBe('legacy-check');
+            delete process.env.MASTER_KEY_PREVIOUS;
         });
 
         test('should return false for plain string', () => {
