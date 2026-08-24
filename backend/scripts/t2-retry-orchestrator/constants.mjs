@@ -1,0 +1,70 @@
+/**
+ * T2 retry orchestrator — durable constants (no production side effects).
+ */
+
+export const TOOL_NAME = 't2-retry-orchestrator';
+export const TOOL_VERSION = '1.0.0';
+
+export const AUTHORIZED_TRANSACTION =
+  'T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST';
+
+export const AUTHORIZED_EFFECTS = Object.freeze([
+  'ENGINE_2_TO_1',
+  'COLLECTOR_DB_B_PERSIST',
+]);
+
+export const ENGINE_NAME = 'titan-engine-worker';
+export const BACKEND_NAME = 'titan-backend';
+export const PROCESSOR_NAME = 'telegram-processor';
+export const COLLECTOR_NAME = 'telegram-collector';
+export const MONITOR_NAME = 'telegram-collector-monitor';
+
+export const EXPECTED_COLLECTOR_DB_USER = 'tg_rot_b_0824';
+
+export const COLLECTOR_DB_KEYS = Object.freeze([
+  'DB_HOST',
+  'DB_PORT',
+  'DB_NAME',
+  'DB_USER',
+  'DB_PASSWORD',
+]);
+
+export const State = Object.freeze({
+  AUTHORIZED_UNCONSUMED: 'AUTHORIZED_UNCONSUMED',
+  PRECHECK_RUNNING: 'PRECHECK_RUNNING',
+  PRECHECK_PASS: 'PRECHECK_PASS',
+  BACKUP_VERIFIED: 'BACKUP_VERIFIED',
+  MUTATION_RUNNING: 'MUTATION_RUNNING',
+  ENGINE_SINGLETON_VERIFIED: 'ENGINE_SINGLETON_VERIFIED',
+  SAVE_RUNNING: 'SAVE_RUNNING',
+  SAVE_SUCCESS: 'SAVE_SUCCESS',
+  POSTSAVE_VERIFIED: 'POSTSAVE_VERIFIED',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  ROLLED_BACK: 'ROLLED_BACK',
+  FAIL_FORWARD_COMPLETE: 'FAIL_FORWARD_COMPLETE',
+});
+
+export const TERMINAL_STATES = Object.freeze([
+  State.COMPLETED,
+  State.FAILED,
+  State.ROLLED_BACK,
+  State.FAIL_FORWARD_COMPLETE,
+]);
+
+export const ALLOWED_DIFF_KINDS = Object.freeze([
+  'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED',
+  'COLLECTOR_DB_KEYS_APPEAR',
+  'DUMP_SHA_CHANGED',
+]);
+
+export const FORBIDDEN_DIFF_KINDS = Object.freeze([
+  'NODE_ENV_CHANGE',
+  'BACKEND_TOPOLOGY_CHANGE',
+  'PROCESSOR_TOPOLOGY_CHANGE',
+  'MONITOR_TOPOLOGY_CHANGE',
+  'UNRELATED_ENV_CHANGE',
+  'TELEGRAM_TOKEN_ENV_RESTORED',
+  'PROVIDER_ENV_CHANGE',
+  'UNRELATED_PROCESS_CHANGE',
+]);
