@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; S2C COMPLETE; TELEGRAM COLLECTOR FUNCTIONAL RESTORE OWNER-APPROVED ONE-SHOT UNCONSUMED; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; S2C COMPLETE; TELEGRAM COLLECTOR FUNCTIONAL RESTORE CDBR-20260824T151304Z COMPLETE/CONSUMED; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -41,12 +41,16 @@ TELEGRAM_OLD_TOKEN_VALID = NO /
 TELEGRAM_NEW_TOKEN_VALID = YES /
 CANONICAL_DB_USES_NEW_TOKEN = YES /
 OLD_RUN_STAGING_REMOVED = YES /
-TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZED = YES /
-TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
-TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = NO /
-ROOT_CAUSE = COLLECTOR_DB_POOL_USES_POSTGRES_EMPTY_PASSWORD_AFTER_S2C_PG_HBA_SCRAM /
-PRODUCTION_MUTATION_CAPABILITY = OPEN_FOR_COLLECTOR_DB_B_ALIGN_ONLY /
-NO OTHER PRODUCTION MUTATION AUTHORIZED /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE = COMPLETE /
+CORRECTION_RUN_ID_COLLECTOR = CDBR-20260824T151304Z /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = YES /
+COLLECTOR_FUNCTIONAL_API = PASS /
+ACCOUNTS_ENDPOINT = 200 /
+COLLECTOR_CHANNELS_ENDPOINT = 200 /
+COLLECTOR_DB_USER = tg_rot_b_0824 /
+PRODUCTION_MUTATION_CAPABILITY = CLOSED /
+NO NEW PRODUCTION MUTATION AUTHORIZED /
 MEXC DB CREDENTIAL = PRESERVED /
 MASTER_KEY PRODUCTION DEPLOYED = YES /
 MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
@@ -2649,7 +2653,7 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / CONSUMED**
 14. ~~credential rotation P0–P11 execution~~ **COMPLETE (RUN_ID CR-20260824T114413Z)** — campaign executed; residual S2 containment was **INCOMPLETE** until S2C (historical)
 15. ~~FINAL S2 INCIDENT CORRECTION~~ **COMPLETE / CONSUMED (S2C-20260824T141928Z)** — old postgres TCP credential invalidated; Telegram canonical token rotated; CR staging deleted
-16. **TELEGRAM COLLECTOR FUNCTIONAL RESTORE** — **OWNER_APPROVED / ONE_SHOT / UNCONSUMED** · align collector DB runtime to `tg_rot_b_0824` · restart collector only
+16. ~~TELEGRAM COLLECTOR FUNCTIONAL RESTORE~~ **COMPLETE / CONSUMED (CDBR-20260824T151304Z)** — collector discrete DB env aligned to `tg_rot_b_0824`; collector restarted once; accounts/channels = 200
 17. production B1 exact-file deployment (**NOT AUTHORIZED**)
 18. engine topology 2→1 T2 retry (**NOT AUTHORIZED**)
 19. NODE_ENV normalization (**NOT AUTHORIZED**)
@@ -2758,33 +2762,44 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**TELEGRAM COLLECTOR FUNCTIONAL RESTORE —
-ALIGN COLLECTOR LIVE DB RUNTIME TO tg_rot_b_0824 /
-RESTART telegram-collector ONLY /
-VERIFY health + accounts + collector-channels**
+**C2 FOREGROUND IO /
+E6A TARGETED EFFECT STILL INCONCLUSIVE /
+B1 PRODUCTION DEPLOYMENT /
+ENGINE PM2 2→1 RECONCILIATION (T2 RETRY) /
+NODE_ENV NORMALIZATION /
+C2 052**
 
-Classification: **TIER 3 SECURITY / NARROW OWNER-APPROVED ONE-SHOT / UNCONSUMED / NO T2 / NO B1 / NO C2 052 / NO NODE_ENV**
+Classification: **TIER 3 / NO MUTATION AUTHORIZED BY THIS CLOSEOUT**
 
 Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
 Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
-Do **NOT** reuse either envelope.
+Telegram collector functional restore `CDBR-20260824T151304Z` is **CONSUMED / COMPLETE / CLOSED**.
+Do **NOT** reuse any of these envelopes.
 
-**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZED = YES**
-**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
-**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = NO**
-**ROOT_CAUSE = COLLECTOR_DB_POOL_USES_POSTGRES_EMPTY_PASSWORD_AFTER_S2C_PG_HBA_SCRAM**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE = COMPLETE**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**COLLECTOR_FUNCTIONAL_API = PASS**
+**ACCOUNTS_ENDPOINT = 200**
+**COLLECTOR_CHANNELS_ENDPOINT = 200**
+**COLLECTOR_DB_USER = tg_rot_b_0824**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
-Allowed mutation (exact):
-1. align telegram-collector live discrete DB env to product DB-B (`DB_USER=tg_rot_b_0824` + matching host/port/name/password)
-2. restart **only** the semantic `telegram-collector` process once (fresh identity; historical pm_id not authority)
-3. validation of health / accounts / collector-channels
+Sanitized restore evidence:
+`/home/ubuntu/TITANGOLD_COLLECTOR_DB_B_RESTORE_CDBR-20260824T151304Z.txt`
+SHA256 = `8c926e34a574d159eaa04c719487dfed3cb2932b99e2d944df77cc3e37c7f614`
+bytes = 1151
+tmp/home equality = **YES**
+mode = **0600**
+RUN_ID = `CDBR-20260824T151304Z`
 
-Explicitly **NOT AUTHORIZED**:
-T2 · B1 · C2/052 · NODE_ENV · backend restart · engine restart · processor restart · monitor restart · PM2 topology · `pm2 save` · pg_hba changes · PostgreSQL role/grant changes · Telegram token changes · AI/provider/MEXC · unrelated cleanup/deployment · source modification
+Mutation ledger:
+collector env align = 1 · collector restart = 1 · pm2 save = 0 · DB mutation = 0 · other restart = 0 · pg_hba = 0
 
-Authorization becomes **CONSUMED immediately before the first production mutation**.
-After terminal STOP/FAILED: NO further production mutation · NO diagnostic mutation · NO retry.
-A **new** Owner authorization is required after terminal state.
+After terminal STOP: NO further production mutation · NO diagnostic mutation · NO retry.
+**T2_RETRY_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
 
 **FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
 **FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
@@ -2802,11 +2817,6 @@ SHA256 = `b64d5a449d96057060bbe2e3b2bed18c94903a040ac15e19da43bbd7b164e102`
 bytes = 2906
 tmp/home equality = **YES**
 mode = **0600**
-
-**T2_RETRY_AUTHORIZED = NO**
-**B1_DEPLOY_AUTHORIZED = NO**
-**C2_052_EXECUTION_AUTHORIZED = NO**
-**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
 
 Sanitized execution evidence:
 `/home/ubuntu/TITANGOLD_CREDENTIAL_ROTATION_EXECUTION_CR-20260824T114413Z.txt`
@@ -3569,4 +3579,37 @@ Why this correction existed (historical residual at capture; now closed):
 Forbidden (unchanged): T2 · B1 · C2/052 · NODE_ENV · AI/provider redesign · MEXC · MASTER_KEY migration changes · PM2 topology reconciliation · unrelated cleanup/deployment · restore of purged `TELEGRAM_BOT_TOKEN` env copies · agent-tools deletion · T2 dump backup deletion.
 
 Envelope is **CONSUMED / CLOSED**.
+
+### Telegram collector functional restore closeout (CONSUMED / COMPLETE)
+
+Owner explicit authorization (verbatim material):
+align telegram-collector live DB runtime identity to DB-B `tg_rot_b_0824`;
+restart ONLY telegram-collector;
+verify health + accounts + collector-channels.
+
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE = COMPLETE**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = YES**
+**RUN_ID = CDBR-20260824T151304Z**
+**TERMINAL = YES**
+**ROOT_CAUSE = COLLECTOR_DB_POOL_USES_POSTGRES_EMPTY_PASSWORD_AFTER_S2C_PG_HBA_SCRAM**
+
+Execution:
+- DB-B credentials resolved from live `titan-backend` `DATABASE_URL` (user `tg_rot_b_0824`); values not logged.
+- Discrete `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` applied to telegram-collector live env via `pm2 restart <id> --update-env`.
+- Restarted only pm_id **16** (`telegram-collector`); restart 13555 → 13556; PID refreshed.
+- `pm2 save` = 0 · pg_hba unchanged · roles/grants unchanged · no other process restart.
+
+**BEFORE:** health=200 · accounts=500 · channels=500 (SASL empty password)
+**AFTER:** health=200 · accounts=200 · channels=200
+**COLLECTOR_FUNCTIONAL_API = PASS** · **DB_ACCESS = PASS** · **TELEGRAM_AUTH = PASS**
+**ENGINE_ONLINE = 2** · **BACKEND = 4** · **PROCESSOR = 1** · **COLLECTOR = 1** · **NODE_ENV = production UNCHANGED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+
+Sanitized evidence:
+`/home/ubuntu/TITANGOLD_COLLECTOR_DB_B_RESTORE_CDBR-20260824T151304Z.txt`
+SHA256 = `8c926e34a574d159eaa04c719487dfed3cb2932b99e2d944df77cc3e37c7f614`
+bytes = 1151 · mode **0600** · tmp/home equality = **YES**
+
+After terminal: NO further production mutation; NO diagnostic mutation; NO retry.
 
