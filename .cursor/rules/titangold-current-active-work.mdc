@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; CR-20260824T114413Z CONSUMED; FINAL S2 INCIDENT CORRECTION S2C-20260824T141928Z COMPLETE/CONSUMED; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; S2C COMPLETE; TELEGRAM COLLECTOR FUNCTIONAL RESTORE OWNER-APPROVED ONE-SHOT UNCONSUMED; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -41,8 +41,12 @@ TELEGRAM_OLD_TOKEN_VALID = NO /
 TELEGRAM_NEW_TOKEN_VALID = YES /
 CANONICAL_DB_USES_NEW_TOKEN = YES /
 OLD_RUN_STAGING_REMOVED = YES /
-PRODUCTION_MUTATION_CAPABILITY = CLOSED /
-NO NEW PRODUCTION MUTATION AUTHORIZED /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZED = YES /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
+TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = NO /
+ROOT_CAUSE = COLLECTOR_DB_POOL_USES_POSTGRES_EMPTY_PASSWORD_AFTER_S2C_PG_HBA_SCRAM /
+PRODUCTION_MUTATION_CAPABILITY = OPEN_FOR_COLLECTOR_DB_B_ALIGN_ONLY /
+NO OTHER PRODUCTION MUTATION AUTHORIZED /
 MEXC DB CREDENTIAL = PRESERVED /
 MASTER_KEY PRODUCTION DEPLOYED = YES /
 MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
@@ -2645,13 +2649,14 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / CONSUMED**
 14. ~~credential rotation P0–P11 execution~~ **COMPLETE (RUN_ID CR-20260824T114413Z)** — campaign executed; residual S2 containment was **INCOMPLETE** until S2C (historical)
 15. ~~FINAL S2 INCIDENT CORRECTION~~ **COMPLETE / CONSUMED (S2C-20260824T141928Z)** — old postgres TCP credential invalidated; Telegram canonical token rotated; CR staging deleted
-16. production B1 exact-file deployment (**NOT AUTHORIZED**)
-17. engine topology 2→1 T2 retry (**NOT AUTHORIZED**)
-18. NODE_ENV normalization (**NOT AUTHORIZED**)
-19. C2 052 (**NOT AUTHORIZED** / BLOCKED_RESOURCE_IO)
-20. runtime validation / Human QA / governance reclose (**HISTORICAL CAMPAIGN CLOSEOUT**)
-21. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
-22. AI Integrations / Connections provider redesign (**FUTURE SEPARATE WORKSTREAM**)
+16. **TELEGRAM COLLECTOR FUNCTIONAL RESTORE** — **OWNER_APPROVED / ONE_SHOT / UNCONSUMED** · align collector DB runtime to `tg_rot_b_0824` · restart collector only
+17. production B1 exact-file deployment (**NOT AUTHORIZED**)
+18. engine topology 2→1 T2 retry (**NOT AUTHORIZED**)
+19. NODE_ENV normalization (**NOT AUTHORIZED**)
+20. C2 052 (**NOT AUTHORIZED** / BLOCKED_RESOURCE_IO)
+21. runtime validation / Human QA / governance reclose (**HISTORICAL CAMPAIGN CLOSEOUT**)
+22. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+23. AI Integrations / Connections provider redesign (**FUTURE SEPARATE WORKSTREAM**)
 
 #### E6A preservation
 
@@ -2753,22 +2758,36 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**C2 FOREGROUND IO /
-E6A TARGETED EFFECT STILL INCONCLUSIVE /
-B1 PRODUCTION DEPLOYMENT /
-ENGINE PM2 2→1 RECONCILIATION (T2 RETRY) /
-NODE_ENV NORMALIZATION /
-C2 052**
+**TELEGRAM COLLECTOR FUNCTIONAL RESTORE —
+ALIGN COLLECTOR LIVE DB RUNTIME TO tg_rot_b_0824 /
+RESTART telegram-collector ONLY /
+VERIFY health + accounts + collector-channels**
 
-Classification: **TIER 3 / NO MUTATION AUTHORIZED BY THIS CLOSEOUT**
+Classification: **TIER 3 SECURITY / NARROW OWNER-APPROVED ONE-SHOT / UNCONSUMED / NO T2 / NO B1 / NO C2 052 / NO NODE_ENV**
 
 Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
 Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
 Do **NOT** reuse either envelope.
 
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZED = YES**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
+**TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_CONSUMED = NO**
+**ROOT_CAUSE = COLLECTOR_DB_POOL_USES_POSTGRES_EMPTY_PASSWORD_AFTER_S2C_PG_HBA_SCRAM**
+
+Allowed mutation (exact):
+1. align telegram-collector live discrete DB env to product DB-B (`DB_USER=tg_rot_b_0824` + matching host/port/name/password)
+2. restart **only** the semantic `telegram-collector` process once (fresh identity; historical pm_id not authority)
+3. validation of health / accounts / collector-channels
+
+Explicitly **NOT AUTHORIZED**:
+T2 · B1 · C2/052 · NODE_ENV · backend restart · engine restart · processor restart · monitor restart · PM2 topology · `pm2 save` · pg_hba changes · PostgreSQL role/grant changes · Telegram token changes · AI/provider/MEXC · unrelated cleanup/deployment · source modification
+
+Authorization becomes **CONSUMED immediately before the first production mutation**.
+After terminal STOP/FAILED: NO further production mutation · NO diagnostic mutation · NO retry.
+A **new** Owner authorization is required after terminal state.
+
 **FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
 **FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
-**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 **DB_INCIDENT_CONTAINMENT_COMPLETE = YES**
 **TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES**
 **OLD_RUN_STAGING_REMOVED = YES**
@@ -2784,7 +2803,6 @@ bytes = 2906
 tmp/home equality = **YES**
 mode = **0600**
 
-After terminal STOP: NO further production mutation · NO diagnostic mutation · NO retry.
 **T2_RETRY_AUTHORIZED = NO**
 **B1_DEPLOY_AUTHORIZED = NO**
 **C2_052_EXECUTION_AUTHORIZED = NO**
