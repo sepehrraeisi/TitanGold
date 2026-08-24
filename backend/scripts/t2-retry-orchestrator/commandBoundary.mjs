@@ -1,6 +1,6 @@
 /**
  * Injected command-execution boundary for T2 orchestrator.
- * Production mutations must never run from unit tests.
+ * Production mutations must never run from unit tests by default.
  */
 
 /**
@@ -38,7 +38,6 @@ export class ForbiddenLiveExecutionError extends Error {
 
 /**
  * Fail-closed default boundary — refuses all mutations and live reads that could touch production.
- * Used when no adapter is injected (prevents accidental live execution).
  */
 export function createFailClosedBoundary() {
   const deny = async (op) => {
@@ -59,3 +58,14 @@ export function createFailClosedBoundary() {
     pathExists: () => deny('pathExists'),
   };
 }
+
+/** Ops that mutate production/filesystem and MUST pass the central mutation guard. */
+export const MUTATING_OPS = Object.freeze([
+  'ensureDir',
+  'writeBackup',
+  'chmod',
+  'stopProcessByPmId',
+  'startProcessByPmId',
+  'pm2Save',
+  'restoreDump',
+]);

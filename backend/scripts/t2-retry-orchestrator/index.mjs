@@ -14,11 +14,13 @@ export {
   TERMINAL_STATES,
   TOOL_NAME,
   TOOL_VERSION,
+  ROLLBACK_ELIGIBLE_STATES,
 } from './constants.mjs';
 
 export {
   createFailClosedBoundary,
   ForbiddenLiveExecutionError,
+  MUTATING_OPS,
 } from './commandBoundary.mjs';
 
 export { SecretSafeEvidence, assertSecretSafeLine } from './evidence.mjs';
@@ -26,10 +28,23 @@ export { SecretSafeEvidence, assertSecretSafeLine } from './evidence.mjs';
 export {
   assertCollectorPersistencePreconditions,
   diffFingerprints,
+  diffProcessEnv,
+  extractProcessEnv,
   normalizeProcess,
   selectEngineRetainExtra,
   semanticFingerprint,
+  summarizeEnvEquality,
 } from './semantics.mjs';
+
+export {
+  createExclusiveJournal,
+  createMemoryJournalFs,
+  JournalError,
+  loadJournal,
+  TransactionJournal,
+} from './journal.mjs';
+
+export { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
 
 export {
   createOrchestrator,

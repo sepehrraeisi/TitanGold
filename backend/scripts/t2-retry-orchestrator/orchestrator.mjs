@@ -1,7 +1,6 @@
 /**
- * Durable T2 retry orchestrator — state machine only.
+ * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
  * All PM2/system I/O goes through an injected command boundary.
- * This module never imports child_process or talks to live PM2 by default.
  */
 
 import crypto from 'crypto';
@@ -10,13 +9,19 @@ import {
   AUTHORIZED_EFFECTS,
   AUTHORIZED_TRANSACTION,
   COLLECTOR_DB_KEYS,
-  ENGINE_NAME,
+  ROLLBACK_ELIGIBLE_STATES,
   State,
   TERMINAL_STATES,
   TOOL_VERSION,
 } from './constants.mjs';
-import { createFailClosedBoundary } from './commandBoundary.mjs';
+import { MUTATING_OPS, createFailClosedBoundary } from './commandBoundary.mjs';
 import { SecretSafeEvidence } from './evidence.mjs';
+import {
+  createExclusiveJournal,
+  createMemoryJournalFs,
+  JournalError,
+  loadJournal,
+} from './journal.mjs';
 import {
   assertCollectorPersistencePreconditions,
   diffFingerprints,
@@ -25,10 +30,6 @@ import {
 } from './semantics.mjs';
 
 export class T2OrchestratorError extends Error {
-  /**
-   * @param {string} code
-   * @param {string} [message]
-   */
   constructor(code, message) {
     super(message || code);
     this.name = 'T2OrchestratorError';
@@ -36,15 +37,6 @@ export class T2OrchestratorError extends Error {
   }
 }
 
-/**
- * @param {object} opts
- * @param {import('./commandBoundary.mjs').T2CommandBoundary} [opts.commands]
- * @param {object} [opts.authorization]
- * @param {string} [opts.runId]
- * @param {string} [opts.backupRoot]
- * @param {boolean} [opts.productionModeAcknowledged]
- * @param {string} [opts.expectedToolVersion]
- */
 export function createOrchestrator(opts = {}) {
   return new T2Orchestrator(opts);
 }
@@ -52,19 +44,30 @@ export function createOrchestrator(opts = {}) {
 export class T2Orchestrator {
   /**
    * @param {object} opts
+   * @param {import('./commandBoundary.mjs').T2CommandBoundary} [opts.commands]
+   * @param {object} [opts.authorization]
+   * @param {string} [opts.runId]
+   * @param {string} [opts.backupRoot]
+   * @param {string} [opts.journalRoot]
+   * @param {import('./journal.mjs').JournalFs} [opts.journalFs]
+   * @param {import('./journal.mjs').TransactionJournal} [opts.journal] existing journal (load path)
+   * @param {boolean} [opts.productionModeAcknowledged]
+   * @param {string} [opts.expectedToolVersion]
    */
   constructor(opts = {}) {
     this.commands = opts.commands || createFailClosedBoundary();
     this.authorization = opts.authorization || null;
     this.runId = opts.runId || null;
     this.backupRoot = opts.backupRoot || null;
+    this.journalRoot = opts.journalRoot || opts.backupRoot || null;
+    this.journalFs = opts.journalFs || createMemoryJournalFs();
+    this.journal = opts.journal || null;
     this.productionModeAcknowledged = opts.productionModeAcknowledged === true;
     this.expectedToolVersion = opts.expectedToolVersion || TOOL_VERSION;
 
-    this.state = State.AUTHORIZED_UNCONSUMED;
-    this.authConsumed = false;
-    this.mutationClosed = false;
-    this.executedOnce = false;
+    this.state = this.journal?.state || State.AUTHORIZED_UNCONSUMED;
+    this.authConsumed = this.journal?.authConsumed === true;
+    this.mutationClosed = this.journal?.mutationClosed === true;
     this.evidence = new SecretSafeEvidence();
 
     this.preDumpSha = null;
@@ -75,6 +78,7 @@ export class T2Orchestrator {
     this.backupPath = null;
     this.backupBytes = null;
     this.recordedExtraIdentity = null;
+    this.runDir = this.journal?.runDir || null;
   }
 
   _log(...parts) {
@@ -82,15 +86,15 @@ export class T2Orchestrator {
   }
 
   _isTerminal() {
-    return TERMINAL_STATES.includes(this.state);
+    return TERMINAL_STATES.includes(this.state) || this.mutationClosed === true;
   }
 
   /**
-   * Central mutation guard — every mutating action must call this.
+   * Central mutation guard — EVERY mutating boundary call must go through guardedCall.
    * @param {string} op
    */
   requireMutationOpen(op) {
-    if (this.mutationClosed || this._isTerminal()) {
+    if (this.mutationClosed || TERMINAL_STATES.includes(this.state)) {
       throw new T2OrchestratorError(
         'MUTATION_CLOSED',
         `MUTATION_CLOSED op=${op} state=${this.state}`,
@@ -105,6 +109,33 @@ export class T2Orchestrator {
         `PRODUCTION_ACK_REQUIRED op=${op}`,
       );
     }
+    if (this.state === State.ROLLBACK_RUNNING) {
+      if (!['restoreDump', 'startProcessByPmId'].includes(op)) {
+        throw new T2OrchestratorError(
+          'ROLLBACK_OP_NOT_ALLOWED',
+          `ROLLBACK_OP_NOT_ALLOWED op=${op}`,
+        );
+      }
+      return;
+    }
+    if (op === 'restoreDump' || op === 'startProcessByPmId') {
+      throw new T2OrchestratorError(
+        'RESTORE_OR_START_REQUIRES_ROLLBACK_STATE',
+        `op=${op} state=${this.state}`,
+      );
+    }
+  }
+
+  /**
+   * @param {string} op
+   * @param {() => Promise<any>} fn
+   */
+  async guardedCall(op, fn) {
+    if (!MUTATING_OPS.includes(op)) {
+      throw new T2OrchestratorError('UNKNOWN_MUTATING_OP', op);
+    }
+    this.requireMutationOpen(op);
+    return fn();
   }
 
   _requireState(allowed) {
@@ -116,10 +147,21 @@ export class T2Orchestrator {
     }
   }
 
-  _fail(code, message) {
-    this.state = State.FAILED;
-    this.mutationClosed = true;
-    this._log('FAILED', code);
+  async _setState(to, event) {
+    this.state = to;
+    if (TERMINAL_STATES.includes(to)) {
+      this.mutationClosed = true;
+    }
+    if (this.journal) {
+      await this.journal.transition(to, event);
+      this.mutationClosed = this.journal.mutationClosed;
+    }
+    this._log('STATE', to, event || '');
+  }
+
+  async _failClosed(code, message) {
+    // Terminal FAILED without further mutation (pre-auth or non-rollbackable).
+    await this._setState(State.FAILED, code);
     throw new T2OrchestratorError(code, message || code);
   }
 
@@ -156,14 +198,18 @@ export class T2Orchestrator {
   }
 
   /**
-   * Consume authorization immediately before first production mutation.
+   * Persist authorization consumption BEFORE first production mutation.
    */
-  consumeAuthorization() {
+  async consumeAuthorization() {
     this._requireState([State.AUTHORIZED_UNCONSUMED, State.PRECHECK_PASS]);
     if (this.authConsumed) {
       throw new T2OrchestratorError('AUTH_ALREADY_CONSUMED');
     }
     this.validateAuthorizationArtifact();
+    if (!this.journal) {
+      throw new T2OrchestratorError('JOURNAL_REQUIRED');
+    }
+    await this.journal.markAuthorizationConsumed();
     this.authConsumed = true;
     if (this.authorization && typeof this.authorization === 'object') {
       this.authorization.consumed = true;
@@ -171,22 +217,62 @@ export class T2Orchestrator {
     this._log('AUTHORIZATION_CONSUMED=YES', `runId=${this.runId}`);
   }
 
+  async initJournalExclusive() {
+    if (!this.runId || !this.journalRoot) {
+      throw new T2OrchestratorError('JOURNAL_ROOT_OR_RUN_ID_MISSING');
+    }
+    try {
+      this.journal = await createExclusiveJournal({
+        runId: this.runId,
+        journalRoot: this.journalRoot,
+        fs: this.journalFs,
+        toolVersion: TOOL_VERSION,
+      });
+    } catch (err) {
+      const code = err.code || err.message;
+      if (code === 'RUN_DIR_EXISTS' || String(err.message || '').includes('RUN_DIR_EXISTS')) {
+        throw new T2OrchestratorError('DUPLICATE_RUN_BLOCKED', 'DUPLICATE_RUN_BLOCKED');
+      }
+      throw err;
+    }
+    this.runDir = this.journal.runDir;
+    this.journal.assertFreshStartAllowed();
+  }
+
+  /**
+   * Attach to existing journal — always fail closed for replay.
+   */
+  static async fromExistingJournal(opts) {
+    const journal = await loadJournal({
+      runId: opts.runId,
+      journalRoot: opts.journalRoot,
+      fs: opts.journalFs,
+    });
+    journal.assertFreshStartAllowed();
+    return new T2Orchestrator({ ...opts, journal });
+  }
+
   async precheck() {
-    if (this.executedOnce || this._isTerminal()) {
+    if (this._isTerminal()) {
       throw new T2OrchestratorError('REPLAY_BLOCKED');
     }
-    this._requireState([State.AUTHORIZED_UNCONSUMED]);
-    this.state = State.PRECHECK_RUNNING;
+    if (this.journal) {
+      this.journal.assertFreshStartAllowed();
+    } else {
+      await this.initJournalExclusive();
+    }
 
-    // Auth artifact must exist before precheck completes; consumption waits until first mutation.
+    this._requireState([State.AUTHORIZED_UNCONSUMED]);
+    await this._setState(State.PRECHECK_RUNNING, 'precheck_begin');
+
     if (!this.authorization) {
-      return this._fail('AUTH_ARTIFACT_MISSING');
+      return this._failClosed('AUTH_ARTIFACT_MISSING');
     }
     if (!this.runId) {
-      return this._fail('RUN_ID_MISSING');
+      return this._failClosed('RUN_ID_MISSING');
     }
     if (this.expectedToolVersion !== TOOL_VERSION) {
-      return this._fail('TOOL_VERSION_MISMATCH');
+      return this._failClosed('TOOL_VERSION_MISMATCH');
     }
 
     const live = await this.commands.listLiveProcesses();
@@ -197,7 +283,7 @@ export class T2Orchestrator {
 
     const selection = selectEngineRetainExtra(this.liveFp);
     if (!selection.ok) {
-      return this._fail(selection.error);
+      return this._failClosed(selection.error);
     }
     this.selection = selection;
     this.recordedExtraIdentity = {
@@ -212,15 +298,21 @@ export class T2Orchestrator {
 
     const dumpOnline = (this.preDumpFp.engines || []).filter((e) => e.status === 'online');
     if (dumpOnline.length !== 2) {
-      return this._fail('DUMP_ENGINE_ONLINE_EXPECTED_2');
+      return this._failClosed('DUMP_ENGINE_ONLINE_EXPECTED_2');
     }
 
     const precond = assertCollectorPersistencePreconditions(this.liveFp, this.preDumpFp);
     if (!precond.ok) {
-      return this._fail(precond.error);
+      return this._failClosed(precond.error);
     }
 
-    this.state = State.PRECHECK_PASS;
+    await this.journal.setSelection({
+      retainedPmId: selection.retained.pm_id,
+      extraPmId: selection.extra.pm_id,
+      preDumpShaPrefix: this.preDumpSha,
+    });
+
+    await this._setState(State.PRECHECK_PASS, 'precheck_pass');
     this._log(
       'PRECHECK_PASS',
       `retained_pm_id=${selection.retained.pm_id}`,
@@ -238,28 +330,36 @@ export class T2Orchestrator {
   async backup() {
     this._requireState([State.PRECHECK_PASS]);
     if (!this.authConsumed) {
-      this.consumeAuthorization();
+      await this.consumeAuthorization();
     }
-    this.requireMutationOpen('backup');
+    // Auth must be durably persisted before any backup filesystem mutation.
+    if (!this.journal?.authConsumed) {
+      throw new T2OrchestratorError('AUTH_CONSUME_NOT_PERSISTED');
+    }
 
     if (!this.backupRoot) {
       throw new T2OrchestratorError('BACKUP_ROOT_MISSING');
     }
-    const runDir = path.join(this.backupRoot, `TITANGOLD_PM2_ENGINE_RECON_${this.runId}`);
-    await this.commands.ensureDir(runDir, 0o700);
+    const runDir =
+      this.runDir || path.join(this.backupRoot, `TITANGOLD_PM2_ENGINE_RECON_${this.runId}`);
     this.backupPath = path.join(runDir, 'dump.pm2.pre');
+
+    await this.guardedCall('ensureDir', () => this.commands.ensureDir(runDir, 0o700));
 
     const dumpPack = await this.commands.readDump();
     if (dumpPack.sha256 !== this.preDumpSha) {
-      return this._fail('BACKUP_SHA_DRIFT');
+      return this._failClosed('BACKUP_SHA_DRIFT');
     }
-    const written = await this.commands.writeBackup(dumpPack.bytes, this.backupPath);
-    await this.commands.chmod(this.backupPath, 0o600);
+
+    const written = await this.guardedCall('writeBackup', () =>
+      this.commands.writeBackup(dumpPack.bytes, this.backupPath),
+    );
+    await this.guardedCall('chmod', () => this.commands.chmod(this.backupPath, 0o600));
     if (written.sha256 !== this.preDumpSha) {
-      return this._fail('BACKUP_WRITE_SHA_MISMATCH');
+      return this._failClosed('BACKUP_WRITE_SHA_MISMATCH');
     }
     this.backupBytes = dumpPack.bytes;
-    this.state = State.BACKUP_VERIFIED;
+    await this._setState(State.BACKUP_VERIFIED, 'backup_verified');
     this._log(
       'BACKUP_VERIFIED',
       `sha_prefix=${this.preDumpSha.slice(0, 12)}`,
@@ -290,19 +390,20 @@ export class T2Orchestrator {
   }
 
   async stopExtra() {
-    this.requireMutationOpen('stop_extra');
     this._requireState([State.BACKUP_VERIFIED]);
-    this.state = State.MUTATION_RUNNING;
+    await this._setState(State.MUTATION_RUNNING, 'stop_extra_begin');
 
     try {
       await this._revalidateExtraIdentity();
     } catch (err) {
-      await this.rollback('STALE_EXTRA_PROCESS');
+      await this.rollback(err.code || 'STALE_EXTRA_PROCESS');
       throw err;
     }
 
     const extraId = this.selection.extra.pm_id;
-    const result = await this.commands.stopProcessByPmId(extraId);
+    const result = await this.guardedCall('stopProcessByPmId', () =>
+      this.commands.stopProcessByPmId(extraId),
+    );
     if (result.exitCode !== 0) {
       await this.rollback('STOP_EXTRA_FAILED');
       throw new T2OrchestratorError('STOP_EXTRA_FAILED');
@@ -320,17 +421,16 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('RETAINED_NOT_ONLINE');
     }
 
-    this.state = State.ENGINE_SINGLETON_VERIFIED;
+    await this._setState(State.ENGINE_SINGLETON_VERIFIED, 'singleton_verified');
     this._log('ENGINE_SINGLETON_VERIFIED', `online=1 retained_pm_id=${retained.pm_id}`);
     return true;
   }
 
   async save() {
-    this.requireMutationOpen('save');
     this._requireState([State.ENGINE_SINGLETON_VERIFIED]);
-    this.state = State.SAVE_RUNNING;
+    await this._setState(State.SAVE_RUNNING, 'save_begin');
 
-    const result = await this.commands.pm2Save();
+    const result = await this.guardedCall('pm2Save', () => this.commands.pm2Save());
     if (result.exitCode !== 0) {
       await this.rollback('SAVE_EXIT_NONZERO');
       throw new T2OrchestratorError('SAVE_EXIT_NONZERO');
@@ -344,7 +444,6 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('DUMP_UNPARSEABLE', err.message);
     }
 
-    // Changed dump SHA after successful parseable save is EXPECTED — never classify as S2 alone.
     this.postDumpSha = dumpPack.sha256;
     if (this.postDumpSha !== this.preDumpSha) {
       this._log('POST_SAVE_SHA_CHANGED=EXPECTED');
@@ -352,17 +451,13 @@ export class T2Orchestrator {
       this._log('POST_SAVE_SHA_UNCHANGED=UNEXPECTED_BUT_NOT_ALONE_FATAL');
     }
 
-    this.state = State.SAVE_SUCCESS;
+    await this._setState(State.SAVE_SUCCESS, 'save_success');
     this._log('SAVE_SUCCESS', `post_sha_prefix=${this.postDumpSha.slice(0, 12)}`);
     return { postDumpSha: this.postDumpSha };
   }
 
   async postsaveVerify() {
     this._requireState([State.SAVE_SUCCESS]);
-    // verification is not a mutation, but must not run after terminal rollback paths
-    if (this.mutationClosed && this.state !== State.SAVE_SUCCESS) {
-      throw new T2OrchestratorError('MUTATION_CLOSED');
-    }
 
     const dumpPack = await this.commands.readDump();
     const postFp = semanticFingerprint(dumpPack.parsed);
@@ -396,9 +491,10 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('MISSING_COLLECTOR_DB_PERSIST');
     }
 
-    // secret-safe collector report — presence bits only (no values, no KEY=value secrets)
     const col = (postFp.collectors || [])[0] || {};
-    const presenceBits = COLLECTOR_DB_KEYS.map((k) => (col.db_keys_present?.[k] ? '1' : '0')).join('');
+    const presenceBits = COLLECTOR_DB_KEYS.map((k) => (col.db_keys_present?.[k] ? '1' : '0')).join(
+      '',
+    );
     this._log(
       'COLLECTOR_DB_PERSIST_PRESENT',
       `keys_order=${COLLECTOR_DB_KEYS.join(',')}`,
@@ -406,7 +502,7 @@ export class T2Orchestrator {
       `DB_USER_EXPECTED=${col.db_user_matches_expected ? 'YES' : 'NO'}`,
     );
 
-    this.state = State.POSTSAVE_VERIFIED;
+    await this._setState(State.POSTSAVE_VERIFIED, 'postsave_verified');
     this._log('POSTSAVE_VERIFIED', `allowlist=${[...kinds].sort().join(',')}`);
     return { kinds: [...kinds] };
   }
@@ -428,62 +524,70 @@ export class T2Orchestrator {
     return true;
   }
 
-  complete() {
+  async complete() {
     this._requireState([State.POSTSAVE_VERIFIED]);
-    this.state = State.COMPLETED;
-    this.mutationClosed = true;
-    this.executedOnce = true;
+    await this._setState(State.COMPLETED, 'completed');
     this._log('COMPLETED', 'mutation_capability=CLOSED');
     return State.COMPLETED;
   }
 
   /**
-   * Rollback to PRE-equivalent dump + restart extra engine if needed.
-   * Production behavior — only invoked from failure paths or tests with fake boundary.
+   * Rollback: nonterminal → ROLLBACK_RUNNING → guarded mutations → ROLLED_BACK.
+   * Never mutates after FAILED/COMPLETED/ROLLED_BACK/FAIL_FORWARD_COMPLETE.
    */
   async rollback(reason) {
-    this._log('ROLLBACK_BEGIN', reason);
-    // Rollback mutations are permitted only while not yet permanently closed as COMPLETED.
-    // Once COMPLETED, rollback is forbidden.
-    if (this.state === State.COMPLETED) {
-      throw new T2OrchestratorError('MUTATION_CLOSED');
+    if (TERMINAL_STATES.includes(this.state) || this.mutationClosed) {
+      throw new T2OrchestratorError(
+        'MUTATION_CLOSED',
+        `MUTATION_CLOSED rollback state=${this.state}`,
+      );
     }
-    // Allow rollback while failing mid-transaction even if mutationClosed was set by _fail race
-    const priorClosed = this.mutationClosed;
-    this.mutationClosed = false;
+    if (!this.authConsumed) {
+      throw new T2OrchestratorError('AUTH_NOT_CONSUMED', 'rollback requires consumed auth');
+    }
+    if (!this.productionModeAcknowledged) {
+      throw new T2OrchestratorError('PRODUCTION_ACK_REQUIRED');
+    }
+    if (!ROLLBACK_ELIGIBLE_STATES.includes(this.state) && this.state !== State.ROLLBACK_RUNNING) {
+      throw new T2OrchestratorError(
+        'ROLLBACK_STATE_INVALID',
+        `ROLLBACK_STATE_INVALID state=${this.state}`,
+      );
+    }
+
+    this._log('ROLLBACK_BEGIN', reason);
+    if (this.state !== State.ROLLBACK_RUNNING) {
+      await this._setState(State.ROLLBACK_RUNNING, `rollback:${reason}`);
+    }
 
     try {
       if (this.backupBytes) {
-        await this.commands.restoreDump(this.backupBytes);
+        await this.guardedCall('restoreDump', () => this.commands.restoreDump(this.backupBytes));
       } else if (this.backupPath) {
-        // boundary may re-read from path via restoreDump expecting bytes; tests supply bytes
         throw new T2OrchestratorError('BACKUP_BYTES_MISSING');
       }
       if (this.selection?.extra?.pm_id != null) {
-        await this.commands.startProcessByPmId(this.selection.extra.pm_id);
+        await this.guardedCall('startProcessByPmId', () =>
+          this.commands.startProcessByPmId(this.selection.extra.pm_id),
+        );
       }
-      this.state = State.ROLLED_BACK;
-      this.mutationClosed = true;
+      await this._setState(State.ROLLED_BACK, reason);
       this._log('ROLLED_BACK', reason);
     } catch (err) {
-      this.state = State.FAIL_FORWARD_COMPLETE;
-      this.mutationClosed = true;
-      this._log('FAIL_FORWARD_COMPLETE', err.code || err.message);
-      throw err;
-    } finally {
-      if (this.state === State.ROLLED_BACK || this.state === State.FAIL_FORWARD_COMPLETE) {
-        this.mutationClosed = true;
-      } else if (priorClosed) {
+      // Still in ROLLBACK_RUNNING / non-terminal until we mark fail-forward
+      try {
+        await this._setState(State.FAIL_FORWARD_COMPLETE, err.code || err.message);
+      } catch {
+        this.state = State.FAIL_FORWARD_COMPLETE;
         this.mutationClosed = true;
       }
+      this._log('FAIL_FORWARD_COMPLETE', err.code || err.message);
+      throw err;
     }
   }
 
-  /**
-   * Full happy-path transaction (still requires injected boundary + auth).
-   */
   async runTransaction() {
-    if (this.executedOnce || this._isTerminal()) {
+    if (this._isTerminal()) {
       throw new T2OrchestratorError('REPLAY_BLOCKED');
     }
     await this.precheck();
@@ -503,3 +607,5 @@ export function sha256Buffer(buf) {
 export function dumpToBytes(entries) {
   return Buffer.from(JSON.stringify(entries), 'utf8');
 }
+
+export { JournalError, createMemoryJournalFs, createExclusiveJournal, loadJournal };

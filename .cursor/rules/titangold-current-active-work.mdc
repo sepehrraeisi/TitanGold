@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2 RETRY ORCHESTRATOR SOURCE FIX COMPLETE; technically reauthorizable; Owner one-shot still required; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — T2 ORCHESTRATOR AUDIT CORRECTION COMPLETE; technically reauthorizable; Owner one-shot still required; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -56,6 +56,7 @@ REBOOT_RESURRECT_REGRESSION_RISK = OPEN /
 T2_RETRY_REARM_DESIGN = COMPLETE /
 T2_REARM_DESIGN_COMPLETE = YES /
 T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE /
+T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE /
 T2_ORCHESTRATOR_CURRENTLY_SAFE = YES /
 T2_ORCHESTRATOR_FIX_REQUIRED = NO /
 T2_SOURCE_IMPLEMENTATION_REQUIRED = NO /
@@ -63,6 +64,10 @@ T2_ORCHESTRATOR_TESTS = PASS /
 TERMINAL_MUTATION_GUARD = PASS /
 SAVE_SUCCESS_CHANGED_SHA_CASE = PASS /
 SECRET_SAFE_EVIDENCE = PASS /
+DURABLE_JOURNAL = PASS /
+ROLLBACK_GUARD = PASS /
+COMPLETE_ENV_ALLOWLIST = PASS /
+LIVE_ADAPTER_GATED = PASS /
 COLLECTOR_PERSISTENCE_EXPECTED_EFFECT_SUPPORTED = YES /
 T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES /
 COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES /
@@ -2795,11 +2800,16 @@ Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
 ### T2 retry orchestrator source-fix closeout (COMPLETE / SOURCE+TESTS ONLY)
 
 **T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE**
+**T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE**
 **T2_ORCHESTRATOR_CURRENTLY_SAFE = YES**
-**T2_ORCHESTRATOR_TESTS = PASS** (unit matrix T1–T16 + related fail-closed cases)
+**T2_ORCHESTRATOR_TESTS = PASS** (T1–T16 + durable journal/replay/rollback/env/live-adapter cases)
 **TERMINAL_MUTATION_GUARD = PASS**
 **SAVE_SUCCESS_CHANGED_SHA_CASE = PASS**
 **SECRET_SAFE_EVIDENCE = PASS**
+**DURABLE_JOURNAL = PASS**
+**ROLLBACK_GUARD = PASS**
+**COMPLETE_ENV_ALLOWLIST = PASS**
+**LIVE_ADAPTER_GATED = PASS**
 **COLLECTOR_PERSISTENCE_EXPECTED_EFFECT_SUPPORTED = YES**
 **T2_TECHNICALLY_REAUTHORIZABLE_NOW = YES**
 **T2_RETRY_AUTHORIZED = NO**
@@ -2810,27 +2820,23 @@ Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
 **THIS CLOSEOUT DID NOT EXECUTE T2 / DID NOT MUTATE PM2**
 
 Durable tooling paths:
-- `backend/scripts/t2-retry-orchestrator/` (`constants.mjs` · `semantics.mjs` · `commandBoundary.mjs` · `evidence.mjs` · `orchestrator.mjs` · `cli.mjs` · `index.mjs` · `README.md`)
+- `backend/scripts/t2-retry-orchestrator/` (`constants.mjs` · `semantics.mjs` · `commandBoundary.mjs` · `evidence.mjs` · `journal.mjs` · `liveBoundary.mjs` · `orchestrator.mjs` · `cli.mjs` · `index.mjs` · `README.md`)
 - `backend/__tests__/unit/t2RetryOrchestrator.test.js`
 
-Contracts implemented in source:
-- state machine with terminal mutation capability CLOSED
-- auth consumed immediately before first mutation
-- changed dump SHA after successful parseable save = SUCCESS (not S2)
-- semantic retain/extra by lowest pm_id among identical online engines (fresh resolve; historical ids not authority)
-- allowlisted shared effects: engine 2→1 + collector DB-B `DB_*` persistence
-- injected command boundary; default CLI non-mutating / live adapter unwired
-- secret-safe evidence (presence bits only; no credential values)
+Audit correction contracts (mandatory):
+- durable exclusive journal / crash-after-consume / duplicate RUN_ID fail-closed
+- every mutating op including rollback restore/start passes central guard
+- rollback only via nonterminal → `ROLLBACK_RUNNING` → terminal `ROLLED_BACK`
+- complete secret-safe env allowlist (key add/remove/value change) across process groups
+- repo-owned `liveBoundary.mjs` selected only under full CLI gates; default remains non-mutating
+- auth consume persisted before backup filesystem writes
 
-Future Owner one-shot envelope (still unauthorized):
-precheck → backup → consume auth → stop exact extra → singleton verify →
-one guarded `pm2 save` → allowlist proof (engine + collector DB-B) →
-health/functional → COMPLETE / CLOSED
+**TOOL_VERSION = 1.1.0**
 
 **T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES**
 **COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES**
 
-This source-fix task mutation ledger:
+This source-fix / audit-correction task mutation ledger:
 **PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **SECRET_MUTATION = 0**
 
 ### T2 retry re-arm design closeout (COMPLETE / READ-ONLY / 20260824T153309Z) — HISTORICAL / SUPERSEDED FOR ORCHESTRATOR SAFETY

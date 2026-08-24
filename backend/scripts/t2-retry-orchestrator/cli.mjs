@@ -2,19 +2,17 @@
 /**
  * Fail-closed CLI for T2 retry orchestrator.
  *
- * Default invocation does NOT mutate production.
- * Live mutation requires ALL of:
+ * Default: non-mutating.
+ * Live adapter selected ONLY when ALL gates are present:
+ *   --execute
  *   --run-id
  *   --authorization-file
  *   --acknowledge-production-mutation=YES
- *   --execute
  *   --backup-root
- *   matching TOOL_VERSION
+ *   --journal-root (optional; defaults to backup-root)
+ *   --expected-tool-version matching TOOL_VERSION
  *
- * Without --execute, the CLI only validates flags / prints tool metadata and exits 2.
- *
- * This CLI intentionally does not wire a live PM2 boundary in this source-fix gate.
- * A future Owner-authorized execution gate must inject/confirm a live adapter separately.
+ * This source task must not invoke live execution.
  */
 
 import fs from 'fs';
@@ -26,6 +24,7 @@ import {
   TOOL_VERSION,
 } from './constants.mjs';
 import { createFailClosedBoundary } from './commandBoundary.mjs';
+import { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
 import { createOrchestrator, T2OrchestratorError } from './orchestrator.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,12 +45,13 @@ function usage() {
     '',
     'Default: non-mutating / fail-closed.',
     '',
-    'Required for future live execution (NOT enabled by this CLI alone):',
+    'Live execution requires ALL of:',
+    '  --execute',
     '  --run-id <id>',
     '  --authorization-file <path>',
     '  --acknowledge-production-mutation=YES',
     '  --backup-root <dir>',
-    '  --execute',
+    '  --expected-tool-version ' + TOOL_VERSION,
     '',
     `Tool: ${TOOL_NAME}@${TOOL_VERSION}`,
     `Authorized transaction id: ${AUTHORIZED_TRANSACTION}`,
@@ -68,6 +68,7 @@ function main(argv = process.argv.slice(2)) {
   const runId = readArg(argv, '--run-id');
   const authFile = readArg(argv, '--authorization-file');
   const backupRoot = readArg(argv, '--backup-root');
+  const journalRoot = readArg(argv, '--journal-root') || backupRoot;
   const ack = readArg(argv, '--acknowledge-production-mutation');
   const expectedVersion = readArg(argv, '--expected-tool-version') || TOOL_VERSION;
 
@@ -78,18 +79,28 @@ function main(argv = process.argv.slice(2)) {
         version: TOOL_VERSION,
         mode: 'NON_MUTATING_DEFAULT',
         message:
-          'Refusing execution. Pass --execute plus authorization inputs only under Owner one-shot gate. Live PM2 adapter is not auto-wired.',
+          'Refusing execution. Pass --execute plus full authorization gates only under Owner one-shot.',
       }),
     );
     process.exit(2);
   }
 
-  if (ack !== 'YES') {
-    console.error('ERROR: --acknowledge-production-mutation=YES is required');
-    process.exit(2);
-  }
-  if (!runId || !authFile || !backupRoot) {
-    console.error('ERROR: --run-id, --authorization-file, and --backup-root are required');
+  const gatesSatisfied =
+    ack === 'YES' &&
+    Boolean(runId) &&
+    Boolean(authFile) &&
+    Boolean(backupRoot) &&
+    Boolean(journalRoot) &&
+    expectedVersion === TOOL_VERSION;
+
+  if (!gatesSatisfied) {
+    console.error(
+      JSON.stringify({
+        error: 'EXECUTION_GATES_INCOMPLETE',
+        message:
+          'Live adapter requires --acknowledge-production-mutation=YES, --run-id, --authorization-file, --backup-root, and matching --expected-tool-version',
+      }),
+    );
     process.exit(2);
   }
 
@@ -101,28 +112,51 @@ function main(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 
-  // Fail-closed: this CLI does not attach a live PM2 boundary.
-  // Future execution gate must replace createFailClosedBoundary with an audited live adapter.
+  // Live adapter is repo-owned and audited, but only selected when gatesSatisfied===true.
+  const commands = createLiveBoundary({ gatesSatisfied: true });
   const orch = createOrchestrator({
-    commands: createFailClosedBoundary(),
+    commands,
     authorization,
     runId,
     backupRoot,
+    journalRoot,
+    journalFs: createNodeJournalFs(),
     productionModeAcknowledged: true,
     expectedToolVersion: expectedVersion,
   });
 
-  console.error(
-    JSON.stringify({
-      tool: TOOL_NAME,
-      version: TOOL_VERSION,
-      mode: 'EXECUTE_REQUESTED_BUT_LIVE_ADAPTER_NOT_WIRED',
-      state: orch.state,
-      message:
-        'Source-fix gate: live PM2 command boundary is intentionally fail-closed. Do not treat this CLI as production-ready execution until a separate Owner gate wires an audited adapter.',
-    }),
-  );
-  process.exit(3);
+  // Deliberately do NOT auto-runTransaction here without an additional
+  // --confirm-run-transaction flag, so casual invocation cannot mutate.
+  if (!hasFlag(argv, '--confirm-run-transaction')) {
+    console.error(
+      JSON.stringify({
+        tool: TOOL_NAME,
+        version: TOOL_VERSION,
+        mode: 'GATES_OK_ADAPTER_SELECTED_RUN_NOT_CONFIRMED',
+        state: orch.state,
+        message:
+          'Live adapter selected. Pass --confirm-run-transaction only under Owner one-shot to execute.',
+      }),
+    );
+    process.exit(3);
+  }
+
+  orch
+    .runTransaction()
+    .then((state) => {
+      console.log(JSON.stringify({ ok: true, state, runId }));
+      process.exit(state === 'COMPLETED' ? 0 : 1);
+    })
+    .catch((err) => {
+      console.error(
+        JSON.stringify({
+          ok: false,
+          error: err.code || 'ERROR',
+          message: String(err.message || err),
+        }),
+      );
+      process.exit(1);
+    });
 }
 
 try {

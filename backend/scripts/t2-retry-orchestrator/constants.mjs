@@ -3,7 +3,7 @@
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.0.0';
+export const TOOL_VERSION = '1.1.0';
 
 export const AUTHORIZED_TRANSACTION =
   'T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST';
@@ -29,6 +29,48 @@ export const COLLECTOR_DB_KEYS = Object.freeze([
   'DB_PASSWORD',
 ]);
 
+/** PM2 metadata field names that must never be treated as application env. */
+export const PM2_METADATA_KEYS = Object.freeze([
+  'pm_id',
+  'name',
+  'status',
+  'pm_pid_path',
+  'pm_err_log_path',
+  'pm_out_log_path',
+  'pm_log_path',
+  'pm_cwd',
+  'pm_exec_path',
+  'exec_mode',
+  'exec_interpreter',
+  'instances',
+  'pm_uptime',
+  'created_at',
+  'restart_time',
+  'unstable_restarts',
+  'axm_actions',
+  'axm_monitor',
+  'axm_options',
+  'axm_dynamic',
+  'vizion',
+  'vizion_running',
+  'NODE_APP_INSTANCE',
+  'unique_id',
+  'km_link',
+  'pmx',
+  'automation',
+  'autorestart',
+  'autostart',
+  'watch',
+  'filter_env',
+  'namespace',
+  'version',
+  'exit_code',
+  'node_args',
+  'args',
+  'env',
+  'pm2_env',
+]);
+
 export const State = Object.freeze({
   AUTHORIZED_UNCONSUMED: 'AUTHORIZED_UNCONSUMED',
   PRECHECK_RUNNING: 'PRECHECK_RUNNING',
@@ -39,6 +81,7 @@ export const State = Object.freeze({
   SAVE_RUNNING: 'SAVE_RUNNING',
   SAVE_SUCCESS: 'SAVE_SUCCESS',
   POSTSAVE_VERIFIED: 'POSTSAVE_VERIFIED',
+  ROLLBACK_RUNNING: 'ROLLBACK_RUNNING',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
   ROLLED_BACK: 'ROLLED_BACK',
@@ -52,6 +95,17 @@ export const TERMINAL_STATES = Object.freeze([
   State.FAIL_FORWARD_COMPLETE,
 ]);
 
+/** States where guarded rollback mutations are allowed. */
+export const ROLLBACK_ELIGIBLE_STATES = Object.freeze([
+  State.BACKUP_VERIFIED,
+  State.MUTATION_RUNNING,
+  State.ENGINE_SINGLETON_VERIFIED,
+  State.SAVE_RUNNING,
+  State.SAVE_SUCCESS,
+  State.POSTSAVE_VERIFIED,
+  State.ROLLBACK_RUNNING,
+]);
+
 export const ALLOWED_DIFF_KINDS = Object.freeze([
   'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED',
   'COLLECTOR_DB_KEYS_APPEAR',
@@ -63,8 +117,14 @@ export const FORBIDDEN_DIFF_KINDS = Object.freeze([
   'BACKEND_TOPOLOGY_CHANGE',
   'PROCESSOR_TOPOLOGY_CHANGE',
   'MONITOR_TOPOLOGY_CHANGE',
+  'ENV_KEY_ADDED',
+  'ENV_KEY_REMOVED',
+  'ENV_VALUE_CHANGED',
   'UNRELATED_ENV_CHANGE',
   'TELEGRAM_TOKEN_ENV_RESTORED',
   'PROVIDER_ENV_CHANGE',
   'UNRELATED_PROCESS_CHANGE',
 ]);
+
+export const PROVIDER_ENV_KEY_RE =
+  /^(MEXC_|OPENAI_|GEMINI_|DEEPSEEK_|OPENROUTER_|ANTHROPIC_|API_KEY|API_SECRET)/i;
