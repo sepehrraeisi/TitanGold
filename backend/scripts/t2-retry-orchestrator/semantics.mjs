@@ -1,6 +1,7 @@
 /**
  * Secret-safe PM2 semantic model for T2 retry.
- * Compares env key sets and value equality internally without logging values/hashes.
+ * Compares env key sets, value equality, and stable launch config
+ * without logging values/hashes of secrets.
  */
 
 import {
@@ -13,36 +14,140 @@ import {
   PM2_METADATA_KEYS,
   PROCESSOR_NAME,
   PROVIDER_ENV_KEY_RE,
+  STABLE_CONFIG_FIELDS,
+  SUPPORTED_ENV_SHAPES,
 } from './constants.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
 
+function isPlainObject(v) {
+  return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function scalarEnvValue(v) {
+  if (v == null) return null;
+  if (typeof v === 'object') return null;
+  return String(v);
+}
+
+function stableSerialize(v) {
+  if (v == null) return null;
+  if (Array.isArray(v)) return JSON.stringify(v.map((x) => String(x)));
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+/**
+ * Extract non-metadata scalar keys from a flat PM2 dump entry (God env shape).
+ * @param {Record<string, unknown>} entry
+ */
+function extractFlatDumpScalars(entry) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (META.has(k)) continue;
+    const s = scalarEnvValue(v);
+    if (s == null) continue;
+    out[k] = s;
+  }
+  return out;
+}
+
+/**
+ * Detect and extract application env from supported PM2 structural forms.
+ * Never returns secret values to callers via logging — only the map for internal use.
+ *
+ * @param {Record<string, unknown>} entry
+ * @returns {{ ok: true, env: Record<string,string>, shape: string } | { ok: false, error: string, shape: null }}
+ */
+export function extractProcessEnvResult(entry = {}) {
+  const shapes = [];
+
+  if (isPlainObject(entry.pm2_env) && isPlainObject(entry.pm2_env.env)) {
+    shapes.push('entry.pm2_env.env');
+  }
+  if (isPlainObject(entry.env) && !Array.isArray(entry.env)) {
+    shapes.push('entry.env');
+  }
+
+  const looksFlatDump =
+    !entry.pm2_env &&
+    (entry.pm_exec_path != null || entry.pm_cwd != null) &&
+    entry.name != null &&
+    entry.status != null;
+
+  if (looksFlatDump) {
+    shapes.push('flat_dump_entry');
+  }
+
+  if (shapes.length === 0) {
+    return { ok: false, error: 'ENV_SHAPE_UNRECOGNIZED', shape: null };
+  }
+
+  /** @type {Record<string, string>} */
+  let env = {};
+
+  if (shapes.includes('flat_dump_entry')) {
+    env = { ...env, ...extractFlatDumpScalars(entry) };
+  }
+  if (shapes.includes('entry.env')) {
+    for (const [k, v] of Object.entries(entry.env)) {
+      if (META.has(k)) continue;
+      const s = scalarEnvValue(v);
+      if (s == null) continue;
+      env[k] = s;
+    }
+  }
+  if (shapes.includes('entry.pm2_env.env')) {
+    for (const [k, v] of Object.entries(entry.pm2_env.env)) {
+      if (META.has(k)) continue;
+      const s = scalarEnvValue(v);
+      if (s == null) continue;
+      env[k] = s;
+    }
+  }
+
+  // Prefer the most specific supported shape label for evidence.
+  const shape = shapes.includes('entry.pm2_env.env')
+    ? 'entry.pm2_env.env'
+    : shapes.includes('entry.env')
+      ? 'entry.env'
+      : 'flat_dump_entry';
+
+  if (!SUPPORTED_ENV_SHAPES.includes(shape)) {
+    return { ok: false, error: 'ENV_SHAPE_UNSUPPORTED', shape: null };
+  }
+
+  return { ok: true, env, shape };
+}
+
 /**
  * Extract the real application env container from a PM2 dump/jlist entry.
- * Does NOT flatten pm2_env metadata into env.
  * @param {Record<string, unknown>} entry
  * @returns {Record<string, string>}
  */
 export function extractProcessEnv(entry = {}) {
-  let raw = null;
-  if (entry.pm2_env && typeof entry.pm2_env === 'object' && entry.pm2_env.env && typeof entry.pm2_env.env === 'object') {
-    raw = entry.pm2_env.env;
-  } else if (entry.env && typeof entry.env === 'object' && !Array.isArray(entry.env)) {
-    raw = entry.env;
-  } else {
-    raw = {};
-  }
+  const r = extractProcessEnvResult(entry);
+  return r.ok ? r.env : {};
+}
 
-  /** @type {Record<string, string>} */
-  const out = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (META.has(k)) continue;
-    if (v == null) continue;
-    // skip nested objects
-    if (typeof v === 'object') continue;
-    out[k] = String(v);
+/**
+ * Fail-closed batch check that every entry has a parseable env shape.
+ * @param {Array<Record<string, unknown>>} entries
+ */
+export function assertEntriesEnvShapes(entries = []) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return { ok: false, error: 'ENV_SHAPE_EMPTY_PROCESS_LIST' };
   }
-  return out;
+  const shapes = new Set();
+  for (const entry of entries) {
+    const r = extractProcessEnvResult(entry);
+    if (!r.ok) {
+      return { ok: false, error: r.error || 'ENV_SHAPE_UNRECOGNIZED' };
+    }
+    shapes.add(r.shape);
+  }
+  return { ok: true, shapes: [...shapes].sort() };
 }
 
 function hasNonEmpty(map, key) {
@@ -59,28 +164,47 @@ function statusOf(entry) {
   );
 }
 
+function pickStableConfig(entry = {}) {
+  const pm = isPlainObject(entry.pm2_env) ? entry.pm2_env : {};
+  const cwd = entry.pm_cwd || pm.pm_cwd || entry.cwd || pm.cwd || null;
+  const script =
+    entry.pm_exec_path || pm.pm_exec_path || entry.script || pm.script || null;
+  const execMode = entry.exec_mode || pm.exec_mode || null;
+  const interpreter = entry.exec_interpreter || pm.exec_interpreter || null;
+  const instances = entry.instances ?? pm.instances ?? null;
+  const namespace = entry.namespace || pm.namespace || null;
+  const args = entry.args ?? pm.args ?? null;
+  const nodeArgs = entry.node_args ?? pm.node_args ?? null;
+  const autorestart = entry.autorestart ?? pm.autorestart ?? null;
+  const watch = entry.watch ?? pm.watch ?? null;
+
+  return {
+    name: entry.name || pm.name || null,
+    script: script != null ? String(script) : null,
+    cwd: cwd != null ? String(cwd) : null,
+    exec_mode: execMode != null ? String(execMode) : null,
+    interpreter: interpreter != null ? String(interpreter) : null,
+    instances: instances != null ? Number(instances) : null,
+    namespace: namespace != null ? String(namespace) : null,
+    args: stableSerialize(args),
+    node_args: stableSerialize(nodeArgs),
+    autorestart: autorestart == null ? null : Boolean(autorestart),
+    watch: watch == null ? null : Boolean(watch),
+  };
+}
+
 /**
- * Normalize one process. Env values kept only on `_envValues` (non-enumerable) for internal diffs.
+ * Normalize one process. Env values kept only on `_envValues` (non-enumerable).
  * @param {Record<string, unknown>} entry
  */
 export function normalizeProcess(entry = {}) {
-  const envMap = extractProcessEnv(entry);
-  const pmId = entry.pm_id ?? entry.pmId;
-  const cwd =
-    entry.pm_cwd ||
-    entry.pm2_env?.pm_cwd ||
-    entry.cwd ||
-    null;
-  const script =
-    entry.pm_exec_path ||
-    entry.pm2_env?.pm_exec_path ||
-    entry.script ||
-    entry.pm2_env?.script ||
-    null;
-  const execMode = entry.exec_mode || entry.pm2_env?.exec_mode || null;
-  const nodeEnv = envMap.NODE_ENV != null ? String(envMap.NODE_ENV) : null;
+  const envResult = extractProcessEnvResult(entry);
+  const envMap = envResult.ok ? envResult.env : {};
+  const pmId = entry.pm_id ?? entry.pmId ?? entry.pm2_env?.pm_id;
+  const stable = pickStableConfig(entry);
   const createdAt = entry.pm2_env?.created_at ?? entry.created_at ?? null;
   const restartTime = entry.pm2_env?.restart_time ?? entry.restart_time ?? null;
+  const nodeEnv = envMap.NODE_ENV != null ? String(envMap.NODE_ENV) : null;
 
   const envKeys = Object.keys(envMap).sort();
   const collectorDb = {};
@@ -89,17 +213,26 @@ export function normalizeProcess(entry = {}) {
   }
 
   const proc = {
-    name: entry.name || null,
+    name: stable.name,
     pm_id: typeof pmId === 'number' ? pmId : pmId != null ? Number(pmId) : null,
     status: String(statusOf(entry)),
-    cwd: cwd != null ? String(cwd) : null,
-    script: script != null ? String(script) : null,
-    exec_mode: execMode != null ? String(execMode) : null,
+    cwd: stable.cwd,
+    script: stable.script,
+    exec_mode: stable.exec_mode,
+    interpreter: stable.interpreter,
+    instances: stable.instances,
+    namespace: stable.namespace,
+    args: stable.args,
+    node_args: stable.node_args,
+    autorestart: stable.autorestart,
+    watch: stable.watch,
     NODE_ENV: nodeEnv,
     created_at: createdAt,
     restart_time: restartTime,
     pid: typeof entry.pid === 'number' ? entry.pid : null,
     env_keys: envKeys,
+    env_shape: envResult.ok ? envResult.shape : null,
+    env_shape_ok: envResult.ok === true,
     collector_db: collectorDb,
     collector_db_user_matches_expected:
       hasNonEmpty(envMap, 'DB_USER') && String(envMap.DB_USER) === EXPECTED_COLLECTOR_DB_USER,
@@ -117,6 +250,16 @@ export function normalizeProcess(entry = {}) {
   return proc;
 }
 
+function attachEnv(target, src) {
+  Object.defineProperty(target, '_envValues', {
+    value: src._envValues || {},
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return target;
+}
+
 /**
  * @param {Array<Record<string, unknown>>} entries
  */
@@ -127,51 +270,54 @@ export function semanticFingerprint(entries = []) {
       .filter((p) => p.name === name)
       .sort((a, b) => (a.pm_id ?? 0) - (b.pm_id ?? 0));
 
-  const mapEngine = (p) => ({
-    pm_id: p.pm_id,
-    status: p.status,
-    NODE_ENV: p.NODE_ENV,
-    cwd: p.cwd,
-    script: p.script,
-    exec_mode: p.exec_mode,
-    created_at: p.created_at,
-    restart_time: p.restart_time,
-    env_keys: p.env_keys,
-    _envValues: p._envValues,
-    has_telegram_bot_token: p.has_telegram_bot_token,
-    has_provider_env: p.has_provider_env,
-  });
+  const mapFull = (p) =>
+    attachEnv(
+      {
+        pm_id: p.pm_id,
+        status: p.status,
+        NODE_ENV: p.NODE_ENV,
+        cwd: p.cwd,
+        script: p.script,
+        exec_mode: p.exec_mode,
+        interpreter: p.interpreter,
+        instances: p.instances,
+        namespace: p.namespace,
+        args: p.args,
+        node_args: p.node_args,
+        autorestart: p.autorestart,
+        watch: p.watch,
+        created_at: p.created_at,
+        restart_time: p.restart_time,
+        env_keys: p.env_keys,
+        env_shape: p.env_shape,
+        has_telegram_bot_token: p.has_telegram_bot_token,
+        has_provider_env: p.has_provider_env,
+      },
+      p,
+    );
 
-  const mapSimple = (p) => ({
-    pm_id: p.pm_id,
-    status: p.status,
-    NODE_ENV: p.NODE_ENV,
-    env_keys: p.env_keys,
-    _envValues: p._envValues,
-    has_telegram_bot_token: p.has_telegram_bot_token,
-    has_provider_env: p.has_provider_env,
-  });
-
-  const engines = byName(ENGINE_NAME).map(mapEngine);
-  const backends = byName(BACKEND_NAME).map(mapSimple);
-  const processors = byName(PROCESSOR_NAME).map(mapSimple);
-  const monitors = byName(MONITOR_NAME).map(mapSimple);
-  const collectors = byName(COLLECTOR_NAME).map((p) => ({
-    ...mapSimple(p),
-    db_keys_present: Object.fromEntries(
-      COLLECTOR_DB_KEYS.map((k) => [k, p.collector_db[k].present]),
+  const engines = byName(ENGINE_NAME).map(mapFull);
+  const backends = byName(BACKEND_NAME).map(mapFull);
+  const processors = byName(PROCESSOR_NAME).map(mapFull);
+  const monitors = byName(MONITOR_NAME).map(mapFull);
+  const collectors = byName(COLLECTOR_NAME).map((p) =>
+    attachEnv(
+      {
+        ...mapFull(p),
+        db_keys_present: Object.fromEntries(
+          COLLECTOR_DB_KEYS.map((k) => [k, p.collector_db[k].present]),
+        ),
+        db_user_matches_expected: p.collector_db_user_matches_expected,
+      },
+      p,
     ),
-    db_user_matches_expected: p.collector_db_user_matches_expected,
-  }));
+  );
 
   const known = new Set([ENGINE_NAME, BACKEND_NAME, PROCESSOR_NAME, COLLECTOR_NAME, MONITOR_NAME]);
   const others = normalized
     .filter((p) => p.name && !known.has(p.name))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)) || (a.pm_id ?? 0) - (b.pm_id ?? 0))
-    .map((p) => ({
-      name: p.name,
-      ...mapSimple(p),
-    }));
+    .map((p) => attachEnv({ name: p.name, ...mapFull(p) }, p));
 
   return {
     engines,
@@ -187,6 +333,33 @@ export function semanticFingerprint(entries = []) {
     collector_count: collectors.length,
     other_names: [...new Set(others.map((o) => o.name))].sort(),
   };
+}
+
+/**
+ * Secret-safe stable launch/config comparison.
+ * @returns {Array<{kind:string, detail?: object}>}
+ */
+export function diffStableConfig(preProc, postProc, { scope } = {}) {
+  const diffs = [];
+  if (!preProc || !postProc) {
+    diffs.push({ kind: 'PROCESS_CONFIG_CHANGED', detail: { scope, category: 'missing' } });
+    return diffs;
+  }
+  for (const field of STABLE_CONFIG_FIELDS) {
+    if (preProc[field] === postProc[field]) continue;
+    if (field === 'script') {
+      diffs.push({ kind: 'SCRIPT_CHANGED', detail: { scope } });
+    } else if (field === 'cwd') {
+      diffs.push({ kind: 'CWD_CHANGED', detail: { scope } });
+    } else if (field === 'args' || field === 'node_args') {
+      diffs.push({ kind: 'ARGS_CHANGED', detail: { scope, field } });
+    } else if (field === 'exec_mode') {
+      diffs.push({ kind: 'EXEC_MODE_CHANGED', detail: { scope } });
+    } else {
+      diffs.push({ kind: 'PROCESS_CONFIG_CHANGED', detail: { scope, field } });
+    }
+  }
+  return diffs;
 }
 
 /**
@@ -206,7 +379,7 @@ export function diffProcessEnv(preProc, postProc, { scope, allowCollectorDbAppea
 
   for (const k of added) {
     if (allowCollectorDbAppear && COLLECTOR_DB_KEYS.includes(k)) {
-      continue; // handled as collector DB appear bundle
+      continue;
     }
     if (k === 'TELEGRAM_BOT_TOKEN') {
       diffs.push({ kind: 'TELEGRAM_TOKEN_ENV_RESTORED', detail: { scope, key: k, category: 'key-added' } });
@@ -244,9 +417,6 @@ export function diffProcessEnv(preProc, postProc, { scope, allowCollectorDbAppea
         kind: 'PROVIDER_ENV_CHANGE',
         detail: { scope, key: k, category: 'value-changed', equality: 'CHANGED' },
       });
-    } else if (allowCollectorDbAppear && COLLECTOR_DB_KEYS.includes(k)) {
-      // DB_* value change after appear is unexpected (should be identical to live persist)
-      diffs.push({ kind: 'ENV_VALUE_CHANGED', detail: { scope, key: k, category: 'value-changed', equality: 'CHANGED' } });
     } else {
       diffs.push({
         kind: 'ENV_VALUE_CHANGED',
@@ -259,8 +429,54 @@ export function diffProcessEnv(preProc, postProc, { scope, allowCollectorDbAppea
 }
 
 /**
- * Build secret-safe evidence summary for env equality without values.
+ * Compare persisted collector DB_* to live values (internal equality only).
+ * Evidence-safe match bits — never values/hashes.
+ *
+ * @param {object} liveCollectorProc
+ * @param {object} persistedCollectorProc
+ * @returns {{ ok: boolean, matches: Record<string, 'YES'|'NO'>, error?: string }}
  */
+export function compareCollectorDbLiveToPersist(liveCollectorProc, persistedCollectorProc) {
+  /** @type {Record<string, 'YES'|'NO'>} */
+  const matches = {};
+  const liveVals = liveCollectorProc?._envValues || {};
+  const persistVals = persistedCollectorProc?._envValues || {};
+
+  let ok = true;
+  for (const key of COLLECTOR_DB_KEYS) {
+    const livePresent = hasNonEmpty(liveVals, key);
+    const persistPresent = hasNonEmpty(persistVals, key);
+    const equal = livePresent && persistPresent && liveVals[key] === persistVals[key];
+    matches[`${key}_MATCH`] = equal ? 'YES' : 'NO';
+    if (!equal) ok = false;
+  }
+
+  if (!ok) {
+    return { ok: false, matches, error: 'COLLECTOR_DB_LIVE_PERSIST_MISMATCH' };
+  }
+  if (persistVals.DB_USER !== EXPECTED_COLLECTOR_DB_USER) {
+    matches.DB_USER_MATCH = 'NO';
+    return { ok: false, matches, error: 'COLLECTOR_DB_USER_UNEXPECTED' };
+  }
+  return { ok: true, matches };
+}
+
+/**
+ * Capture live collector DB values for later exact persist match (non-enumerable).
+ */
+export function captureCollectorDbLiveValues(liveFp) {
+  const live = (liveFp.collectors || [])[0];
+  if (!live) return null;
+  const vals = live._envValues || {};
+  /** @type {Record<string, string>} */
+  const captured = {};
+  for (const key of COLLECTOR_DB_KEYS) {
+    if (!hasNonEmpty(vals, key)) return null;
+    captured[key] = vals[key];
+  }
+  return captured;
+}
+
 export function summarizeEnvEquality(preProc, postProc) {
   const preKeys = new Set(preProc?.env_keys || []);
   const postKeys = new Set(postProc?.env_keys || []);
@@ -307,6 +523,20 @@ export function selectEngineRetainExtra(fp) {
   };
 }
 
+function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, skipStatus = false }) {
+  const diffs = [];
+  if (!pre || !post) {
+    diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { scope } });
+    return diffs;
+  }
+  if (!skipStatus && pre.status !== post.status) {
+    diffs.push({ kind: 'STATUS_CHANGE', detail: { scope, pre: pre.status, post: post.status } });
+  }
+  diffs.push(...diffStableConfig(pre, post, { scope }));
+  diffs.push(...diffProcessEnv(pre, post, { scope, allowCollectorDbAppear }));
+  return diffs;
+}
+
 /**
  * Diff pre-dump fingerprint vs post-dump fingerprint (secret-safe).
  */
@@ -328,7 +558,7 @@ export function diffFingerprints(pre, post, { extraPmId }) {
         detail: { pm_id: pmId, pre: a.status, post: b.status },
       });
     }
-    // For stopped extra, env may remain — still compare env (should be unchanged)
+    diffs.push(...diffStableConfig(a, b, { scope: `engine:${pmId}` }));
     diffs.push(...diffProcessEnv(a, b, { scope: `engine:${pmId}` }));
   }
 
@@ -340,11 +570,14 @@ export function diffFingerprints(pre, post, { extraPmId }) {
     for (const pmId of new Set([...preB.keys(), ...postB.keys()])) {
       const a = preB.get(pmId);
       const b = postB.get(pmId);
-      if (!a || !b || a.status !== b.status) {
+      if (!a || !b) {
         diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE', detail: { pm_id: pmId } });
         continue;
       }
-      diffs.push(...diffProcessEnv(a, b, { scope: `backend:${pmId}` }));
+      if (a.status !== b.status) {
+        diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE', detail: { pm_id: pmId } });
+      }
+      diffs.push(...diffProcessPair(a, b, { scope: `backend:${pmId}`, skipStatus: true }));
     }
   }
 
@@ -360,7 +593,7 @@ export function diffFingerprints(pre, post, { extraPmId }) {
         diffs.push({ kind: 'PROCESSOR_TOPOLOGY_CHANGE', detail: { pm_id: pmId } });
         continue;
       }
-      diffs.push(...diffProcessEnv(a, b, { scope: `processor:${pmId}` }));
+      diffs.push(...diffProcessPair(a, b, { scope: `processor:${pmId}`, skipStatus: true }));
     }
   }
 
@@ -376,7 +609,7 @@ export function diffFingerprints(pre, post, { extraPmId }) {
         diffs.push({ kind: 'MONITOR_TOPOLOGY_CHANGE', detail: { pm_id: pmId } });
         continue;
       }
-      diffs.push(...diffProcessEnv(a, b, { scope: `monitor:${pmId}` }));
+      diffs.push(...diffProcessPair(a, b, { scope: `monitor:${pmId}`, skipStatus: true }));
     }
   }
 
@@ -389,6 +622,8 @@ export function diffFingerprints(pre, post, { extraPmId }) {
       scope: `collector:${preCol.pm_id}`,
       allowCollectorDbAppear: true,
     });
+    diffs.push(...diffStableConfig(preCol, postCol, { scope: `collector:${preCol.pm_id}` }));
+
     const preKeys = preCol.db_keys_present || {};
     const postKeys = postCol.db_keys_present || {};
     const preHadAny = COLLECTOR_DB_KEYS.some((k) => preKeys[k]);
@@ -405,13 +640,11 @@ export function diffFingerprints(pre, post, { extraPmId }) {
       diffs.push({ kind: 'UNRELATED_ENV_CHANGE', detail: 'COLLECTOR_DB_UNEXPECTED' });
     }
 
-    // Non-DB env diffs remain
     for (const d of envDiffs) {
       diffs.push(d);
     }
   }
 
-  // other processes
   const preO = new Map((pre.others || []).map((e) => [`${e.name}:${e.pm_id}`, e]));
   const postO = new Map((post.others || []).map((e) => [`${e.name}:${e.pm_id}`, e]));
   for (const key of new Set([...preO.keys(), ...postO.keys()])) {
@@ -421,7 +654,7 @@ export function diffFingerprints(pre, post, { extraPmId }) {
       diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { other: key } });
       continue;
     }
-    diffs.push(...diffProcessEnv(a, b, { scope: `other:${key}` }));
+    diffs.push(...diffProcessPair(a, b, { scope: `other:${key}`, skipStatus: true }));
   }
 
   if (JSON.stringify(pre.other_names || []) !== JSON.stringify(post.other_names || [])) {
@@ -461,6 +694,13 @@ function classifyDiffs(diffs, { extraPmId }) {
         'TELEGRAM_TOKEN_ENV_RESTORED',
         'PROVIDER_ENV_CHANGE',
         'UNRELATED_ENV_CHANGE',
+        'SCRIPT_CHANGED',
+        'CWD_CHANGED',
+        'ARGS_CHANGED',
+        'EXEC_MODE_CHANGED',
+        'PROCESS_CONFIG_CHANGED',
+        'COLLECTOR_DB_LIVE_PERSIST_MISMATCH',
+        'STATUS_CHANGE',
       ].includes(d.kind)
     ) {
       out.push({ kind: d.kind, detail: d.detail });
@@ -473,6 +713,100 @@ function classifyDiffs(diffs, { extraPmId }) {
     out.push({ kind: 'UNEXPECTED', detail: d });
   }
   return out;
+}
+
+/**
+ * Prove live+persisted state is PRE-equivalent after rollback.
+ * @returns {{ ok: boolean, error?: string, details?: object }}
+ */
+export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp, {
+  retainedPmId,
+  extraPmId,
+  expectedDumpSha,
+  actualDumpSha,
+}) {
+  if (expectedDumpSha !== actualDumpSha) {
+    return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
+  }
+
+  if ((postLiveFp.engine_online_count || 0) !== 2) {
+    return { ok: false, error: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED' };
+  }
+
+  const preRetained = (preLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
+  const preExtra = (preLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
+  const postRetained = (postLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
+  const postExtra = (postLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
+
+  if (!preRetained || !preExtra || !postRetained || !postExtra) {
+    return { ok: false, error: 'ROLLBACK_ENGINE_IDENTITY_MISSING' };
+  }
+  if (postRetained.status !== 'online' || postExtra.status !== 'online') {
+    return { ok: false, error: 'ROLLBACK_ENGINE_NOT_BOTH_ONLINE' };
+  }
+  if (
+    postRetained.script !== preRetained.script ||
+    postRetained.cwd !== preRetained.cwd ||
+    postRetained.exec_mode !== preRetained.exec_mode ||
+    postRetained.NODE_ENV !== preRetained.NODE_ENV ||
+    postExtra.script !== preExtra.script ||
+    postExtra.cwd !== preExtra.cwd ||
+    postExtra.exec_mode !== preExtra.exec_mode ||
+    postExtra.NODE_ENV !== preExtra.NODE_ENV
+  ) {
+    return { ok: false, error: 'ROLLBACK_ENGINE_CONFIG_DRIFT' };
+  }
+
+  // Persisted dump must match PRE dump semantics (collector DB_* absent again).
+  const { classified } = diffFingerprints(preDumpFp, postDumpFp, { extraPmId });
+  const unexpected = classified.filter(
+    (c) =>
+      c.kind !== 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED' &&
+      c.kind !== 'COLLECTOR_DB_KEYS_APPEAR' &&
+      c.kind !== 'DUMP_SHA_CHANGED',
+  );
+  // After rollback, dump should equal PRE — no allowed forward diffs.
+  if (classified.length > 0 || unexpected.length > 0) {
+    // exact: any semantic diff vs PRE dump is fail
+    if (classified.length > 0) {
+      return {
+        ok: false,
+        error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
+        details: { kinds: classified.map((c) => c.kind) },
+      };
+    }
+  }
+
+  const postColLive = (postLiveFp.collectors || [])[0];
+  const preColLive = (preLiveFp.collectors || [])[0];
+  if (!postColLive || !preColLive) {
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_MISSING' };
+  }
+  const liveDb = compareCollectorDbLiveToPersist(preColLive, postColLive);
+  if (!liveDb.ok) {
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_LIVE_DB_B_LOST' };
+  }
+
+  const postColDump = (postDumpFp.collectors || [])[0];
+  const preColDump = (preDumpFp.collectors || [])[0];
+  if (!postColDump || !preColDump) {
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_DUMP_MISSING' };
+  }
+  const dumpHadDb = COLLECTOR_DB_KEYS.some((k) => postColDump.db_keys_present?.[k]);
+  if (dumpHadDb) {
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_STILL_PERSISTED' };
+  }
+
+  // Unrelated process groups must match PRE dump topology/config.
+  if (
+    postDumpFp.backend_count !== preDumpFp.backend_count ||
+    postDumpFp.processor_count !== preDumpFp.processor_count ||
+    postDumpFp.monitor_count !== preDumpFp.monitor_count
+  ) {
+    return { ok: false, error: 'ROLLBACK_UNRELATED_TOPOLOGY_DRIFT' };
+  }
+
+  return { ok: true, details: { PRE_EQUIVALENT: 'YES' } };
 }
 
 export function assertCollectorPersistencePreconditions(liveFp, dumpFp) {

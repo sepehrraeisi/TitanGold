@@ -1,6 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
- * All PM2/system I/O goes through an injected command boundary.
+ * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
 import crypto from 'crypto';
@@ -24,10 +24,15 @@ import {
 } from './journal.mjs';
 import {
   assertCollectorPersistencePreconditions,
+  assertEntriesEnvShapes,
+  assertPreEquivalent,
+  captureCollectorDbLiveValues,
+  compareCollectorDbLiveToPersist,
   diffFingerprints,
   selectEngineRetainExtra,
   semanticFingerprint,
 } from './semantics.mjs';
+import { createSideEffectLedger, planRollbackActions } from './sideEffectLedger.mjs';
 
 export class T2OrchestratorError extends Error {
   constructor(code, message) {
@@ -44,15 +49,6 @@ export function createOrchestrator(opts = {}) {
 export class T2Orchestrator {
   /**
    * @param {object} opts
-   * @param {import('./commandBoundary.mjs').T2CommandBoundary} [opts.commands]
-   * @param {object} [opts.authorization]
-   * @param {string} [opts.runId]
-   * @param {string} [opts.backupRoot]
-   * @param {string} [opts.journalRoot]
-   * @param {import('./journal.mjs').JournalFs} [opts.journalFs]
-   * @param {import('./journal.mjs').TransactionJournal} [opts.journal] existing journal (load path)
-   * @param {boolean} [opts.productionModeAcknowledged]
-   * @param {string} [opts.expectedToolVersion]
    */
   constructor(opts = {}) {
     this.commands = opts.commands || createFailClosedBoundary();
@@ -63,22 +59,35 @@ export class T2Orchestrator {
     this.journalFs = opts.journalFs || createMemoryJournalFs();
     this.journal = opts.journal || null;
     this.productionModeAcknowledged = opts.productionModeAcknowledged === true;
-    this.expectedToolVersion = opts.expectedToolVersion || TOOL_VERSION;
+    // Must be explicitly supplied for live/exec paths — no silent default in CLI.
+    this.expectedToolVersion =
+      opts.expectedToolVersion !== undefined && opts.expectedToolVersion !== null
+        ? opts.expectedToolVersion
+        : TOOL_VERSION;
 
     this.state = this.journal?.state || State.AUTHORIZED_UNCONSUMED;
     this.authConsumed = this.journal?.authConsumed === true;
     this.mutationClosed = this.journal?.mutationClosed === true;
     this.evidence = new SecretSafeEvidence();
 
+    this.sideEffects = createSideEffectLedger();
+    if (this.journal?.record?.sideEffects) {
+      Object.assign(this.sideEffects, this.journal.record.sideEffects);
+    }
+
     this.preDumpSha = null;
     this.postDumpSha = null;
     this.preDumpFp = null;
+    this.preLiveFp = null;
     this.liveFp = null;
     this.selection = null;
     this.backupPath = null;
     this.backupBytes = null;
     this.recordedExtraIdentity = null;
+    this.recordedRetainedIdentity = null;
+    this.liveCollectorDb = null;
     this.runDir = this.journal?.runDir || null;
+    this.lastRollbackPlan = null;
   }
 
   _log(...parts) {
@@ -89,10 +98,12 @@ export class T2Orchestrator {
     return TERMINAL_STATES.includes(this.state) || this.mutationClosed === true;
   }
 
-  /**
-   * Central mutation guard — EVERY mutating boundary call must go through guardedCall.
-   * @param {string} op
-   */
+  async _persistSideEffects() {
+    if (this.journal) {
+      await this.journal.persistSideEffects(this.sideEffects);
+    }
+  }
+
   requireMutationOpen(op) {
     if (this.mutationClosed || TERMINAL_STATES.includes(this.state)) {
       throw new T2OrchestratorError(
@@ -126,10 +137,6 @@ export class T2Orchestrator {
     }
   }
 
-  /**
-   * @param {string} op
-   * @param {() => Promise<any>} fn
-   */
   async guardedCall(op, fn) {
     if (!MUTATING_OPS.includes(op)) {
       throw new T2OrchestratorError('UNKNOWN_MUTATING_OP', op);
@@ -160,9 +167,24 @@ export class T2Orchestrator {
   }
 
   async _failClosed(code, message) {
-    // Terminal FAILED without further mutation (pre-auth or non-rollbackable).
     await this._setState(State.FAILED, code);
     throw new T2OrchestratorError(code, message || code);
+  }
+
+  /**
+   * Fail closed with ZERO PM2 rollback mutations (e.g. stale before stop).
+   */
+  async _failClosedNoPm2Rollback(code, message) {
+    this._log(
+      'NO_PM2_ROLLBACK_MUTATION',
+      `BACKUP_WRITTEN=${this.sideEffects.BACKUP_WRITTEN ? 'YES' : 'NO'}`,
+      `STOP_ATTEMPTED=${this.sideEffects.STOP_ATTEMPTED ? 'YES' : 'NO'}`,
+      `ENGINE_STOP_APPLIED=${this.sideEffects.ENGINE_STOP_APPLIED ? 'YES' : 'NO'}`,
+      `SAVE_ATTEMPTED=${this.sideEffects.SAVE_ATTEMPTED ? 'YES' : 'NO'}`,
+      `DUMP_SAVE_APPLIED=${this.sideEffects.DUMP_SAVE_APPLIED ? 'YES' : 'NO'}`,
+    );
+    await this._persistSideEffects();
+    await this._failClosed(code, message);
   }
 
   validateAuthorizationArtifact() {
@@ -197,9 +219,6 @@ export class T2Orchestrator {
     return true;
   }
 
-  /**
-   * Persist authorization consumption BEFORE first production mutation.
-   */
   async consumeAuthorization() {
     this._requireState([State.AUTHORIZED_UNCONSUMED, State.PRECHECK_PASS]);
     if (this.authConsumed) {
@@ -239,9 +258,6 @@ export class T2Orchestrator {
     this.journal.assertFreshStartAllowed();
   }
 
-  /**
-   * Attach to existing journal — always fail closed for replay.
-   */
   static async fromExistingJournal(opts) {
     const journal = await loadJournal({
       runId: opts.runId,
@@ -277,7 +293,23 @@ export class T2Orchestrator {
 
     const live = await this.commands.listLiveProcesses();
     const dumpPack = await this.commands.readDump();
+
+    const liveShape = assertEntriesEnvShapes(live);
+    if (!liveShape.ok) {
+      return this._failClosed(liveShape.error || 'ENV_SHAPE_UNRECOGNIZED');
+    }
+    const dumpShape = assertEntriesEnvShapes(dumpPack.parsed);
+    if (!dumpShape.ok) {
+      return this._failClosed(dumpShape.error || 'ENV_SHAPE_UNRECOGNIZED');
+    }
+    this._log(
+      'ENV_SHAPE_OK',
+      `live=${liveShape.shapes.join('+')}`,
+      `dump=${dumpShape.shapes.join('+')}`,
+    );
+
     this.liveFp = semanticFingerprint(live);
+    this.preLiveFp = this.liveFp;
     this.preDumpFp = semanticFingerprint(dumpPack.parsed);
     this.preDumpSha = dumpPack.sha256;
 
@@ -295,6 +327,13 @@ export class T2Orchestrator {
       created_at: selection.extra.created_at,
       restart_time: selection.extra.restart_time,
     };
+    this.recordedRetainedIdentity = {
+      pm_id: selection.retained.pm_id,
+      script: selection.retained.script,
+      cwd: selection.retained.cwd,
+      exec_mode: selection.retained.exec_mode,
+      NODE_ENV: selection.retained.NODE_ENV,
+    };
 
     const dumpOnline = (this.preDumpFp.engines || []).filter((e) => e.status === 'online');
     if (dumpOnline.length !== 2) {
@@ -304,6 +343,11 @@ export class T2Orchestrator {
     const precond = assertCollectorPersistencePreconditions(this.liveFp, this.preDumpFp);
     if (!precond.ok) {
       return this._failClosed(precond.error);
+    }
+
+    this.liveCollectorDb = captureCollectorDbLiveValues(this.liveFp);
+    if (!this.liveCollectorDb) {
+      return this._failClosed('LIVE_COLLECTOR_DB_CAPTURE_FAILED');
     }
 
     await this.journal.setSelection({
@@ -332,7 +376,6 @@ export class T2Orchestrator {
     if (!this.authConsumed) {
       await this.consumeAuthorization();
     }
-    // Auth must be durably persisted before any backup filesystem mutation.
     if (!this.journal?.authConsumed) {
       throw new T2OrchestratorError('AUTH_CONSUME_NOT_PERSISTED');
     }
@@ -359,12 +402,15 @@ export class T2Orchestrator {
       return this._failClosed('BACKUP_WRITE_SHA_MISMATCH');
     }
     this.backupBytes = dumpPack.bytes;
+    this.sideEffects.BACKUP_WRITTEN = true;
+    await this._persistSideEffects();
     await this._setState(State.BACKUP_VERIFIED, 'backup_verified');
     this._log(
       'BACKUP_VERIFIED',
       `sha_prefix=${this.preDumpSha.slice(0, 12)}`,
       'mode=0600',
       'dir_mode=0700',
+      'BACKUP_WRITTEN=YES',
     );
     return { backupPath: this.backupPath, sha256: this.preDumpSha };
   }
@@ -396,21 +442,41 @@ export class T2Orchestrator {
     try {
       await this._revalidateExtraIdentity();
     } catch (err) {
-      await this.rollback(err.code || 'STALE_EXTRA_PROCESS');
+      // Stale BEFORE stop → zero PM2 rollback mutation
+      await this._failClosedNoPm2Rollback(err.code || 'STALE_EXTRA_PROCESS');
       throw err;
     }
 
     const extraId = this.selection.extra.pm_id;
+    this.sideEffects.STOP_ATTEMPTED = true;
+    await this._persistSideEffects();
+
     const result = await this.guardedCall('stopProcessByPmId', () =>
       this.commands.stopProcessByPmId(extraId),
     );
-    if (result.exitCode !== 0) {
+
+    // Fresh-read live state — never trust exit code alone for ENGINE_STOP_APPLIED
+    const live = await this.commands.listLiveProcesses();
+    const fp = semanticFingerprint(live);
+    const extra = (fp.engines || []).find((e) => e.pm_id === extraId);
+    const stopProven = extra && extra.status === 'stopped';
+    if (stopProven) {
+      this.sideEffects.ENGINE_STOP_APPLIED = true;
+      await this._persistSideEffects();
+      this._log('ENGINE_STOP_APPLIED=YES', `extra_pm_id=${extraId}`);
+    } else {
+      this._log('ENGINE_STOP_APPLIED=NO');
+    }
+
+    if (result.exitCode !== 0 && !stopProven) {
       await this.rollback('STOP_EXTRA_FAILED');
       throw new T2OrchestratorError('STOP_EXTRA_FAILED');
     }
+    if (!stopProven) {
+      await this.rollback('ENGINE_STOP_NOT_PROVEN');
+      throw new T2OrchestratorError('ENGINE_STOP_NOT_PROVEN');
+    }
 
-    const live = await this.commands.listLiveProcesses();
-    const fp = semanticFingerprint(live);
     if (fp.engine_online_count !== 1) {
       await this.rollback('ENGINE_SINGLETON_VALIDATION_FAIL');
       throw new T2OrchestratorError('ENGINE_SINGLETON_VALIDATION_FAIL');
@@ -430,18 +496,37 @@ export class T2Orchestrator {
     this._requireState([State.ENGINE_SINGLETON_VERIFIED]);
     await this._setState(State.SAVE_RUNNING, 'save_begin');
 
+    this.sideEffects.SAVE_ATTEMPTED = true;
+    await this._persistSideEffects();
+
     const result = await this.guardedCall('pm2Save', () => this.commands.pm2Save());
+
+    let dumpPack = null;
+    let dumpStateUnknown = false;
+    try {
+      dumpPack = await this.commands.readDump();
+    } catch {
+      dumpStateUnknown = true;
+    }
+
+    if (dumpPack && dumpPack.sha256 !== this.preDumpSha) {
+      this.sideEffects.DUMP_SAVE_APPLIED = true;
+      await this._persistSideEffects();
+      this._log('DUMP_SAVE_APPLIED=YES', `post_sha_prefix=${dumpPack.sha256.slice(0, 12)}`);
+    } else if (dumpPack) {
+      this._log('DUMP_SAVE_APPLIED=NO', 'sha_unchanged');
+    } else {
+      this._log('DUMP_SAVE_APPLIED=UNKNOWN');
+    }
+
     if (result.exitCode !== 0) {
-      await this.rollback('SAVE_EXIT_NONZERO');
+      await this.rollback('SAVE_EXIT_NONZERO', { dumpStateUnknown });
       throw new T2OrchestratorError('SAVE_EXIT_NONZERO');
     }
 
-    let dumpPack;
-    try {
-      dumpPack = await this.commands.readDump();
-    } catch (err) {
-      await this.rollback('DUMP_UNPARSEABLE');
-      throw new T2OrchestratorError('DUMP_UNPARSEABLE', err.message);
+    if (dumpStateUnknown || !dumpPack) {
+      await this.rollback('DUMP_UNPARSEABLE', { dumpStateUnknown: true });
+      throw new T2OrchestratorError('DUMP_UNPARSEABLE');
     }
 
     this.postDumpSha = dumpPack.sha256;
@@ -458,6 +543,16 @@ export class T2Orchestrator {
 
   async postsaveVerify() {
     this._requireState([State.SAVE_SUCCESS]);
+
+    // Revalidate live collector DB values before persist equality check
+    const liveNow = await this.commands.listLiveProcesses();
+    const liveFpNow = semanticFingerprint(liveNow);
+    const liveDbNow = captureCollectorDbLiveValues(liveFpNow);
+    if (!liveDbNow) {
+      await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
+      throw new T2OrchestratorError('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
+    }
+    this.liveCollectorDb = liveDbNow;
 
     const dumpPack = await this.commands.readDump();
     const postFp = semanticFingerprint(dumpPack.parsed);
@@ -491,7 +586,24 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('MISSING_COLLECTOR_DB_PERSIST');
     }
 
-    const col = (postFp.collectors || [])[0] || {};
+    const postCol = (postFp.collectors || [])[0];
+    const liveProc = { env_keys: [...COLLECTOR_DB_KEYS] };
+    Object.defineProperty(liveProc, '_envValues', {
+      value: this.liveCollectorDb,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    const match = compareCollectorDbLiveToPersist(liveProc, postCol);
+    for (const [k, v] of Object.entries(match.matches)) {
+      this._log(`${k}=${v}`);
+    }
+    if (!match.ok) {
+      await this.rollback('SEMANTIC_ALLOWLIST_FAIL');
+      throw new T2OrchestratorError('SEMANTIC_ALLOWLIST_FAIL', match.error);
+    }
+
+    const col = postCol || {};
     const presenceBits = COLLECTOR_DB_KEYS.map((k) => (col.db_keys_present?.[k] ? '1' : '0')).join(
       '',
     );
@@ -504,7 +616,7 @@ export class T2Orchestrator {
 
     await this._setState(State.POSTSAVE_VERIFIED, 'postsave_verified');
     this._log('POSTSAVE_VERIFIED', `allowlist=${[...kinds].sort().join(',')}`);
-    return { kinds: [...kinds] };
+    return { kinds: [...kinds], dbMatches: match.matches };
   }
 
   async healthValidate() {
@@ -532,10 +644,11 @@ export class T2Orchestrator {
   }
 
   /**
-   * Rollback: nonterminal → ROLLBACK_RUNNING → guarded mutations → ROLLED_BACK.
-   * Never mutates after FAILED/COMPLETED/ROLLED_BACK/FAIL_FORWARD_COMPLETE.
+   * Side-effect-aware rollback.
+   * nonterminal → ROLLBACK_RUNNING → conditional guarded mutations → PRE_EQUIVALENT → ROLLED_BACK
+   * or FAIL_FORWARD_COMPLETE if postconditions fail.
    */
-  async rollback(reason) {
+  async rollback(reason, opts = {}) {
     if (TERMINAL_STATES.includes(this.state) || this.mutationClosed) {
       throw new T2OrchestratorError(
         'MUTATION_CLOSED',
@@ -560,21 +673,57 @@ export class T2Orchestrator {
       await this._setState(State.ROLLBACK_RUNNING, `rollback:${reason}`);
     }
 
+    const plan = planRollbackActions(this.sideEffects, {
+      dumpStateUnknown: opts.dumpStateUnknown === true,
+    });
+    this.lastRollbackPlan = plan;
+    this._log(
+      'ROLLBACK_PLAN',
+      `restoreDump=${plan.restoreDump ? 'YES' : 'NO'}`,
+      `startExtra=${plan.startExtra ? 'YES' : 'NO'}`,
+      `restore_reason=${plan.reason.restore}`,
+      `start_reason=${plan.reason.start}`,
+    );
+
     try {
-      if (this.backupBytes) {
-        await this.guardedCall('restoreDump', () => this.commands.restoreDump(this.backupBytes));
-      } else if (this.backupPath) {
-        throw new T2OrchestratorError('BACKUP_BYTES_MISSING');
+      if (plan.restoreDump) {
+        if (!this.backupBytes) {
+          throw new T2OrchestratorError('BACKUP_BYTES_MISSING');
+        }
+        const restoreResult = await this.guardedCall('restoreDump', () =>
+          this.commands.restoreDump(this.backupBytes),
+        );
+        if (restoreResult && restoreResult.ok === false) {
+          throw new T2OrchestratorError('RESTORE_DUMP_FAILED');
+        }
       }
-      if (this.selection?.extra?.pm_id != null) {
-        await this.guardedCall('startProcessByPmId', () =>
+
+      if (plan.startExtra) {
+        if (this.selection?.extra?.pm_id == null) {
+          throw new T2OrchestratorError('EXTRA_PM_ID_MISSING');
+        }
+        const startResult = await this.guardedCall('startProcessByPmId', () =>
           this.commands.startProcessByPmId(this.selection.extra.pm_id),
         );
+        if (!startResult || startResult.exitCode !== 0) {
+          throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
+        }
       }
+
+      // If no PM2 inverse mutations were needed, still require PRE_EQUIVALENT proof.
+      const proof = await this._provePreEquivalent();
+      if (!proof.ok) {
+        await this._setState(State.FAIL_FORWARD_COMPLETE, proof.error);
+        this._log('FAIL_FORWARD_COMPLETE', proof.error);
+        throw new T2OrchestratorError(proof.error);
+      }
+
       await this._setState(State.ROLLED_BACK, reason);
-      this._log('ROLLED_BACK', reason);
+      this._log('ROLLED_BACK', reason, 'PRE_EQUIVALENT=YES');
     } catch (err) {
-      // Still in ROLLBACK_RUNNING / non-terminal until we mark fail-forward
+      if (TERMINAL_STATES.includes(this.state)) {
+        throw err;
+      }
       try {
         await this._setState(State.FAIL_FORWARD_COMPLETE, err.code || err.message);
       } catch {
@@ -584,6 +733,42 @@ export class T2Orchestrator {
       this._log('FAIL_FORWARD_COMPLETE', err.code || err.message);
       throw err;
     }
+  }
+
+  async _provePreEquivalent() {
+    let dumpPack;
+    try {
+      dumpPack = await this.commands.readDump();
+    } catch {
+      return { ok: false, error: 'ROLLBACK_DUMP_UNREADABLE' };
+    }
+    const live = await this.commands.listLiveProcesses();
+    const postDumpFp = semanticFingerprint(dumpPack.parsed);
+    const postLiveFp = semanticFingerprint(live);
+
+    // Collector live functional health during rollback proof
+    try {
+      const h5003 = await this.commands.healthCheck(5003);
+      const func = await this.commands.collectorFunctionalCheck();
+      if (h5003.statusCode !== 200 || func.accounts !== 200 || func.channels !== 200) {
+        return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
+      }
+    } catch {
+      return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
+    }
+
+    return assertPreEquivalent(
+      this.preDumpFp,
+      this.preLiveFp,
+      postDumpFp,
+      postLiveFp,
+      {
+        retainedPmId: this.selection?.retained?.pm_id,
+        extraPmId: this.selection?.extra?.pm_id,
+        expectedDumpSha: this.preDumpSha,
+        actualDumpSha: dumpPack.sha256,
+      },
+    );
   }
 
   async runTransaction() {

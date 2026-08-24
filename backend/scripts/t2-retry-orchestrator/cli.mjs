@@ -3,14 +3,14 @@
  * Fail-closed CLI for T2 retry orchestrator.
  *
  * Default: non-mutating.
- * Live adapter selected ONLY when ALL gates are present:
+ * Live adapter selected ONLY when ALL gates are present AND explicit:
  *   --execute
  *   --run-id
  *   --authorization-file
  *   --acknowledge-production-mutation=YES
  *   --backup-root
- *   --journal-root (optional; defaults to backup-root)
- *   --expected-tool-version matching TOOL_VERSION
+ *   --expected-tool-version  (MUST be explicit; no default for live path)
+ *   --confirm-run-transaction
  *
  * This source task must not invoke live execution.
  */
@@ -23,57 +23,113 @@ import {
   TOOL_NAME,
   TOOL_VERSION,
 } from './constants.mjs';
-import { createFailClosedBoundary } from './commandBoundary.mjs';
 import { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
 import { createOrchestrator, T2OrchestratorError } from './orchestrator.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function readArg(argv, name) {
+export function readArg(argv, name) {
   const idx = argv.indexOf(name);
   if (idx === -1 || idx + 1 >= argv.length) return null;
   return argv[idx + 1];
 }
 
-function hasFlag(argv, name) {
+export function hasFlag(argv, name) {
   return argv.includes(name);
 }
 
-function usage() {
+export function usage() {
   return [
     `Usage: node ${path.relative(process.cwd(), path.join(__dirname, 'cli.mjs'))} [options]`,
     '',
     'Default: non-mutating / fail-closed.',
     '',
-    'Live execution requires ALL of:',
+    'Live execution requires ALL of (all explicit — no defaults):',
     '  --execute',
     '  --run-id <id>',
     '  --authorization-file <path>',
     '  --acknowledge-production-mutation=YES',
     '  --backup-root <dir>',
     '  --expected-tool-version ' + TOOL_VERSION,
+    '  --confirm-run-transaction',
     '',
     `Tool: ${TOOL_NAME}@${TOOL_VERSION}`,
     `Authorized transaction id: ${AUTHORIZED_TRANSACTION}`,
   ].join('\n');
 }
 
-function main(argv = process.argv.slice(2)) {
-  if (hasFlag(argv, '--help') || hasFlag(argv, '-h')) {
-    console.log(usage());
-    process.exit(0);
-  }
-
+/**
+ * Complete live execution gate decision.
+ * --expected-tool-version MUST be present on argv (not defaulted).
+ * --confirm-run-transaction is part of the gate, not a later convenience.
+ */
+export function evaluateLiveExecutionGates(argv = []) {
   const execute = hasFlag(argv, '--execute');
   const runId = readArg(argv, '--run-id');
   const authFile = readArg(argv, '--authorization-file');
   const backupRoot = readArg(argv, '--backup-root');
   const journalRoot = readArg(argv, '--journal-root') || backupRoot;
   const ack = readArg(argv, '--acknowledge-production-mutation');
-  const expectedVersion = readArg(argv, '--expected-tool-version') || TOOL_VERSION;
+  const hasExplicitVersion = argv.includes('--expected-tool-version');
+  const expectedVersion = hasExplicitVersion ? readArg(argv, '--expected-tool-version') : null;
+  const confirmRun = hasFlag(argv, '--confirm-run-transaction');
 
+  const missing = [];
+  if (!execute) missing.push('--execute');
+  if (!runId) missing.push('--run-id');
+  if (!authFile) missing.push('--authorization-file');
+  if (ack !== 'YES') missing.push('--acknowledge-production-mutation=YES');
+  if (!backupRoot) missing.push('--backup-root');
+  if (!hasExplicitVersion || expectedVersion == null) missing.push('--expected-tool-version');
+  if (!confirmRun) missing.push('--confirm-run-transaction');
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      error: 'EXECUTION_GATES_INCOMPLETE',
+      missing,
+      expectedVersion,
+      runId,
+      authFile,
+      backupRoot,
+      journalRoot,
+    };
+  }
+
+  if (expectedVersion !== TOOL_VERSION) {
+    return {
+      ok: false,
+      error: 'TOOL_VERSION_MISMATCH',
+      expectedVersion,
+      toolVersion: TOOL_VERSION,
+      runId,
+      authFile,
+      backupRoot,
+      journalRoot,
+    };
+  }
+
+  return {
+    ok: true,
+    expectedVersion,
+    runId,
+    authFile,
+    backupRoot,
+    journalRoot,
+    confirmRun: true,
+  };
+}
+
+export function main(argv = process.argv.slice(2), { exit = process.exit, stdout = console.log, stderr = console.error } = {}) {
+  if (hasFlag(argv, '--help') || hasFlag(argv, '-h')) {
+    stdout(usage());
+    exit(0);
+    return;
+  }
+
+  const execute = hasFlag(argv, '--execute');
   if (!execute) {
-    console.error(
+    stderr(
       JSON.stringify({
         tool: TOOL_NAME,
         version: TOOL_VERSION,
@@ -82,90 +138,79 @@ function main(argv = process.argv.slice(2)) {
           'Refusing execution. Pass --execute plus full authorization gates only under Owner one-shot.',
       }),
     );
-    process.exit(2);
+    exit(2);
+    return;
   }
 
-  const gatesSatisfied =
-    ack === 'YES' &&
-    Boolean(runId) &&
-    Boolean(authFile) &&
-    Boolean(backupRoot) &&
-    Boolean(journalRoot) &&
-    expectedVersion === TOOL_VERSION;
-
-  if (!gatesSatisfied) {
-    console.error(
+  const gates = evaluateLiveExecutionGates(argv);
+  if (!gates.ok) {
+    stderr(
       JSON.stringify({
-        error: 'EXECUTION_GATES_INCOMPLETE',
+        error: gates.error,
+        missing: gates.missing || undefined,
+        expectedVersion: gates.expectedVersion,
+        toolVersion: TOOL_VERSION,
         message:
-          'Live adapter requires --acknowledge-production-mutation=YES, --run-id, --authorization-file, --backup-root, and matching --expected-tool-version',
+          'Live adapter requires explicit --execute, --run-id, --authorization-file, --acknowledge-production-mutation=YES, --backup-root, --expected-tool-version matching TOOL_VERSION, and --confirm-run-transaction',
       }),
     );
-    process.exit(2);
+    exit(2);
+    return;
   }
 
   let authorization;
   try {
-    authorization = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+    authorization = JSON.parse(fs.readFileSync(gates.authFile, 'utf8'));
   } catch {
-    console.error('ERROR: authorization file unreadable/unparseable');
-    process.exit(2);
+    stderr('ERROR: authorization file unreadable/unparseable');
+    exit(2);
+    return;
   }
 
-  // Live adapter is repo-owned and audited, but only selected when gatesSatisfied===true.
+  // Live adapter only when complete gate decision is ok (includes confirm).
   const commands = createLiveBoundary({ gatesSatisfied: true });
   const orch = createOrchestrator({
     commands,
     authorization,
-    runId,
-    backupRoot,
-    journalRoot,
+    runId: gates.runId,
+    backupRoot: gates.backupRoot,
+    journalRoot: gates.journalRoot,
     journalFs: createNodeJournalFs(),
     productionModeAcknowledged: true,
-    expectedToolVersion: expectedVersion,
+    expectedToolVersion: gates.expectedVersion,
   });
 
-  // Deliberately do NOT auto-runTransaction here without an additional
-  // --confirm-run-transaction flag, so casual invocation cannot mutate.
-  if (!hasFlag(argv, '--confirm-run-transaction')) {
-    console.error(
-      JSON.stringify({
-        tool: TOOL_NAME,
-        version: TOOL_VERSION,
-        mode: 'GATES_OK_ADAPTER_SELECTED_RUN_NOT_CONFIRMED',
-        state: orch.state,
-        message:
-          'Live adapter selected. Pass --confirm-run-transaction only under Owner one-shot to execute.',
-      }),
-    );
-    process.exit(3);
-  }
-
-  orch
+  return orch
     .runTransaction()
     .then((state) => {
-      console.log(JSON.stringify({ ok: true, state, runId }));
-      process.exit(state === 'COMPLETED' ? 0 : 1);
+      stdout(JSON.stringify({ ok: true, state, runId: gates.runId }));
+      exit(state === 'COMPLETED' ? 0 : 1);
     })
     .catch((err) => {
-      console.error(
+      stderr(
         JSON.stringify({
           ok: false,
           error: err.code || 'ERROR',
           message: String(err.message || err),
         }),
       );
-      process.exit(1);
+      exit(1);
     });
 }
 
-try {
-  main();
-} catch (err) {
-  if (err instanceof T2OrchestratorError) {
-    console.error(JSON.stringify({ error: err.code, message: err.message }));
+const isDirect =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+
+if (isDirect) {
+  try {
+    main();
+  } catch (err) {
+    if (err instanceof T2OrchestratorError) {
+      console.error(JSON.stringify({ error: err.code, message: err.message }));
+      process.exit(1);
+    }
+    console.error(JSON.stringify({ error: 'UNHANDLED', message: String(err?.message || err) }));
     process.exit(1);
   }
-  console.error(JSON.stringify({ error: 'UNHANDLED', message: String(err?.message || err) }));
-  process.exit(1);
 }

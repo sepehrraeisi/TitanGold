@@ -2,6 +2,7 @@
  * Durable one-shot transaction journal for T2 orchestrator.
  * No secret values. Parent dir 0700, journal file 0600.
  * Atomic exclusive run-directory creation — duplicate RUN_ID fails closed.
+ * Durable writes: temp → fsync file → rename → fsync directory.
  */
 
 import path from 'path';
@@ -23,18 +24,22 @@ export class JournalError extends Error {
  *   readFile: (file: string) => Promise<string>,
  *   exists: (file: string) => Promise<boolean>,
  *   chmod: (file: string, mode: number) => Promise<void>,
+ *   fsync?: (target: string) => Promise<void>,
  * }} JournalFs
  */
 
 /**
- * In-memory journal FS for unit tests.
+ * In-memory journal FS for unit tests (fsync mockable).
  */
 export function createMemoryJournalFs() {
   /** @type {Map<string, { type: 'dir'|'file', mode: number, data?: string }>} */
   const store = new Map();
+  /** @type {string[]} */
+  const fsyncCalls = [];
 
   return {
     store,
+    fsyncCalls,
     async mkdirExclusive(dir, mode) {
       if (store.has(dir)) {
         throw new JournalError('RUN_DIR_EXISTS', `RUN_DIR_EXISTS path=${dir}`);
@@ -48,7 +53,13 @@ export function createMemoryJournalFs() {
       store.set(file, { type: 'file', mode, data });
     },
     async writeFileAtomic(file, data, mode) {
+      const dir = path.dirname(file);
+      const tmp = `${file}.tmp`;
+      store.set(tmp, { type: 'file', mode, data });
+      await this.fsync(tmp);
       store.set(file, { type: 'file', mode, data });
+      store.delete(tmp);
+      await this.fsync(dir);
     },
     async readFile(file) {
       const e = store.get(file);
@@ -62,6 +73,9 @@ export function createMemoryJournalFs() {
       const e = store.get(file);
       if (!e) throw new JournalError('JOURNAL_MISSING');
       e.mode = mode;
+    },
+    async fsync(target) {
+      fsyncCalls.push(String(target));
     },
   };
 }
@@ -93,10 +107,21 @@ export async function createExclusiveJournal(opts) {
     retainedPmId: null,
     extraPmId: null,
     preDumpShaPrefix: null,
+    sideEffects: {
+      BACKUP_WRITTEN: false,
+      STOP_ATTEMPTED: false,
+      ENGINE_STOP_APPLIED: false,
+      SAVE_ATTEMPTED: false,
+      DUMP_SAVE_APPLIED: false,
+    },
     createdAt: new Date().toISOString(),
   };
 
   await fs.writeFileExclusive(journalPath, JSON.stringify(record, null, 2), 0o600);
+  if (typeof fs.fsync === 'function') {
+    await fs.fsync(journalPath);
+    await fs.fsync(runDir);
+  }
 
   return new TransactionJournal({ runDir, journalPath, fs, record });
 }
@@ -169,11 +194,17 @@ export class TransactionJournal {
   }
 
   async persist() {
-    await this.fs.writeFileAtomic(
-      this.journalPath,
-      JSON.stringify(this.record, null, 2),
-      0o600,
-    );
+    try {
+      await this.fs.writeFileAtomic(
+        this.journalPath,
+        JSON.stringify(this.record, null, 2),
+        0o600,
+      );
+    } catch (err) {
+      const e = new JournalError('JOURNAL_PERSIST_FAILED', err.message || 'JOURNAL_PERSIST_FAILED');
+      e.cause = err;
+      throw e;
+    }
   }
 
   async transition(toState, event) {
@@ -193,7 +224,6 @@ export class TransactionJournal {
 
   /**
    * Persist authorization consumption BEFORE any production mutation.
-   * Atomic relative to journal file write.
    */
   async markAuthorizationConsumed() {
     if (this.record.authConsumed) {
@@ -215,6 +245,17 @@ export class TransactionJournal {
     this.record.preDumpShaPrefix = preDumpShaPrefix
       ? String(preDumpShaPrefix).slice(0, 12)
       : null;
+    await this.persist();
+  }
+
+  async persistSideEffects(ledger) {
+    this.record.sideEffects = {
+      BACKUP_WRITTEN: !!ledger.BACKUP_WRITTEN,
+      STOP_ATTEMPTED: !!ledger.STOP_ATTEMPTED,
+      ENGINE_STOP_APPLIED: !!ledger.ENGINE_STOP_APPLIED,
+      SAVE_ATTEMPTED: !!ledger.SAVE_ATTEMPTED,
+      DUMP_SAVE_APPLIED: !!ledger.DUMP_SAVE_APPLIED,
+    };
     await this.persist();
   }
 }

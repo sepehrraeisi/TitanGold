@@ -3,7 +3,7 @@
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.1.0';
+export const TOOL_VERSION = '1.2.0';
 
 export const AUTHORIZED_TRANSACTION =
   'T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST';
@@ -29,9 +29,10 @@ export const COLLECTOR_DB_KEYS = Object.freeze([
   'DB_PASSWORD',
 ]);
 
-/** PM2 metadata field names that must never be treated as application env. */
+/** PM2 metadata / launch fields that must never be treated as application env. */
 export const PM2_METADATA_KEYS = Object.freeze([
   'pm_id',
+  'pmId',
   'name',
   'status',
   'pm_pid_path',
@@ -69,6 +70,58 @@ export const PM2_METADATA_KEYS = Object.freeze([
   'args',
   'env',
   'pm2_env',
+  'cwd',
+  'script',
+  'pid',
+  'monit',
+  'pm_id',
+  'windowsHide',
+  'kill_retry_time',
+  'max_memory_restart',
+  'treekill',
+  'username',
+  'merge_logs',
+  'source_map_support',
+  'instance_var',
+  'env_production',
+  'env_development',
+  'env_file',
+  'updateEnv',
+  'node_version',
+  'PM2_HOME',
+  'PM2_JSON_PROCESSING',
+  'PM2_USAGE',
+]);
+
+/** Volatile runtime metadata excluded from stable config diffs. */
+export const VOLATILE_RUNTIME_KEYS = Object.freeze([
+  'pid',
+  'pm_uptime',
+  'created_at',
+  'restart_time',
+  'unstable_restarts',
+  'axm_monitor',
+  'axm_actions',
+  'axm_dynamic',
+  'monit',
+  'memory',
+  'cpu',
+  'exit_code',
+]);
+
+/** Stable launch/config fields compared across dump/live. */
+export const STABLE_CONFIG_FIELDS = Object.freeze([
+  'name',
+  'script',
+  'cwd',
+  'exec_mode',
+  'interpreter',
+  'instances',
+  'namespace',
+  'args',
+  'node_args',
+  'autorestart',
+  'watch',
 ]);
 
 export const State = Object.freeze({
@@ -124,7 +177,19 @@ export const FORBIDDEN_DIFF_KINDS = Object.freeze([
   'TELEGRAM_TOKEN_ENV_RESTORED',
   'PROVIDER_ENV_CHANGE',
   'UNRELATED_PROCESS_CHANGE',
+  'SCRIPT_CHANGED',
+  'CWD_CHANGED',
+  'ARGS_CHANGED',
+  'EXEC_MODE_CHANGED',
+  'PROCESS_CONFIG_CHANGED',
+  'COLLECTOR_DB_LIVE_PERSIST_MISMATCH',
 ]);
 
 export const PROVIDER_ENV_KEY_RE =
   /^(MEXC_|OPENAI_|GEMINI_|DEEPSEEK_|OPENROUTER_|ANTHROPIC_|API_KEY|API_SECRET)/i;
+
+export const SUPPORTED_ENV_SHAPES = Object.freeze([
+  'entry.env',
+  'entry.pm2_env.env',
+  'flat_dump_entry',
+]);

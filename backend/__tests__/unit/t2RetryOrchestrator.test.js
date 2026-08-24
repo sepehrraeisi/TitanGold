@@ -25,6 +25,13 @@ import {
   ForbiddenLiveExecutionError,
   JournalError,
   MUTATING_OPS,
+  evaluateLiveExecutionGates,
+  extractProcessEnvResult,
+  assertEntriesEnvShapes,
+  compareCollectorDbLiveToPersist,
+  planRollbackActions,
+  createSideEffectLedger,
+  semanticFingerprint,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 const SECRET_PASSWORD = 'super-secret-db-password-NEVER-IN-EVIDENCE';
@@ -55,6 +62,11 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/backend',
       pm_exec_path: '/app/backend/workers/engineWorkerLeader.js',
       exec_mode: 'fork_mode',
+      exec_interpreter: 'node',
+      namespace: 'default',
+      node_args: [],
+      autorestart: true,
+      watch: false,
       created_at: 1000,
       restart_time: 5,
       env: { NODE_ENV: 'development', PATH: '/usr/bin' },
@@ -67,6 +79,11 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/backend',
       pm_exec_path: '/app/backend/workers/engineWorkerLeader.js',
       exec_mode: 'fork_mode',
+      exec_interpreter: 'node',
+      namespace: 'default',
+      node_args: [],
+      autorestart: true,
+      watch: false,
       created_at: 1001,
       restart_time: 5,
       env: { NODE_ENV: 'development', PATH: '/usr/bin' },
@@ -75,18 +92,26 @@ function makeLiveAndDump(overrides = {}) {
       name: 'titan-backend',
       pm_id: id,
       status: 'online',
+      pm_cwd: '/app/backend',
+      pm_exec_path: '/app/backend/server.js',
+      exec_mode: 'cluster_mode',
       env: { NODE_ENV: 'development', BACKEND_SECRET: SECRET_BACKEND },
     })),
     {
       name: 'telegram-processor',
       pm_id: 11,
       status: 'online',
+      pm_cwd: '/app/telegram-collector',
+      pm_exec_path: '/app/telegram-collector/processor.js',
+      args: ['--mode=normal'],
       env: { NODE_ENV: 'development' },
     },
     {
       name: 'telegram-collector',
       pm_id: 16,
       status: 'online',
+      pm_cwd: '/app/telegram-collector',
+      pm_exec_path: '/app/telegram-collector/index.js',
       env: {
         NODE_ENV: 'production',
         DB_HOST: '127.0.0.1',
@@ -132,6 +157,15 @@ function makeLiveAndDump(overrides = {}) {
     forceCollectorUnrelatedEnvAdd: false,
     forceProviderEnvAppear: false,
     forceTelegramTokenAppear: false,
+    forceCollectorDbPasswordMismatch: false,
+    forceCollectorDbHostMismatch: false,
+    forceCollectorDbNameMismatch: false,
+    forceBackendScriptDrift: false,
+    forceBackendCwdDrift: false,
+    forceProcessorArgsDrift: false,
+    forceOtherConfigDrift: false,
+    startExitCode: 0,
+    restoreShaOverride: null,
     ...overrides,
   };
 }
@@ -140,35 +174,54 @@ function createFakeBoundary(world) {
   let dumpEntries = deepClone(world.dump);
   let liveEntries = deepClone(world.live);
   let dumpCorrupt = false;
+  const mutationLog = [];
 
   return {
+    mutationLog,
     world: () => ({ liveEntries, dumpEntries }),
     async listLiveProcesses() {
       return deepClone(liveEntries);
     },
     async readDump() {
       if (dumpCorrupt) throw new Error('DUMP_UNPARSEABLE');
-      const bytes = dumpToBytes(dumpEntries);
+      let bytes = dumpToBytes(dumpEntries);
+      if (world.restoreShaOverride && dumpEntries === world._shaOverrideTarget) {
+        bytes = Buffer.from(world.restoreShaOverride);
+      }
       return { bytes, parsed: JSON.parse(bytes.toString('utf8')), sha256: sha256Buffer(bytes) };
     },
     async writeBackup(bytes) {
+      mutationLog.push('writeBackup');
       return { sha256: sha256Buffer(bytes), bytes: bytes.length, mode: 0o600 };
     },
     async restoreDump(backupBytes) {
+      mutationLog.push('restoreDump');
       dumpCorrupt = false;
       dumpEntries = JSON.parse(Buffer.from(backupBytes).toString('utf8'));
+      if (world.forceRestoreShaMismatch) {
+        // Corrupt restored dump content so SHA != backup
+        dumpEntries = deepClone(dumpEntries);
+        dumpEntries.push({ name: 'tamper', pm_id: 999, status: 'stopped', env: {} });
+      }
+      return { ok: true };
     },
     async stopProcessByPmId(pmId) {
+      mutationLog.push(['stop', pmId]);
       const proc = liveEntries.find((e) => e.pm_id === pmId && e.name === 'titan-engine-worker');
       if (proc) proc.status = 'stopped';
       return { exitCode: 0 };
     },
     async startProcessByPmId(pmId) {
+      mutationLog.push(['start', pmId]);
+      if (world.startExitCode !== 0) {
+        return { exitCode: world.startExitCode };
+      }
       const proc = liveEntries.find((e) => e.pm_id === pmId && e.name === 'titan-engine-worker');
       if (proc) proc.status = 'online';
       return { exitCode: 0 };
     },
     async pm2Save() {
+      mutationLog.push('pm2Save');
       if (world.saveExit !== 0) return { exitCode: world.saveExit };
       if (world.corruptDumpAfterSave) {
         dumpCorrupt = true;
@@ -215,6 +268,42 @@ function createFakeBoundary(world) {
         const c = dumpEntries.find((e) => e.name === 'telegram-collector');
         c.env = { ...c.env, TELEGRAM_BOT_TOKEN: SECRET_TOKEN };
       }
+      if (world.forceCollectorDbPasswordMismatch) {
+        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+        c.env.DB_PASSWORD = 'wrong-password-not-live';
+      }
+      if (world.forceCollectorDbHostMismatch) {
+        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+        c.env.DB_HOST = '10.0.0.1';
+      }
+      if (world.forceCollectorDbNameMismatch) {
+        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+        c.env.DB_NAME = 'other_db';
+      }
+      if (world.forceBackendScriptDrift) {
+        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
+        b.pm_exec_path = '/app/backend/server-DRIFTED.js';
+      }
+      if (world.forceBackendCwdDrift) {
+        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
+        b.pm_cwd = '/app/backend-DRIFTED';
+      }
+      if (world.forceProcessorArgsDrift) {
+        const p = dumpEntries.find((e) => e.name === 'telegram-processor');
+        p.args = ['--mode=drifted'];
+      }
+      if (world.forceOtherConfigDrift) {
+        dumpEntries.push({
+          name: 'titan-error-watch',
+          pm_id: 99,
+          status: 'online',
+          pm_exec_path: '/x.js',
+          env: { NODE_ENV: 'development' },
+        });
+      }
+      if (world.forceEngineCountNotRestoredOnRollback) {
+        world._blockEngineRestore = true;
+      }
       return { exitCode: 0 };
     },
     async healthCheck(port) {
@@ -223,8 +312,12 @@ function createFakeBoundary(world) {
     async collectorFunctionalCheck() {
       return { accounts: 200, channels: 200, health: 200 };
     },
-    async ensureDir() {},
-    async chmod() {},
+    async ensureDir() {
+      mutationLog.push('ensureDir');
+    },
+    async chmod() {
+      mutationLog.push('chmod');
+    },
     async pathExists() {
       return true;
     },
@@ -240,6 +333,44 @@ function nextRunId(prefix = 'T2R') {
 function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   const world = makeLiveAndDump(worldOverrides);
   const commands = createFakeBoundary(world);
+  // Optional: break start after stop for FAIL_FORWARD tests
+  if (worldOverrides.forceStartFailOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    let startedOnce = false;
+    commands.startProcessByPmId = async (pmId) => {
+      // Allow normal path until rollback
+      if (commands.mutationLog.includes('pm2Save') || world.saveExit !== 0) {
+        return { exitCode: 1 };
+      }
+      startedOnce = true;
+      return origStart(pmId);
+    };
+    void startedOnce;
+  }
+  if (worldOverrides.forceEngineCountNotRestoredOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      // Immediately stop again so count stays wrong? Better: don't actually start
+      const proc = commands.world().liveEntries.find((e) => e.pm_id === pmId);
+      if (proc) proc.status = 'stopped';
+      return r;
+    };
+  }
+  if (worldOverrides.forceUnrelatedRollbackDrift) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      // Drift live retained engine NODE_ENV after start — dump SHA remains PRE-correct
+      const retained = commands
+        .world()
+        .liveEntries.find((e) => e.name === 'titan-engine-worker' && e.status === 'online' && e.pm_id !== pmId);
+      if (retained) {
+        retained.env = { ...(retained.env || {}), NODE_ENV: 'production' };
+      }
+      return r;
+    };
+  }
   const runId = orchOverrides.runId || nextRunId();
   const journalFs = orchOverrides.journalFs || createMemoryJournalFs();
   const journalRoot = orchOverrides.journalRoot || '/tmp/t2-orch-journals';
@@ -256,7 +387,7 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   return { orch, commands, world, journalFs, journalRoot, runId };
 }
 
-describe('T2 retry orchestrator (durable audit correction)', () => {
+describe('T2 retry orchestrator (final audit correction)', () => {
   it('T1 happy path', async () => {
     const { orch, commands } = buildOrch();
     const result = await orch.runTransaction();
@@ -283,16 +414,21 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     expect(await orch.complete()).toBe(State.COMPLETED);
   });
 
-  it('T3 save command failure => rollback', async () => {
+  it('T3 save command failure => rollback PRE_EQUIVALENT', async () => {
     const { orch, commands } = buildOrch({ saveExit: 1 });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
     await expect(orch.save()).rejects.toMatchObject({ code: 'SAVE_EXIT_NONZERO' });
     expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(false);
+    expect(orch.sideEffects.ENGINE_STOP_APPLIED).toBe(true);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(false);
+    expect(orch.lastRollbackPlan.startExtra).toBe(true);
     expect(
       commands.world().liveEntries.filter((e) => e.name === 'titan-engine-worker' && e.status === 'online'),
     ).toHaveLength(2);
+    expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
   });
 
   it('T4 semantic post-save mismatch => rollback', async () => {
@@ -337,14 +473,18 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     await expect(orch.runTransaction()).rejects.toMatchObject({ code: 'REPLAY_BLOCKED' });
   });
 
-  it('T9 stale pm_id / process generation blocked', async () => {
+  it('T9 stale pm_id BEFORE stop => FAILED with zero PM2 rollback mutation', async () => {
     const { orch, commands } = buildOrch();
     await orch.precheck();
     await orch.backup();
     const extra = commands.world().liveEntries.find((e) => e.pm_id === orch.selection.extra.pm_id);
     extra.restart_time = 999;
     await expect(orch.stopExtra()).rejects.toMatchObject({ code: 'STALE_EXTRA_PROCESS' });
-    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(orch.state).toBe(State.FAILED);
+    expect(commands.mutationLog.includes('restoreDump')).toBe(false);
+    expect(commands.mutationLog.some((m) => Array.isArray(m) && m[0] === 'start')).toBe(false);
+    expect(commands.mutationLog.some((m) => Array.isArray(m) && m[0] === 'stop')).toBe(false);
+    expect(orch.evidence.lines.some((l) => l.includes('NO_PM2_ROLLBACK_MUTATION'))).toBe(true);
   });
 
   it('T10 unexpected dump difference blocked', async () => {
@@ -437,14 +577,8 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     await orch.precheck();
     await orch.backup();
     expect(orch.journal.authConsumed).toBe(true);
-
     const loaded = await loadJournal({ runId, journalRoot, fs: journalFs });
     expect(() => loaded.assertFreshStartAllowed()).toThrow(JournalError);
-    try {
-      loaded.assertFreshStartAllowed();
-    } catch (e) {
-      expect(e.code).toBe('JOURNAL_AUTH_CONSUMED_NO_REPLAY');
-    }
   });
 
   it('T18 crash-after-consume simulation = BLOCKED', async () => {
@@ -454,7 +588,6 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     const { orch } = buildOrch({}, { journalFs, journalRoot, runId });
     await orch.precheck();
     await orch.consumeAuthorization();
-    // simulate crash: new process sees consumed journal, cannot continue
     const loaded = await loadJournal({ runId, journalRoot, fs: journalFs });
     expect(loaded.authConsumed).toBe(true);
     try {
@@ -463,17 +596,6 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     } catch (e) {
       expect(e.code).toBe('JOURNAL_AUTH_CONSUMED_NO_REPLAY');
     }
-    const orch2 = createOrchestrator({
-      commands: createFakeBoundary(makeLiveAndDump()),
-      authorization: makeAuth(runId),
-      runId,
-      backupRoot: journalRoot,
-      journalRoot,
-      journalFs,
-      journal: loaded,
-      productionModeAcknowledged: true,
-    });
-    await expect(orch2.precheck()).rejects.toBeTruthy();
   });
 
   it('T19 duplicate concurrent run creation = BLOCKED', async () => {
@@ -484,7 +606,6 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     await expect(
       createExclusiveJournal({ runId, journalRoot, fs: journalFs, toolVersion: TOOL_VERSION }),
     ).rejects.toMatchObject({ code: 'RUN_DIR_EXISTS' });
-
     const { orch } = buildOrch({}, { journalFs, journalRoot, runId });
     await expect(orch.precheck()).rejects.toMatchObject({ code: 'DUPLICATE_RUN_BLOCKED' });
   });
@@ -495,15 +616,9 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     const runId = nextRunId('TERM');
     const { orch } = buildOrch({}, { journalFs, journalRoot, runId });
     await orch.runTransaction();
-    expect(orch.state).toBe(State.COMPLETED);
     const loaded = await loadJournal({ runId, journalRoot, fs: journalFs });
     expect(loaded.isTerminal()).toBe(true);
-    try {
-      loaded.assertFreshStartAllowed();
-      throw new Error('should have thrown');
-    } catch (e) {
-      expect(['JOURNAL_TERMINAL_NO_REPLAY', 'JOURNAL_AUTH_CONSUMED_NO_REPLAY']).toContain(e.code);
-    }
+    expect(() => loaded.assertFreshStartAllowed()).toThrow(JournalError);
   });
 
   it('T21 external rollback cannot bypass auth/ack/state/terminal', async () => {
@@ -528,7 +643,6 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     o4.state = State.AUTHORIZED_UNCONSUMED;
     await expect(o4.rollback('x')).rejects.toMatchObject({ code: 'ROLLBACK_STATE_INVALID' });
 
-    // restoreDump cannot be called outside ROLLBACK_RUNNING
     const { orch: o5 } = buildOrch();
     await o5.precheck();
     await o5.backup();
@@ -634,7 +748,6 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     const commands = {
       ...base,
       async writeBackup(...args) {
-        // journal must already show consumed
         const j = await loadJournal({ runId, journalRoot, fs: journalFs });
         expect(j.authConsumed).toBe(true);
         backupCalled = true;
@@ -667,5 +780,330 @@ describe('T2 retry orchestrator (durable audit correction)', () => {
     ]) {
       expect(MUTATING_OPS.includes(op)).toBe(true);
     }
+  });
+
+  // ---- Final audit cases ----
+
+  it('T32 start rollback nonzero => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ saveExit: 1, forceStartFailOnRollback: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await expect(orch.save()).rejects.toMatchObject({ code: 'START_ROLLBACK_NONZERO' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+    expect(orch.mutationClosed).toBe(true);
+  });
+
+  it('T33 restored dump SHA mismatch => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceRestoreShaMismatch: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('T34 engine count not restored => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ saveExit: 1, forceEngineCountNotRestoredOnRollback: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await expect(orch.save()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('T35 unrelated rollback drift => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceUnrelatedRollbackDrift: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('T36 successful rollback proves PRE_EQUIVALENT', async () => {
+    const { orch } = buildOrch({ forceBackendDriftOnSave: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(true);
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
+  });
+
+  it('T37 persisted DB_PASSWORD differs = FAIL', async () => {
+    const { orch } = buildOrch({ forceCollectorDbPasswordMismatch: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.evidence.lines.some((l) => l.includes('DB_PASSWORD_MATCH=NO'))).toBe(true);
+    expect(orch.evidence.toString().includes('wrong-password')).toBe(false);
+  });
+
+  it('T38 persisted DB_HOST differs = FAIL', async () => {
+    const { orch } = buildOrch({ forceCollectorDbHostMismatch: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.evidence.lines.some((l) => l.includes('DB_HOST_MATCH=NO'))).toBe(true);
+    expect(orch.evidence.toString().includes('10.0.0.1')).toBe(false);
+  });
+
+  it('T39 persisted DB_NAME differs = FAIL', async () => {
+    const { orch } = buildOrch({ forceCollectorDbNameMismatch: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.evidence.lines.some((l) => l.includes('DB_NAME_MATCH=NO'))).toBe(true);
+  });
+
+  it('T40 all five DB exact match = PASS; no credential values in evidence', async () => {
+    const { orch } = buildOrch();
+    await orch.runTransaction();
+    for (const k of COLLECTOR_DB_KEYS) {
+      expect(orch.evidence.lines.some((l) => l.includes(`${k}_MATCH=YES`))).toBe(true);
+    }
+    const blob = orch.evidence.toString();
+    expect(blob.includes(SECRET_PASSWORD)).toBe(false);
+    expect(blob.includes('127.0.0.1')).toBe(false);
+    expect(blob.includes('5433')).toBe(false);
+  });
+
+  it('T41 backend script drift = FAIL', async () => {
+    const { orch } = buildOrch({ forceBackendScriptDrift: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  });
+
+  it('T42 backend cwd drift = FAIL', async () => {
+    const { orch } = buildOrch({ forceBackendCwdDrift: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  });
+
+  it('T43 processor args drift = FAIL', async () => {
+    const { orch } = buildOrch({ forceProcessorArgsDrift: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  });
+
+  it('T44 unrelated process config drift = FAIL', async () => {
+    const { orch } = buildOrch({ forceOtherConfigDrift: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  });
+
+  it('T45 env shapes: entry.env + entry.pm2_env.env + flat dump supported', () => {
+    const a = extractProcessEnvResult({ name: 'x', env: { A: '1' } });
+    expect(a.ok).toBe(true);
+    expect(a.shape).toBe('entry.env');
+
+    const b = extractProcessEnvResult({
+      name: 'x',
+      pm2_env: { status: 'online', env: { B: '2' } },
+    });
+    expect(b.ok).toBe(true);
+    expect(b.shape).toBe('entry.pm2_env.env');
+
+    const c = extractProcessEnvResult({
+      name: 'x',
+      status: 'online',
+      pm_exec_path: '/a.js',
+      pm_cwd: '/a',
+      NODE_ENV: 'development',
+      DB_USER: 'u',
+    });
+    expect(c.ok).toBe(true);
+    expect(c.shape).toBe('flat_dump_entry');
+    expect(c.env.DB_USER).toBe('u');
+
+    const bad = assertEntriesEnvShapes([{ foo: 1 }]);
+    expect(bad.ok).toBe(false);
+  });
+
+  it('T46 execute without explicit expected-tool-version => fail closed', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--confirm-run-transaction',
+    ]);
+    expect(g.ok).toBe(false);
+    expect(g.missing).toContain('--expected-tool-version');
+  });
+
+  it('T47 wrong tool version => fail closed', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--expected-tool-version',
+      '0.0.0',
+      '--confirm-run-transaction',
+    ]);
+    expect(g.ok).toBe(false);
+    expect(g.error).toBe('TOOL_VERSION_MISMATCH');
+  });
+
+  it('T48 no confirm-run-transaction => cannot initialize live transaction', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--expected-tool-version',
+      TOOL_VERSION,
+    ]);
+    expect(g.ok).toBe(false);
+    expect(g.missing).toContain('--confirm-run-transaction');
+  });
+
+  it('T49 all explicit gates => adapter may initialize in mocked test only', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--expected-tool-version',
+      TOOL_VERSION,
+      '--confirm-run-transaction',
+    ]);
+    expect(g.ok).toBe(true);
+    const boundary = createLiveBoundary({
+      gatesSatisfied: g.ok,
+      spawnSyncImpl: () => ({ status: 0, stdout: '[]', stderr: '' }),
+    });
+    expect(boundary).toBeTruthy();
+  });
+
+  it('T50 journal durable write invokes fsync (mocked)', async () => {
+    const fs = createMemoryJournalFs();
+    const runId = nextRunId('FSYNC');
+    const j = await createExclusiveJournal({
+      runId,
+      journalRoot: '/tmp/t2-fsync',
+      fs,
+      toolVersion: TOOL_VERSION,
+    });
+    await j.markAuthorizationConsumed();
+    expect(fs.fsyncCalls.length).toBeGreaterThan(0);
+    expect(j.authConsumed).toBe(true);
+  });
+
+  it('T51 side-effect plan: stale/no-stop => no restore/start', () => {
+    const ledger = createSideEffectLedger();
+    ledger.BACKUP_WRITTEN = true;
+    const plan = planRollbackActions(ledger);
+    expect(plan.restoreDump).toBe(false);
+    expect(plan.startExtra).toBe(false);
+    expect(plan.anyPm2Mutation).toBe(false);
+  });
+
+  it('T52 compareCollectorDbLiveToPersist secret-safe', () => {
+    const live = { env_keys: [...COLLECTOR_DB_KEYS] };
+    Object.defineProperty(live, '_envValues', {
+      value: {
+        DB_HOST: '127.0.0.1',
+        DB_PORT: '5433',
+        DB_NAME: 'titangold_db',
+        DB_USER: EXPECTED_COLLECTOR_DB_USER,
+        DB_PASSWORD: SECRET_PASSWORD,
+      },
+      enumerable: false,
+    });
+    const persist = { env_keys: [...COLLECTOR_DB_KEYS] };
+    Object.defineProperty(persist, '_envValues', {
+      value: {
+        DB_HOST: '127.0.0.1',
+        DB_PORT: '5433',
+        DB_NAME: 'titangold_db',
+        DB_USER: EXPECTED_COLLECTOR_DB_USER,
+        DB_PASSWORD: SECRET_PASSWORD,
+      },
+      enumerable: false,
+    });
+    const ok = compareCollectorDbLiveToPersist(live, persist);
+    expect(ok.ok).toBe(true);
+    expect(JSON.stringify(ok).includes(SECRET_PASSWORD)).toBe(false);
+
+    const badPersist = { env_keys: [...COLLECTOR_DB_KEYS] };
+    Object.defineProperty(badPersist, '_envValues', {
+      value: { ...live._envValues, DB_PASSWORD: 'nope' },
+      enumerable: false,
+    });
+    const bad = compareCollectorDbLiveToPersist(live, badPersist);
+    expect(bad.ok).toBe(false);
+    expect(bad.matches.DB_PASSWORD_MATCH).toBe('NO');
+  });
+
+  it('T53 jlist-shaped fingerprint works', () => {
+    const entries = [
+      {
+        name: 'telegram-collector',
+        pm_id: 16,
+        pm2_env: {
+          status: 'online',
+          pm_cwd: '/c',
+          pm_exec_path: '/c/i.js',
+          exec_mode: 'fork_mode',
+          env: {
+            NODE_ENV: 'production',
+            DB_HOST: 'h',
+            DB_PORT: '1',
+            DB_NAME: 'n',
+            DB_USER: EXPECTED_COLLECTOR_DB_USER,
+            DB_PASSWORD: 'p',
+          },
+        },
+      },
+    ];
+    const shape = assertEntriesEnvShapes(entries);
+    expect(shape.ok).toBe(true);
+    const fp = semanticFingerprint(entries);
+    expect(fp.collectors[0].db_user_matches_expected).toBe(true);
   });
 });

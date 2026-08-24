@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2 ORCHESTRATOR AUDIT CORRECTION COMPLETE; technically reauthorizable; Owner one-shot still required; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — T2 ORCHESTRATOR FINAL AUDIT PASS; technically reauthorizable; Owner one-shot still required; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -57,6 +57,13 @@ T2_RETRY_REARM_DESIGN = COMPLETE /
 T2_REARM_DESIGN_COMPLETE = YES /
 T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE /
 T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE /
+T2_ORCHESTRATOR_FINAL_AUDIT = PASS /
+SIDE_EFFECT_LEDGER = PASS /
+ROLLBACK_PRE_EQUIVALENT_PROOF = PASS /
+COLLECTOR_DB_EXACT_PERSIST_MATCH = PASS /
+STABLE_PM2_CONFIG_ALLOWLIST = PASS /
+EXPLICIT_EXECUTION_GATES = PASS /
+DURABLE_JOURNAL_FSYNC = PASS /
 T2_ORCHESTRATOR_CURRENTLY_SAFE = YES /
 T2_ORCHESTRATOR_FIX_REQUIRED = NO /
 T2_SOURCE_IMPLEMENTATION_REQUIRED = NO /
@@ -2801,8 +2808,15 @@ Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
 
 **T2_ORCHESTRATOR_SOURCE_FIX = COMPLETE**
 **T2_ORCHESTRATOR_AUDIT_CORRECTION = COMPLETE**
+**T2_ORCHESTRATOR_FINAL_AUDIT = PASS**
+**SIDE_EFFECT_LEDGER = PASS**
+**ROLLBACK_PRE_EQUIVALENT_PROOF = PASS**
+**COLLECTOR_DB_EXACT_PERSIST_MATCH = PASS**
+**STABLE_PM2_CONFIG_ALLOWLIST = PASS**
+**EXPLICIT_EXECUTION_GATES = PASS**
+**DURABLE_JOURNAL_FSYNC = PASS**
 **T2_ORCHESTRATOR_CURRENTLY_SAFE = YES**
-**T2_ORCHESTRATOR_TESTS = PASS** (T1–T16 + durable journal/replay/rollback/env/live-adapter cases)
+**T2_ORCHESTRATOR_TESTS = PASS** (T1–T53 + final audit matrix; suite green with pm2DeployGuard)
 **TERMINAL_MUTATION_GUARD = PASS**
 **SAVE_SUCCESS_CHANGED_SHA_CASE = PASS**
 **SECRET_SAFE_EVIDENCE = PASS**
@@ -2820,23 +2834,24 @@ Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
 **THIS CLOSEOUT DID NOT EXECUTE T2 / DID NOT MUTATE PM2**
 
 Durable tooling paths:
-- `backend/scripts/t2-retry-orchestrator/` (`constants.mjs` · `semantics.mjs` · `commandBoundary.mjs` · `evidence.mjs` · `journal.mjs` · `liveBoundary.mjs` · `orchestrator.mjs` · `cli.mjs` · `index.mjs` · `README.md`)
+- `backend/scripts/t2-retry-orchestrator/` (`constants.mjs` · `semantics.mjs` · `commandBoundary.mjs` · `evidence.mjs` · `journal.mjs` · `sideEffectLedger.mjs` · `liveBoundary.mjs` · `orchestrator.mjs` · `cli.mjs` · `index.mjs` · `README.md`)
 - `backend/__tests__/unit/t2RetryOrchestrator.test.js`
 
-Audit correction contracts (mandatory):
-- durable exclusive journal / crash-after-consume / duplicate RUN_ID fail-closed
-- every mutating op including rollback restore/start passes central guard
-- rollback only via nonterminal → `ROLLBACK_RUNNING` → terminal `ROLLED_BACK`
-- complete secret-safe env allowlist (key add/remove/value change) across process groups
-- repo-owned `liveBoundary.mjs` selected only under full CLI gates; default remains non-mutating
+Final audit contracts (mandatory):
+- durable exclusive journal with temp→fsync→rename→fsync-dir; crash-after-consume / duplicate RUN_ID fail-closed
+- side-effect ledger drives rollback (no blind inverse); stale-before-stop = zero PM2 rollback mutation → FAILED
+- rollback only via nonterminal → `ROLLBACK_RUNNING` → PRE_EQUIVALENT proof → `ROLLED_BACK` else `FAIL_FORWARD_COMPLETE`
+- collector DB_* exact live→persist equality (evidence YES/NO only)
+- stable PM2 launch/config allowlist (script/cwd/args/exec_mode/…)
+- repo-owned `liveBoundary.mjs` only under complete explicit gates including `--expected-tool-version` + `--confirm-run-transaction`
 - auth consume persisted before backup filesystem writes
 
-**TOOL_VERSION = 1.1.0**
+**TOOL_VERSION = 1.2.0**
 
 **T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES**
 **COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES**
 
-This source-fix / audit-correction task mutation ledger:
+This source-fix / final-audit task mutation ledger:
 **PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **SECRET_MUTATION = 0**
 
 ### T2 retry re-arm design closeout (COMPLETE / READ-ONLY / 20260824T153309Z) — HISTORICAL / SUPERSEDED FOR ORCHESTRATOR SAFETY

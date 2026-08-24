@@ -155,16 +155,26 @@ export function createNodeJournalFs() {
       const fh = await fsp.open(file, 'wx', mode);
       try {
         await fh.writeFile(data, 'utf8');
+        await fh.sync();
         await fh.chmod(mode);
       } finally {
         await fh.close();
       }
+      await this.fsync(path.dirname(file));
     },
     async writeFileAtomic(file, data, mode) {
+      const dir = path.dirname(file);
       const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-      await fsp.writeFile(tmp, data, { mode });
+      const fh = await fsp.open(tmp, 'w', mode);
+      try {
+        await fh.writeFile(data, 'utf8');
+        await fh.sync();
+        await fh.chmod(mode);
+      } finally {
+        await fh.close();
+      }
       await fsp.rename(tmp, file);
-      await fsp.chmod(file, mode);
+      await this.fsync(dir);
     },
     async readFile(file) {
       return fsp.readFile(file, 'utf8');
@@ -179,6 +189,14 @@ export function createNodeJournalFs() {
     },
     async chmod(file, mode) {
       await fsp.chmod(file, mode);
+    },
+    async fsync(target) {
+      const fh = await fsp.open(target, 'r');
+      try {
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
     },
   };
 }

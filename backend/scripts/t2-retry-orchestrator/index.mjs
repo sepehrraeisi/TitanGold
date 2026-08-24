@@ -15,6 +15,7 @@ export {
   TOOL_NAME,
   TOOL_VERSION,
   ROLLBACK_ELIGIBLE_STATES,
+  SUPPORTED_ENV_SHAPES,
 } from './constants.mjs';
 
 export {
@@ -27,9 +28,15 @@ export { SecretSafeEvidence, assertSecretSafeLine } from './evidence.mjs';
 
 export {
   assertCollectorPersistencePreconditions,
+  assertEntriesEnvShapes,
+  assertPreEquivalent,
+  captureCollectorDbLiveValues,
+  compareCollectorDbLiveToPersist,
   diffFingerprints,
   diffProcessEnv,
+  diffStableConfig,
   extractProcessEnv,
+  extractProcessEnvResult,
   normalizeProcess,
   selectEngineRetainExtra,
   semanticFingerprint,
@@ -45,6 +52,17 @@ export {
 } from './journal.mjs';
 
 export { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
+
+export {
+  createSideEffectLedger,
+  planRollbackActions,
+} from './sideEffectLedger.mjs';
+
+export {
+  evaluateLiveExecutionGates,
+  hasFlag,
+  readArg,
+} from './cli.mjs';
 
 export {
   createOrchestrator,
