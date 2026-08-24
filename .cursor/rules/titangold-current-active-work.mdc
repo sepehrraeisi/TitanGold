@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; credential rotation P0–P11 envelope OWNER-APPROVED ONE-SHOT UNCONSUMED; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; CR-20260824T114413Z CONSUMED; FINAL S2 INCIDENT CORRECTION S2C-20260824T141928Z COMPLETE/CONSUMED; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -24,31 +24,38 @@ TERMINAL MUTATION GUARD PROVEN /
 SECRET-SAFE EVIDENCE MODEL PROVEN /
 SYNTHETIC STATE-MACHINE TESTS PASS /
 CREDENTIAL ROTATION REQUIRED (S2) /
-CREDENTIAL ROTATION FINAL READINESS = COMPLETE /
-CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES /
-CREDENTIAL_ROTATION_EXECUTION_READY = YES /
-CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES /
-CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
-ROTATION DESIGN CORRECTION COMPLETE /
-MASTER_KEY MIGRATION TOOLING DESIGN COMPLETE /
-MASTER_KEY TOOLING SOURCE IMPLEMENTATION = COMPLETE /
-MASTER_KEY TOOLING SOURCE VERIFIED = YES /
-MASTER_KEY PHASE-SAFE WRITE MODEL = PROVEN /
-MASTER_KEY CHECKPOINT / RESUME FAIL-CLOSED = PROVEN /
-MASTER_KEY APPLY COMPLETION POSTCONDITIONS = PROVEN /
-MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = CONSUMED /
-MASTER_KEY PRODUCTION DEPLOYED = NO /
-OWNER_DECISIONS_ACTUALLY_REQUIRED = 0 /
-CREDENTIAL TECHNICAL DESIGN READY = YES /
-ROTATION EXECUTION AUTHORIZED = YES / ONE_SHOT / UNCONSUMED / P0 NOT STARTED /
-JWT/SESSION INVALIDATION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
-TELEGRAM INTERRUPTION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
-DB CUTOVER WINDOW ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
+CREDENTIAL ROTATION CAMPAIGN = CONSUMED / P0–P11 COMPLETE /
+RUN_ID = CR-20260824T114413Z /
+OBJECTIVE = MINIMAL_INCIDENT_CONTAINMENT /
+S2 INCIDENT CONTAINMENT = COMPLETE /
+OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO /
+TELEGRAM_EXPOSED_TOKEN_CURRENT_CANONICAL = NO /
+DB_INCIDENT_CONTAINMENT_COMPLETE = YES /
+TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES /
+FINAL_S2_INCIDENT_CORRECTION = COMPLETE /
+CORRECTION_RUN_ID = S2C-20260824T141928Z /
+FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED /
+CORRECTION_AUTHORIZATION_CONSUMED = YES /
+WAITING_FOR_OPERATOR = NO /
+TELEGRAM_OLD_TOKEN_VALID = NO /
+TELEGRAM_NEW_TOKEN_VALID = YES /
+CANONICAL_DB_USES_NEW_TOKEN = YES /
+OLD_RUN_STAGING_REMOVED = YES /
+PRODUCTION_MUTATION_CAPABILITY = CLOSED /
+NO NEW PRODUCTION MUTATION AUTHORIZED /
+MEXC DB CREDENTIAL = PRESERVED /
+MASTER_KEY PRODUCTION DEPLOYED = YES /
+MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
+JWT ROTATED = YES /
+DB-B ROLE = tg_rot_b_0824 LIVE /
+TEST_QA / PROVIDER ENV COPIES = PURGED /
 T2 REAUTHORIZATION NOT ELIGIBLE /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
-RETRY UNAUTHORIZED /
-MUTATION OUTSIDE CREDENTIAL-ROTATION P0–P11 ENVELOPE = NOT AUTHORIZED**
+ENGINE TOPOLOGY STILL 2 /
+C2 052 NOT EXECUTED /
+CREDENTIAL ROTATION ENVELOPE MUST NOT BE REUSED /
+CORRECTION MUTATION OUTSIDE THIS NEW ENVELOPE = NOT AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -2635,12 +2642,16 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 10. ~~MASTER_KEY migration tooling design (Correction II)~~ **COMPLETE (20260822T173130Z)** — source implementation ready; **NOT** authorized
 11. ~~SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization~~ **COMPLETE / CONSUMED (20260824)** — source only; no runtime/prod mutation
 12. ~~PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS~~ **COMPLETE (20260824T100623Z)** — TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO (historical at that closeout)
-13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / UNCONSUMED** — envelope recorded; **P0 NOT STARTED**
-14. production B1 exact-file deployment (**NOT AUTHORIZED** / FORBIDDEN inside credential campaign)
-15. engine refresh + backend reload (**ONLY** as authorized P4 envelope steps; not open-ended; **NOT STARTED**)
-16. NODE_ENV normalization (**NOT AUTHORIZED** / FORBIDDEN inside credential campaign)
-17. runtime validation / Human QA / governance reclose
-18. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / CONSUMED**
+14. ~~credential rotation P0–P11 execution~~ **COMPLETE (RUN_ID CR-20260824T114413Z)** — campaign executed; residual S2 containment was **INCOMPLETE** until S2C (historical)
+15. ~~FINAL S2 INCIDENT CORRECTION~~ **COMPLETE / CONSUMED (S2C-20260824T141928Z)** — old postgres TCP credential invalidated; Telegram canonical token rotated; CR staging deleted
+16. production B1 exact-file deployment (**NOT AUTHORIZED**)
+17. engine topology 2→1 T2 retry (**NOT AUTHORIZED**)
+18. NODE_ENV normalization (**NOT AUTHORIZED**)
+19. C2 052 (**NOT AUTHORIZED** / BLOCKED_RESOURCE_IO)
+20. runtime validation / Human QA / governance reclose (**HISTORICAL CAMPAIGN CLOSEOUT**)
+21. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+22. AI Integrations / Connections provider redesign (**FUTURE SEPARATE WORKSTREAM**)
 
 #### E6A preservation
 
@@ -2742,45 +2753,58 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**SECURITY CREDENTIAL ROTATION CAMPAIGN
-P0 FAIL-CLOSED PRECHECK / ENVELOPE EXECUTION**
+**C2 FOREGROUND IO /
+E6A TARGETED EFFECT STILL INCONCLUSIVE /
+B1 PRODUCTION DEPLOYMENT /
+ENGINE PM2 2→1 RECONCILIATION (T2 RETRY) /
+NODE_ENV NORMALIZATION /
+C2 052**
 
-Classification: **TIER 3 SECURITY / BOUNDED PRODUCTION SECRET+RUNTIME MUTATION / OWNER-APPROVED ONE-SHOT ENVELOPE UNCONSUMED / NO T2 RETRY / NO B1 DEPLOYMENT / NO C2 052 / NO NODE_ENV NORMALIZATION**
+Classification: **TIER 3 / NO MUTATION AUTHORIZED BY THIS CLOSEOUT**
 
-Owner authorization is **CAPTURED**. Do **NOT** start P0 in this governance capture.
+Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
+Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
+Do **NOT** reuse either envelope.
 
-**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
-**CREDENTIAL_ROTATION_EXECUTION_READY = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
+**FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
+**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**DB_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_RUN_STAGING_REMOVED = YES**
+**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO**
+**OLD_TELEGRAM_TOKEN_VALID = NO**
+**CANONICAL_DB_USES_NEW_TOKEN = YES**
+**HEALTH = 5002/5003 HTTP 200**
 
-Authorized envelope (exact; rollback/fail-forward **inside this envelope only**):
-- **P0** fresh fail-closed precheck
-- **P1** secure replacement-secret staging/handoff
-- **P2** exact-file crypto compatibility deployment only
-- **P3** reversible credential additions / TEST_QA purge as designed
-- **P4** required runtime refresh + validation
-- **P5** MASTER_KEY explicit mk2 cutover
-- **P6** authorized ciphertext migration
-- **P7** zero-legacy / zero-malformed / zero-conflict proof
-- **P8** authorized old credential/role/key revocations
-- **P9** guarded PM2 secret cleanup + persistence
-- **P10** old-secret absence proof
-- **P11** final health/security verification
+Sanitized correction evidence:
+`/home/ubuntu/TITANGOLD_S2C_INCIDENT_CORRECTION_S2C-20260824T141928Z.txt`
+SHA256 = `b64d5a449d96057060bbe2e3b2bed18c94903a040ac15e19da43bbd7b164e102`
+bytes = 2906
+tmp/home equality = **YES**
+mode = **0600**
 
-Terminal rule (machine-enforced): after terminal **STOP/FAILED**:
-NO further production mutation · NO diagnostic `pm2 save` · NO DB/Redis write · NO secret rewrite · NO restart/reload · NO retry.
-A **new** Owner authorization is required after terminal state.
+After terminal STOP: NO further production mutation · NO diagnostic mutation · NO retry.
+**T2_RETRY_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
 
-Explicitly **NOT AUTHORIZED**:
-T2 retry · engine 2→1 T2 reconciliation · B1 deployment · C2/052 execution · NODE_ENV normalization · unrelated production deploy · unrelated PM2 cleanup · Data Hub / Foundation / Agents Shell changes · any mutation outside this envelope.
+Sanitized execution evidence:
+`/home/ubuntu/TITANGOLD_CREDENTIAL_ROTATION_EXECUTION_CR-20260824T114413Z.txt`
+SHA256 = `8356bfb648db4f1274575e76ebb74f04188048c8f1da0ad44fec5ff232863ac1`
+bytes = 7022
+tmp/home equality = **YES**
+mode = **0600**
+RUN_ID = `CR-20260824T114413Z`
 
 Prior gates:
 - Credential rotation design correction = **COMPLETE (20260822T170203Z)**
 - MASTER_KEY migration tooling design (Correction II) = **COMPLETE (20260822T173130Z)**
 - MASTER_KEY tooling source implementation = **COMPLETE / VERIFIED / CONSUMED**
 - Final readiness verification = **COMPLETE (20260824T100623Z)**
-- Execution authorization capture = **COMPLETE / UNCONSUMED**
+- Execution authorization capture = **COMPLETE / CONSUMED**
+- Campaign execution = **COMPLETE (CR-20260824T114413Z)**
 - **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
@@ -3434,7 +3458,7 @@ Technically resolved: Redis PATH_A · delete redundant stopped · collector-moni
 **SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION**  
 **T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO**
 
-### Credential rotation execution authorization capture (COMPLETE / UNCONSUMED)
+### Credential rotation execution authorization capture (COMPLETE / CONSUMED)
 
 Owner explicit authorization (verbatim material):
 Credential Rotation campaign with the defined P0–P11 production transaction envelope is authorized.
@@ -3442,29 +3466,30 @@ Defined rollback/fail-forward actions inside that envelope are also authorized.
 T2, B1, C2/052 and NODE_ENV are outside authorization.
 
 **CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
-**CREDENTIAL_ROTATION_EXECUTION_READY = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
-**P0 STARTED = NO**
-**AUTHORIZATION_CONSUMED = NO**
+**CREDENTIAL_ROTATION_EXECUTION_READY = YES** *(historical at authorization)*
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = CONSUMED / COMPLETE / CLOSED**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**P0 STARTED = YES**
+**AUTHORIZATION_CONSUMED = YES**
+**RUN_ID = CR-20260824T114413Z**
+**TERMINAL = YES**
+**OBJECTIVE = MINIMAL_INCIDENT_CONTAINMENT**
 
-Authorized envelope:
-P0 fresh fail-closed precheck
-P1 secure replacement-secret staging/handoff
-P2 exact-file crypto compatibility deployment only
-P3 reversible credential additions / TEST_QA purge as designed
-P4 required runtime refresh + validation
-P5 MASTER_KEY explicit mk2 cutover
-P6 authorized ciphertext migration
-P7 zero-legacy / zero-malformed / zero-conflict proof
-P8 authorized old credential/role/key revocations
-P9 guarded PM2 secret cleanup + persistence
-P10 old-secret absence proof
-P11 final health/security verification
+P0–P11 executed under the same RUN_ID after Owner cancelled provider replacement handoff.
+No new MEXC API credentials. No AI-provider replacements. Canonical MEXC `exchange_connections` preserved.
+OpenAI/Gemini/DeepSeek classified **B**; OpenRouter classified **C**; env copies purged.
 
-After terminal STOP/FAILED: NO further production mutation; NO diagnostic pm2 save; NO DB/Redis write; NO secret rewrite; NO restart/reload; NO retry. New Owner authorization required.
+P4 `all_ok=false` chronology (read-only closeout):
+- Campaign state immediately before collector `health_fail` = **P2_COMPLETE_P4_RUNNING** (in-phase).
+- Terminal state entered by that event = **NO**.
+- `health_fail` class = **IN-PHASE / STARTUP RACE / NON-TERMINAL** (P4 loop stopped remaining applies; campaign did **not** enter FAILED/ROLLED_BACK; P4 was **not** rerun).
+- Immediate P4 post (`2026-08-24T13:13:42Z`): health 5002=`200` · 5003=`000` after collector pm_id **16** restart.
+- First later recorded 5003 HTTP 200 = P5 precheck **`2026-08-24T13:17:40Z`** (also P5 post `13:18:07Z`, P9/P10, P11).
+- First `TERMINAL_COMPLETED` write = `2026-08-24T13:32:13Z` after P11 evidence. **No production mutation after terminal.**
 
-This capture itself: production mutation = 0 · P0 not started · one-shot not consumed.
+After terminal STOP: NO further production mutation; NO diagnostic pm2 save; NO DB/Redis write; NO secret rewrite; NO restart/reload; NO retry. New Owner authorization required.
+
+This capture itself is superseded by execution closeout; production mutation occurred **inside the consumed envelope only**.
 
 ### Closed / still forbidden (outside envelope)
 
@@ -3479,5 +3504,51 @@ This capture itself: production mutation = 0 · P0 not started · one-shot not c
 **MUTATION OUTSIDE CREDENTIAL-ROTATION P0–P11 ENVELOPE = NOT AUTHORIZED**
 **SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
 **MANUAL TRANSFER AUTHORIZED = NO**
-Envelope mutations are **authorized but UNCONSUMED**; do **not** start P0 in this capture.
+**REPEAT_ROTATION_CAMPAIGN_AUTHORIZED = NO**
+Envelope is **CONSUMED / CLOSED**.
+
+### Final S2 incident correction authorization capture (CONSUMED / COMPLETE)
+
+Owner explicit authorization (verbatim material):
+invalidate the OLD exposed PostgreSQL credential;
+rotate the exposed Telegram token ONLY IF it is still valid;
+after final verification, delete staging belonging to `CR-20260824T114413Z`.
+
+**FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
+**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**CORRECTION_AUTHORIZATION_CONSUMED = YES**
+**CORRECTION_RUN_ID = S2C-20260824T141928Z**
+**WAITING_FOR_OPERATOR = NO / RESUMED AFTER STAGING_COMPLETE**
+**TERMINAL = YES**
+**PRIOR_CAMPAIGN_RUN_ID = CR-20260824T114413Z** (immutable / CONSUMED)
+
+Execution (same RUN_ID after BotFather handoff):
+- Human handoff occurred; replacement token staged via hidden host input (not Cursor/chat).
+- At resume: old Telegram getMe = UNAUTHORIZED; new token valid and different.
+- PostgreSQL: ALTER ROLE postgres PASSWORD (not stored) + pg_hba `postgres` TCP `scram-sha-256` (trust alone left passwordless URL valid) + `pg_reload_conf`. Peer/sudo recovery preserved. `tg_rot_b_0824` unchanged.
+- Telegram: 4 matching `telegram_publishers.bot_token_encrypted` rows rewritten mk2; empty rows untouched; PM2 env copies not restored; no pm2 save/restart.
+- Staging `CR-20260824T114413Z` deleted. T2 secure PM2 backup retained. Agent-tools not deleted.
+
+**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO**
+**NEW_PRODUCT_DB_CREDENTIAL_AUTHENTICATES = YES**
+**DB_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_TELEGRAM_TOKEN_VALID = NO**
+**NEW_TELEGRAM_TOKEN_VALID = YES**
+**CANONICAL_DB_USES_NEW_TOKEN = YES**
+**TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_RUN_STAGING_EXISTS = NO**
+**HEALTH = 5002/5003 HTTP 200**
+**ENGINE_ONLINE = 2** · **NODE_ENV = development UNCHANGED**
+
+After terminal: NO further production mutation; NO diagnostic mutation; NO retry.
+
+Historical WAITING (consumed): first precheck entered WAITING because **TELEGRAM_EXPOSED_TOKEN_VALID = YES** and BotFather human action was required. After hidden-input staging, the **same** RUN_ID resumed and completed.
+
+Why this correction existed (historical residual at capture; now closed):
+- P8 skipped old-role revoke because it would revoke superuser → passwordless S2 URL still authenticated until pg_hba + password invalidation
+- env copies purged but DB publishers still matched the exposed token until mk2 rewrite of 4 rows
+
+Forbidden (unchanged): T2 · B1 · C2/052 · NODE_ENV · AI/provider redesign · MEXC · MASTER_KEY migration changes · PM2 topology reconciliation · unrelated cleanup/deployment · restore of purged `TELEGRAM_BOT_TOKEN` env copies · agent-tools deletion · T2 dump backup deletion.
+
+Envelope is **CONSUMED / CLOSED**.
 
