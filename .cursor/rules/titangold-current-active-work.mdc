@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; CR-20260824T114413Z CONSUMED but S2 containment INCOMPLETE; FINAL S2 INCIDENT CORRECTION OWNER-APPROVED ONE-SHOT UNCONSUMED; T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; CR-20260824T114413Z CONSUMED; FINAL S2 INCIDENT CORRECTION S2C-20260824T141928Z COMPLETE/CONSUMED; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -27,21 +27,22 @@ CREDENTIAL ROTATION REQUIRED (S2) /
 CREDENTIAL ROTATION CAMPAIGN = CONSUMED / P0–P11 COMPLETE /
 RUN_ID = CR-20260824T114413Z /
 OBJECTIVE = MINIMAL_INCIDENT_CONTAINMENT /
-S2 INCIDENT CONTAINMENT = INCOMPLETE /
-OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = YES /
-TELEGRAM_EXPOSED_TOKEN_CURRENT_CANONICAL = YES /
-DB_INCIDENT_CONTAINMENT_COMPLETE = NO /
-TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = NO /
-FINAL_S2_INCIDENT_CORRECTION_AUTHORIZED = YES /
-FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
+S2 INCIDENT CONTAINMENT = COMPLETE /
+OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO /
+TELEGRAM_EXPOSED_TOKEN_CURRENT_CANONICAL = NO /
+DB_INCIDENT_CONTAINMENT_COMPLETE = YES /
+TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES /
+FINAL_S2_INCIDENT_CORRECTION = COMPLETE /
 CORRECTION_RUN_ID = S2C-20260824T141928Z /
-WAITING_FOR_OPERATOR = YES /
-TELEGRAM_EXPOSED_TOKEN_VALID = YES /
-TELEGRAM_ROTATION_REQUIRED = YES /
-HUMAN_BOTFATHER_REQUIRED = YES /
-CORRECTION_AUTHORIZATION_CONSUMED = NO /
-PRODUCTION_MUTATIONS = 0 /
-P0 NOT STARTED FOR THIS CORRECTION /
+FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED /
+CORRECTION_AUTHORIZATION_CONSUMED = YES /
+WAITING_FOR_OPERATOR = NO /
+TELEGRAM_OLD_TOKEN_VALID = NO /
+TELEGRAM_NEW_TOKEN_VALID = YES /
+CANONICAL_DB_USES_NEW_TOKEN = YES /
+OLD_RUN_STAGING_REMOVED = YES /
+PRODUCTION_MUTATION_CAPABILITY = CLOSED /
+NO NEW PRODUCTION MUTATION AUTHORIZED /
 MEXC DB CREDENTIAL = PRESERVED /
 MASTER_KEY PRODUCTION DEPLOYED = YES /
 MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
@@ -2642,8 +2643,8 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 11. ~~SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization~~ **COMPLETE / CONSUMED (20260824)** — source only; no runtime/prod mutation
 12. ~~PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS~~ **COMPLETE (20260824T100623Z)** — TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO (historical at that closeout)
 13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / CONSUMED**
-14. ~~credential rotation P0–P11 execution~~ **COMPLETE (RUN_ID CR-20260824T114413Z)** — campaign executed; residual S2 containment **INCOMPLETE**
-15. **FINAL S2 INCIDENT CORRECTION AUTHORIZATION** — **OWNER_APPROVED / ONE_SHOT / UNCONSUMED** · **WAITING_FOR_OPERATOR** · RUN_ID `S2C-20260824T141928Z` · production mutation **not** started
+14. ~~credential rotation P0–P11 execution~~ **COMPLETE (RUN_ID CR-20260824T114413Z)** — campaign executed; residual S2 containment was **INCOMPLETE** until S2C (historical)
+15. ~~FINAL S2 INCIDENT CORRECTION~~ **COMPLETE / CONSUMED (S2C-20260824T141928Z)** — old postgres TCP credential invalidated; Telegram canonical token rotated; CR staging deleted
 16. production B1 exact-file deployment (**NOT AUTHORIZED**)
 17. engine topology 2→1 T2 retry (**NOT AUTHORIZED**)
 18. NODE_ENV normalization (**NOT AUTHORIZED**)
@@ -2752,64 +2753,38 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**FINAL S2 INCIDENT CORRECTION —
-OLD POSTGRESQL CREDENTIAL INVALIDATION /
-TELEGRAM TOKEN VALIDATE-THEN-ROTATE-IF-VALID /
-FINAL VERIFICATION /
-DELETE STAGING CR-20260824T114413Z**
+**C2 FOREGROUND IO /
+E6A TARGETED EFFECT STILL INCONCLUSIVE /
+B1 PRODUCTION DEPLOYMENT /
+ENGINE PM2 2→1 RECONCILIATION (T2 RETRY) /
+NODE_ENV NORMALIZATION /
+C2 052**
 
-Classification: **TIER 3 SECURITY / NARROW OWNER-APPROVED ONE-SHOT CORRECTION / UNCONSUMED / NO T2 / NO B1 / NO C2 052 / NO NODE_ENV**
+Classification: **TIER 3 / NO MUTATION AUTHORIZED BY THIS CLOSEOUT**
 
 Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
-Do **NOT** reuse it.
+Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
+Do **NOT** reuse either envelope.
 
-**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZED = YES**
-**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
-**CORRECTION_RUN_ID = S2C-20260824T141928Z**
-**WAITING_FOR_OPERATOR = YES**
-**CORRECTION_AUTHORIZATION_CONSUMED = NO**
-**PRODUCTION_MUTATIONS = 0**
-**TERMINAL = NO**
-
-Fresh read-only precheck (`2026-08-24T14:19:28Z`):
-**CURRENT_PRODUCT_RUNTIME_USES_TG_ROT_B = YES**
-**CURRENT_PRODUCT_RUNTIME_USES_OLD_DB_CREDENTIAL = NO**
-**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = YES**
-**NEW_PRODUCT_DB_CREDENTIAL_AUTHENTICATES = YES**
+**FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
+**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**DB_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_RUN_STAGING_REMOVED = YES**
+**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO**
+**OLD_TELEGRAM_TOKEN_VALID = NO**
+**CANONICAL_DB_USES_NEW_TOKEN = YES**
 **HEALTH = 5002/5003 HTTP 200**
-**TELEGRAM_EXPOSED_TOKEN_MATCHES_CURRENT_CANONICAL = YES** (4 ciphertext rows / 2 active)
-**TELEGRAM_EXPOSED_TOKEN_VALID = YES** (Telegram getMe OK)
-**CURRENT_RUNTIME_USES_EXPOSED_TELEGRAM_TOKEN = NO** (live env copies empty)
-**DB_RUNTIME_OWNERSHIP_AMBIGUOUS = NO**
-**LOCAL_PRIVILEGED_PG_ADMIN_AVAILABLE = YES**
-**STAGING CR-20260824T114413Z EXISTS = YES**
 
-Telegram new token cannot be obtained without BotFather. Canonical UI cannot mint a replacement token.
-**Do NOT mutate PostgreSQL or DB publishers until replacement token is staged via hidden host input.**
+Sanitized correction evidence:
+`/home/ubuntu/TITANGOLD_S2C_INCIDENT_CORRECTION_S2C-20260824T141928Z.txt`
+SHA256 = `b64d5a449d96057060bbe2e3b2bed18c94903a040ac15e19da43bbd7b164e102`
+bytes = 2906
+tmp/home equality = **YES**
+mode = **0600**
 
-Operator script (do **not** paste token into Cursor/chat):
-`/home/ubuntu/TITANGOLD_SECRET_STAGING/S2C-20260824T141928Z/operator_telegram_token_input.sh`
-
-Containment incomplete (read-only residual proof, no values):
-**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = YES**
-**TELEGRAM_EXPOSED_TOKEN_CURRENT_CANONICAL = YES**
-**CURRENT_PRODUCT_RUNTIME_USES_OLD_DB_CREDENTIAL = NO** (historical residual; must be re-proven immediately before mutation)
-**CURRENT_RUNTIME_USES_EXPOSED_TELEGRAM_TOKEN = NO** (env copies purged; canonical DB still matches exposed token)
-
-Allowed envelope (exact; this capture itself performs **no** production mutation):
-1. invalidate the exact OLD S2-exposed PostgreSQL credential without disturbing `tg_rot_b_0824`
-2. read-only Telegram token validation; rotate **only if still valid**
-3. final verification
-4. deletion of `/home/ubuntu/TITANGOLD_SECRET_STAGING/CR-20260824T114413Z/` only after containment PASS
-
-Explicitly **NOT AUTHORIZED**:
-T2 retry · engine 2→1 · B1 deploy · C2/052 · NODE_ENV normalization · AI/provider redesign · MEXC changes · MASTER_KEY migration changes · PM2 topology reconciliation · unrelated cleanup/deployment · agent-tools deletion · T2 secure PM2 backup deletion · restore of purged PM2/env `TELEGRAM_BOT_TOKEN` copies
-
-Authorization becomes **CONSUMED immediately before the first production mutation**.
-After terminal STOP/FAILED: NO further production mutation · NO diagnostic mutation · NO retry.
-A **new** Owner authorization is required after terminal state.
-
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
+After terminal STOP: NO further production mutation · NO diagnostic mutation · NO retry.
 **T2_RETRY_AUTHORIZED = NO**
 **B1_DEPLOY_AUTHORIZED = NO**
 **C2_052_EXECUTION_AUTHORIZED = NO**
@@ -3532,35 +3507,48 @@ This capture itself is superseded by execution closeout; production mutation occ
 **REPEAT_ROTATION_CAMPAIGN_AUTHORIZED = NO**
 Envelope is **CONSUMED / CLOSED**.
 
-### Final S2 incident correction authorization capture (UNCONSUMED)
+### Final S2 incident correction authorization capture (CONSUMED / COMPLETE)
 
 Owner explicit authorization (verbatim material):
 invalidate the OLD exposed PostgreSQL credential;
 rotate the exposed Telegram token ONLY IF it is still valid;
 after final verification, delete staging belonging to `CR-20260824T114413Z`.
 
-**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZED = YES**
-**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
-**CORRECTION_AUTHORIZATION_CONSUMED = NO**
+**FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
+**FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**CORRECTION_AUTHORIZATION_CONSUMED = YES**
 **CORRECTION_RUN_ID = S2C-20260824T141928Z**
-**WAITING_FOR_OPERATOR = YES**
-**PRODUCTION_MUTATION_THIS_CAPTURE = 0**
-**PRIOR_CAMPAIGN_RUN_ID = CR-20260824T114413Z** (immutable / CONSUMED / must not be reused)
+**WAITING_FOR_OPERATOR = NO / RESUMED AFTER STAGING_COMPLETE**
+**TERMINAL = YES**
+**PRIOR_CAMPAIGN_RUN_ID = CR-20260824T114413Z** (immutable / CONSUMED)
 
-Fresh precheck entered WAITING because **TELEGRAM_EXPOSED_TOKEN_VALID = YES** and BotFather human action is required. PostgreSQL invalidation is deferred until the replacement token is staged.
+Execution (same RUN_ID after BotFather handoff):
+- Human handoff occurred; replacement token staged via hidden host input (not Cursor/chat).
+- At resume: old Telegram getMe = UNAUTHORIZED; new token valid and different.
+- PostgreSQL: ALTER ROLE postgres PASSWORD (not stored) + pg_hba `postgres` TCP `scram-sha-256` (trust alone left passwordless URL valid) + `pg_reload_conf`. Peer/sudo recovery preserved. `tg_rot_b_0824` unchanged.
+- Telegram: 4 matching `telegram_publishers.bot_token_encrypted` rows rewritten mk2; empty rows untouched; PM2 env copies not restored; no pm2 save/restart.
+- Staging `CR-20260824T114413Z` deleted. T2 secure PM2 backup retained. Agent-tools not deleted.
 
-Why this correction exists:
-- residual proof: **OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = YES** (P8 skipped old-role revoke because it would revoke superuser)
-- residual proof: **TELEGRAM_EXPOSED_TOKEN_CURRENT_CANONICAL = YES** (env copies purged; DB publishers still match exposed token)
-- therefore earlier closeout **COMPLETE** claim for incident containment was **PREMATURE**
+**OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = NO**
+**NEW_PRODUCT_DB_CREDENTIAL_AUTHENTICATES = YES**
+**DB_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_TELEGRAM_TOKEN_VALID = NO**
+**NEW_TELEGRAM_TOKEN_VALID = YES**
+**CANONICAL_DB_USES_NEW_TOKEN = YES**
+**TELEGRAM_INCIDENT_CONTAINMENT_COMPLETE = YES**
+**OLD_RUN_STAGING_EXISTS = NO**
+**HEALTH = 5002/5003 HTTP 200**
+**ENGINE_ONLINE = 2** · **NODE_ENV = development UNCHANGED**
 
-Allowed:
-1. old PostgreSQL credential invalidation (prefer local peer/sudo admin path; do not drop `postgres`; do not change `tg_rot_b_0824`)
-2. Telegram token validation and, only if still valid, rotation into canonical DB owner using current mk2 path
-3. final verification
-4. deletion of staging for `CR-20260824T114413Z` only after DB + Telegram containment PASS
+After terminal: NO further production mutation; NO diagnostic mutation; NO retry.
 
-Forbidden (unchanged): T2 · B1 · C2/052 · NODE_ENV · AI/provider redesign · MEXC · MASTER_KEY migration changes · PM2 topology reconciliation · unrelated cleanup/deployment.
+Historical WAITING (consumed): first precheck entered WAITING because **TELEGRAM_EXPOSED_TOKEN_VALID = YES** and BotFather human action was required. After hidden-input staging, the **same** RUN_ID resumed and completed.
 
-Do **not** start production mutation in this governance capture.
+Why this correction existed (historical residual at capture; now closed):
+- P8 skipped old-role revoke because it would revoke superuser → passwordless S2 URL still authenticated until pg_hba + password invalidation
+- env copies purged but DB publishers still matched the exposed token until mk2 rewrite of 4 rows
+
+Forbidden (unchanged): T2 · B1 · C2/052 · NODE_ENV · AI/provider redesign · MEXC · MASTER_KEY migration changes · PM2 topology reconciliation · unrelated cleanup/deployment · restore of purged `TELEGRAM_BOT_TOKEN` env copies · agent-tools deletion · T2 dump backup deletion.
+
+Envelope is **CONSUMED / CLOSED**.
 
