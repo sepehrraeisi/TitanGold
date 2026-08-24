@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling source COMPLETE+VERIFIED with phase-safe write + fail-closed resume correction; pre-production readiness next; EXECUTION_READY=NO; no T2/B1
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling COMPLETE+VERIFIED; credential rotation final readiness COMPLETE; TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO; no T2/B1
 alwaysApply: true
 ---
 
@@ -24,7 +24,10 @@ TERMINAL MUTATION GUARD PROVEN /
 SECRET-SAFE EVIDENCE MODEL PROVEN /
 SYNTHETIC STATE-MACHINE TESTS PASS /
 CREDENTIAL ROTATION REQUIRED (S2) /
-ROTATION EXECUTION READY = NO /
+CREDENTIAL ROTATION FINAL READINESS = COMPLETE /
+CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES /
+CREDENTIAL_ROTATION_EXECUTION_READY = YES /
+CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO /
 ROTATION DESIGN CORRECTION COMPLETE /
 MASTER_KEY MIGRATION TOOLING DESIGN COMPLETE /
 MASTER_KEY TOOLING SOURCE IMPLEMENTATION = COMPLETE /
@@ -33,7 +36,8 @@ MASTER_KEY PHASE-SAFE WRITE MODEL = PROVEN /
 MASTER_KEY CHECKPOINT / RESUME FAIL-CLOSED = PROVEN /
 MASTER_KEY APPLY COMPLETION POSTCONDITIONS = PROVEN /
 MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = CONSUMED /
-OWNER_DECISIONS_ACTUALLY_REQUIRED = 4 /
+MASTER_KEY PRODUCTION DEPLOYED = NO /
+OWNER_DECISIONS_ACTUALLY_REQUIRED = 1 /
 CREDENTIAL TECHNICAL DESIGN READY = YES /
 ROTATION EXECUTION NOT AUTHORIZED /
 JWT/SESSION INVALIDATION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
@@ -2629,11 +2633,11 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 9. ~~credential rotation design correction~~ **COMPLETE (20260822T170203Z)** — campaign design proven; EXECUTION_READY remains **NO**
 10. ~~MASTER_KEY migration tooling design (Correction II)~~ **COMPLETE (20260822T173130Z)** — source implementation ready; **NOT** authorized
 11. ~~SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization~~ **COMPLETE / CONSUMED (20260824)** — source only; no runtime/prod mutation
-12. C2 FOREGROUND IO / COLLECTED_DATA LOOKUP E6A / TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE / SECURITY MASTER_KEY TOOLING / SOURCE COMPLETE / PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS (**NEXT**)
-13. credential rotation campaign Owner decisions + execution authorization (NOT YET)
-14. production B1 exact-file deployment (NOT YET AUTHORIZED)
-15. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-16. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+12. ~~PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS~~ **COMPLETE (20260824T100623Z)** — TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO
+13. SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION (**NEXT** — one exact transaction envelope)
+14. production B1 exact-file deployment (NOT YET AUTHORIZED / FORBIDDEN inside credential campaign)
+15. authorized engine refresh + backend reload (ONLY as campaign envelope steps; not open-ended)
+16. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED / FORBIDDEN inside credential campaign)
 17. runtime validation / Human QA / governance reclose
 18. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
@@ -2737,28 +2741,26 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**C2 FOREGROUND IO
-COLLECTED_DATA LOOKUP E6A
-TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-SECURITY MASTER_KEY TOOLING
-SOURCE COMPLETE / PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS**
+**SECURITY CREDENTIAL ROTATION CAMPAIGN
+PRODUCTION EXECUTION AUTHORIZATION**
 
-Classification: **TIER 3 READ-ONLY / SOURCE-TO-RUNTIME READINESS VERIFICATION / NO SECRET ROTATION / NO PM2 MUTATION / NO T2 RETRY / NO B1 DEPLOYMENT**
+Classification: **TIER 3 SECURITY / BOUNDED PRODUCTION SECRET+RUNTIME MUTATION / EXPLICIT OWNER AUTHORIZATION REQUIRED / NO T2 RETRY / NO B1 DEPLOYMENT**
 
-This gate must verify, read-only:
-1. exact-main implementation + source provenance
-2. deploy sequencing + production source compatibility
-3. migration surface remains 9 or current proven equivalent
-4. credential-rotation campaign prerequisites remain satisfied
-5. exact future execution transaction plan
+This future gate must authorize **one exact transaction envelope**, not an open-ended production session.
 
-It MUST NOT authorize production secret rotation, PM2 mutation, DB ciphertext migration apply, T2 retry, or B1 deploy.
+Pre-production final readiness = **COMPLETE (20260824T100623Z)**
+**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
+**CREDENTIAL_ROTATION_EXECUTION_READY = YES**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
 
 Prior gates:
 - Credential rotation design correction = **COMPLETE (20260822T170203Z)**
 - MASTER_KEY migration tooling design (Correction II) = **COMPLETE (20260822T173130Z)**
-- **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+- MASTER_KEY tooling source implementation = **COMPLETE / VERIFIED / CONSUMED**
+- Final readiness verification = **COMPLETE (20260824T100623Z)**
 - **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
+
+Must NOT authorize T2 retry or B1 deploy inside the credential campaign envelope.
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
@@ -3324,14 +3326,93 @@ M0→M9 as designed.
 | 6 | collector-monitor topology | **C** | **DEFER** · refresh both during campaign |
 | 7 | MASTER_KEY tooling | **A** | Owner authorize source package · **RECOMMENDED=AUTHORIZE** |
 
-**OWNER_DECISIONS_ACTUALLY_REQUIRED = 4** (A1–A4)
+**OWNER_DECISIONS_ACTUALLY_REQUIRED = 1** (final production campaign execution authorization only; A1–A3 already accepted; A4 tooling consumed)
 
 #### Authorization preserved
 
 **CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO** · **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**  
+**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES** · **CREDENTIAL_ROTATION_EXECUTION_READY = YES**  
 **T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO** · **PM2/DB/Redis/secret mutation = NO**
 
 **THIS TASK MUTATION LEDGER:** production=0 · source=0 · DB=0 · PM2=0 · secret=0
+
+### Credential rotation final readiness closeout (COMPLETE / 20260824T100623Z)
+
+Sanitized evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_C2_CREDENTIAL_ROTATION_FINAL_READINESS_20260824T100623Z.txt`
+SHA256 = `40da66ecbf056a3b3af21480e67fff67d9355209f22e05f8121d368cf58eb72b`
+bytes = 15304 · tmp/home equality = **YES**
+
+**CREDENTIAL_ROTATION_FINAL_READINESS = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY / SOURCE-TO-RUNTIME READINESS VERIFICATION**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **SECRET_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0**
+
+#### Fresh authority / source-to-runtime
+
+**ORIGIN_MAIN = `09139aa6553908c9bbbdae0c3828b40faa280964`**
+**RULE02_PRE_BLOB = `561e1ebb98e8b962adcf3b37ebad984cf851f61c`**
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+**PROD_DIRTY_COUNT = 489**
+**SOURCE_TO_RUNTIME_ALIGNMENT = NOT_ALIGNED / MASTER_KEY_TOOLING_NOT_DEPLOYED**
+**MASTER_KEY_PRODUCTION_DEPLOYED = NO**
+**B1_PRODUCTION_DEPLOYED = NO**
+**E6A_EXPECTED_SHA_MATCH = YES**
+**HEALTH = 5002/5003 HTTP 200**
+**DUMP_SHA = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f` PRE_MATCH = YES**
+**ROLLBACK_LIVE_STATE = PRE_EQUIVALENT**
+**POSTGRES = 14.24** · **REDIS = 6.0.16**
+**ENGINE_NODE_ENV_DRIFT = OPEN** (development live+dump; ecosystem production; **NOT** normalized)
+
+#### Fresh credential inventory (no key names / no values)
+
+**CLASSES = 7** · **ACTIVE_ROTATION_REQUIRED = 19** · **ACTIVE_UNKNOWN = 0** · **NEW_NOT_IN_PRIOR = 0**
+**TEST_QA = 5** (purge during campaign)
+**PROVIDER_GROUPS = MEXC · OPENAI · GEMINI · DEEPSEEK · OPENROUTER** (all create-before-revoke READY)
+**MASTER_KEY_LEGACY_CIPHERTEXT_FIELDS = 9** · **mk2 = 0** · **malformed = 0**
+**DECRYPTABILITY_PROOF = DEFERRED_TO_EXECUTION_P0_PRECHECK**
+
+#### Class readiness
+
+| Area | Status |
+|---|---|
+| MASTER_KEY | READY (deploy=P2; decrypt=P0) |
+| POSTGRES DB-B | READY |
+| REDIS PATH_A | READY |
+| JWT/SESSION | READY |
+| TELEGRAM | READY |
+| PROVIDERS | READY |
+| OTHER_SECRET / TEST_QA | READY |
+| PM2 persistence (security-scoped) | READY |
+| Secure handoff | READY |
+| Rollback / terminal guard / absence proof | READY |
+
+**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
+**CREDENTIAL_ROTATION_EXECUTION_READY = YES**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**TECHNICAL_BLOCKERS = NONE**
+
+#### PM2 consumer notes (semantic identity; historical pm_ids NOT mutation authority)
+
+Engine online×2 · backend online×4 · processor 1 online + 1 stopped · collector 1 online + 1 stopped · collector-monitor online×2 · frontend stopped×2 · error-watch online×2  
+**DUMP_LIVE_PROCESSOR_STATUS_DRIFT = YES** (dump 2-online vs live 1+1) — future guarded security save persists **LIVE** authority  
+Future delete set = proven-redundant STOPPED processor/collector/frontend  
+Campaign **MUST NOT** T2-reconcile engine 2→1 or normalize NODE_ENV or deploy B1
+
+#### Future envelope summary
+
+P0 precheck → P1 staging → P2 crypto compatibility deploy (not B1) → P3 reversible adds → P4 refresh/validate → P5 mk2 cutover → P6 migrate apply → P7 zero-legacy → P8 revokes → P9 guarded PM2 persistence → P10 absence proof → P11 final health  
+After terminal STOP: **NO** diagnostic mutation without new authorization
+
+#### Owner decisions
+
+Previously accepted (do not re-ask): JWT logout · Telegram interruption · DB cutover  
+Technically resolved: Redis PATH_A · delete redundant stopped · collector-monitor refresh-both · MASTER_KEY C_HYBRID tooling  
+**NEW_OWNER_ITEMS_REQUIRED = 1** = authorize the exact production campaign envelope
+
+#### Next gate
+
+**SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION**  
+**T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO**
 
 ### Closed / still forbidden
 
@@ -3348,4 +3429,6 @@ M0→M9 as designed.
 **052 AUTHORIZED = NO**
 **SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
 **T2_RETRY_AUTHORIZED = NO**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO**
 
