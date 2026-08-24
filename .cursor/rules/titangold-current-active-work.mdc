@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling COMPLETE+VERIFIED; credential rotation final readiness COMPLETE; TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO; no T2/B1
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; credential rotation P0–P11 envelope OWNER-APPROVED ONE-SHOT UNCONSUMED; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -27,7 +27,8 @@ CREDENTIAL ROTATION REQUIRED (S2) /
 CREDENTIAL ROTATION FINAL READINESS = COMPLETE /
 CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES /
 CREDENTIAL_ROTATION_EXECUTION_READY = YES /
-CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO /
+CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES /
+CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
 ROTATION DESIGN CORRECTION COMPLETE /
 MASTER_KEY MIGRATION TOOLING DESIGN COMPLETE /
 MASTER_KEY TOOLING SOURCE IMPLEMENTATION = COMPLETE /
@@ -37,9 +38,9 @@ MASTER_KEY CHECKPOINT / RESUME FAIL-CLOSED = PROVEN /
 MASTER_KEY APPLY COMPLETION POSTCONDITIONS = PROVEN /
 MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = CONSUMED /
 MASTER_KEY PRODUCTION DEPLOYED = NO /
-OWNER_DECISIONS_ACTUALLY_REQUIRED = 1 /
+OWNER_DECISIONS_ACTUALLY_REQUIRED = 0 /
 CREDENTIAL TECHNICAL DESIGN READY = YES /
-ROTATION EXECUTION NOT AUTHORIZED /
+ROTATION EXECUTION AUTHORIZED = YES / ONE_SHOT / UNCONSUMED / P0 NOT STARTED /
 JWT/SESSION INVALIDATION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
 TELEGRAM INTERRUPTION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
 DB CUTOVER WINDOW ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
@@ -47,7 +48,7 @@ T2 REAUTHORIZATION NOT ELIGIBLE /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
 RETRY UNAUTHORIZED /
-NO PM2 OR DEPLOYMENT MUTATION CURRENTLY AUTHORIZED**
+MUTATION OUTSIDE CREDENTIAL-ROTATION P0–P11 ENVELOPE = NOT AUTHORIZED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -2633,11 +2634,11 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 9. ~~credential rotation design correction~~ **COMPLETE (20260822T170203Z)** — campaign design proven; EXECUTION_READY remains **NO**
 10. ~~MASTER_KEY migration tooling design (Correction II)~~ **COMPLETE (20260822T173130Z)** — source implementation ready; **NOT** authorized
 11. ~~SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization~~ **COMPLETE / CONSUMED (20260824)** — source only; no runtime/prod mutation
-12. ~~PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS~~ **COMPLETE (20260824T100623Z)** — TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO
-13. SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION (**NEXT** — one exact transaction envelope)
-14. production B1 exact-file deployment (NOT YET AUTHORIZED / FORBIDDEN inside credential campaign)
-15. authorized engine refresh + backend reload (ONLY as campaign envelope steps; not open-ended)
-16. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED / FORBIDDEN inside credential campaign)
+12. ~~PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS~~ **COMPLETE (20260824T100623Z)** — TECHNICAL/EXECUTION_READY=YES; AUTHORIZED=NO (historical at that closeout)
+13. ~~SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION~~ **OWNER_APPROVED / ONE_SHOT / UNCONSUMED** — envelope recorded; **P0 NOT STARTED**
+14. production B1 exact-file deployment (**NOT AUTHORIZED** / FORBIDDEN inside credential campaign)
+15. engine refresh + backend reload (**ONLY** as authorized P4 envelope steps; not open-ended; **NOT STARTED**)
+16. NODE_ENV normalization (**NOT AUTHORIZED** / FORBIDDEN inside credential campaign)
 17. runtime validation / Human QA / governance reclose
 18. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
@@ -2742,25 +2743,45 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 ## Next Owner gate
 
 **SECURITY CREDENTIAL ROTATION CAMPAIGN
-PRODUCTION EXECUTION AUTHORIZATION**
+P0 FAIL-CLOSED PRECHECK / ENVELOPE EXECUTION**
 
-Classification: **TIER 3 SECURITY / BOUNDED PRODUCTION SECRET+RUNTIME MUTATION / EXPLICIT OWNER AUTHORIZATION REQUIRED / NO T2 RETRY / NO B1 DEPLOYMENT**
+Classification: **TIER 3 SECURITY / BOUNDED PRODUCTION SECRET+RUNTIME MUTATION / OWNER-APPROVED ONE-SHOT ENVELOPE UNCONSUMED / NO T2 RETRY / NO B1 DEPLOYMENT / NO C2 052 / NO NODE_ENV NORMALIZATION**
 
-This future gate must authorize **one exact transaction envelope**, not an open-ended production session.
+Owner authorization is **CAPTURED**. Do **NOT** start P0 in this governance capture.
 
-Pre-production final readiness = **COMPLETE (20260824T100623Z)**
 **CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
 **CREDENTIAL_ROTATION_EXECUTION_READY = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
+
+Authorized envelope (exact; rollback/fail-forward **inside this envelope only**):
+- **P0** fresh fail-closed precheck
+- **P1** secure replacement-secret staging/handoff
+- **P2** exact-file crypto compatibility deployment only
+- **P3** reversible credential additions / TEST_QA purge as designed
+- **P4** required runtime refresh + validation
+- **P5** MASTER_KEY explicit mk2 cutover
+- **P6** authorized ciphertext migration
+- **P7** zero-legacy / zero-malformed / zero-conflict proof
+- **P8** authorized old credential/role/key revocations
+- **P9** guarded PM2 secret cleanup + persistence
+- **P10** old-secret absence proof
+- **P11** final health/security verification
+
+Terminal rule (machine-enforced): after terminal **STOP/FAILED**:
+NO further production mutation · NO diagnostic `pm2 save` · NO DB/Redis write · NO secret rewrite · NO restart/reload · NO retry.
+A **new** Owner authorization is required after terminal state.
+
+Explicitly **NOT AUTHORIZED**:
+T2 retry · engine 2→1 T2 reconciliation · B1 deployment · C2/052 execution · NODE_ENV normalization · unrelated production deploy · unrelated PM2 cleanup · Data Hub / Foundation / Agents Shell changes · any mutation outside this envelope.
 
 Prior gates:
 - Credential rotation design correction = **COMPLETE (20260822T170203Z)**
 - MASTER_KEY migration tooling design (Correction II) = **COMPLETE (20260822T173130Z)**
 - MASTER_KEY tooling source implementation = **COMPLETE / VERIFIED / CONSUMED**
 - Final readiness verification = **COMPLETE (20260824T100623Z)**
+- Execution authorization capture = **COMPLETE / UNCONSUMED**
 - **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
-
-Must NOT authorize T2 retry or B1 deploy inside the credential campaign envelope.
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
@@ -3326,13 +3347,12 @@ M0→M9 as designed.
 | 6 | collector-monitor topology | **C** | **DEFER** · refresh both during campaign |
 | 7 | MASTER_KEY tooling | **A** | Owner authorize source package · **RECOMMENDED=AUTHORIZE** |
 
-**OWNER_DECISIONS_ACTUALLY_REQUIRED = 1** (final production campaign execution authorization only; A1–A3 already accepted; A4 tooling consumed)
+**OWNER_DECISIONS_ACTUALLY_REQUIRED = 0** (A1–A3 accepted; A4 tooling consumed; campaign envelope Owner-approved one-shot)
 
-#### Authorization preserved
+#### Authorization preserved (historical at MASTER_KEY tooling closeout)
 
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO** · **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**  
-**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES** · **CREDENTIAL_ROTATION_EXECUTION_READY = YES**  
-**T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO** · **PM2/DB/Redis/secret mutation = NO**
+**SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**  
+**T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO**
 
 **THIS TASK MUTATION LEDGER:** production=0 · source=0 · DB=0 · PM2=0 · secret=0
 
@@ -3388,7 +3408,7 @@ bytes = 15304 · tmp/home equality = **YES**
 
 **CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
 **CREDENTIAL_ROTATION_EXECUTION_READY = YES**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO** *(historical at final-readiness closeout; superseded by Owner envelope authorization below)*
 **TECHNICAL_BLOCKERS = NONE**
 
 #### PM2 consumer notes (semantic identity; historical pm_ids NOT mutation authority)
@@ -3407,28 +3427,57 @@ After terminal STOP: **NO** diagnostic mutation without new authorization
 
 Previously accepted (do not re-ask): JWT logout · Telegram interruption · DB cutover  
 Technically resolved: Redis PATH_A · delete redundant stopped · collector-monitor refresh-both · MASTER_KEY C_HYBRID tooling  
-**NEW_OWNER_ITEMS_REQUIRED = 1** = authorize the exact production campaign envelope
+**NEW_OWNER_ITEMS_REQUIRED = 0** at readiness closeout; Owner later authorized the exact envelope (see capture below)
 
-#### Next gate
+#### Next gate (historical at readiness closeout)
 
 **SECURITY CREDENTIAL ROTATION CAMPAIGN PRODUCTION EXECUTION AUTHORIZATION**  
 **T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO**
 
-### Closed / still forbidden
+### Credential rotation execution authorization capture (COMPLETE / UNCONSUMED)
 
-**WORKTREE MUTATION AUTHORIZED = NO**
-**SOURCE WRITE AUTHORIZED = NO**
-**PM2 DELETE AUTHORIZED = NO**
-**ENGINE RESTART AUTHORIZED = NO**
-**BACKEND RELOAD AUTHORIZED = NO**
-**PRODUCTION DEPLOYMENT AUTHORIZED = NO**
-**DB MUTATION AUTHORIZED = NO**
-**REDIS MUTATION AUTHORIZED = NO**
-**REDIS_EXECUTION_AUTHORITY = NO**
-**MANUAL TRANSFER AUTHORIZED = NO**
-**052 AUTHORIZED = NO**
-**SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
+Owner explicit authorization (verbatim material):
+Credential Rotation campaign with the defined P0–P11 production transaction envelope is authorized.
+Defined rollback/fail-forward actions inside that envelope are also authorized.
+T2, B1, C2/052 and NODE_ENV are outside authorization.
+
+**CREDENTIAL_ROTATION_TECHNICAL_READINESS = YES**
+**CREDENTIAL_ROTATION_EXECUTION_READY = YES**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = YES**
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
+**P0 STARTED = NO**
+**AUTHORIZATION_CONSUMED = NO**
+
+Authorized envelope:
+P0 fresh fail-closed precheck
+P1 secure replacement-secret staging/handoff
+P2 exact-file crypto compatibility deployment only
+P3 reversible credential additions / TEST_QA purge as designed
+P4 required runtime refresh + validation
+P5 MASTER_KEY explicit mk2 cutover
+P6 authorized ciphertext migration
+P7 zero-legacy / zero-malformed / zero-conflict proof
+P8 authorized old credential/role/key revocations
+P9 guarded PM2 secret cleanup + persistence
+P10 old-secret absence proof
+P11 final health/security verification
+
+After terminal STOP/FAILED: NO further production mutation; NO diagnostic pm2 save; NO DB/Redis write; NO secret rewrite; NO restart/reload; NO retry. New Owner authorization required.
+
+This capture itself: production mutation = 0 · P0 not started · one-shot not consumed.
+
+### Closed / still forbidden (outside envelope)
+
 **T2_RETRY_AUTHORIZED = NO**
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO**
+**ENGINE 2→1 T2 RECONCILIATION AUTHORIZED = NO**
 **B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**UNRELATED PRODUCTION DEPLOY AUTHORIZED = NO**
+**UNRELATED PM2 CLEANUP AUTHORIZED = NO**
+**DATA HUB / FOUNDATION / AGENTS SHELL CHANGE AUTHORIZED = NO**
+**MUTATION OUTSIDE CREDENTIAL-ROTATION P0–P11 ENVELOPE = NOT AUTHORIZED**
+**SECURE_BACKUP_CLEANUP_AUTHORIZED = NO**
+**MANUAL TRANSFER AUTHORIZED = NO**
+Envelope mutations are **authorized but UNCONSUMED**; do **not** start P0 in this capture.
 
