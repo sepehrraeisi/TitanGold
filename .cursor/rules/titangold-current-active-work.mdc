@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY migration tooling design COMPLETE; source implementation ready but NOT authorized; EXECUTION_READY=NO; next=MASTER_KEY tooling source+Owner decisions gate; no T2/B1
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling source COMPLETE+VERIFIED with phase-safe write + fail-closed resume correction; pre-production readiness next; EXECUTION_READY=NO; no T2/B1
 alwaysApply: true
 ---
 
@@ -27,11 +27,18 @@ CREDENTIAL ROTATION REQUIRED (S2) /
 ROTATION EXECUTION READY = NO /
 ROTATION DESIGN CORRECTION COMPLETE /
 MASTER_KEY MIGRATION TOOLING DESIGN COMPLETE /
-MASTER_KEY SOURCE IMPLEMENTATION READY = YES /
-MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = NO /
+MASTER_KEY TOOLING SOURCE IMPLEMENTATION = COMPLETE /
+MASTER_KEY TOOLING SOURCE VERIFIED = YES /
+MASTER_KEY PHASE-SAFE WRITE MODEL = PROVEN /
+MASTER_KEY CHECKPOINT / RESUME FAIL-CLOSED = PROVEN /
+MASTER_KEY APPLY COMPLETION POSTCONDITIONS = PROVEN /
+MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = CONSUMED /
 OWNER_DECISIONS_ACTUALLY_REQUIRED = 4 /
 CREDENTIAL TECHNICAL DESIGN READY = YES /
 ROTATION EXECUTION NOT AUTHORIZED /
+JWT/SESSION INVALIDATION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
+TELEGRAM INTERRUPTION ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
+DB CUTOVER WINDOW ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION /
 T2 REAUTHORIZATION NOT ELIGIBLE /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
@@ -2621,13 +2628,14 @@ Future execution must freshly resolve pm_ids. Historical 5/9 are **NOT mutation 
 8. ~~rotation readiness + PM2 consumer topology material correction~~ **COMPLETE (20260822T163514Z)** — EXECUTION_READY remains **NO**
 9. ~~credential rotation design correction~~ **COMPLETE (20260822T170203Z)** — campaign design proven; EXECUTION_READY remains **NO**
 10. ~~MASTER_KEY migration tooling design (Correction II)~~ **COMPLETE (20260822T173130Z)** — source implementation ready; **NOT** authorized
-11. SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization (**NEXT**)
-12. credential rotation campaign Owner decisions + execution authorization (NOT YET)
-13. production B1 exact-file deployment (NOT YET AUTHORIZED)
-14. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
-15. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
-16. runtime validation / Human QA / governance reclose
-17. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
+11. ~~SECURITY MASTER_KEY ROTATION TOOLING — source implementation + Owner decisions authorization~~ **COMPLETE / CONSUMED (20260824)** — source only; no runtime/prod mutation
+12. C2 FOREGROUND IO / COLLECTED_DATA LOOKUP E6A / TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE / SECURITY MASTER_KEY TOOLING / SOURCE COMPLETE / PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS (**NEXT**)
+13. credential rotation campaign Owner decisions + execution authorization (NOT YET)
+14. production B1 exact-file deployment (NOT YET AUTHORIZED)
+15. authorized engine refresh + backend reload (NOT YET AUTHORIZED)
+16. NODE_ENV normalization under explicit authority (NOT YET AUTHORIZED)
+17. runtime validation / Human QA / governance reclose
+18. stopped engine rollback entry cleanup (**SEPARATE FUTURE AUTHORITY** — not automatic after T2)
 
 #### E6A preservation
 
@@ -2732,14 +2740,17 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **C2 FOREGROUND IO
 COLLECTED_DATA LOOKUP E6A
 TELEGRAM TRANSFER ALWAYS-ON SAFE BACKGROUND LIFECYCLE
-SECURITY MASTER_KEY ROTATION TOOLING
-SOURCE IMPLEMENTATION + OWNER DECISIONS AUTHORIZATION**
+SECURITY MASTER_KEY TOOLING
+SOURCE COMPLETE / PRE-PRODUCTION VERIFICATION + CREDENTIAL ROTATION CAMPAIGN FINAL READINESS**
 
-Classification: **TIER 3 SECURITY SOURCE IMPLEMENTATION OWNER GATE / NO PRODUCTION SECRET ROTATION / NO T2 RETRY / NO B1 DEPLOYMENT**
+Classification: **TIER 3 READ-ONLY / SOURCE-TO-RUNTIME READINESS VERIFICATION / NO SECRET ROTATION / NO PM2 MUTATION / NO T2 RETRY / NO B1 DEPLOYMENT**
 
-This gate may, in ONE Owner response:
-1. accept/reject the 4 compressed true Owner decisions
-2. authorize **source-only** implementation of MASTER_KEY compatibility + migrator tooling
+This gate must verify, read-only:
+1. exact-main implementation + source provenance
+2. deploy sequencing + production source compatibility
+3. migration surface remains 9 or current proven equivalent
+4. credential-rotation campaign prerequisites remain satisfied
+5. exact future execution transaction plan
 
 It MUST NOT authorize production secret rotation, PM2 mutation, DB ciphertext migration apply, T2 retry, or B1 deploy.
 
@@ -2747,7 +2758,7 @@ Prior gates:
 - Credential rotation design correction = **COMPLETE (20260822T170203Z)**
 - MASTER_KEY migration tooling design (Correction II) = **COMPLETE (20260822T173130Z)**
 - **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
-- **SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
+- **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
 
 ### Engine PM2 T2 failed execution closeout + RCA (20260822T160149Z)
 
@@ -3253,10 +3264,21 @@ bytes = 8329 · tmp/home equality = **YES**
 **SELECTED_MASTER_KEY_MIGRATION_MODEL = C_HYBRID** (versioned `mk2:` new writes + dual-read for legacy 3-part via `MASTER_KEY` + `MASTER_KEY_PREVIOUS`)
 **MASTER_KEY_MIGRATION_DESIGN_COMPLETE = YES**
 **MASTER_KEY_TOOLING_SOURCE_IMPLEMENTATION_READY = YES**
-**SOURCE_IMPLEMENTATION_AUTHORIZED = NO**
+**MASTER_KEY_TOOLING_SOURCE_IMPLEMENTATION = COMPLETE**
+**MASTER_KEY_TOOLING_SOURCE_VERIFIED = YES**
+**MASTER_KEY_WRITE_DEFAULT_MODE = LEGACY**
+**MASTER_KEY_WRITE_EXPLICIT_CUTOVER_MODE = MK2**
+**MASTER_KEY_PRE_CUTOVER_MK2_HAZARD = CLOSED**
+**MASTER_KEY_RESUME_SKIP_FAILED_ROW_DEFECT = CLOSED**
+**MASTER_KEY_CONFLICT_MALFORMED_COMPLETION_DEFECT = CLOSED**
+**MASTER_KEY_RUNID_PATH_TRAVERSAL_DEFECT = CLOSED**
+**SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
 **MASTER_KEY_SYNTHETIC_TEST_MODEL = PASS** (T1–T10 · /tmp fake keys only)
 **CREDENTIAL_ROTATION_TECHNICAL_DESIGN_READY = YES**
 **CREDENTIAL_ROTATION_EXECUTION_READY = NO**
+**JWT_LOGOUT_ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION**
+**TELEGRAM_INTERRUPTION_ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION**
+**DB_CUTOVER_WINDOW_ACCEPTANCE = APPROVED / PENDING FUTURE EXECUTION**
 
 #### Crypto model (no values)
 
@@ -3278,12 +3300,12 @@ bytes = 8329 · tmp/home equality = **YES**
 **TOTAL_CIPHERTEXT_FIELDS_TO_MIGRATE = 9**  
 Excluded: password_hash / 2FA / empty webhooks & user_settings (not MASTER_KEY AES surfaces).
 
-#### Tooling spec (implementation-ready · not authorized)
+#### Tooling spec (implemented in source; runtime not authorized)
 
 **ADD:** `cryptoKeyring.js` · `scripts/masterKeyMigrate.mjs` · unit tests  
 **MODIFY:** `utils/crypto.js` facade to keyring (preserve API)  
-CLI: `--dry-run` / `--apply` / `--resume` · checkpoint 0600 · metrics only · **never** log plaintext/ciphertext/keys  
-Concurrency: deploy compatibility **before** apply; resume/idempotent skip `mk2:`  
+Implemented CLI: `--dry-run` / `--apply` / `--resume` · checkpoint 0600 · metrics only · **never** log plaintext/ciphertext/keys  
+Implemented safety: default legacy-safe writes + explicit `mk2` cutover mode · dual-read · CAS fail-closed guard · durable progress only after safe row handling · malformed/conflict apply blockers · terminal mutation guard · final zero-legacy postcondition verification · runId path hardening  
 
 #### Sequencing / irreversible point
 
@@ -3306,7 +3328,7 @@ M0→M9 as designed.
 
 #### Authorization preserved
 
-**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO** · **SOURCE_IMPLEMENTATION_AUTHORIZED = NO**  
+**CREDENTIAL_ROTATION_EXECUTION_AUTHORIZED = NO** · **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**  
 **T2_RETRY_AUTHORIZED = NO** · **B1_DEPLOY_AUTHORIZED = NO** · **PM2/DB/Redis/secret mutation = NO**
 
 **THIS TASK MUTATION LEDGER:** production=0 · source=0 · DB=0 · PM2=0 · secret=0
