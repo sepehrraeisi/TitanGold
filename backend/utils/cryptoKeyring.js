@@ -5,6 +5,7 @@ const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 const MK2_PREFIX = 'mk2:';
 const LEGACY_PARTS = 3;
+const WRITE_MODE_ENV = 'MASTER_KEY_WRITE_MODE';
 
 function readHexKey(name, { required = false } = {}) {
   const keyHex = process.env[name];
@@ -39,6 +40,18 @@ export function getMasterKeyContext() {
     current: getCurrentMasterKey(),
     previous: getPreviousMasterKey(),
   };
+}
+
+export function getMasterKeyWriteMode(rawMode = process.env[WRITE_MODE_ENV]) {
+  if (rawMode === undefined || rawMode === null || rawMode === '') {
+    return 'legacy';
+  }
+
+  if (rawMode === 'legacy' || rawMode === 'mk2') {
+    return rawMode;
+  }
+
+  throw new Error(`${WRITE_MODE_ENV} must be one of: legacy, mk2`);
 }
 
 export function isLegacyEnvelope(value) {
@@ -103,6 +116,35 @@ export function encryptMk2Secret(plaintext, context = getMasterKeyContext()) {
   } catch (error) {
     throw new Error(`Encryption failed: ${error.message}`);
   }
+}
+
+export function encryptLegacySecret(plaintext, context = getMasterKeyContext()) {
+  if (!plaintext) {
+    throw new Error('Cannot encrypt empty string');
+  }
+  try {
+    return encryptPayload(plaintext, context.current);
+  } catch (error) {
+    throw new Error(`Encryption failed: ${error.message}`);
+  }
+}
+
+export function encryptManagedSecret(
+  plaintext,
+  {
+    context = getMasterKeyContext(),
+    writeMode = getMasterKeyWriteMode(),
+  } = {},
+) {
+  if (writeMode === 'legacy') {
+    return encryptLegacySecret(plaintext, context);
+  }
+
+  if (writeMode === 'mk2') {
+    return encryptMk2Secret(plaintext, context);
+  }
+
+  throw new Error(`${WRITE_MODE_ENV} must be one of: legacy, mk2`);
 }
 
 export function decryptCompatibleSecret(encrypted, context = getMasterKeyContext()) {

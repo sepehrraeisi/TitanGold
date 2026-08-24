@@ -5,8 +5,11 @@
 import {
   classifyCiphertext,
   decryptCompatibleSecret,
+  encryptLegacySecret,
+  encryptManagedSecret,
   encryptMk2Secret,
   getCurrentMasterKey,
+  getMasterKeyWriteMode,
   getPreviousMasterKey,
   isLegacyEnvelope,
   isMk2Envelope,
@@ -21,6 +24,7 @@ describe('MASTER_KEY keyring compatibility', () => {
   beforeEach(() => {
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = legacyKey;
+    delete process.env.MASTER_KEY_WRITE_MODE;
   });
 
   afterAll(() => {
@@ -28,17 +32,26 @@ describe('MASTER_KEY keyring compatibility', () => {
     process.env.MASTER_KEY_PREVIOUS = originalPreviousKey;
   });
 
-  test('new writes use mk2 envelope and decrypt with current key', () => {
-    const encrypted = encryptMk2Secret('fake-secret');
+  test('compatibility deployment default writes legacy', () => {
+    delete process.env.MASTER_KEY_PREVIOUS;
+    const encrypted = encryptManagedSecret('fake-secret');
+    expect(isLegacyEnvelope(encrypted)).toBe(true);
+    expect(classifyCiphertext(encrypted)).toBe('legacy');
+    expect(decryptCompatibleSecret(encrypted)).toBe('fake-secret');
+  });
+
+  test('explicit mk2 mode writes mk2 envelope and decrypts with current key', () => {
+    process.env.MASTER_KEY_WRITE_MODE = 'mk2';
+    const encrypted = encryptManagedSecret('fake-secret');
     expect(isMk2Envelope(encrypted)).toBe(true);
     expect(classifyCiphertext(encrypted)).toBe('mk2');
     expect(decryptCompatibleSecret(encrypted)).toBe('fake-secret');
   });
 
-  test('legacy payload decrypts through previous-key path', () => {
+  test('legacy payload decrypts through previous-key path after cutover', () => {
     process.env.MASTER_KEY = legacyKey;
     delete process.env.MASTER_KEY_PREVIOUS;
-    const legacy = encryptMk2Secret('legacy-only').slice(4);
+    const legacy = encryptLegacySecret('legacy-only');
 
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = legacyKey;
@@ -50,18 +63,32 @@ describe('MASTER_KEY keyring compatibility', () => {
   test('legacy decrypt falls back to current key when previous key is unset', () => {
     process.env.MASTER_KEY = legacyKey;
     delete process.env.MASTER_KEY_PREVIOUS;
-    const legacy = encryptMk2Secret('same-key').slice(4);
+    const legacy = encryptLegacySecret('same-key');
     expect(decryptCompatibleSecret(legacy)).toBe('same-key');
   });
 
   test('legacy decrypt fails closed when wrong previous key is configured', () => {
     process.env.MASTER_KEY = legacyKey;
     delete process.env.MASTER_KEY_PREVIOUS;
-    const legacy = encryptMk2Secret('wrong-key').slice(4);
+    const legacy = encryptLegacySecret('wrong-key');
 
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = '1111111111111111111111111111111111111111111111111111111111111111';
     expect(() => decryptCompatibleSecret(legacy)).toThrow('Decryption failed');
+  });
+
+  test('pre-cutover legacy write survives NEW/PREVIOUS cutover', () => {
+    process.env.MASTER_KEY = legacyKey;
+    delete process.env.MASTER_KEY_PREVIOUS;
+    const preCutover = encryptManagedSecret('survives-cutover');
+
+    process.env.MASTER_KEY = currentKey;
+    process.env.MASTER_KEY_PREVIOUS = legacyKey;
+    process.env.MASTER_KEY_WRITE_MODE = 'mk2';
+    const postCutover = encryptManagedSecret('new-secret');
+
+    expect(decryptCompatibleSecret(preCutover)).toBe('survives-cutover');
+    expect(decryptCompatibleSecret(postCutover)).toBe('new-secret');
   });
 
   test('malformed envelope fails closed', () => {
@@ -76,5 +103,11 @@ describe('MASTER_KEY keyring compatibility', () => {
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = 'abcd';
     expect(() => getPreviousMasterKey()).toThrow('MASTER_KEY_PREVIOUS must be 32 bytes');
+  });
+
+  test('invalid write mode fails closed', () => {
+    process.env.MASTER_KEY_WRITE_MODE = 'bad-mode';
+    expect(() => getMasterKeyWriteMode()).toThrow('MASTER_KEY_WRITE_MODE must be one of: legacy, mk2');
+    expect(() => encryptManagedSecret('bad-mode-secret')).toThrow('MASTER_KEY_WRITE_MODE must be one of: legacy, mk2');
   });
 });

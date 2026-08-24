@@ -33,7 +33,7 @@ describe('Crypto Utility Tests', () => {
 
             expect(encrypted).toBeDefined();
             expect(encrypted).not.toBe(plain);
-            expect(encrypted).toMatch(/^mk2:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+            expect(encrypted).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
         });
 
         test('should throw error for empty input', () => {
@@ -45,6 +45,13 @@ describe('Crypto Utility Tests', () => {
             const enc1 = cryptoUtils.encryptSecret(plain);
             const enc2 = cryptoUtils.encryptSecret(plain);
             expect(enc1).not.toBe(enc2);
+        });
+
+        test('should honor explicit mk2 write mode', () => {
+            process.env.MASTER_KEY_WRITE_MODE = 'mk2';
+            const encrypted = cryptoUtils.encryptSecret('cutover-secret');
+            expect(encrypted).toMatch(/^mk2:/);
+            delete process.env.MASTER_KEY_WRITE_MODE;
         });
     });
 

@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling source COMPLETE+VERIFIED; source authorization consumed; pre-production readiness next; EXECUTION_READY=NO; no T2/B1
+description: TitanGold Rule 02 — C2 READY_TO_APPLY; MASTER_KEY tooling source COMPLETE+VERIFIED with phase-safe write + fail-closed resume correction; pre-production readiness next; EXECUTION_READY=NO; no T2/B1
 alwaysApply: true
 ---
 
@@ -29,6 +29,9 @@ ROTATION DESIGN CORRECTION COMPLETE /
 MASTER_KEY MIGRATION TOOLING DESIGN COMPLETE /
 MASTER_KEY TOOLING SOURCE IMPLEMENTATION = COMPLETE /
 MASTER_KEY TOOLING SOURCE VERIFIED = YES /
+MASTER_KEY PHASE-SAFE WRITE MODEL = PROVEN /
+MASTER_KEY CHECKPOINT / RESUME FAIL-CLOSED = PROVEN /
+MASTER_KEY APPLY COMPLETION POSTCONDITIONS = PROVEN /
 MASTER_KEY SOURCE IMPLEMENTATION AUTHORIZED = CONSUMED /
 OWNER_DECISIONS_ACTUALLY_REQUIRED = 4 /
 CREDENTIAL TECHNICAL DESIGN READY = YES /
@@ -3263,6 +3266,12 @@ bytes = 8329 · tmp/home equality = **YES**
 **MASTER_KEY_TOOLING_SOURCE_IMPLEMENTATION_READY = YES**
 **MASTER_KEY_TOOLING_SOURCE_IMPLEMENTATION = COMPLETE**
 **MASTER_KEY_TOOLING_SOURCE_VERIFIED = YES**
+**MASTER_KEY_WRITE_DEFAULT_MODE = LEGACY**
+**MASTER_KEY_WRITE_EXPLICIT_CUTOVER_MODE = MK2**
+**MASTER_KEY_PRE_CUTOVER_MK2_HAZARD = CLOSED**
+**MASTER_KEY_RESUME_SKIP_FAILED_ROW_DEFECT = CLOSED**
+**MASTER_KEY_CONFLICT_MALFORMED_COMPLETION_DEFECT = CLOSED**
+**MASTER_KEY_RUNID_PATH_TRAVERSAL_DEFECT = CLOSED**
 **SOURCE_IMPLEMENTATION_AUTHORIZED = CONSUMED**
 **MASTER_KEY_SYNTHETIC_TEST_MODEL = PASS** (T1–T10 · /tmp fake keys only)
 **CREDENTIAL_ROTATION_TECHNICAL_DESIGN_READY = YES**
@@ -3296,7 +3305,7 @@ Excluded: password_hash / 2FA / empty webhooks & user_settings (not MASTER_KEY A
 **ADD:** `cryptoKeyring.js` · `scripts/masterKeyMigrate.mjs` · unit tests  
 **MODIFY:** `utils/crypto.js` facade to keyring (preserve API)  
 Implemented CLI: `--dry-run` / `--apply` / `--resume` · checkpoint 0600 · metrics only · **never** log plaintext/ciphertext/keys  
-Implemented safety: dual-read + `mk2:` writes · CAS update guard · resume/idempotent skip `mk2:` · terminal mutation guard  
+Implemented safety: default legacy-safe writes + explicit `mk2` cutover mode · dual-read · CAS fail-closed guard · durable progress only after safe row handling · malformed/conflict apply blockers · terminal mutation guard · final zero-legacy postcondition verification · runId path hardening  
 
 #### Sequencing / irreversible point
 

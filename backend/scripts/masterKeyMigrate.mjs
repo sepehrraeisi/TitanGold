@@ -8,8 +8,9 @@ import { classifyCiphertext, decryptCompatibleSecret, encryptMk2Secret } from '.
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_CHECKPOINT_DIR = path.join(process.cwd(), '.tmp', 'master-key-migration');
 const TERMINAL_STATES = new Set(['FAILED', 'COMPLETED']);
+const SAFE_RUN_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
-function sanitizeError(error) {
+export function sanitizeError(error) {
   const message = String(error?.message || 'unknown error')
     .replace(/mk2:[0-9a-f:]+/gi, '[REDACTED_CIPHERTEXT]')
     .replace(/[0-9a-f]{64}/gi, '[REDACTED_KEY]');
@@ -19,22 +20,54 @@ function sanitizeError(error) {
   };
 }
 
+export function validateRunId(runId) {
+  if (!SAFE_RUN_ID.test(runId || '')) {
+    throw new Error('Invalid runId: use 1-64 chars from [A-Za-z0-9._-]');
+  }
+  return runId;
+}
+
+export function resolveCheckpointPath(checkpointDir, runId) {
+  const safeRunId = validateRunId(runId);
+  const baseDir = path.resolve(checkpointDir);
+  const finalPath = path.resolve(baseDir, `${safeRunId}.json`);
+  const relativePath = path.relative(baseDir, finalPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error('Invalid runId checkpoint path traversal');
+  }
+  return finalPath;
+}
+
 export function createStateMachine() {
   let state = 'ACTIVE';
+  let sealed = false;
   return {
     getState() {
       return state;
     },
     assertMutable() {
-      if (TERMINAL_STATES.has(state)) {
+      if (TERMINAL_STATES.has(state) || sealed) {
         throw new Error(`Mutation blocked after terminal state: ${state}`);
       }
     },
-    markFailed() {
-      state = 'FAILED';
+    beginTerminal(nextState) {
+      if (!TERMINAL_STATES.has(nextState)) {
+        throw new Error(`Invalid terminal state: ${nextState}`);
+      }
+      if (sealed) {
+        throw new Error('Terminal transition already sealed');
+      }
+      state = nextState;
+      return state;
     },
-    markCompleted() {
-      state = 'COMPLETED';
+    sealTerminalCheckpoint() {
+      if (!TERMINAL_STATES.has(state)) {
+        throw new Error('Cannot seal checkpoint before terminal state');
+      }
+      if (sealed) {
+        throw new Error('Terminal checkpoint already sealed');
+      }
+      sealed = true;
     },
   };
 }
@@ -44,8 +77,9 @@ export function createCheckpointStore({
   fsImpl = fs,
 } = {}) {
   return {
+    checkpointDir,
     getPath(runId) {
-      return path.join(checkpointDir, `${runId}.json`);
+      return resolveCheckpointPath(checkpointDir, runId);
     },
     load(runId) {
       const filePath = this.getPath(runId);
@@ -53,7 +87,7 @@ export function createCheckpointStore({
       return JSON.parse(fsImpl.readFileSync(filePath, 'utf8'));
     },
     save(runId, data) {
-      fsImpl.mkdirSync(checkpointDir, { recursive: true, mode: 0o700 });
+      fsImpl.mkdirSync(path.resolve(checkpointDir), { recursive: true, mode: 0o700 });
       const filePath = this.getPath(runId);
       fsImpl.writeFileSync(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });
       return filePath;
@@ -63,12 +97,13 @@ export function createCheckpointStore({
 
 function normalizeOptions(raw = {}) {
   const batchSize = Number.parseInt(raw.batchSize ?? DEFAULT_BATCH_SIZE, 10);
+  const runId = validateRunId(raw.runId || `mk-${Date.now()}`);
   return {
     apply: Boolean(raw.apply),
     dryRun: Boolean(raw.dryRun),
     resume: Boolean(raw.resume),
     batchSize: Number.isFinite(batchSize) && batchSize > 0 ? batchSize : DEFAULT_BATCH_SIZE,
-    runId: raw.runId || `mk-${Date.now()}`,
+    runId,
     logger: raw.logger || console,
   };
 }
@@ -195,6 +230,68 @@ export async function createPgClient() {
   return getClient();
 }
 
+function createEmptyCounts() {
+  return {
+    scanned: 0,
+    eligibleLegacy: 0,
+    migrated: 0,
+    skippedMk2: 0,
+    malformed: 0,
+    conflicts: 0,
+  };
+}
+
+function emptySurfaceSummary(lastProcessedPk = null) {
+  return {
+    ...createEmptyCounts(),
+    lastProcessedPk,
+  };
+}
+
+function mergeCounts(target, source) {
+  for (const key of Object.keys(target)) {
+    target[key] += source[key] || 0;
+  }
+}
+
+function buildCheckpointPayload(summary, state) {
+  return {
+    runId: summary.runId,
+    state,
+    progress: Object.fromEntries(
+      Object.entries(summary.surfaces).map(([id, value]) => [
+        id,
+        { lastProcessedPk: value.lastProcessedPk },
+      ]),
+    ),
+    counts: summary.counts,
+    remainingLegacy: summary.remainingLegacy ?? null,
+    remainingMalformed: summary.remainingMalformed ?? null,
+    remainingConflicts: summary.remainingConflicts ?? null,
+    error: summary.error ?? null,
+  };
+}
+
+async function countRemaining(surface, client, classifyFn, batchSize) {
+  let afterPk = null;
+  let remainingLegacy = 0;
+  let remainingMalformed = 0;
+
+  while (true) {
+    const rows = await surface.listEligible(client, { afterPk, limit: batchSize });
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const format = classifyFn(row.storedValue);
+      if (format === 'legacy') remainingLegacy += 1;
+      if (format === 'malformed') remainingMalformed += 1;
+      afterPk = row.pk;
+    }
+  }
+
+  return { remainingLegacy, remainingMalformed };
+}
+
 export async function runMigration({
   clientFactory = createPgClient,
   surfaces = createDefaultSurfaceRegistry(),
@@ -217,30 +314,19 @@ export async function runMigration({
     mode: options.apply ? 'apply' : 'dry-run',
     state: 'ACTIVE',
     dbMutationCount: 0,
-    counts: {
-      scanned: 0,
-      eligibleLegacy: 0,
-      migrated: 0,
-      skippedMk2: 0,
-      malformed: 0,
-      conflicts: 0,
-    },
+    counts: createEmptyCounts(),
     surfaces: {},
     checkpointPath: checkpointStore.getPath(options.runId),
+    remainingLegacy: null,
+    remainingMalformed: null,
+    remainingConflicts: null,
   };
 
   const client = await clientFactory();
   try {
     for (const surface of surfaces) {
-      const surfaceSummary = summary.surfaces[surface.id] || {
-        scanned: 0,
-        eligibleLegacy: 0,
-        migrated: 0,
-        skippedMk2: 0,
-        malformed: 0,
-        conflicts: 0,
-        lastProcessedPk: progress[surface.id]?.lastProcessedPk || null,
-      };
+      const surfaceSummary = summary.surfaces[surface.id]
+        || emptySurfaceSummary(progress[surface.id]?.lastProcessedPk || null);
       summary.surfaces[surface.id] = surfaceSummary;
 
       let afterPk = surfaceSummary.lastProcessedPk;
@@ -249,30 +335,38 @@ export async function runMigration({
         if (rows.length === 0) break;
 
         for (const row of rows) {
+          const rowCounts = createEmptyCounts();
           const format = classifyFn(row.storedValue);
-          surfaceSummary.scanned += 1;
-          summary.counts.scanned += 1;
-          surfaceSummary.lastProcessedPk = row.pk;
-          afterPk = row.pk;
+          rowCounts.scanned += 1;
 
           if (format === 'mk2') {
-            surfaceSummary.skippedMk2 += 1;
-            summary.counts.skippedMk2 += 1;
+            rowCounts.skippedMk2 += 1;
+            mergeCounts(surfaceSummary, rowCounts);
+            mergeCounts(summary.counts, rowCounts);
+            surfaceSummary.lastProcessedPk = row.pk;
+            afterPk = row.pk;
+            checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'ACTIVE'));
             continue;
           }
 
           if (format === 'malformed') {
-            surfaceSummary.malformed += 1;
-            summary.counts.malformed += 1;
-            continue;
+            rowCounts.malformed += 1;
+            mergeCounts(surfaceSummary, rowCounts);
+            mergeCounts(summary.counts, rowCounts);
+            if (options.dryRun) {
+              surfaceSummary.lastProcessedPk = row.pk;
+              afterPk = row.pk;
+              checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'ACTIVE'));
+              continue;
+            }
+            throw new Error(`Malformed ciphertext blocks apply on surface ${surface.id}`);
           }
 
           if (format !== 'legacy') {
             continue;
           }
 
-          surfaceSummary.eligibleLegacy += 1;
-          summary.counts.eligibleLegacy += 1;
+          rowCounts.eligibleLegacy += 1;
 
           const plaintext = decryptFn(row.storedValue);
           const migratedValue = encryptFn(plaintext);
@@ -282,6 +376,11 @@ export async function runMigration({
           }
 
           if (options.dryRun) {
+            mergeCounts(surfaceSummary, rowCounts);
+            mergeCounts(summary.counts, rowCounts);
+            surfaceSummary.lastProcessedPk = row.pk;
+            afterPk = row.pk;
+            checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'ACTIVE'));
             continue;
           }
 
@@ -296,64 +395,66 @@ export async function runMigration({
             });
             if (updated === 1) {
               await client.query('COMMIT');
-              surfaceSummary.migrated += 1;
-              summary.counts.migrated += 1;
+              rowCounts.migrated += 1;
+              mergeCounts(surfaceSummary, rowCounts);
+              mergeCounts(summary.counts, rowCounts);
               summary.dbMutationCount += 1;
+              surfaceSummary.lastProcessedPk = row.pk;
+              afterPk = row.pk;
+              checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'ACTIVE'));
             } else {
               await client.query('ROLLBACK');
-              surfaceSummary.conflicts += 1;
-              summary.counts.conflicts += 1;
+              rowCounts.conflicts += 1;
+              mergeCounts(surfaceSummary, rowCounts);
+              mergeCounts(summary.counts, rowCounts);
+              const conflictError = new Error(`CAS conflict blocks apply on surface ${surface.id}`);
+              conflictError.alreadyRolledBack = true;
+              throw conflictError;
             }
           } catch (error) {
-            await client.query('ROLLBACK');
+            if (!error.alreadyRolledBack) {
+              await client.query('ROLLBACK');
+            }
             throw error;
           }
         }
-
-        checkpointStore.save(options.runId, {
-          runId: options.runId,
-          state: 'ACTIVE',
-          progress: Object.fromEntries(
-            Object.entries(summary.surfaces).map(([id, value]) => [
-              id,
-              { lastProcessedPk: value.lastProcessedPk },
-            ]),
-          ),
-          counts: summary.counts,
-        });
       }
     }
 
-    stateMachine.markCompleted();
+    if (options.apply) {
+      let remainingLegacy = 0;
+      let remainingMalformed = 0;
+      for (const surface of surfaces) {
+        const remaining = await countRemaining(surface, client, classifyFn, options.batchSize);
+        remainingLegacy += remaining.remainingLegacy;
+        remainingMalformed += remaining.remainingMalformed;
+      }
+      summary.remainingLegacy = remainingLegacy;
+      summary.remainingMalformed = remainingMalformed;
+      summary.remainingConflicts = summary.counts.conflicts;
+      if (remainingLegacy !== 0 || remainingMalformed !== 0 || summary.counts.conflicts !== 0) {
+        throw new Error('Apply postcondition failed: unresolved legacy, malformed, or conflict rows remain');
+      }
+    } else {
+      summary.remainingLegacy = summary.counts.eligibleLegacy;
+      summary.remainingMalformed = summary.counts.malformed;
+      summary.remainingConflicts = 0;
+    }
+
+    stateMachine.beginTerminal('COMPLETED');
     summary.state = 'COMPLETED';
-    checkpointStore.save(options.runId, {
-      runId: options.runId,
-      state: 'COMPLETED',
-      progress: Object.fromEntries(
-        Object.entries(summary.surfaces).map(([id, value]) => [
-          id,
-          { lastProcessedPk: value.lastProcessedPk },
-        ]),
-      ),
-      counts: summary.counts,
-    });
+    checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'COMPLETED'));
+    stateMachine.sealTerminalCheckpoint();
     return summary;
   } catch (error) {
-    stateMachine.markFailed();
+    stateMachine.beginTerminal('FAILED');
     summary.state = 'FAILED';
     summary.error = sanitizeError(error);
-    checkpointStore.save(options.runId, {
-      runId: options.runId,
-      state: 'FAILED',
-      progress: Object.fromEntries(
-        Object.entries(summary.surfaces).map(([id, value]) => [
-          id,
-          { lastProcessedPk: value.lastProcessedPk },
-        ]),
-      ),
-      counts: summary.counts,
-      error: summary.error,
-    });
+    summary.remainingLegacy ??= null;
+    summary.remainingMalformed ??= null;
+    summary.remainingConflicts ??= summary.counts.conflicts;
+    checkpointStore.save(options.runId, buildCheckpointPayload(summary, 'FAILED'));
+    stateMachine.sealTerminalCheckpoint();
     throw error;
   } finally {
     client.release?.();

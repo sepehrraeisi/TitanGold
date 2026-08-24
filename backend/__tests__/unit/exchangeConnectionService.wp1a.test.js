@@ -112,8 +112,8 @@ describe('exchangeConnectionService WP1A', () => {
 
     const insertCall = query.mock.calls[0];
     expect(insertCall[0]).toMatch(/INSERT INTO exchange_connections/);
-    expect(insertCall[1][2]).toMatch(/^mk2:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
-    expect(insertCall[1][3]).toMatch(/^mk2:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
+    expect(insertCall[1][2]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
+    expect(insertCall[1][3]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
     expect(insertCall[1][2]).not.toBe('TESTAPIKEY123456');
     expect(dto.isConnected).toBe(false);
     expect(dto.configured).toBe(true);

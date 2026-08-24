@@ -14,10 +14,12 @@ jest.unstable_mockModule('../../database/db.js', () => ({
 
 const {
   createCheckpointStore,
+  resolveCheckpointPath,
   createStateMachine,
   runMigration,
 } = await import('../../scripts/masterKeyMigrate.mjs');
 const { decryptSecret, encryptSecret } = await import('../../utils/crypto.js');
+const { encryptLegacySecret, encryptManagedSecret } = await import('../../utils/cryptoKeyring.js');
 
 function createMemoryClient() {
   return {
@@ -64,6 +66,7 @@ describe('MASTER_KEY migration tooling', () => {
   beforeEach(() => {
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = legacyKey;
+    delete process.env.MASTER_KEY_WRITE_MODE;
     getClient.mockReset();
   });
 
@@ -75,16 +78,32 @@ describe('MASTER_KEY migration tooling', () => {
   function makeLegacyValue(plaintext) {
     process.env.MASTER_KEY = legacyKey;
     delete process.env.MASTER_KEY_PREVIOUS;
-    const legacy = encryptSecret(plaintext).slice(4);
+    const legacy = encryptLegacySecret(plaintext);
     process.env.MASTER_KEY = currentKey;
     process.env.MASTER_KEY_PREVIOUS = legacyKey;
     return legacy;
   }
 
+  test('compatibility deployment default writes legacy and cutover writes mk2', () => {
+    process.env.MASTER_KEY = legacyKey;
+    delete process.env.MASTER_KEY_PREVIOUS;
+    const preCutover = encryptSecret('legacy-phase');
+    expect(preCutover.startsWith('mk2:')).toBe(false);
+
+    process.env.MASTER_KEY = currentKey;
+    process.env.MASTER_KEY_PREVIOUS = legacyKey;
+    process.env.MASTER_KEY_WRITE_MODE = 'mk2';
+    const postCutover = encryptSecret('mk2-phase');
+
+    expect(postCutover.startsWith('mk2:')).toBe(true);
+    expect(decryptSecret(preCutover)).toBe('legacy-phase');
+    expect(decryptSecret(postCutover)).toBe('mk2-phase');
+  });
+
   test('dry-run scans mixed dataset with zero DB mutation', async () => {
     const rows = [
       { pk: '1', storedValue: makeLegacyValue('alpha') },
-      { pk: '2', storedValue: encryptSecret('beta') },
+      { pk: '2', storedValue: encryptManagedSecret('beta', { writeMode: 'mk2' }) },
       { pk: '3', storedValue: 'not-a-ciphertext' },
     ];
     const client = createMemoryClient();
@@ -101,10 +120,11 @@ describe('MASTER_KEY migration tooling', () => {
     expect(summary.counts.eligibleLegacy).toBe(1);
     expect(summary.counts.skippedMk2).toBe(1);
     expect(summary.counts.malformed).toBe(1);
+    expect(summary.remainingMalformed).toBe(1);
     expect(client.query).not.toHaveBeenCalledWith(expect.stringMatching(/^UPDATE/i), expect.anything());
   });
 
-  test('apply migrates legacy values to mk2 and resume is safe', async () => {
+  test('apply migrates legacy values to mk2 and proves zero legacy postcondition', async () => {
     const rows = [
       { pk: '1', storedValue: makeLegacyValue('resume-a') },
       { pk: '2', storedValue: makeLegacyValue('resume-b') },
@@ -124,19 +144,9 @@ describe('MASTER_KEY migration tooling', () => {
     expect(summary.counts.migrated).toBe(2);
     expect(rows.every((row) => row.storedValue.startsWith('mk2:'))).toBe(true);
     expect(decryptSecret(rows[0].storedValue)).toBe('resume-a');
-
-    const secondClient = createMemoryClient();
-    getClient.mockResolvedValue(secondClient);
-    const resumed = await runMigration({
-      apply: true,
-      resume: true,
-      runId: 'resume-run',
-      surfaces: [createSurface('exchange_connections.api_key', rows)],
-      checkpointStore: createCheckpointStore({ checkpointDir }),
-      batchSize: 1,
-    });
-    expect(resumed.counts.migrated).toBe(0);
-    expect(resumed.counts.skippedMk2).toBe(0);
+    expect(summary.remainingLegacy).toBe(0);
+    expect(summary.remainingMalformed).toBe(0);
+    expect(summary.remainingConflicts).toBe(0);
   });
 
   test('second apply run is idempotent because mk2 rows are skipped', async () => {
@@ -162,21 +172,97 @@ describe('MASTER_KEY migration tooling', () => {
     expect(second.counts.skippedMk2).toBe(1);
   });
 
-  test('compare-and-set conflict does not clobber concurrent change', async () => {
+  test('failed row does not advance durable checkpoint and resume retries exact row', async () => {
+    const rows = [
+      { pk: '1', storedValue: makeLegacyValue('row-1') },
+      { pk: '2', storedValue: makeLegacyValue('row-2') },
+      { pk: '3', storedValue: makeLegacyValue('row-3') },
+    ];
+    const client = createMemoryClient();
+    getClient.mockResolvedValue(client);
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mk-failed-row-'));
+    const transient = { failed: false };
+
+    const failingSurface = createSurface('exchange_connections.api_key', rows, {
+      onCompareAndSet: (payload) => {
+        const row = rows.find((item) => item.pk === payload.pk);
+        if (payload.pk === '2' && !transient.failed) {
+          transient.failed = true;
+          throw new Error('synthetic-row-two-failure');
+        }
+        row.storedValue = payload.nextValue;
+        return 1;
+      },
+    });
+
+    await expect(runMigration({
+      apply: true,
+      runId: 'failed-row-resume',
+      surfaces: [failingSurface],
+      checkpointStore: createCheckpointStore({ checkpointDir }),
+      batchSize: 1,
+    })).rejects.toThrow('synthetic-row-two-failure');
+
+    const failedCheckpoint = JSON.parse(fs.readFileSync(path.join(checkpointDir, 'failed-row-resume.json'), 'utf8'));
+    expect(failedCheckpoint.progress['exchange_connections.api_key'].lastProcessedPk).toBe('1');
+    expect(rows[0].storedValue.startsWith('mk2:')).toBe(true);
+    expect(rows[1].storedValue.startsWith('mk2:')).toBe(false);
+    expect(rows[2].storedValue.startsWith('mk2:')).toBe(false);
+
+    const resumeClient = createMemoryClient();
+    getClient.mockResolvedValue(resumeClient);
+    const resumed = await runMigration({
+      apply: true,
+      resume: true,
+      runId: 'failed-row-resume',
+      surfaces: [failingSurface],
+      checkpointStore: createCheckpointStore({ checkpointDir }),
+      batchSize: 1,
+    });
+    expect(resumed.counts.migrated).toBe(2);
+    expect(rows.every((row) => row.storedValue.startsWith('mk2:'))).toBe(true);
+  });
+
+  test('compare-and-set conflict cannot complete apply and resume reconsiders row', async () => {
     const rows = [{ pk: '1', storedValue: makeLegacyValue('conflict') }];
     const client = createMemoryClient();
     getClient.mockResolvedValue(client);
-
-    const summary = await runMigration({
-      apply: true,
-      runId: 'conflict-run',
-      surfaces: [createSurface('exchange_connections.api_secret', rows, { onCompareAndSet: () => 0 })],
-      checkpointStore: createCheckpointStore({ checkpointDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mk-conflict-')) }),
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mk-conflict-'));
+    let conflictActive = true;
+    const conflictSurface = createSurface('exchange_connections.api_secret', rows, {
+      onCompareAndSet: (payload) => {
+        if (conflictActive) {
+          return 0;
+        }
+        const row = rows.find((item) => item.pk === payload.pk);
+        row.storedValue = payload.nextValue;
+        return 1;
+      },
     });
 
-    expect(summary.counts.conflicts).toBe(1);
-    expect(summary.counts.migrated).toBe(0);
+    await expect(runMigration({
+      apply: true,
+      runId: 'conflict-run',
+      surfaces: [conflictSurface],
+      checkpointStore: createCheckpointStore({ checkpointDir }),
+    })).rejects.toThrow('CAS conflict blocks apply');
     expect(rows[0].storedValue.startsWith('mk2:')).toBe(false);
+
+    const failedCheckpoint = JSON.parse(fs.readFileSync(path.join(checkpointDir, 'conflict-run.json'), 'utf8'));
+    expect(failedCheckpoint.progress['exchange_connections.api_secret'].lastProcessedPk).not.toBe('1');
+
+    conflictActive = false;
+    const resumeClient = createMemoryClient();
+    getClient.mockResolvedValue(resumeClient);
+    const resumed = await runMigration({
+      apply: true,
+      resume: true,
+      runId: 'conflict-run',
+      surfaces: [conflictSurface],
+      checkpointStore: createCheckpointStore({ checkpointDir }),
+    });
+    expect(resumed.counts.migrated).toBe(1);
+    expect(rows[0].storedValue.startsWith('mk2:')).toBe(true);
   });
 
   test('round-trip mismatch blocks persistence and terminal stop prevents more mutation', async () => {
@@ -198,8 +284,35 @@ describe('MASTER_KEY migration tooling', () => {
     expect(client.query).not.toHaveBeenCalledWith('BEGIN');
 
     const stateMachine = createStateMachine();
-    stateMachine.markFailed();
+    stateMachine.beginTerminal('FAILED');
+    stateMachine.sealTerminalCheckpoint();
     expect(() => stateMachine.assertMutable()).toThrow('Mutation blocked after terminal state');
+    expect(() => stateMachine.sealTerminalCheckpoint()).toThrow('Terminal checkpoint already sealed');
+  });
+
+  test('malformed apply cannot complete and dry-run remains mutation-free', async () => {
+    const rows = [{ pk: '1', storedValue: 'malformed-value' }];
+    const dryClient = createMemoryClient();
+    getClient.mockResolvedValue(dryClient);
+
+    const drySummary = await runMigration({
+      dryRun: true,
+      runId: 'malformed-dry',
+      surfaces: [createSurface('api_integrations.api_key_encrypted', rows)],
+      checkpointStore: createCheckpointStore({ checkpointDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mk-malformed-dry-')) }),
+    });
+    expect(drySummary.dbMutationCount).toBe(0);
+    expect(drySummary.counts.malformed).toBe(1);
+    expect(dryClient.query).not.toHaveBeenCalledWith('BEGIN');
+
+    const applyClient = createMemoryClient();
+    getClient.mockResolvedValue(applyClient);
+    await expect(runMigration({
+      apply: true,
+      runId: 'malformed-apply',
+      surfaces: [createSurface('api_integrations.api_key_encrypted', rows)],
+      checkpointStore: createCheckpointStore({ checkpointDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mk-malformed-apply-')) }),
+    })).rejects.toThrow('Malformed ciphertext blocks apply');
   });
 
   test('sanitized failure path does not leak plaintext into checkpoint', async () => {
@@ -220,5 +333,10 @@ describe('MASTER_KEY migration tooling', () => {
     const checkpointBody = fs.readFileSync(path.join(checkpointDir, 'sanitize-run.json'), 'utf8');
     expect(checkpointBody).not.toContain(sensitivePlaintext);
     expect(checkpointBody).not.toMatch(/[0-9a-f]{64}/i);
+  });
+
+  test('unsafe runId/path traversal is rejected', () => {
+    expect(() => resolveCheckpointPath('/tmp/master-key', '../escape')).toThrow('Invalid runId');
+    expect(() => createCheckpointStore({ checkpointDir: '/tmp/master-key' }).getPath('../../bad')).toThrow('Invalid runId');
   });
 });

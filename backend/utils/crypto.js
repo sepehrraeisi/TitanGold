@@ -6,7 +6,9 @@
 import {
   classifyCiphertext,
   decryptCompatibleSecret,
+  encryptManagedSecret,
   encryptMk2Secret,
+  getMasterKeyWriteMode,
   isLegacyEnvelope,
   isMk2Envelope,
   maskSecret,
@@ -15,10 +17,10 @@ import {
 /**
  * Encrypt a secret (API key, token, etc.)
  * @param {string} plaintext - Plain text to encrypt
- * @returns {string} Encrypted format: "mk2:iv:ciphertext:authTag" (all hex)
+ * @returns {string} Encrypted format controlled by MASTER_KEY_WRITE_MODE
  */
 export function encryptSecret(plaintext) {
-  return encryptMk2Secret(plaintext);
+  return encryptManagedSecret(plaintext);
 }
 
 /**
@@ -49,7 +51,9 @@ export {
   maskSecret,
   classifyCiphertext,
   decryptCompatibleSecret,
+  encryptManagedSecret,
   encryptMk2Secret,
+  getMasterKeyWriteMode,
   isLegacyEnvelope,
   isMk2Envelope,
 };
