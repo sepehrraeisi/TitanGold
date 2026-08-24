@@ -3542,8 +3542,12 @@ after final verification, delete staging belonging to `CR-20260824T114413Z`.
 **FINAL_S2_INCIDENT_CORRECTION_AUTHORIZED = YES**
 **FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED**
 **CORRECTION_AUTHORIZATION_CONSUMED = NO**
+**CORRECTION_RUN_ID = S2C-20260824T141928Z**
+**WAITING_FOR_OPERATOR = YES**
 **PRODUCTION_MUTATION_THIS_CAPTURE = 0**
 **PRIOR_CAMPAIGN_RUN_ID = CR-20260824T114413Z** (immutable / CONSUMED / must not be reused)
+
+Fresh precheck entered WAITING because **TELEGRAM_EXPOSED_TOKEN_VALID = YES** and BotFather human action is required. PostgreSQL invalidation is deferred until the replacement token is staged.
 
 Why this correction exists:
 - residual proof: **OLD_DB_CREDENTIAL_STILL_AUTHENTICATES = YES** (P8 skipped old-role revoke because it would revoke superuser)
