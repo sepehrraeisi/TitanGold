@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — C2 READY_TO_APPLY; S2C COMPLETE; COLLECTOR LIVE FUNCTIONAL RESTORE CDBR COMPLETE (NOT PERSISTED); T2/B1/052/NODE_ENV still forbidden
+description: TitanGold Rule 02 — T2 RETRY RE-ARM DESIGN COMPLETE; shared T2+collector save preferred; orchestrator source fix required; T2/B1/052/NODE_ENV still forbidden
 alwaysApply: true
 ---
 
@@ -53,6 +53,16 @@ COLLECTOR_DB_RUNTIME_ALIGNED_LIVE = YES /
 COLLECTOR_DB_RUNTIME_PERSISTED = NO /
 PM2_SAVE_PERFORMED = NO /
 REBOOT_RESURRECT_REGRESSION_RISK = OPEN /
+T2_RETRY_REARM_DESIGN = COMPLETE /
+T2_REARM_DESIGN_COMPLETE = YES /
+T2_ORCHESTRATOR_CURRENTLY_SAFE = NO /
+T2_ORCHESTRATOR_FIX_REQUIRED = YES /
+T2_SOURCE_IMPLEMENTATION_REQUIRED = YES /
+T2_TECHNICALLY_REAUTHORIZABLE_NOW = NO /
+T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES /
+COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES /
+NEXT_GATE = T2_RETRY_ORCHESTRATOR_SOURCE_FIX /
+T2_RETRY_AUTHORIZED = NO /
 PRODUCTION_MUTATION_CAPABILITY = CLOSED /
 NO NEW PRODUCTION MUTATION AUTHORIZED /
 MEXC DB CREDENTIAL = PRESERVED /
@@ -61,7 +71,6 @@ MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
 JWT ROTATED = YES /
 DB-B ROLE = tg_rot_b_0824 LIVE /
 TEST_QA / PROVIDER ENV COPIES = PURGED /
-T2 REAUTHORIZATION NOT ELIGIBLE /
 NODE_ENV DRIFT OPEN /
 B1 NOT DEPLOYED /
 ENGINE TOPOLOGY STILL 2 /
@@ -2767,20 +2776,89 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ## Next Owner gate
 
-**C2 FOREGROUND IO /
-E6A TARGETED EFFECT STILL INCONCLUSIVE /
-B1 PRODUCTION DEPLOYMENT /
-ENGINE PM2 2→1 RECONCILIATION (T2 RETRY) /
-NODE_ENV NORMALIZATION /
-C2 052**
+**PRIMARY ROADMAP = Telegram completion → Artemis → Agents**
 
-Classification: **TIER 3 / NO MUTATION AUTHORIZED BY THIS CLOSEOUT**
+**NEXT_GATE = T2_RETRY_ORCHESTRATOR_SOURCE_FIX**
+(design-proven corrected state machine exists only as `/tmp` synthetic proof; durable orchestrator tooling is **NOT** in the TitanGold production repo and must not be reused from the failed T2 agent script.)
+
+After durable orchestrator source + tests land (no production execution in that gate):
+future Owner one-shot may authorize **combined** T2 engine 2→1 **and** telegram-collector DB-B live-env persistence via **one** guarded `pm2 save`.
+
+Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
+
+### T2 retry re-arm design closeout (COMPLETE / READ-ONLY / 20260824T153309Z)
+
+Sanitized design evidence (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_T2_REARM_DESIGN_20260824T153309Z.txt`
+SHA256 = `be45c73b700eefcdba6eeb5df0ae59f54135ceddd5bc134d64d0139f48e15214`
+bytes = 5460
+tmp/home equality = **YES**
+mode = **0600**
+
+Synthetic offline proof:
+`/tmp/TITANGOLD_T2_REARM_SYNTH_RESULTS.txt`
+**SYNTH_PASS = 13 / FAIL = 0 / TOTAL = 13**
+(includes mandatory T1–T12 + `hist_changed_sha_not_s2`)
+
+**T2_REARM_DESIGN_COMPLETE = YES**
+**T2_ORCHESTRATOR_CURRENTLY_SAFE = NO**
+**T2_ORCHESTRATOR_FIX_REQUIRED = YES**
+**T2_SOURCE_IMPLEMENTATION_REQUIRED = YES**
+**T2_TECHNICALLY_REAUTHORIZABLE_NOW = NO**
+**T2_RETRY_AUTHORIZED = NO**
+**THIS CLOSEOUT DID NOT AUTHORIZE T2 EXECUTION**
+
+Fresh read-only baseline (design snapshot — **NOT** mutation authority):
+- canonical GitHub main = `08f30c5eca44fac5f4cf7a4d3f22a6be8a43e421`
+- PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`
+- active dump SHA256 = `6cbf24ca4293451c17d39b14a91bc3dcc52a6aa693c18af7f910b6df0c25b81f` (≠ historical T2 PRE)
+- historical T2 PRE backup retained = `02d8738756497dd1eb7240beff3d2aad7ae8336a9ea823fffab460056c7e2a4f` · **DO NOT overwrite/delete**
+- engine online = **2** · backend = **4** · processor = **1** · collector = **1** · monitor = **2**
+- health 5002/5003 = **200/200**
+- collector accounts/channels = **200/200** (`/api/telegram-collector/accounts` · `/api/telegram-collector/collector-channels`)
+- collector live DB-B `tg_rot_b_0824` = **YES** · dump persisted DB_* = **NO**
+- NODE_ENV drift = **OPEN** (engine development preserved / not normalized)
+- B1 production deployed = **NO** · C2 052 executed = **NO**
+
+Engine semantic retain/extra (design only; future execution must re-resolve):
+identical fork workers · retain lowest pm_id candidate · extra = higher pm_id · unique responsibility **NOT** proven · historical pm_ids are **NOT** authority.
+
+**T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES**
+**COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES**
+Reason: `pm2 save` persists live God env; collector live already carries DB-B; current dump collector lacks DB_* keys.
+Future Owner envelope **MUST** explicitly authorize **both** effects so collector persistence is not an accidental side effect.
+Allowlist expected durable diffs: engine extra online→stopped · collector DB_* keys appear · dump SHA change.
+Forbidden diffs: NODE_ENV change · backend topology · processor change · monitor change unless unavoidable.
+
+Corrected state-machine invariants (design + synthetic PASS):
+- auth consumed immediately before first production mutation
+- `pm2 save` exit=0 + parseable dump + changed SHA = **SUCCESS path** (NOT S2)
+- after COMPLETED/FAILED/ROLLED_BACK/FAIL_FORWARD_COMPLETE: mutation capability permanently **CLOSED**
+- no diagnostic `pm2 save` after terminal · no replay · stale pm_id blocked · unexpected allowlist diff blocked
+- secret-safe evidence only (no raw env/dump secrets)
+
+Fresh future backup contract (not created in this task):
+`/home/ubuntu/TITANGOLD_PM2_SECURE_BACKUPS/TITANGOLD_PM2_ENGINE_RECON_<UTC>/dump.pm2.pre`
+dir **0700** · file **0600** · SHA256 + parse + exact-byte rollback · never overwrite historical T2 backup.
+
+**B1_DEPLOY_READY = NO**
+**C2_052_READY = NO**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**PM2_MUTATION_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+
+Bounded next source-fix surface (no production execution):
+- durable T2 retry orchestrator tooling (preferred outside ephemeral agent scripts; may live as ops tooling under a future authorized source path)
+- synthetic/unit tests covering T1–T12 + changed-SHA-not-S2 + collector DB-B expected-diff allowlist
+- do **not** execute `pm2 stop/save/start` in the source-fix gate
 
 Credential rotation campaign `CR-20260824T114413Z` remains **CONSUMED / CLOSED**.
 Final S2 incident correction `S2C-20260824T141928Z` is **CONSUMED / COMPLETE / CLOSED**.
 Telegram collector live functional restore `CDBR-20260824T151304Z` is **CONSUMED / COMPLETE / CLOSED** for **live** API recovery only.
 Do **NOT** reuse any of these envelopes.
-Do **NOT** claim durable collector restore: DB-B discrete `DB_*` values were injected only into the live telegram-collector PM2/God environment; `pm2 save` was outside the Owner-authorized envelope, so persistence across daemon resurrect / host reboot is **NOT** proven. A separate bounded persistence gate is required before calling the fix durable. Persistence is **NOT** authorized by this closeout.
+Do **NOT** claim durable collector restore until a future Owner-authorized guarded save (preferably shared with corrected T2) closes persistence.
 
 **TELEGRAM_COLLECTOR_LIVE_FUNCTIONAL_RESTORE = COMPLETE**
 **TELEGRAM_COLLECTOR_FUNCTIONAL_RESTORE_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
@@ -2792,7 +2870,6 @@ Do **NOT** claim durable collector restore: DB-B discrete `DB_*` values were inj
 **COLLECTOR_DB_RUNTIME_PERSISTED = NO**
 **PM2_SAVE_PERFORMED = NO**
 **REBOOT_RESURRECT_REGRESSION_RISK = OPEN**
-**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
 Sanitized restore evidence:
 `/home/ubuntu/TITANGOLD_COLLECTOR_DB_B_RESTORE_CDBR-20260824T151304Z.txt`
@@ -2802,14 +2879,12 @@ tmp/home equality = **YES**
 mode = **0600**
 RUN_ID = `CDBR-20260824T151304Z`
 
-Mutation ledger:
+Mutation ledger (CDBR historical):
 collector env align = 1 · collector restart = 1 · pm2 save = 0 · DB mutation = 0 · other restart = 0 · pg_hba = 0
 
-After terminal STOP: NO further production mutation · NO diagnostic mutation · NO retry.
-**T2_RETRY_AUTHORIZED = NO**
-**B1_DEPLOY_AUTHORIZED = NO**
-**C2_052_EXECUTION_AUTHORIZED = NO**
-**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+This re-arm design task mutation ledger:
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **SECRET_MUTATION = 0**
+(governance Rule02 only)
 
 **FINAL_S2_INCIDENT_CORRECTION = COMPLETE**
 **FINAL_S2_INCIDENT_CORRECTION_AUTHORIZATION = CONSUMED / COMPLETE / CLOSED**
