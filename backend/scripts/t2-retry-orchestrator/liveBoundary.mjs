@@ -10,7 +10,11 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { ForbiddenLiveExecutionError } from './commandBoundary.mjs';
+import {
+  ForbiddenLiveExecutionError,
+  GlobalPm2SaveForbiddenError,
+} from './commandBoundary.mjs';
+import { REQUIRED_PROJECTED_DUMP_MODE } from './constants.mjs';
 
 function sha256Buffer(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -99,7 +103,14 @@ export function createLiveBoundary(opts = {}) {
       } catch {
         throw fixedError('PM2_DUMP_PARSE_FAILED');
       }
-      return { bytes, parsed, sha256: sha256Buffer(bytes), mode };
+      return {
+        bytes,
+        parsed,
+        sha256: sha256Buffer(bytes),
+        mode,
+        uid: st.uid,
+        gid: st.gid,
+      };
     },
 
     async writeBackup(bytes, destPath) {
@@ -111,7 +122,7 @@ export function createLiveBoundary(opts = {}) {
     /**
      * Atomic restore using EXACT PRE active-dump mode (never invent 0664).
      * @param {Buffer} backupBytes
-     * @param {{ mode: number }} opts
+     * @param {{ mode: number, uid?: number, gid?: number }} opts
      */
     async restoreDump(backupBytes, opts = {}) {
       if (typeof opts.mode !== 'number' || !Number.isFinite(opts.mode)) {
@@ -130,8 +141,14 @@ export function createLiveBoundary(opts = {}) {
       }
       await fsp.rename(tmp, dumpPath);
       await fsyncPath(dir);
-      // Re-assert exact PRE mode after rename (filesystem may apply umask on create)
       await fsp.chmod(dumpPath, mode);
+      if (typeof opts.uid === 'number' && typeof opts.gid === 'number') {
+        try {
+          await fsp.chown(dumpPath, opts.uid, opts.gid);
+        } catch {
+          throw fixedError('RESTORE_OWNER_MISMATCH');
+        }
+      }
       return { ok: true, mode };
     },
 
@@ -143,13 +160,107 @@ export function createLiveBoundary(opts = {}) {
       return runPm2(['start', String(pmId)]);
     },
 
+    /**
+     * Global pm2 save is forbidden on the v1.5.0 forward/rollback path.
+     */
     async pm2Save() {
-      return runPm2(['save']);
+      throw new GlobalPm2SaveForbiddenError();
     },
 
     /**
-     * Harden ONLY the already-resolved active dump path (never arbitrary caller paths).
-     * Returns mode only — never dump contents.
+     * Atomic projected dump write — mode 0600 from first byte; never 0664 intermediate.
+     * Targets ONLY the resolved active dump path.
+     * @param {Buffer} projectedBytes
+     * @param {{ expectedUid?: number, expectedGid?: number, expectedSha256?: string }} [opts]
+     */
+    async writeProjectedActiveDump(projectedBytes, opts = {}) {
+      if (!Buffer.isBuffer(projectedBytes)) {
+        throw fixedError('PROJECTED_BYTES_INVALID');
+      }
+      let preSt;
+      try {
+        preSt = await fsp.stat(dumpPath);
+      } catch {
+        throw fixedError('PM2_DUMP_READ_FAILED');
+      }
+      if (typeof opts.expectedUid === 'number' && preSt.uid !== opts.expectedUid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof opts.expectedGid === 'number' && preSt.gid !== opts.expectedGid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
+      }
+
+      const dir = path.dirname(dumpPath);
+      const tmp = path.join(dir, `dump.pm2.t2proj.${process.pid}.${Date.now()}`);
+      const targetMode = REQUIRED_PROJECTED_DUMP_MODE;
+
+      const fh = await fsp.open(tmp, 'w', targetMode);
+      try {
+        await fh.chmod(targetMode);
+        await fh.writeFile(projectedBytes);
+        await fh.sync();
+        await fh.chmod(targetMode);
+      } finally {
+        await fh.close();
+      }
+
+      const tmpSt = await fsp.stat(tmp);
+      if ((tmpSt.mode & 0o777) !== targetMode) {
+        try {
+          await fsp.unlink(tmp);
+        } catch {
+          /* ignore */
+        }
+        throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
+      }
+
+      await fsp.rename(tmp, dumpPath);
+      await fsyncPath(dir);
+
+      // Preserve owner/group when we are the same user; fail closed if required and cannot.
+      if (typeof opts.expectedUid === 'number' && typeof opts.expectedGid === 'number') {
+        try {
+          await fsp.chown(dumpPath, opts.expectedUid, opts.expectedGid);
+        } catch {
+          throw fixedError('DUMP_OWNER_PRESERVE_FAILED');
+        }
+      }
+
+      await fsp.chmod(dumpPath, targetMode);
+      try {
+        await fsyncPath(dumpPath);
+      } catch {
+        // Best-effort
+      }
+
+      const st = await fsp.stat(dumpPath);
+      const mode = st.mode & 0o777;
+      if (mode !== targetMode) {
+        throw fixedError('PROJECTED_DUMP_MODE_NOT_0600');
+      }
+      const bytes = await fsp.readFile(dumpPath);
+      const sha = sha256Buffer(bytes);
+      if (opts.expectedSha256 && sha !== opts.expectedSha256) {
+        throw fixedError('PROJECTED_DUMP_READBACK_MISMATCH');
+      }
+      try {
+        JSON.parse(bytes.toString('utf8'));
+      } catch {
+        throw fixedError('PROJECTED_DUMP_PARSE_FAILED');
+      }
+
+      return {
+        mode,
+        sha256: sha,
+        ownerPreserved:
+          typeof opts.expectedUid !== 'number' ? true : st.uid === opts.expectedUid,
+        groupPreserved:
+          typeof opts.expectedGid !== 'number' ? true : st.gid === opts.expectedGid,
+      };
+    },
+
+    /**
+     * Legacy harden — not used by v1.5 forward path.
      * @param {number} [mode]
      */
     async hardenActiveDumpMode(mode = 0o600) {

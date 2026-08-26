@@ -10,7 +10,9 @@ export {
   ENGINE_NAME,
   EXPECTED_COLLECTOR_DB_USER,
   FORBIDDEN_DIFF_KINDS,
+  LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   REQUIRED_POST_SAVE_DUMP_MODE,
+  REQUIRED_PROJECTED_DUMP_MODE,
   State,
   TERMINAL_STATES,
   TOOL_NAME,
@@ -22,6 +24,7 @@ export {
 export {
   createFailClosedBoundary,
   ForbiddenLiveExecutionError,
+  GlobalPm2SaveForbiddenError,
   MUTATING_OPS,
 } from './commandBoundary.mjs';
 
@@ -44,6 +47,16 @@ export {
   semanticFingerprint,
   summarizeEnvEquality,
 } from './semantics.mjs';
+
+export {
+  assertUnauthorizedLiveEnvNotPersisted,
+  buildExpectedProjectedDump,
+  dumpRecordStableKey,
+  resolveDumpCollectorIdentity,
+  resolveDumpEngineIdentities,
+  resolveDumpEnvMutationTarget,
+  structuralDiffPaths,
+} from './projection.mjs';
 
 export {
   createExclusiveJournal,

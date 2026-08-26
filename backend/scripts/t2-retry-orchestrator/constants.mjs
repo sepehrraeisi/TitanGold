@@ -1,18 +1,23 @@
 /**
  * T2 retry orchestrator — durable constants (no production side effects).
+ * TOOL_VERSION 1.5.0 — surgical projected-dump persistence (no global pm2 save).
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.4.0';
+export const TOOL_VERSION = '1.5.0';
 
 export const AUTHORIZED_TRANSACTION =
-  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN';
+  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST';
 
 export const AUTHORIZED_EFFECTS = Object.freeze([
   'ENGINE_2_TO_1',
   'COLLECTOR_DB_B_PERSIST',
-  'DUMP_MODE_HARDEN_0600',
+  'PROJECTED_DUMP_WRITE_0600',
 ]);
+
+/** Legacy 1.4.0 identity — must fail closed against 1.5.0 auth. */
+export const LEGACY_AUTHORIZED_TRANSACTION_1_4_0 =
+  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN';
 
 export const ENGINE_NAME = 'titan-engine-worker';
 export const BACKEND_NAME = 'titan-backend';
@@ -30,8 +35,11 @@ export const COLLECTOR_DB_KEYS = Object.freeze([
   'DB_PASSWORD',
 ]);
 
-/** Final active dump mode required after successful forward save + harden. */
-export const REQUIRED_POST_SAVE_DUMP_MODE = 0o600;
+/** Final active dump mode required after successful projected write. */
+export const REQUIRED_PROJECTED_DUMP_MODE = 0o600;
+
+/** @deprecated Use REQUIRED_PROJECTED_DUMP_MODE — kept for historical journal parsers. */
+export const REQUIRED_POST_SAVE_DUMP_MODE = REQUIRED_PROJECTED_DUMP_MODE;
 
 /** PM2 metadata / launch fields that must never be treated as application env. */
 export const PM2_METADATA_KEYS = Object.freeze([
@@ -52,6 +60,7 @@ export const PM2_METADATA_KEYS = Object.freeze([
   'created_at',
   'restart_time',
   'unstable_restarts',
+  'prev_restart_delay',
   'axm_actions',
   'axm_monitor',
   'axm_options',
@@ -78,7 +87,6 @@ export const PM2_METADATA_KEYS = Object.freeze([
   'script',
   'pid',
   'monit',
-  'pm_id',
   'windowsHide',
   'kill_retry_time',
   'max_memory_restart',
@@ -95,6 +103,7 @@ export const PM2_METADATA_KEYS = Object.freeze([
   'PM2_HOME',
   'PM2_JSON_PROCESSING',
   'PM2_USAGE',
+  'pmx_module',
 ]);
 
 /** Volatile runtime metadata excluded from stable config diffs. */
@@ -104,6 +113,7 @@ export const VOLATILE_RUNTIME_KEYS = Object.freeze([
   'created_at',
   'restart_time',
   'unstable_restarts',
+  'prev_restart_delay',
   'axm_monitor',
   'axm_actions',
   'axm_dynamic',
@@ -135,6 +145,12 @@ export const State = Object.freeze({
   BACKUP_VERIFIED: 'BACKUP_VERIFIED',
   MUTATION_RUNNING: 'MUTATION_RUNNING',
   ENGINE_SINGLETON_VERIFIED: 'ENGINE_SINGLETON_VERIFIED',
+  PROJECTION_BUILDING: 'PROJECTION_BUILDING',
+  PROJECTION_READY: 'PROJECTION_READY',
+  PROJECTION_WRITE_RUNNING: 'PROJECTION_WRITE_RUNNING',
+  PROJECTION_WRITTEN: 'PROJECTION_WRITTEN',
+  POSTWRITE_VERIFIED: 'POSTWRITE_VERIFIED',
+  // Legacy 1.4.0 states (journal parse only — v1.5 must not enter)
   SAVE_RUNNING: 'SAVE_RUNNING',
   SAVE_SUCCESS: 'SAVE_SUCCESS',
   DUMP_HARDENING: 'DUMP_HARDENING',
@@ -154,11 +170,16 @@ export const TERMINAL_STATES = Object.freeze([
   State.FAIL_FORWARD_COMPLETE,
 ]);
 
-/** States where guarded rollback mutations are allowed. */
+/** States where guarded rollback mutations are allowed (v1.5 + legacy). */
 export const ROLLBACK_ELIGIBLE_STATES = Object.freeze([
   State.BACKUP_VERIFIED,
   State.MUTATION_RUNNING,
   State.ENGINE_SINGLETON_VERIFIED,
+  State.PROJECTION_BUILDING,
+  State.PROJECTION_READY,
+  State.PROJECTION_WRITE_RUNNING,
+  State.PROJECTION_WRITTEN,
+  State.POSTWRITE_VERIFIED,
   State.SAVE_RUNNING,
   State.SAVE_SUCCESS,
   State.DUMP_HARDENING,

@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  *
- * Durable T2 retry orchestrator — synthetic/fake-only matrix.
+ * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.5.0).
  * Never contacts live PM2, DB, Redis, Telegram, or production services.
  */
 
@@ -23,6 +23,7 @@ import {
   sha256Buffer,
   T2OrchestratorError,
   ForbiddenLiveExecutionError,
+  GlobalPm2SaveForbiddenError,
   JournalError,
   MUTATING_OPS,
   evaluateLiveExecutionGates,
@@ -33,11 +34,20 @@ import {
   createSideEffectLedger,
   semanticFingerprint,
   selectEngineRetainExtra,
+  REQUIRED_PROJECTED_DUMP_MODE,
+  LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
+  buildExpectedProjectedDump,
+  assertUnauthorizedLiveEnvNotPersisted,
+  resolveDumpEngineIdentities,
+  resolveDumpCollectorIdentity,
+  structuralDiffPaths,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 const SECRET_PASSWORD = 'super-secret-db-password-NEVER-IN-EVIDENCE';
 const SECRET_TOKEN = '123456789:AAHsecretTelegramTokenValueXXXX';
 const SECRET_BACKEND = 'backend-secret-value-should-stay-invisible';
+const PRE_JWT = 'pre-dump-jwt-secret-VALUE';
+const LIVE_JWT = 'live-different-jwt-secret-VALUE';
 
 function deepClone(v) {
   return JSON.parse(JSON.stringify(v));
@@ -51,6 +61,18 @@ function makeAuth(runId = 'T2R-TEST-001') {
     oneShotToken: 'opaque-one-shot-not-a-credential',
     consumed: false,
   };
+}
+
+/** Simulate production dump: no pm_id; collector lacks DB_* keys. */
+function prepareDumpFromLive(live) {
+  const dump = deepClone(live);
+  for (const e of dump) {
+    delete e.pm_id;
+    if (e.name === 'telegram-collector') {
+      for (const k of COLLECTOR_DB_KEYS) delete e.env[k];
+    }
+  }
+  return dump;
 }
 
 function makeLiveAndDump(overrides = {}) {
@@ -96,6 +118,7 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/backend',
       pm_exec_path: '/app/backend/server.js',
       exec_mode: 'cluster_mode',
+      created_at: 2000 + id,
       env: { NODE_ENV: 'development', BACKEND_SECRET: SECRET_BACKEND, PATH: '/usr/bin' },
     })),
     {
@@ -105,6 +128,7 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/telegram-collector',
       pm_exec_path: '/app/telegram-collector/processor.js',
       args: ['--mode=normal'],
+      created_at: 3000,
       env: { NODE_ENV: 'development', PATH: '/usr/bin' },
     },
     {
@@ -113,6 +137,7 @@ function makeLiveAndDump(overrides = {}) {
       status: 'online',
       pm_cwd: '/app/telegram-collector',
       pm_exec_path: '/app/telegram-collector/index.js',
+      created_at: 4000,
       env: {
         NODE_ENV: 'production',
         DB_HOST: '127.0.0.1',
@@ -126,28 +151,28 @@ function makeLiveAndDump(overrides = {}) {
       name: 'telegram-collector-monitor',
       pm_id: 8,
       status: 'online',
+      created_at: 5000,
       env: { NODE_ENV: 'development' },
     },
     {
       name: 'telegram-collector-monitor',
       pm_id: 14,
       status: 'online',
+      created_at: 5001,
       env: { NODE_ENV: 'development' },
     },
   ];
 
-  const dump = deepClone(live);
-  for (const e of dump) {
-    if (e.name === 'telegram-collector') {
-      for (const k of COLLECTOR_DB_KEYS) delete e.env[k];
-    }
-  }
+  const dump = prepareDumpFromLive(live);
 
   return {
     live,
     dump,
-    saveExit: 0,
-    corruptDumpAfterSave: false,
+    forceProjectedWriteFailBeforeRename: false,
+    forceProjectedWriteFailAfterRename: false,
+    forceProjectedTempModeFail: false,
+    forceReadbackMismatch: false,
+    forceOwnerMismatch: false,
     forceBackendDriftOnSave: false,
     forceNodeEnvDriftOnSave: false,
     forceProcessorDriftOnSave: false,
@@ -178,6 +203,104 @@ function makeLiveAndDump(overrides = {}) {
   };
 }
 
+function applyPostWriteTampers(world, dumpEntries) {
+  if (world.forceBackendDriftOnSave) {
+    const backends = dumpEntries
+      .map((e, i) => ({ e, i }))
+      .filter((x) => x.e.name === 'titan-backend');
+    if (backends.length) dumpEntries.splice(backends[backends.length - 1].i, 1);
+  }
+  if (world.forceNodeEnvDriftOnSave) {
+    for (const e of dumpEntries) {
+      if (e.name === 'titan-engine-worker' && e.status === 'online') {
+        e.env = { ...(e.env || {}), NODE_ENV: 'production' };
+      }
+    }
+  }
+  if (world.forceProcessorDriftOnSave) {
+    for (let i = dumpEntries.length - 1; i >= 0; i--) {
+      if (dumpEntries[i].name === 'telegram-processor') dumpEntries.splice(i, 1);
+    }
+  }
+  if (world.forceMonitorDriftOnSave) {
+    for (let i = dumpEntries.length - 1; i >= 0; i--) {
+      if (dumpEntries[i].name === 'telegram-collector-monitor') dumpEntries.splice(i, 1);
+    }
+  }
+  if (world.forceBackendEnvAdd) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) b.env = { ...b.env, UNRELATED_NEW_KEY: 'x' };
+  }
+  if (world.forceBackendEnvRemove) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) delete b.env.BACKEND_SECRET;
+  }
+  if (world.forceBackendEnvValueChange) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) b.env.BACKEND_SECRET = 'changed-secret-value';
+  }
+  if (world.forceCollectorUnrelatedEnvAdd) {
+    const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+    if (c) c.env = { ...c.env, COLLECTOR_EXTRA: 'nope' };
+  }
+  if (world.forceProviderEnvAppear) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) b.env = { ...b.env, MEXC_API_KEY: 'provider-secret' };
+  }
+  if (world.forceTelegramTokenAppear) {
+    const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+    if (c) c.env = { ...c.env, TELEGRAM_BOT_TOKEN: SECRET_TOKEN };
+  }
+  if (world.forceCollectorDbPasswordMismatch) {
+    const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+    if (c) c.env.DB_PASSWORD = 'wrong-password-not-live';
+  }
+  if (world.forceCollectorDbHostMismatch) {
+    const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+    if (c) c.env.DB_HOST = '10.0.0.1';
+  }
+  if (world.forceCollectorDbNameMismatch) {
+    const c = dumpEntries.find((e) => e.name === 'telegram-collector');
+    if (c) c.env.DB_NAME = 'other_db';
+  }
+  if (world.forceBackendScriptDrift) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) b.pm_exec_path = '/app/backend/server-DRIFTED.js';
+  }
+  if (world.forceBackendCwdDrift) {
+    const b = dumpEntries.find((e) => e.name === 'titan-backend');
+    if (b) b.pm_cwd = '/app/backend-DRIFTED';
+  }
+  if (world.forceProcessorArgsDrift) {
+    const p = dumpEntries.find((e) => e.name === 'telegram-processor');
+    if (p) p.args = ['--mode=drifted'];
+  }
+  if (world.forceOtherConfigDrift) {
+    dumpEntries.push({
+      name: 'titan-error-watch',
+      status: 'online',
+      pm_exec_path: '/x.js',
+      created_at: 9999,
+      env: { NODE_ENV: 'development' },
+    });
+  }
+  if (world.forceRetainedPathChangeOnSave) {
+    for (const e of dumpEntries) {
+      if (e.name === 'titan-engine-worker' && e.status === 'online') {
+        e.env = { ...(e.env || {}), PATH: '/mutated/path/should-fail' };
+      }
+    }
+  }
+  if (world.forceReadbackMismatch) {
+    dumpEntries.push({
+      name: 'tamper-readback',
+      status: 'stopped',
+      created_at: 8888,
+      env: {},
+    });
+  }
+}
+
 function createFakeBoundary(world) {
   let dumpEntries = deepClone(world.dump);
   let liveEntries = deepClone(world.live);
@@ -202,6 +325,8 @@ function createFakeBoundary(world) {
         parsed: JSON.parse(bytes.toString('utf8')),
         sha256: sha256Buffer(bytes),
         mode: dumpMode,
+        uid: 1000,
+        gid: 1000,
       };
     },
     async writeBackup(bytes) {
@@ -221,7 +346,7 @@ function createFakeBoundary(world) {
       }
       if (world.forceRestoreShaMismatch) {
         dumpEntries = deepClone(dumpEntries);
-        dumpEntries.push({ name: 'tamper', pm_id: 999, status: 'stopped', env: {} });
+        dumpEntries.push({ name: 'tamper', status: 'stopped', created_at: 999, env: {} });
       }
       return { ok: true, mode: dumpMode };
     },
@@ -242,100 +367,55 @@ function createFakeBoundary(world) {
     },
     async pm2Save() {
       mutationLog.push('pm2Save');
-      if (world.saveExit !== 0) return { exitCode: world.saveExit };
-      if (world.corruptDumpAfterSave) {
-        dumpCorrupt = true;
-        return { exitCode: 0 };
+      throw Object.assign(new Error('GLOBAL_PM2_SAVE_FORBIDDEN'), {
+        code: 'GLOBAL_PM2_SAVE_FORBIDDEN',
+      });
+    },
+    async writeProjectedActiveDump(bytes, opts = {}) {
+      mutationLog.push(['writeProjectedActiveDump', opts]);
+      if (world.forceProjectedWriteFailBeforeRename) {
+        throw new Error('WRITE_FAIL_BEFORE_RENAME');
       }
-      dumpEntries = deepClone(liveEntries);
-      if (world.forceBackendDriftOnSave) {
-        dumpEntries = dumpEntries.filter((e) => !(e.name === 'titan-backend' && e.pm_id === 4));
-      }
-      if (world.forceNodeEnvDriftOnSave) {
-        for (const e of dumpEntries) {
-          if (e.name === 'titan-engine-worker' && e.status === 'online') {
-            e.env = { ...(e.env || {}), NODE_ENV: 'production' };
-          }
-        }
-      }
-      if (world.forceProcessorDriftOnSave) {
-        dumpEntries = dumpEntries.filter((e) => e.name !== 'telegram-processor');
-      }
-      if (world.forceMonitorDriftOnSave) {
-        dumpEntries = dumpEntries.filter((e) => e.name !== 'telegram-collector-monitor');
-      }
-      if (world.forceBackendEnvAdd) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        b.env = { ...b.env, UNRELATED_NEW_KEY: 'x' };
-      }
-      if (world.forceBackendEnvRemove) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        delete b.env.BACKEND_SECRET;
-      }
-      if (world.forceBackendEnvValueChange) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        b.env.BACKEND_SECRET = 'changed-secret-value';
-      }
-      if (world.forceCollectorUnrelatedEnvAdd) {
-        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
-        c.env = { ...c.env, COLLECTOR_EXTRA: 'nope' };
-      }
-      if (world.forceProviderEnvAppear) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        b.env = { ...b.env, MEXC_API_KEY: 'provider-secret' };
-      }
-      if (world.forceTelegramTokenAppear) {
-        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
-        c.env = { ...c.env, TELEGRAM_BOT_TOKEN: SECRET_TOKEN };
-      }
-      if (world.forceCollectorDbPasswordMismatch) {
-        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
-        c.env.DB_PASSWORD = 'wrong-password-not-live';
-      }
-      if (world.forceCollectorDbHostMismatch) {
-        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
-        c.env.DB_HOST = '10.0.0.1';
-      }
-      if (world.forceCollectorDbNameMismatch) {
-        const c = dumpEntries.find((e) => e.name === 'telegram-collector');
-        c.env.DB_NAME = 'other_db';
-      }
-      if (world.forceBackendScriptDrift) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        b.pm_exec_path = '/app/backend/server-DRIFTED.js';
-      }
-      if (world.forceBackendCwdDrift) {
-        const b = dumpEntries.find((e) => e.name === 'titan-backend' && e.pm_id === 1);
-        b.pm_cwd = '/app/backend-DRIFTED';
-      }
-      if (world.forceProcessorArgsDrift) {
-        const p = dumpEntries.find((e) => e.name === 'telegram-processor');
-        p.args = ['--mode=drifted'];
-      }
-      if (world.forceOtherConfigDrift) {
-        dumpEntries.push({
-          name: 'titan-error-watch',
-          pm_id: 99,
-          status: 'online',
-          pm_exec_path: '/x.js',
-          env: { NODE_ENV: 'development' },
+      if (world.forceProjectedTempModeFail) {
+        throw Object.assign(new Error('PROJECTED_TEMP_MODE_NOT_0600'), {
+          code: 'PROJECTED_TEMP_MODE_NOT_0600',
         });
       }
-      if (world.forceEngineCountNotRestoredOnRollback) {
-        world._blockEngineRestore = true;
+      if (world.forceOwnerMismatch) {
+        throw new Error('DUMP_OWNER_MISMATCH');
       }
-      if (world.forceRetainedPathChangeOnSave) {
-        for (const e of dumpEntries) {
-          if (e.name === 'titan-engine-worker' && e.status === 'online') {
-            e.env = { ...(e.env || {}), PATH: '/mutated/path/should-fail' };
-          }
-        }
+
+      const applyBytes = () => {
+        dumpEntries = JSON.parse(Buffer.from(bytes).toString('utf8'));
+        dumpMode = REQUIRED_PROJECTED_DUMP_MODE;
+      };
+
+      if (world.forceProjectedWriteFailAfterRename) {
+        applyBytes();
+        throw new Error('WRITE_FAIL_AFTER_RENAME');
       }
-      // Simulate PM2 save recreating dump with umask → 0664
-      dumpMode = 0o664;
-      return { exitCode: 0 };
+
+      applyBytes();
+
+      const sha = sha256Buffer(bytes);
+      if (opts.expectedSha256 && sha !== opts.expectedSha256) {
+        throw Object.assign(new Error('PROJECTED_DUMP_READBACK_MISMATCH'), {
+          code: 'PROJECTED_DUMP_READBACK_MISMATCH',
+        });
+      }
+
+      // Tampers apply AFTER write so subsequent readDump differs from expected projection.
+      applyPostWriteTampers(world, dumpEntries);
+
+      return {
+        mode: REQUIRED_PROJECTED_DUMP_MODE,
+        sha256: sha,
+        ownerPreserved: true,
+        groupPreserved: true,
+      };
     },
     async hardenActiveDumpMode(mode = 0o600) {
+      // Legacy stub — v1.5 forward path must not require this.
       mutationLog.push(['hardenActiveDumpMode', mode & 0o777]);
       if (world.forceHardenCommandFail) {
         throw new Error('HARDEN_CMD_FAIL');
@@ -374,28 +454,35 @@ function nextRunId(prefix = 'T2R') {
   return `${prefix}-${runSeq}-${Date.now()}`;
 }
 
+function pm2SaveCount(commands) {
+  return commands.mutationLog.filter((m) => m === 'pm2Save').length;
+}
+
+function projectedWriteCount(commands) {
+  return commands.mutationLog.filter((m) => Array.isArray(m) && m[0] === 'writeProjectedActiveDump')
+    .length;
+}
+
 function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   const world = makeLiveAndDump(worldOverrides);
   const commands = createFakeBoundary(world);
-  // Optional: break start after stop for FAIL_FORWARD tests
   if (worldOverrides.forceStartFailOnRollback) {
     const origStart = commands.startProcessByPmId.bind(commands);
-    let startedOnce = false;
     commands.startProcessByPmId = async (pmId) => {
-      // Allow normal path until rollback
-      if (commands.mutationLog.includes('pm2Save') || world.saveExit !== 0) {
+      if (
+        projectedWriteCount(commands) > 0 ||
+        world.forceProjectedWriteFailBeforeRename ||
+        world.forceProjectedWriteFailAfterRename
+      ) {
         return { exitCode: 1 };
       }
-      startedOnce = true;
       return origStart(pmId);
     };
-    void startedOnce;
   }
   if (worldOverrides.forceEngineCountNotRestoredOnRollback) {
     const origStart = commands.startProcessByPmId.bind(commands);
     commands.startProcessByPmId = async (pmId) => {
       const r = await origStart(pmId);
-      // Immediately stop again so count stays wrong? Better: don't actually start
       const proc = commands.world().liveEntries.find((e) => e.pm_id === pmId);
       if (proc) proc.status = 'stopped';
       return r;
@@ -405,10 +492,11 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
     const origStart = commands.startProcessByPmId.bind(commands);
     commands.startProcessByPmId = async (pmId) => {
       const r = await origStart(pmId);
-      // Drift live retained engine NODE_ENV after start — dump SHA remains PRE-correct
       const retained = commands
         .world()
-        .liveEntries.find((e) => e.name === 'titan-engine-worker' && e.status === 'online' && e.pm_id !== pmId);
+        .liveEntries.find(
+          (e) => e.name === 'titan-engine-worker' && e.status === 'online' && e.pm_id !== pmId,
+        );
       if (retained) {
         retained.env = { ...(retained.env || {}), NODE_ENV: 'production' };
       }
@@ -437,7 +525,9 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
     const origStart = commands.startProcessByPmId.bind(commands);
     commands.startProcessByPmId = async (pmId) => {
       const r = await origStart(pmId);
-      const m = commands.world().liveEntries.find((e) => e.name === 'telegram-collector-monitor' && e.pm_id === 8);
+      const m = commands
+        .world()
+        .liveEntries.find((e) => e.name === 'telegram-collector-monitor' && e.pm_id === 8);
       if (m) m.status = 'stopped';
       return r;
     };
@@ -472,6 +562,15 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   return { orch, commands, world, journalFs, journalRoot, runId };
 }
 
+/** Drive through stop + projection write; tamper flags fail inside writeProjectedDump. */
+async function runToWrite(orch) {
+  await orch.precheck();
+  await orch.backup();
+  await orch.stopExtra();
+  await orch.buildProjection();
+  return orch.writeProjectedDump();
+}
+
 describe('T2 retry orchestrator (final audit correction)', () => {
   it('T1 happy path', async () => {
     const { orch, commands } = buildOrch();
@@ -479,38 +578,52 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(result).toBe(State.COMPLETED);
     expect(orch.mutationClosed).toBe(true);
     expect(orch.journal.authConsumed).toBe(true);
+    expect(pm2SaveCount(commands)).toBe(0);
+    expect(projectedWriteCount(commands)).toBe(1);
+    expect(orch.sideEffects.SAVE_ATTEMPTED).toBe(false);
+    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(false);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(false);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(false);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(true);
+    expect(commands.world().dumpMode).toBe(REQUIRED_PROJECTED_DUMP_MODE);
     const { liveEntries, dumpEntries } = commands.world();
     expect(liveEntries.filter((e) => e.name === 'titan-engine-worker' && e.status === 'online')).toHaveLength(1);
     const col = dumpEntries.find((e) => e.name === 'telegram-collector');
     expect(col.env.DB_USER).toBe(EXPECTED_COLLECTOR_DB_USER);
   });
 
-  it('T2 save exit=0 + changed dump SHA => SUCCESS', async () => {
+  it('T2 projected write success => PROJECTION_WRITTEN then COMPLETED', async () => {
     const { orch } = buildOrch();
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
     const pre = orch.preDumpSha;
-    await orch.save();
-    expect(orch.state).toBe(State.SAVE_SUCCESS);
+    await orch.buildProjection();
+    expect(orch.state).toBe(State.PROJECTION_READY);
+    await orch.writeProjectedDump();
+    expect(orch.state).toBe(State.PROJECTION_WRITTEN);
     expect(orch.postDumpSha).not.toBe(pre);
-    await orch.hardenDump();
-    expect(orch.state).toBe(State.DUMP_HARDENED);
-    await orch.postsaveVerify();
+    await orch.postwriteVerify();
+    expect(orch.state).toBe(State.POSTWRITE_VERIFIED);
     await orch.healthValidate();
     expect(await orch.complete()).toBe(State.COMPLETED);
   });
 
-  it('T3 save command failure => rollback PRE_EQUIVALENT', async () => {
-    const { orch, commands } = buildOrch({ saveExit: 1 });
+  it('T3 projected write fail before rename => rollback; pm2Save=0', async () => {
+    const { orch, commands } = buildOrch({ forceProjectedWriteFailBeforeRename: true });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await expect(orch.save()).rejects.toMatchObject({ code: 'SAVE_EXIT_NONZERO' });
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({
+      code: 'PROJECTED_DUMP_STATE_UNKNOWN',
+    });
     expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(false);
+    expect(pm2SaveCount(commands)).toBe(0);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(false);
     expect(orch.sideEffects.ENGINE_STOP_APPLIED).toBe(true);
-    expect(orch.lastRollbackPlan.restoreDump).toBe(false);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(true);
     expect(orch.lastRollbackPlan.startExtra).toBe(true);
     expect(
       commands.world().liveEntries.filter((e) => e.name === 'titan-engine-worker' && e.status === 'online'),
@@ -518,24 +631,20 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
   });
 
-  it('T4 semantic post-save mismatch => rollback', async () => {
+  it('T4 post-write tamper (backend remove) => rollback', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.state).toBe(State.ROLLED_BACK);
   });
 
   it('T5 rollback succeeds (exact dump restore)', async () => {
-    const { orch, commands } = buildOrch({ saveExit: 1 });
+    const { orch, commands } = buildOrch({ forceProjectedWriteFailBeforeRename: true });
     await orch.precheck();
     const preSha = orch.preDumpSha;
     await orch.backup();
     await orch.stopExtra();
-    await expect(orch.save()).rejects.toBeInstanceOf(T2OrchestratorError);
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toBeInstanceOf(T2OrchestratorError);
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect((await commands.readDump()).sha256).toBe(preSha);
   });
@@ -545,13 +654,13 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     orch.state = State.FAILED;
     orch.mutationClosed = true;
     orch.authConsumed = true;
-    expect(() => orch.requireMutationOpen('save')).toThrow(/MUTATION_CLOSED/);
+    expect(() => orch.requireMutationOpen('writeProjectedActiveDump')).toThrow(/MUTATION_CLOSED/);
   });
 
   it('T7 mutation after COMPLETED blocked', async () => {
     const { orch } = buildOrch();
     await orch.runTransaction();
-    expect(() => orch.requireMutationOpen('save')).toThrow(/MUTATION_CLOSED/);
+    expect(() => orch.requireMutationOpen('writeProjectedActiveDump')).toThrow(/MUTATION_CLOSED/);
     await expect(orch.rollback('x')).rejects.toMatchObject({ code: 'MUTATION_CLOSED' });
   });
 
@@ -579,12 +688,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T10 unexpected dump difference blocked', async () => {
     const { orch } = buildOrch({ forceProcessorDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T11 evidence secret-safe', async () => {
@@ -600,8 +704,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
   it('T12 collector DB-B persistence accepted as allowlisted effect', async () => {
     const { orch } = buildOrch();
     await orch.runTransaction();
-    expect(orch.evidence.lines.some((l) => l.includes('COLLECTOR_DB_KEYS_APPEAR'))).toBe(true);
-    expect(orch.evidence.lines.some((l) => /presence_bits=11111/.test(l))).toBe(true);
+    expect(orch.evidence.lines.some((l) => l.includes('COLLECTOR_DB_KEYS_ADDED=5'))).toBe(true);
+    expect(orch.evidence.lines.some((l) => l.includes('AUTHORIZED_DIFF_PATH_COUNT=6'))).toBe(true);
   });
 
   it('T13 changed dump SHA alone never causes S2 classification', async () => {
@@ -609,30 +713,21 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await orch.save();
-    expect(orch.state).toBe(State.SAVE_SUCCESS);
+    await orch.buildProjection();
+    await orch.writeProjectedDump();
+    expect(orch.state).toBe(State.PROJECTION_WRITTEN);
     expect(orch.evidence.lines.some((l) => /\bS2\b/.test(l))).toBe(false);
   });
 
   it('T14 NODE_ENV drift causes failure', async () => {
     const { orch } = buildOrch({ forceNodeEnvDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T15 backend/processor/monitor topology drift causes failure', async () => {
     for (const key of ['forceBackendDriftOnSave', 'forceProcessorDriftOnSave', 'forceMonitorDriftOnSave']) {
       const { orch } = buildOrch({ [key]: true });
-      await orch.precheck();
-      await orch.backup();
-      await orch.stopExtra();
-      await orch.save();
-      await orch.hardenDump();
-      await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+      await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
       expect(orch.state).toBe(State.ROLLED_BACK);
     }
   });
@@ -643,11 +738,14 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const blob = orch.evidence.toString();
     expect(blob.includes(SECRET_PASSWORD)).toBe(false);
     expect(blob.includes('127.0.0.1')).toBe(false);
-    expect(blob).toMatch(/presence_bits=11111/);
+    expect(blob).toMatch(/COLLECTOR_DB_KEYS_ADDED=5/);
   });
 
-  it('fail-closed boundary rejects live ops by default', async () => {
-    await expect(createFailClosedBoundary().pm2Save()).rejects.toBeInstanceOf(ForbiddenLiveExecutionError);
+  it('fail-closed boundary: pm2Save throws GlobalPm2SaveForbiddenError', async () => {
+    await expect(createFailClosedBoundary().pm2Save()).rejects.toBeInstanceOf(GlobalPm2SaveForbiddenError);
+    await expect(createFailClosedBoundary().writeProjectedActiveDump(Buffer.from('[]'))).rejects.toBeInstanceOf(
+      ForbiddenLiveExecutionError,
+    );
   });
 
   it('authorization / tool version mismatch fail closed', async () => {
@@ -744,65 +842,123 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     });
   });
 
-  it('T22 backend unrelated env add = FAIL', async () => {
-    const { orch } = buildOrch({ forceBackendEnvAdd: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  it('T22 unit: unauthorized live env must not appear in projection', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const liveFp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(liveFp);
+    const snap = {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: snap,
+    });
+    expect(built.ok).toBe(true);
+    const badProjected = deepClone(built.projected);
+    const colIdx = built.collectorMap.dumpIndex;
+    badProjected[colIdx].env.UNRELATED_NEW_KEY = 'x';
+    const check = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: dump,
+      projected: badProjected,
+      collectorDumpIndex: colIdx,
+      liveCollectorEnvKeys: ['UNRELATED_NEW_KEY', ...COLLECTOR_DB_KEYS],
+    });
+    expect(check.ok).toBe(false);
   });
 
-  it('T23 backend unrelated env removal = FAIL', async () => {
-    const { orch } = buildOrch({ forceBackendEnvRemove: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  it('T23 unit: backend env removal is not an authorized projection path', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    dump[2].env.BACKEND_SECRET = SECRET_BACKEND;
+    const liveFp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(liveFp);
+    const snap = {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+    const built = buildExpectedProjectedDump({ preDump: dump, selection: sel, collectorDbSnapshot: snap });
+    expect(built.ok).toBe(true);
+    const diffs = structuralDiffPaths(dump, built.projected);
+    expect(diffs.every((p) => !p.includes('BACKEND_SECRET'))).toBe(true);
+    expect(diffs).toHaveLength(6);
   });
 
-  it('T24 backend env value change = FAIL', async () => {
-    const { orch } = buildOrch({ forceBackendEnvValueChange: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
-    expect(orch.evidence.toString().includes('changed-secret-value')).toBe(false);
+  it('T24 unit: projection does not copy live JWT/backend secret values into evidence paths', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const b = dump.find((e) => e.name === 'titan-backend');
+    b.env.BACKEND_SECRET = SECRET_BACKEND;
+    const liveFp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(liveFp);
+    const snap = {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+    const built = buildExpectedProjectedDump({ preDump: dump, selection: sel, collectorDbSnapshot: snap });
+    expect(built.ok).toBe(true);
+    const blob = JSON.stringify(built.manifest);
+    expect(blob.includes(SECRET_BACKEND)).toBe(false);
+    expect(blob.includes(SECRET_PASSWORD)).toBe(false);
   });
 
-  it('T25 collector unrelated env add = FAIL', async () => {
-    const { orch } = buildOrch({ forceCollectorUnrelatedEnvAdd: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  it('T25 unit: collector unrelated env cannot be authorized by projection builder', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const liveFp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(liveFp);
+    const snap = {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+    const built = buildExpectedProjectedDump({ preDump: dump, selection: sel, collectorDbSnapshot: snap });
+    const col = built.projected[built.collectorMap.dumpIndex];
+    expect(col.env.COLLECTOR_EXTRA).toBeUndefined();
+    expect(Object.keys(col.env).filter((k) => COLLECTOR_DB_KEYS.includes(k))).toHaveLength(5);
   });
 
-  it('T26 provider env appearance = FAIL', async () => {
-    const { orch } = buildOrch({ forceProviderEnvAppear: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+  it('T26 unit: provider env appearance rejected by assertUnauthorizedLiveEnvNotPersisted', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const liveFp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(liveFp);
+    const snap = {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+    const built = buildExpectedProjectedDump({ preDump: dump, selection: sel, collectorDbSnapshot: snap });
+    const bad = deepClone(built.projected);
+    bad[built.collectorMap.dumpIndex].env.MEXC_API_KEY = 'provider-secret';
+    const check = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: dump,
+      projected: bad,
+      collectorDumpIndex: built.collectorMap.dumpIndex,
+      liveCollectorEnvKeys: ['MEXC_API_KEY', ...COLLECTOR_DB_KEYS],
+    });
+    expect(check.ok).toBe(false);
   });
 
-  it('T27 Telegram token appearance = FAIL', async () => {
+  it('T27 integration: post-write tamper with telegram token => rollback; secret-safe', async () => {
     const { orch } = buildOrch({ forceTelegramTokenAppear: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.toString().includes(SECRET_TOKEN)).toBe(false);
   });
 
@@ -814,7 +970,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(blob.includes(SECRET_PASSWORD)).toBe(false);
   });
 
-  it('T29 live adapter requires gates; mocked spawn never hits real PM2', async () => {
+  it('T29 live adapter: pm2Save throws GLOBAL_PM2_SAVE_FORBIDDEN', async () => {
     expect(() => createLiveBoundary({ gatesSatisfied: false })).toThrow(ForbiddenLiveExecutionError);
     let spawned = [];
     const boundary = createLiveBoundary({
@@ -831,10 +987,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
         return { status: 0, stdout: '200', stderr: '' };
       },
     });
-    const saveResult = await boundary.pm2Save();
-    expect(saveResult.exitCode).toBe(0);
-    expect(saveResult.stdout).toBeUndefined();
-    expect(spawned.some((s) => s[0] === 'pm2' && s[1] === 'save')).toBe(true);
+    await expect(boundary.pm2Save()).rejects.toMatchObject({ code: 'GLOBAL_PM2_SAVE_FORBIDDEN' });
+    expect(spawned.some((s) => s[0] === 'pm2' && s[1] === 'save')).toBe(false);
   });
 
   it('T30 auth consume persisted before backup mutation', async () => {
@@ -873,6 +1027,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'writeBackup',
       'chmod',
       'stopProcessByPmId',
+      'writeProjectedActiveDump',
       'pm2Save',
       'hardenActiveDumpMode',
       'restoreDump',
@@ -882,95 +1037,75 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     }
   });
 
-  // ---- Final audit cases ----
-
   it('T32 start rollback nonzero => FAIL_FORWARD_COMPLETE', async () => {
-    const { orch } = buildOrch({ saveExit: 1, forceStartFailOnRollback: true });
+    const { orch } = buildOrch({
+      forceProjectedWriteFailBeforeRename: true,
+      forceStartFailOnRollback: true,
+    });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await expect(orch.save()).rejects.toMatchObject({ code: 'START_ROLLBACK_NONZERO' });
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({ code: 'START_ROLLBACK_NONZERO' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
     expect(orch.mutationClosed).toBe(true);
   });
 
   it('T33 restored dump SHA mismatch => FAIL_FORWARD_COMPLETE', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceRestoreShaMismatch: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
   it('T34 engine count not restored => FAIL_FORWARD_COMPLETE', async () => {
-    const { orch } = buildOrch({ saveExit: 1, forceEngineCountNotRestoredOnRollback: true });
+    const { orch } = buildOrch({
+      forceProjectedWriteFailBeforeRename: true,
+      forceEngineCountNotRestoredOnRollback: true,
+    });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await expect(orch.save()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED' });
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({
+      code: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED',
+    });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
   it('T35 unrelated rollback drift => FAIL_FORWARD_COMPLETE', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceUnrelatedRollbackDrift: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
   it('T36 successful rollback proves PRE_EQUIVALENT', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(true);
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(false);
+    expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(false);
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
   });
 
-  it('T37 persisted DB_PASSWORD differs = FAIL', async () => {
+  it('T37 dump DB_PASSWORD tamper after projected write => FAIL', async () => {
     const { orch } = buildOrch({ forceCollectorDbPasswordMismatch: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
-    expect(orch.evidence.lines.some((l) => l.includes('DB_PASSWORD_MATCH=NO'))).toBe(true);
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.toString().includes('wrong-password')).toBe(false);
   });
 
-  it('T38 persisted DB_HOST differs = FAIL', async () => {
+  it('T38 dump DB_HOST tamper after projected write => FAIL', async () => {
     const { orch } = buildOrch({ forceCollectorDbHostMismatch: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
-    expect(orch.evidence.lines.some((l) => l.includes('DB_HOST_MATCH=NO'))).toBe(true);
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.toString().includes('10.0.0.1')).toBe(false);
   });
 
-  it('T39 persisted DB_NAME differs = FAIL', async () => {
+  it('T39 dump DB_NAME tamper after projected write => FAIL', async () => {
     const { orch } = buildOrch({ forceCollectorDbNameMismatch: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
-    expect(orch.evidence.lines.some((l) => l.includes('DB_NAME_MATCH=NO'))).toBe(true);
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
   });
 
   it('T40 all five DB exact match = PASS; no credential values in evidence', async () => {
@@ -987,42 +1122,22 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T41 backend script drift = FAIL', async () => {
     const { orch } = buildOrch({ forceBackendScriptDrift: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T42 backend cwd drift = FAIL', async () => {
     const { orch } = buildOrch({ forceBackendCwdDrift: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T43 processor args drift = FAIL', async () => {
     const { orch } = buildOrch({ forceProcessorArgsDrift: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T44 unrelated process config drift = FAIL', async () => {
     const { orch } = buildOrch({ forceOtherConfigDrift: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
   });
 
   it('T45 env shapes: entry.env + entry.pm2_env.env + flat dump supported', () => {
@@ -1217,17 +1332,10 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(fp.collectors[0].db_user_matches_expected).toBe(true);
   });
 
-  // ---- Last merge-blocking corrections ----
-
   it('T54 PRE dump mode 0600 restored as 0600', async () => {
     const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
-    await orch.precheck();
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.preDumpMode).toBe(0o600);
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o600);
     const restoreCalls = commands.mutationLog.filter((m) => Array.isArray(m) && m[0] === 'restoreDump');
@@ -1236,25 +1344,15 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T55 PRE dump mode 0640 restored as 0640', async () => {
     const { orch, commands } = buildOrch({ dumpMode: 0o640, forceBackendDriftOnSave: true });
-    await orch.precheck();
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.preDumpMode).toBe(0o640);
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o640);
   });
 
   it('T56 restore never forces 0664 unless PRE was 0664', async () => {
     const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toBeTruthy();
+    await expect(runToWrite(orch)).rejects.toBeTruthy();
     expect(commands.world().dumpMode).not.toBe(0o664);
     expect(commands.mutationLog.some((m) => Array.isArray(m) && m[0] === 'restoreDump' && m[1] === 0o664)).toBe(
       false,
@@ -1267,12 +1365,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       forceBackendDriftOnSave: true,
       forceRestoreModeMismatch: true,
     });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_MODE_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_MODE_MISMATCH' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
@@ -1280,12 +1373,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const world = makeLiveAndDump();
     world.live[0].args = ['--a'];
     world.live[1].args = ['--b'];
-    world.dump = deepClone(world.live);
-    for (const e of world.dump) {
-      if (e.name === 'telegram-collector') {
-        for (const k of COLLECTOR_DB_KEYS) delete e.env[k];
-      }
-    }
+    world.dump = prepareDumpFromLive(world.live);
     const runId = nextRunId('ENGARGS');
     const journalFs = createMemoryJournalFs();
     const journalRoot = '/tmp/t2-eng-args';
@@ -1305,7 +1393,6 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T59 PATH-only difference with canonical consensus => PASS retain canonical', async () => {
     const world = makeLiveAndDump();
-    // lower pm_id noncanonical; higher matches backend/processor canonical /usr/bin
     world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical/extra/bin:/usr/bin' };
     world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
     const fp = semanticFingerprint(world.live);
@@ -1351,12 +1438,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       forceBackendDriftOnSave: true,
       forceLiveBackendEnvDriftOnRollback: true,
     });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
     expect(orch.evidence.toString().includes('drifted-after-rollback')).toBe(false);
   });
@@ -1366,12 +1448,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       forceBackendDriftOnSave: true,
       forceLiveProcessorConfigDriftOnRollback: true,
     });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
@@ -1380,12 +1457,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       forceBackendDriftOnSave: true,
       forceLiveMonitorDriftOnRollback: true,
     });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
@@ -1394,23 +1466,13 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       forceBackendDriftOnSave: true,
       forceLiveOtherProcessDriftOnRollback: true,
     });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
   it('T66 exact PRE live semantic equivalence => ROLLED_BACK', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
   });
@@ -1447,8 +1509,6 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     }
     await fs.unlink(tmpDump).catch(() => {});
   });
-
-  // ---- 1.4.0 PATH selection + dump harden ----
 
   it('T68 PATH differs plus another env value => FAIL', () => {
     const world = makeLiveAndDump();
@@ -1502,12 +1562,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const world = makeLiveAndDump();
     world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical/extra/bin:/usr/bin' };
     world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
-    world.dump = deepClone(world.live);
-    for (const e of world.dump) {
-      if (e.name === 'telegram-collector') {
-        for (const k of COLLECTOR_DB_KEYS) delete e.env[k];
-      }
-    }
+    world.dump = prepareDumpFromLive(world.live);
     const runId = nextRunId('PATHEV');
     const journalFs = createMemoryJournalFs();
     const journalRoot = '/tmp/t2-path-ev';
@@ -1531,12 +1586,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T74 PRE→POST retained PATH change still FAIL', async () => {
     const { orch } = buildOrch({ forceRetainedPathChangeOnSave: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.state).toBe(State.ROLLED_BACK);
   });
 
@@ -1545,9 +1595,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    // Inject PATH drift on rollback start for retained engine live state
+    await orch.buildProjection();
     const origStart = commands.startProcessByPmId.bind(commands);
     commands.startProcessByPmId = async (pmId) => {
       const r = await origStart(pmId);
@@ -1558,119 +1606,103 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       }
       return r;
     };
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
     expect(orch.evidence.toString().includes('/rollback/drift')).toBe(false);
   });
 
-  it('T76 exactly one pm2 save; harden after SAVE_SUCCESS; final mode 0600', async () => {
+  it('T76 projected write once; no pm2Save; final mode 0600', async () => {
     const { orch, commands } = buildOrch();
     await orch.runTransaction();
     expect(orch.state).toBe(State.COMPLETED);
-    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
-    const hardenCalls = commands.mutationLog.filter((m) => Array.isArray(m) && m[0] === 'hardenActiveDumpMode');
-    expect(hardenCalls.length).toBe(1);
-    expect(hardenCalls[0][1]).toBe(0o600);
-    expect(commands.world().dumpMode).toBe(0o600);
-    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
-    expect(orch.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(true);
+    expect(pm2SaveCount(commands)).toBe(0);
+    expect(projectedWriteCount(commands)).toBe(1);
+    expect(commands.world().dumpMode).toBe(REQUIRED_PROJECTED_DUMP_MODE);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(true);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(false);
     expect(orch.evidence.toString().includes('DUMP_MODE=0600')).toBe(true);
   });
 
-  it('T77 harden command failure => rollback', async () => {
-    const { orch, commands } = buildOrch({ forceHardenCommandFail: true });
+  it('T77 projected write fail after rename => rollback; pm2Save=0', async () => {
+    const { orch, commands } = buildOrch({ forceProjectedWriteFailAfterRename: true });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await orch.save();
-    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_COMMAND_FAILED' });
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({
+      code: 'PROJECTED_DUMP_STATE_UNKNOWN',
+    });
     expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
-    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
-    expect(orch.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(false);
+    expect(pm2SaveCount(commands)).toBe(0);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(false);
   });
 
-  it('T78 harden leaves 0664 => rollback', async () => {
-    const { orch } = buildOrch({ forceHardenSkipModeChange: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_MODE_NOT_0600' });
+  it('T78 forceReadbackMismatch => rollback', async () => {
+    const { orch } = buildOrch({ forceReadbackMismatch: true });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.state).toBe(State.ROLLED_BACK);
   });
 
-  it('T79 harden wrong mode 0640 => rollback', async () => {
-    const { orch } = buildOrch({ forceHardenWrongMode: true });
-    await orch.precheck();
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_MODE_NOT_0600' });
+  it('T79 forceOwnerMismatch => rollback', async () => {
+    const { orch } = buildOrch({ forceOwnerMismatch: true });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_STATE_UNKNOWN' });
     expect(orch.state).toBe(State.ROLLED_BACK);
   });
 
-  it('T80 harden after terminal => BLOCKED', async () => {
+  it('T80 writeProjectedActiveDump after terminal => BLOCKED', async () => {
     const { orch } = buildOrch();
     await orch.runTransaction();
-    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
+    await expect(
+      orch.guardedCall('writeProjectedActiveDump', async () => ({ mode: 0o600, sha256: 'x' })),
+    ).rejects.toMatchObject({ code: 'MUTATION_CLOSED' });
   });
 
-  it('T81 postsaveVerify before DUMP_HARDENED => BLOCKED', async () => {
+  it('T81 postwriteVerify before PROJECTION_WRITTEN => BLOCKED', async () => {
     const { orch } = buildOrch();
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await orch.save();
-    expect(orch.state).toBe(State.SAVE_SUCCESS);
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
+    await orch.buildProjection();
+    expect(orch.state).toBe(State.PROJECTION_READY);
+    await expect(orch.postwriteVerify()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
   });
 
-  it('T82 rollback restores PRE 0664 after harden', async () => {
+  it('T82 rollback restores PRE 0664 after projected write tamper', async () => {
     const { orch, commands } = buildOrch({ dumpMode: 0o664, forceBackendDriftOnSave: true });
-    await orch.precheck();
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.preDumpMode).toBe(0o664);
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    await orch.hardenDump();
-    expect(commands.world().dumpMode).toBe(0o600);
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o664);
   });
 
-  it('T83 rollback restores PRE 0600 after harden', async () => {
+  it('T83 rollback restores PRE 0600 after projected write tamper', async () => {
     const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
-    await orch.precheck();
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
     expect(orch.preDumpMode).toBe(0o600);
-    await orch.backup();
-    await orch.stopExtra();
-    await orch.save();
-    expect(commands.world().dumpMode).toBe(0o664);
-    await orch.hardenDump();
-    expect(commands.world().dumpMode).toBe(0o600);
-    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o600);
   });
 
-  it('T84 no second save during hardening/rollback', async () => {
-    const { orch, commands } = buildOrch({ forceHardenWrongMode: true });
+  it('T84 no pm2Save during projected write/rollback', async () => {
+    const { orch, commands } = buildOrch({ forceProjectedWriteFailAfterRename: true });
     await orch.precheck();
     await orch.backup();
     await orch.stopExtra();
-    await orch.save();
-    await expect(orch.hardenDump()).rejects.toBeTruthy();
-    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toBeTruthy();
+    expect(pm2SaveCount(commands)).toBe(0);
   });
 
-  it('T85 ledger harden attempted/applied persists durably', async () => {
+  it('T85 ledger projected write attempted/applied persists durably', async () => {
     const { orch, journalFs, journalRoot, runId } = buildOrch();
     await orch.runTransaction();
     const j = await loadJournal({ runId, journalRoot, fs: journalFs });
-    expect(j.record.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
-    expect(j.record.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(true);
+    expect(j.record.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
+    expect(j.record.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(true);
+    expect(j.record.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(false);
+    expect(j.record.sideEffects.DUMP_SAVE_APPLIED).toBe(false);
   });
 
   it('T86 old TOOL_VERSION 1.3.0 artifact => FAIL', async () => {
@@ -1679,7 +1711,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.authConsumed).toBe(false);
   });
 
-  it('T87 missing DUMP_MODE_HARDEN_0600 authorized effect => FAIL', async () => {
+  it('T87 missing PROJECTED_DUMP_WRITE_0600 authorized effect => FAIL', async () => {
     const runId = nextRunId('NOHARDEN');
     const auth = makeAuth(runId);
     auth.authorizedEffects = ['ENGINE_2_TO_1', 'COLLECTOR_DB_B_PERSIST'];
@@ -1688,28 +1720,197 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_INCOMPLETE' });
   });
 
-  it('T88 new 1.4.0 complete mocked artifact => PASS', async () => {
+  it('T88 new 1.5.0 complete mocked artifact => PASS', async () => {
     const { orch } = buildOrch();
-    expect(TOOL_VERSION).toBe('1.4.0');
-    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN');
+    expect(TOOL_VERSION).toBe('1.5.0');
+    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST');
     expect(AUTHORIZED_EFFECTS).toEqual([
       'ENGINE_2_TO_1',
       'COLLECTOR_DB_B_PERSIST',
-      'DUMP_MODE_HARDEN_0600',
+      'PROJECTED_DUMP_WRITE_0600',
     ]);
     const result = await orch.runTransaction();
     expect(result).toBe(State.COMPLETED);
   });
 
-  it('T89 mutation after COMPLETED cannot harden or save', async () => {
+  it('T89 mutation after COMPLETED cannot writeProjected or pm2Save', async () => {
     const { orch } = buildOrch();
     await orch.runTransaction();
     await expect(orch.guardedCall('pm2Save', async () => ({ exitCode: 0 }))).rejects.toMatchObject({
       code: 'MUTATION_CLOSED',
     });
     await expect(
-      orch.guardedCall('hardenActiveDumpMode', async () => ({ mode: 0o600, ok: true })),
+      orch.guardedCall('writeProjectedActiveDump', async () => ({ mode: 0o600, sha256: 'x' })),
     ).rejects.toMatchObject({ code: 'MUTATION_CLOSED' });
+  });
+
+  it('T90 legacy 1.4.0 transaction identity => FAIL', async () => {
+    const runId = nextRunId('LEGACY14');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_4_0;
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
   });
 });
 
+describe('T2 v1.5 projection security', () => {
+  function baseSnap() {
+    return {
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5433',
+      DB_NAME: 'titangold_db',
+      DB_USER: EXPECTED_COLLECTOR_DB_USER,
+      DB_PASSWORD: SECRET_PASSWORD,
+    };
+  }
+
+  it('live JWT differs from PRE dump → projected keeps PRE JWT', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const col = dump.find((e) => e.name === 'telegram-collector');
+    col.env.JWT_SECRET = PRE_JWT;
+    world.live.find((e) => e.name === 'telegram-collector').env.JWT_SECRET = LIVE_JWT;
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: baseSnap(),
+    });
+    expect(built.ok).toBe(true);
+    expect(built.projected[built.collectorMap.dumpIndex].env.JWT_SECRET).toBe(PRE_JWT);
+    const check = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: dump,
+      projected: built.projected,
+      collectorDumpIndex: built.collectorMap.dumpIndex,
+      liveCollectorEnvKeys: Object.keys(world.live.find((e) => e.name === 'telegram-collector').env),
+    });
+    expect(check.ok).toBe(true);
+    expect(check.JWT_SECRET_LIVE_DRIFT_NOT_PERSISTED).toBe('PASS');
+  });
+
+  it('live Cursor-only env → absent from projected', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    world.live.find((e) => e.name === 'telegram-collector').env.__CURSOR_SANDBOX_ENV_RESTORE = '1';
+    world.live.find((e) => e.name === 'telegram-collector').env.CURSOR_CONVERSATION_ID = 'cid';
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: baseSnap(),
+    });
+    expect(built.ok).toBe(true);
+    const postEnv = built.projected[built.collectorMap.dumpIndex].env;
+    expect(postEnv.__CURSOR_SANDBOX_ENV_RESTORE).toBeUndefined();
+    expect(postEnv.CURSOR_CONVERSATION_ID).toBeUndefined();
+    const check = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: dump,
+      projected: built.projected,
+      collectorDumpIndex: built.collectorMap.dumpIndex,
+      liveCollectorEnvKeys: Object.keys(world.live.find((e) => e.name === 'telegram-collector').env),
+    });
+    expect(check.ok).toBe(true);
+  });
+
+  it('live prev_restart_delay → not projected', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    world.live.find((e) => e.name === 'telegram-collector').env.prev_restart_delay = '5000';
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: baseSnap(),
+    });
+    expect(built.projected[built.collectorMap.dumpIndex].env.prev_restart_delay).toBeUndefined();
+  });
+
+  it('only 5 DB_* + 1 status change (6 paths)', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: baseSnap(),
+    });
+    expect(built.ok).toBe(true);
+    const diffs = structuralDiffPaths(dump, built.projected);
+    expect(diffs).toHaveLength(6);
+    expect(built.manifest.AUTHORIZED_DIFF_PATH_COUNT).toBe(6);
+  });
+
+  it('seventh change fails', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      collectorDbSnapshot: baseSnap(),
+    });
+    const mutated = deepClone(built.projected);
+    mutated[built.collectorMap.dumpIndex].env.EXTRA_SEVENTH = 'nope';
+    const diffs = structuralDiffPaths(dump, mutated);
+    expect(diffs.length).toBeGreaterThan(6);
+  });
+
+  it('dump without pm_id unique mapping PASS', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    expect(dump.every((e) => e.pm_id === undefined)).toBe(true);
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(true);
+    const collector = resolveDumpCollectorIdentity(dump);
+    expect(collector.ok).toBe(true);
+  });
+
+  it('ambiguous mapping FAIL', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    // Duplicate created_at on engines → ambiguous stable key
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') e.created_at = 1000;
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    // Make live engines also share created_at so fallback cannot unique-map
+    world.live[0].created_at = 1000;
+    world.live[1].created_at = 1000;
+    const sel2 = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel2.ok).toBe(true);
+    const engines = resolveDumpEngineIdentities(dump, sel2);
+    expect(engines.ok).toBe(false);
+    expect(engines.error).toBe('DUMP_ENGINE_IDENTITY_UNRESOLVED');
+    void sel;
+  });
+
+  it('GlobalPm2SaveForbiddenError on boundary.pm2Save', async () => {
+    const { commands } = buildOrch();
+    await expect(commands.pm2Save()).rejects.toMatchObject({ code: 'GLOBAL_PM2_SAVE_FORBIDDEN' });
+    await expect(createFailClosedBoundary().pm2Save()).rejects.toBeInstanceOf(GlobalPm2SaveForbiddenError);
+  });
+
+  it('planRollbackActions with PROJECTED_DUMP_WRITE_ATTEMPTED + unknown → restoreDump true', () => {
+    const ledger = createSideEffectLedger();
+    ledger.PROJECTED_DUMP_WRITE_ATTEMPTED = true;
+    const plan = planRollbackActions(ledger, { dumpStateUnknown: true });
+    expect(plan.restoreDump).toBe(true);
+    expect(plan.reason.restore).toBe('PROJECTED_DUMP_WRITE_ATTEMPTED_STATE_UNKNOWN');
+  });
+
+  it('happy path pm2Save mutation count 0', async () => {
+    const { orch, commands } = buildOrch();
+    await orch.runTransaction();
+    expect(orch.state).toBe(State.COMPLETED);
+    expect(pm2SaveCount(commands)).toBe(0);
+  });
+
+  it('rollback path pm2Save count 0', async () => {
+    const { orch, commands } = buildOrch({ forceReadbackMismatch: true });
+    await expect(runToWrite(orch)).rejects.toBeTruthy();
+    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(pm2SaveCount(commands)).toBe(0);
+  });
+});
