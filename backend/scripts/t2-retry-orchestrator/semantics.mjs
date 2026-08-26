@@ -1060,9 +1060,10 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   if (!postColDump || !preColDump) {
     return { ok: false, error: 'ROLLBACK_COLLECTOR_DUMP_MISSING' };
   }
-  const dumpHadDb = COLLECTOR_DB_KEYS.some((k) => postColDump.db_keys_present?.[k]);
-  if (dumpHadDb) {
-    return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_STILL_PERSISTED' };
+  // v1.6: PRE dump already has DB_*; rollback must preserve exact dump DB_* vs PRE dump.
+  const dumpDb = compareCollectorDbLiveToPersist(preColDump, postColDump);
+  if (!dumpDb.ok) {
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_NOT_PRESERVED', details: dumpDb.matches };
   }
 
   if (
@@ -1082,21 +1083,87 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   };
 }
 
-export function assertCollectorPersistencePreconditions(liveFp, dumpFp) {
+/**
+ * Classify collector DB_* relationship between PRE dump and PRE live.
+ * Never returns values.
+ */
+export function classifyCollectorDbPrestate(liveFp, dumpFp) {
   const live = (liveFp.collectors || [])[0];
   const dump = (dumpFp.collectors || [])[0];
-  if (!live) return { ok: false, error: 'LIVE_COLLECTOR_MISSING' };
-  if (!dump) return { ok: false, error: 'DUMP_COLLECTOR_MISSING' };
+  if (!live || !dump) {
+    return {
+      state: 'UNSUPPORTED',
+      ok: false,
+      error: !live ? 'LIVE_COLLECTOR_MISSING' : 'DUMP_COLLECTOR_MISSING',
+      matches: {},
+    };
+  }
   const liveKeys = live.db_keys_present || {};
   const dumpKeys = dump.db_keys_present || {};
-  if (!COLLECTOR_DB_KEYS.every((k) => liveKeys[k])) {
-    return { ok: false, error: 'LIVE_COLLECTOR_DB_B_INCOMPLETE' };
+  const livePresentCount = COLLECTOR_DB_KEYS.filter((k) => liveKeys[k]).length;
+  const dumpPresentCount = COLLECTOR_DB_KEYS.filter((k) => dumpKeys[k]).length;
+
+  if (livePresentCount < COLLECTOR_DB_KEYS.length) {
+    return {
+      state: 'UNSUPPORTED',
+      ok: false,
+      error: 'LIVE_COLLECTOR_DB_B_INCOMPLETE',
+      matches: {},
+    };
   }
   if (live.db_user_matches_expected !== true) {
-    return { ok: false, error: 'LIVE_COLLECTOR_DB_USER_UNEXPECTED' };
+    return {
+      state: 'UNSUPPORTED',
+      ok: false,
+      error: 'LIVE_COLLECTOR_DB_USER_UNEXPECTED',
+      matches: {},
+    };
   }
-  if (COLLECTOR_DB_KEYS.some((k) => dumpKeys[k])) {
-    return { ok: false, error: 'DUMP_ALREADY_HAS_COLLECTOR_DB' };
+
+  if (dumpPresentCount === 0) {
+    return { state: 'ABSENT', ok: false, error: 'COLLECTOR_DB_PRESTATE_ABSENT', matches: {} };
   }
-  return { ok: true };
+  if (dumpPresentCount < COLLECTOR_DB_KEYS.length) {
+    return { state: 'PARTIAL', ok: false, error: 'COLLECTOR_DB_PRESTATE_PARTIAL', matches: {} };
+  }
+
+  const match = compareCollectorDbLiveToPersist(live, dump);
+  /** @type {Record<string, 'YES'|'NO'>} */
+  const evidence = {};
+  for (const key of COLLECTOR_DB_KEYS) {
+    evidence[`${key}_PRE_MATCH`] = match.matches[`${key}_MATCH`] || 'NO';
+  }
+  if (!match.ok) {
+    return {
+      state: 'PRESENT_MISMATCHED',
+      ok: false,
+      error: match.error || 'COLLECTOR_DB_PRESTATE_MISMATCHED',
+      matches: evidence,
+    };
+  }
+  return {
+    state: 'ALREADY_PRESENT_EXACT',
+    ok: true,
+    matches: evidence,
+  };
+}
+
+/**
+ * v1.6 production T2 accepts ONLY ALREADY_PRESENT_EXACT.
+ */
+export function assertCollectorPersistencePreconditions(liveFp, dumpFp) {
+  const classified = classifyCollectorDbPrestate(liveFp, dumpFp);
+  if (!classified.ok || classified.state !== 'ALREADY_PRESENT_EXACT') {
+    return {
+      ok: false,
+      error: classified.error || 'COLLECTOR_DB_PRESTATE_NOT_ALREADY_PRESENT_EXACT',
+      state: classified.state,
+      matches: classified.matches,
+    };
+  }
+  return {
+    ok: true,
+    state: classified.state,
+    matches: classified.matches,
+  };
 }

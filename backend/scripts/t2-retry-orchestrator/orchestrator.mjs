@@ -1,6 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
- * TOOL_VERSION 1.5.0 — surgical projected-dump persistence (no global pm2 save).
+ * TOOL_VERSION 1.6.0 — ALREADY_PRESENT_EXACT DB + projected engine singleton (no global pm2 save).
  * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
@@ -40,6 +40,7 @@ import {
   resolveDumpCollectorIdentity,
   resolveDumpEngineIdentities,
 } from './projection.mjs';
+import { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
 import { createSideEffectLedger, planRollbackActions } from './sideEffectLedger.mjs';
 
 const FORWARD_MUTATING_OPS = Object.freeze([
@@ -118,6 +119,10 @@ export class T2Orchestrator {
     this.recordedExtraIdentity = null;
     this.recordedRetainedIdentity = null;
     this.liveCollectorDb = null;
+    this.cleanPreDump = Array.isArray(opts.cleanPreDump) ? opts.cleanPreDump : null;
+    this.expectedCleanPreSha = opts.expectedCleanPreSha || null;
+    this.actualCleanPreSha = opts.actualCleanPreSha || null;
+    this.expectedActiveDumpSha = opts.expectedActiveDumpSha || null;
     this.runDir = this.journal?.runDir || null;
     this.lastRollbackPlan = null;
     this.dumpOwnershipSafe = false;
@@ -439,10 +444,36 @@ export class T2Orchestrator {
     if (!precond.ok) {
       return this._failClosed(precond.error);
     }
+    if (precond.matches) {
+      for (const [k, v] of Object.entries(precond.matches)) {
+        this._log(`${k}=${v}`);
+      }
+    }
+    this._log(`COLLECTOR_DB_PRESTATE=${precond.state || 'ALREADY_PRESENT_EXACT'}`);
 
     this.liveCollectorDb = captureCollectorDbLiveValues(this.liveFp);
     if (!this.liveCollectorDb) {
       return this._failClosed('LIVE_COLLECTOR_DB_CAPTURE_FAILED');
+    }
+
+    // Sanitized PRE baseline gate — fail before auth consume
+    if (!this.cleanPreDump || !this.expectedCleanPreSha || !this.actualCleanPreSha) {
+      return this._failClosed('CLEAN_PRE_BASELINE_REQUIRED');
+    }
+    const sanitized = assertSanitizedPreBaselineProof({
+      cleanPreDump: this.cleanPreDump,
+      activePreDump: dumpPack.parsed,
+      expectedCleanPreSha: this.expectedCleanPreSha,
+      actualCleanPreSha: this.actualCleanPreSha,
+      expectedActiveDumpSha: this.expectedActiveDumpSha,
+      actualActiveDumpSha: this.preDumpSha,
+    });
+    if (!sanitized.ok) {
+      return this._failClosed(sanitized.error || 'SANITIZED_PRE_BASELINE_PROOF_FAIL');
+    }
+    for (const [k, v] of Object.entries(sanitized)) {
+      if (k === 'ok') continue;
+      this._log(`${k}=${v}`);
     }
 
     await this.journal.setSelection({
@@ -457,7 +488,7 @@ export class T2Orchestrator {
       `retained_pm_id=${selection.retained.pm_id}`,
       `extra_pm_id=${selection.extra.pm_id}`,
       'collector_live_db_b=YES',
-      'collector_dump_db=NO',
+      'collector_dump_db=ALREADY_PRESENT_EXACT',
       `pre_dump_sha_prefix=${this.preDumpSha.slice(0, 12)}`,
     );
     return {

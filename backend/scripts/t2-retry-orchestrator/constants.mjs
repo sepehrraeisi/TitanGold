@@ -1,21 +1,24 @@
 /**
  * T2 retry orchestrator — durable constants (no production side effects).
- * TOOL_VERSION 1.5.0 — surgical projected-dump persistence (no global pm2 save).
+ * TOOL_VERSION 1.6.0 — ALREADY_PRESENT_EXACT collector DB + projected engine singleton.
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.5.0';
+export const TOOL_VERSION = '1.6.0';
 
 export const AUTHORIZED_TRANSACTION =
-  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST';
+  'T2_ENGINE_SINGLETON_DB_ALREADY_PRESENT_PROJECTED_PERSIST';
 
 export const AUTHORIZED_EFFECTS = Object.freeze([
   'ENGINE_2_TO_1',
-  'COLLECTOR_DB_B_PERSIST',
   'PROJECTED_DUMP_WRITE_0600',
 ]);
 
-/** Legacy 1.4.0 identity — must fail closed against 1.5.0 auth. */
+/** Legacy 1.5.0 identity — must fail closed against 1.6.0 auth. */
+export const LEGACY_AUTHORIZED_TRANSACTION_1_5_0 =
+  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST';
+
+/** Legacy 1.4.0 identity — must fail closed. */
 export const LEGACY_AUTHORIZED_TRANSACTION_1_4_0 =
   'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN';
 
@@ -35,11 +38,36 @@ export const COLLECTOR_DB_KEYS = Object.freeze([
   'DB_PASSWORD',
 ]);
 
+export const COLLECTOR_DB_PRESTATE = Object.freeze({
+  ABSENT: 'ABSENT',
+  ALREADY_PRESENT_EXACT: 'ALREADY_PRESENT_EXACT',
+  PARTIAL: 'PARTIAL',
+  PRESENT_MISMATCHED: 'PRESENT_MISMATCHED',
+  UNSUPPORTED: 'UNSUPPORTED',
+});
+
 /** Final active dump mode required after successful projected write. */
 export const REQUIRED_PROJECTED_DUMP_MODE = 0o600;
 
 /** @deprecated Use REQUIRED_PROJECTED_DUMP_MODE — kept for historical journal parsers. */
 export const REQUIRED_POST_SAVE_DUMP_MODE = REQUIRED_PROJECTED_DUMP_MODE;
+
+/** Session / IDE / shell keys restored by dump sanitization (names only). */
+export const SESSION_IDE_ENV_KEYS = Object.freeze([
+  'PWD',
+  'OLDPWD',
+  'SSH_CLIENT',
+  'SSH_CONNECTION',
+  'XDG_SESSION_ID',
+  '_',
+  '__CURSOR_SANDBOX_ENV_RESTORE',
+  'CURSOR_CONVERSATION_ID',
+  'CURSOR_RIPGREP_PATH',
+  'VSCODE_IPC_HOOK_CLI',
+  'VSCODE_NLS_CONFIG',
+  'AGENT_TRANSCRIPTS',
+  'BROWSER',
+]);
 
 /** PM2 metadata / launch fields that must never be treated as application env. */
 export const PM2_METADATA_KEYS = Object.freeze([
@@ -150,7 +178,7 @@ export const State = Object.freeze({
   PROJECTION_WRITE_RUNNING: 'PROJECTION_WRITE_RUNNING',
   PROJECTION_WRITTEN: 'PROJECTION_WRITTEN',
   POSTWRITE_VERIFIED: 'POSTWRITE_VERIFIED',
-  // Legacy 1.4.0 states (journal parse only — v1.5 must not enter)
+  // Legacy 1.4.0 states (journal parse only — v1.6 must not enter)
   SAVE_RUNNING: 'SAVE_RUNNING',
   SAVE_SUCCESS: 'SAVE_SUCCESS',
   DUMP_HARDENING: 'DUMP_HARDENING',
@@ -170,7 +198,7 @@ export const TERMINAL_STATES = Object.freeze([
   State.FAIL_FORWARD_COMPLETE,
 ]);
 
-/** States where guarded rollback mutations are allowed (v1.5 + legacy). */
+/** States where guarded rollback mutations are allowed (v1.6 + legacy). */
 export const ROLLBACK_ELIGIBLE_STATES = Object.freeze([
   State.BACKUP_VERIFIED,
   State.MUTATION_RUNNING,
@@ -190,7 +218,6 @@ export const ROLLBACK_ELIGIBLE_STATES = Object.freeze([
 
 export const ALLOWED_DIFF_KINDS = Object.freeze([
   'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED',
-  'COLLECTOR_DB_KEYS_APPEAR',
   'DUMP_SHA_CHANGED',
 ]);
 
@@ -212,6 +239,7 @@ export const FORBIDDEN_DIFF_KINDS = Object.freeze([
   'EXEC_MODE_CHANGED',
   'PROCESS_CONFIG_CHANGED',
   'COLLECTOR_DB_LIVE_PERSIST_MISMATCH',
+  'COLLECTOR_DB_KEYS_APPEAR',
 ]);
 
 export const PROVIDER_ENV_KEY_RE =
