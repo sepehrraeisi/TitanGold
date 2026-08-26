@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2 RETRY ONE-SHOT OWNER AUTHORIZATION CAPTURED / UNCONSUMED; execution pending; B1/C2-052/NODE_ENV still forbidden outside envelope
+description: TitanGold Rule 02 — T2 ENGINE PATH + PM2 DUMP SAFETY RCA COMPLETE; PATH benign / orchestrator normalization required; dump 0600 hardening required; T2_REAUTH_READY=NO; production mutation=0
 alwaysApply: true
 ---
 
@@ -69,31 +69,33 @@ ENGINE_FULL_SEMANTIC_EQUIVALENCE_GATE = PASS /
 ROLLBACK_FULL_LIVE_PRE_EQUIVALENT = PASS /
 LOW_LEVEL_PARSE_SECRET_SAFETY = PASS /
 T2_ORCHESTRATOR_CURRENTLY_SAFE = YES /
-T2_ORCHESTRATOR_FIX_REQUIRED = NO /
-T2_SOURCE_IMPLEMENTATION_REQUIRED = NO /
-T2_ORCHESTRATOR_TESTS = PASS /
-TERMINAL_MUTATION_GUARD = PASS /
-SAVE_SUCCESS_CHANGED_SHA_CASE = PASS /
-SECRET_SAFE_EVIDENCE = PASS /
-DURABLE_JOURNAL = PASS /
-ROLLBACK_GUARD = PASS /
-COMPLETE_ENV_ALLOWLIST = PASS /
-LIVE_ADAPTER_GATED = PASS /
-COLLECTOR_PERSISTENCE_EXPECTED_EFFECT_SUPPORTED = YES /
-T2_AND_COLLECTOR_PERSISTENCE_CAN_SHARE_ONE_GUARDED_SAVE = YES /
-COLLECTOR_PERSISTENCE_CAN_BE_CLOSED_WITH_T2 = YES /
-T2_TECHNICALLY_REAUTHORIZABLE_NOW = YES /
-T2_RETRY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED /
-T2_RETRY_AUTHORIZED = YES /
-T2_RETRY_TOOL_VERSION = 1.3.0 /
 T2_RETRY_RUN_ID = T2R-20260824T173927Z /
-AUTHORIZED_TRANSACTION = T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST /
-AUTHORIZED_EFFECTS = ENGINE_2_TO_1 + COLLECTOR_DB_B_PERSIST /
-ROLLBACK_FAIL_FORWARD_INSIDE_ENVELOPE = AUTHORIZED /
-EXCLUSIONS = B1 / C2-052 / NODE_ENV / UNRELATED_MUTATION /
-PRODUCTION_MUTATION_CAPABILITY = AUTHORIZED_ONLY_INSIDE_T2_ONE_SHOT_ENVELOPE /
-NEXT_GATE = T2_RETRY_ONE_SHOT_EXECUTION /
-NO NEW PRODUCTION MUTATION AUTHORIZED OUTSIDE THIS ENVELOPE /
+T2_RETRY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / HISTORICAL_CAPTURE / UNCONSUMED / EXECUTION_BLOCKED /
+T2_RETRY_RESULT = STOPPED_BEFORE_AUTH_CONSUME /
+T2_RETRY_STOP_REASON = ENGINE_RUNTIME_IDENTITY_MISMATCH /
+T2_RETRY_STOP_DETAIL = PATH_ENV_VALUE_INEQUALITY_ONLY /
+T2_RETRY_AUTHORIZATION_CONSUMED = NO /
+ORCHESTRATOR_INVOKED = NO /
+T2_FORWARD_PM2_SAVE_COUNT = 0 /
+ENGINE_TOPOLOGY_2_TO_1 = NOT_EXECUTED /
+COLLECTOR_DB_RUNTIME_PERSISTED = NO /
+T2_RETRY_AUTHORIZED = NO /
+PRODUCTION_MUTATION_CAPABILITY = CLOSED /
+T2_ENGINE_ENV_EQUIVALENCE_RCA = COMPLETE /
+PATH_DIFFERENCE_CLASS = COMPONENT_SET_DIFFERENCE /
+ENGINE_PATH_RUNTIME_RELEVANCE = NONE /
+EXECUTABLE_RESOLUTION_EQUIVALENT = YES /
+PATH_DIFFERENCE_IS_SEMANTICALLY_BENIGN = YES /
+PRODUCTION_PATH_ALIGNMENT_REQUIRED = NO /
+ORCHESTRATOR_PATH_NORMALIZATION_REQUIRED = YES /
+PM2_DUMP_EFFECTIVE_SECRET_EXPOSURE = SAFE_BY_PARENT_TRAVERSAL /
+PM2_DUMP_MODE_HARDENING_REQUIRED = YES /
+T2_REAUTH_READY = NO /
+NEXT_GATE = T2_ORCHESTRATOR_PATH_EQUIVALENCE_AND_DUMP_0600_HARDENING_SOURCE /
+B1_DEPLOY_AUTHORIZED = NO /
+C2_052_EXECUTION_AUTHORIZED = NO /
+NODE_ENV_NORMALIZATION_AUTHORIZED = NO /
+NO NEW PRODUCTION MUTATION AUTHORIZED /
 MEXC DB CREDENTIAL = PRESERVED /
 MASTER_KEY PRODUCTION DEPLOYED = YES /
 MASTER_KEY mk2 MIGRATION = 9/9 · remainingLegacy = 0 /
@@ -2809,7 +2811,8 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 
 ### T2 retry one-shot production execution — STOPPED BEFORE AUTH CONSUME (COMPLETE / NO MUTATION)
 
-Owner explicit authorization was captured (verbatim material preserved historically):
+**AUTHORIZATION_CAPTURE_STATUS = HISTORICAL / CLOSED / SUPERSEDED_BY_STOP_CLOSEOUT**
+Owner explicit authorization was captured (verbatim material preserved historically; this capture is **NOT** a live execution authorization):
 اجرای one-shot T2 مجاز است: topology موتور از 2→1 با orchestrator نسخه 1.3.0 انجام شود و همان یک guarded pm2 save، DB-B فعلی Telegram Collector را نیز persist کند. precheck، journal، backup امن، validation و rollback/fail-forward تعریف‌شده داخل همین envelope مجازند. B1، C2/052، NODE_ENV و هر تغییر دیگری خارج از این مجوز هستند.
 
 **T2_RETRY_RUN_ID = T2R-20260824T173927Z**
@@ -2817,7 +2820,7 @@ Owner explicit authorization was captured (verbatim material preserved historica
 **CANONICAL_GITHUB_MAIN = `f73c7105dd57d062681f051bf2db4af19ec57a8d`**
 **GOVERNANCE_CAPTURE_COMMIT = `69d1315061285a514b028bf182734300cbef8d68`**
 **TOOL_PROVENANCE = PASS** (exact blob identity vs canonical; staged outside app runtime)
-**T2_RETRY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / UNCONSUMED / EXECUTION_BLOCKED**
+**T2_RETRY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / HISTORICAL_CAPTURE / UNCONSUMED / EXECUTION_BLOCKED**
 **T2_RETRY_AUTHORIZATION_CONSUMED = NO**
 **ORCHESTRATOR_INVOKED = NO**
 **T2_RETRY_RESULT = STOPPED_BEFORE_AUTH_CONSUME**
@@ -2835,17 +2838,101 @@ Owner explicit authorization was captured (verbatim material preserved historica
 **T2_RETRY_AUTHORIZED = NO**
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 **B1_DEPLOY_AUTHORIZED = NO** · **C2_052_EXECUTION_AUTHORIZED = NO** · **NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
-**NEXT_GATE = T2_ENGINE_ENV_EQUIVALENCE_REMEDIATION_THEN_OWNER_REAUTH**
+**NEXT_GATE (HISTORICAL AT STOP CLOSEOUT) = T2_ENGINE_ENV_EQUIVALENCE_REMEDIATION_THEN_OWNER_REAUTH**
+**NEXT_GATE = T2_ORCHESTRATOR_PATH_EQUIVALENCE_AND_DUMP_0600_HARDENING_SOURCE**
 **EVIDENCE = `/home/ubuntu/TITANGOLD_T2_EXEC_T2R-20260824T173927Z/evidence/TITANGOLD_T2_RETRY_STOP_PRECHECK_T2R-20260824T173927Z.txt`**
 **EVIDENCE_SHA256 = `d79540a4029e6512529a0bd9a1f0bd657377be8ca6783c42e47ece81458d2928`** · mode **0600**
 
 Do **NOT** claim T2 COMPLETED. Do **NOT** advance to B1. Do **NOT** mutate PATH/PM2 under this closed attempt.
+Do **NOT** treat the historical authorization capture as reusable live authority.
 
 Durable repo-owned T2 orchestrator source + unit tests are **COMPLETE**.
 Owner must still issue an explicit one-shot production envelope before any
 `pm2 stop/save/start` or dump restore. This closeout does **NOT** authorize T2.
 
 Classification: **TIER 3 / NO PRODUCTION MUTATION AUTHORIZED BY THIS CLOSEOUT**
+
+### T2 engine PATH + PM2 dump safety RCA (COMPLETE / READ-ONLY / 20260826)
+
+**T2_ENGINE_ENV_EQUIVALENCE_RCA = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY / NO PRODUCTION MUTATION**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **CHMOD = 0**
+
+Fresh baseline (observation only; pm_ids not mutation authority):
+engine online = **2** · backend = **4** · processor = **1** · collector = **1** · monitor = **2**
+health 5002/5003 = **200/200** · accounts/channels = **200/200**
+collector live DB-B complete = **YES** (`tg_rot_b_0824`) · dump collector DB_* absent = **YES**
+NODE_ENV = **development** (engine; unchanged / not normalized)
+active dump SHA256 = `6cbf24ca4293451c17d39b14a91bc3dcc52a6aa693c18af7f910b6df0c25b81f` · mode **0664** · unchanged since T2R stop
+historical T2 PRE backup retained = **YES** · **NO T2 mutation since stopped attempt**
+
+#### PATH difference (no raw PATH values)
+
+**PATH_DIFFERENCE_CLASS = COMPONENT_SET_DIFFERENCE**
+lower-pm_id engine candidate: component_count **12** · unique **11** · has duplicate-kinds **1**
+higher-pm_id engine candidate: component_count **6** · unique **6** · duplicates **0**
+same component set = **NO** · same order = **NO** · same multiset = **NO**
+only-in-A count = **5** · only-in-B count = **0**
+only-in-A classes = system(2) + system_extra(1) + toolchain(1) + user_local(1)
+A is strict **superset** of B · B is **subsequence** of A
+only-A directories executable count = **0**
+
+Origin evidence:
+- higher-pm_id engine PATH **equals** PM2 daemon PATH **and** systemd `pm2-ubuntu.service` Environment PATH = **PROVEN**
+- backend + processor PATH equal that same canonical PATH = **PROVEN**
+- dump persists both divergent PATH values matching live = **PROVEN**
+- update-env history as cause = **NOT_PROVEN**
+**LIKELY_ORIGIN = DUMP_RESURRECT_HISTORY_PLUS_DIVERGENT_HISTORICAL_START_ENV_FOR_ONE_ENGINE**
+
+#### Execution semantics
+
+**ENGINE_PATH_RUNTIME_RELEVANCE = NONE**
+engine reachable graph (engineWorkerLeader + scheduler closure): **no** `child_process` / spawn / execFile / execSync
+prior `exec` hit = RegExp `.exec` false positive only
+**EXECUTABLE_RESOLUTION_EQUIVALENT = YES** (node/npm/npx/bash/sh/curl/git/psql/redis-cli/python3/python/node-gyp realpath identical; live `/proc/<pid>/exe` identical)
+
+**CANONICAL_ENGINE_PATH_SOURCE = PM2_DAEMON_AND_SYSTEMD_UNIT_ENVIRONMENT_PATH**
+**CANONICAL_PATH_CONFIDENCE = HIGH**
+Do **not** treat lower pm_id as canonical PATH authority (lower pm_id is the divergent superset).
+
+#### Remediation decision
+
+**PATH_DIFFERENCE_IS_SEMANTICALLY_BENIGN = YES**
+**PRODUCTION_PATH_ALIGNMENT_REQUIRED = NO**
+**ORCHESTRATOR_PATH_NORMALIZATION_REQUIRED = YES** (narrow structural PATH equivalence only; do **not** weaken full env gate)
+Accept PATH as equivalent only when demonstrable: subsequence/superset relation + zero executables in only-extra dirs + identical relevant binary resolution (+ canonical daemon/unit match evidence).
+
+#### PM2 dump permission safety
+
+dump owner/group = **ubuntu:ubuntu** · mode **0664** (other-read bit set)
+PM2_HOME mode = **0700** · parents traversable by other, but PM2_HOME blocks traversal
+**PM2_DUMP_EFFECTIVE_SECRET_EXPOSURE = SAFE_BY_PARENT_TRAVERSAL**
+**PM2_DUMP_MODE_HARDENING_REQUIRED = YES** · durable target **0600**
+PM2 `save` uses `writeFileSync` without explicit mode; current umask **002** → recreated dump **0664** = **PROVEN**
+therefore pre-save chmod alone is **insufficient**; future envelope needs **post-save** 0600 harden + verify.
+
+#### Future Owner envelope (design only — NOT authorized)
+
+Preferred combine into **one** forward `pm2 save`:
+1. orchestrator narrow PATH equivalence (source first)
+2. engine 2→1
+3. collector DB-B persistence
+4. post-save dump mode **0600** hardening
+
+production PATH `update-env` / engine restart for PATH = **NOT required** under decision A
+**T2_REAUTH_READY = NO**
+**NEXT_BLOCKER = ORCHESTRATOR_SOURCE_CHANGE_FOR_NARROW_PATH_EQUIVALENCE_PLUS_POST_SAVE_DUMP_0600_HARDENING**
+
+**T2_RETRY_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+
+Sanitized evidence:
+`/home/ubuntu/TITANGOLD_T2_ENGINE_PATH_DUMP_SAFETY_RCA_20260826.txt`
+SHA256 = `305106ee2e93e1c60fb1981711072a765726a0605f8f81f728850869725c5b26`
+bytes = 4429 · mode **0600** · tmp/home equality = **YES**
 
 ### T2 retry orchestrator source-fix closeout (COMPLETE / SOURCE+TESTS ONLY)
 
