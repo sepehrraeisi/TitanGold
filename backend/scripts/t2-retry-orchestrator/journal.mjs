@@ -111,6 +111,10 @@ export async function createExclusiveJournal(opts) {
       BACKUP_WRITTEN: false,
       STOP_ATTEMPTED: false,
       ENGINE_STOP_APPLIED: false,
+      PROJECTED_DUMP_WRITE_ATTEMPTED: false,
+      PROJECTED_DUMP_WRITE_APPLIED: false,
+      DUMP_RESTORE_REQUIRED: null,
+      DUMP_RESTORE_DECISION: 'UNDECIDED',
       SAVE_ATTEMPTED: false,
       DUMP_SAVE_APPLIED: false,
       DUMP_MODE_HARDEN_ATTEMPTED: false,
@@ -255,6 +259,14 @@ export class TransactionJournal {
       BACKUP_WRITTEN: !!ledger.BACKUP_WRITTEN,
       STOP_ATTEMPTED: !!ledger.STOP_ATTEMPTED,
       ENGINE_STOP_APPLIED: !!ledger.ENGINE_STOP_APPLIED,
+      PROJECTED_DUMP_WRITE_ATTEMPTED: !!ledger.PROJECTED_DUMP_WRITE_ATTEMPTED,
+      PROJECTED_DUMP_WRITE_APPLIED: !!ledger.PROJECTED_DUMP_WRITE_APPLIED,
+      DUMP_RESTORE_REQUIRED:
+        typeof ledger.DUMP_RESTORE_REQUIRED === 'boolean' ? ledger.DUMP_RESTORE_REQUIRED : null,
+      DUMP_RESTORE_DECISION:
+        typeof ledger.DUMP_RESTORE_DECISION === 'string'
+          ? ledger.DUMP_RESTORE_DECISION
+          : 'UNDECIDED',
       SAVE_ATTEMPTED: !!ledger.SAVE_ATTEMPTED,
       DUMP_SAVE_APPLIED: !!ledger.DUMP_SAVE_APPLIED,
       DUMP_MODE_HARDEN_ATTEMPTED: !!ledger.DUMP_MODE_HARDEN_ATTEMPTED,

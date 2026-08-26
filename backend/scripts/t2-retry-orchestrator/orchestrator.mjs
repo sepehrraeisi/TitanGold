@@ -1,5 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
+ * TOOL_VERSION 1.5.0 — surgical projected-dump persistence (no global pm2 save).
  * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
@@ -9,7 +10,7 @@ import {
   AUTHORIZED_EFFECTS,
   AUTHORIZED_TRANSACTION,
   COLLECTOR_DB_KEYS,
-  REQUIRED_POST_SAVE_DUMP_MODE,
+  REQUIRED_PROJECTED_DUMP_MODE,
   ROLLBACK_ELIGIBLE_STATES,
   State,
   TERMINAL_STATES,
@@ -24,16 +25,38 @@ import {
   loadJournal,
 } from './journal.mjs';
 import {
+  assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
   compareCollectorDbLiveToPersist,
-  diffFingerprints,
   selectEngineRetainExtra,
   semanticFingerprint,
 } from './semantics.mjs';
+import {
+  assertUnauthorizedLiveEnvNotPersisted,
+  buildExpectedProjectedDump,
+  resolveDumpCollectorIdentity,
+  resolveDumpEngineIdentities,
+} from './projection.mjs';
 import { createSideEffectLedger, planRollbackActions } from './sideEffectLedger.mjs';
+
+const FORWARD_MUTATING_OPS = Object.freeze([
+  'ensureDir',
+  'writeBackup',
+  'chmod',
+  'stopProcessByPmId',
+  'writeProjectedActiveDump',
+]);
+
+function deepCloneJson(v) {
+  return JSON.parse(JSON.stringify(v));
+}
+
+function deepJsonEqual(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 export class T2OrchestratorError extends Error {
   constructor(code, message) {
@@ -78,12 +101,18 @@ export class T2Orchestrator {
 
     this.preDumpSha = null;
     this.preDumpMode = null;
+    this.preDumpUid = null;
+    this.preDumpGid = null;
+    this.preDumpParsed = null;
     this.postDumpMode = null;
     this.postDumpSha = null;
     this.preDumpFp = null;
     this.preLiveFp = null;
     this.liveFp = null;
     this.selection = null;
+    this.dumpEngineMap = null;
+    this.dumpCollectorMap = null;
+    this.expectedProjected = null;
     this.backupPath = null;
     this.backupBytes = null;
     this.recordedExtraIdentity = null;
@@ -91,6 +120,7 @@ export class T2Orchestrator {
     this.liveCollectorDb = null;
     this.runDir = this.journal?.runDir || null;
     this.lastRollbackPlan = null;
+    this.dumpOwnershipSafe = false;
   }
 
   _log(...parts) {
@@ -132,10 +162,22 @@ export class T2Orchestrator {
       }
       return;
     }
+    if (op === 'pm2Save') {
+      throw new T2OrchestratorError('GLOBAL_PM2_SAVE_FORBIDDEN', 'GLOBAL_PM2_SAVE_FORBIDDEN');
+    }
+    if (op === 'hardenActiveDumpMode') {
+      throw new T2OrchestratorError('HARDEN_FORBIDDEN_IN_V15', 'HARDEN_FORBIDDEN_IN_V15');
+    }
     if (op === 'restoreDump' || op === 'startProcessByPmId') {
       throw new T2OrchestratorError(
         'RESTORE_OR_START_REQUIRES_ROLLBACK_STATE',
         `op=${op} state=${this.state}`,
+      );
+    }
+    if (!FORWARD_MUTATING_OPS.includes(op)) {
+      throw new T2OrchestratorError(
+        'FORWARD_OP_NOT_ALLOWED',
+        `FORWARD_OP_NOT_ALLOWED op=${op} state=${this.state}`,
       );
     }
   }
@@ -183,6 +225,8 @@ export class T2Orchestrator {
       `BACKUP_WRITTEN=${this.sideEffects.BACKUP_WRITTEN ? 'YES' : 'NO'}`,
       `STOP_ATTEMPTED=${this.sideEffects.STOP_ATTEMPTED ? 'YES' : 'NO'}`,
       `ENGINE_STOP_APPLIED=${this.sideEffects.ENGINE_STOP_APPLIED ? 'YES' : 'NO'}`,
+      `PROJECTED_DUMP_WRITE_ATTEMPTED=${this.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED ? 'YES' : 'NO'}`,
+      `PROJECTED_DUMP_WRITE_APPLIED=${this.sideEffects.PROJECTED_DUMP_WRITE_APPLIED ? 'YES' : 'NO'}`,
       `SAVE_ATTEMPTED=${this.sideEffects.SAVE_ATTEMPTED ? 'YES' : 'NO'}`,
       `DUMP_SAVE_APPLIED=${this.sideEffects.DUMP_SAVE_APPLIED ? 'YES' : 'NO'}`,
       `DUMP_MODE_HARDEN_ATTEMPTED=${this.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED ? 'YES' : 'NO'}`,
@@ -204,10 +248,13 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('AUTH_TRANSACTION_MISMATCH');
     }
     const effects = Array.isArray(auth.authorizedEffects) ? auth.authorizedEffects : [];
-    for (const required of AUTHORIZED_EFFECTS) {
-      if (!effects.includes(required)) {
-        throw new T2OrchestratorError('AUTH_EFFECTS_INCOMPLETE');
-      }
+    const uniqueEffects = new Set(effects);
+    if (
+      effects.length !== AUTHORIZED_EFFECTS.length ||
+      uniqueEffects.size !== AUTHORIZED_EFFECTS.length ||
+      AUTHORIZED_EFFECTS.some((required) => !uniqueEffects.has(required))
+    ) {
+      throw new T2OrchestratorError('AUTH_EFFECTS_NOT_EXACT');
     }
     if (!auth.oneShotToken || typeof auth.oneShotToken !== 'string') {
       throw new T2OrchestratorError('AUTH_TOKEN_MISSING');
@@ -323,6 +370,26 @@ export class T2Orchestrator {
     this.preDumpMode = dumpPack.mode & 0o777;
     this._log('PRE_DUMP_MODE', `mode=${this.preDumpMode}`);
 
+    this.preDumpUid = typeof dumpPack.uid === 'number' ? dumpPack.uid : null;
+    this.preDumpGid = typeof dumpPack.gid === 'number' ? dumpPack.gid : null;
+    this.preDumpParsed = deepCloneJson(dumpPack.parsed);
+    if (this.preDumpUid != null) {
+      this._log('PRE_DUMP_OWNER=PRESENT');
+    }
+    if (this.preDumpGid != null) {
+      this._log('PRE_DUMP_GROUP=PRESENT');
+    }
+    if (typeof this.commands.inspectActiveDumpWriteSafety === 'function') {
+      const ownership = await this.commands.inspectActiveDumpWriteSafety();
+      this.dumpOwnershipSafe = ownership?.safe === true;
+      if (typeof ownership?.dumpUid === 'number') this.preDumpUid = ownership.dumpUid;
+      if (typeof ownership?.dumpGid === 'number') this.preDumpGid = ownership.dumpGid;
+      if (!this.dumpOwnershipSafe) {
+        return this._failClosed('DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+      }
+      this._log('DUMP_OWNER_GROUP_PRECHECK=PASS');
+    }
+
     const selection = selectEngineRetainExtra(this.liveFp);
     if (!selection.ok) {
       return this._failClosed(selection.error);
@@ -354,6 +421,19 @@ export class T2Orchestrator {
     if (dumpOnline.length !== 2) {
       return this._failClosed('DUMP_ENGINE_ONLINE_EXPECTED_2');
     }
+
+    // Resolve dump identities BEFORE auth consume (still in precheck)
+    const engineMap = resolveDumpEngineIdentities(dumpPack.parsed, selection);
+    if (!engineMap.ok) {
+      return this._failClosed(engineMap.error || 'DUMP_ENGINE_IDENTITY_UNRESOLVED');
+    }
+    this.dumpEngineMap = engineMap;
+
+    const collectorMap = resolveDumpCollectorIdentity(dumpPack.parsed);
+    if (!collectorMap.ok) {
+      return this._failClosed(collectorMap.error || 'DUMP_COLLECTOR_IDENTITY_UNRESOLVED');
+    }
+    this.dumpCollectorMap = collectorMap;
 
     const precond = assertCollectorPersistencePreconditions(this.liveFp, this.preDumpFp);
     if (!precond.ok) {
@@ -507,118 +587,184 @@ export class T2Orchestrator {
     return true;
   }
 
-  async save() {
+  /**
+   * Build expected projected dump from PRE dump + authorized live DB_* only.
+   * No pm2 save. No live God-env merge.
+   */
+  async buildProjection() {
     this._requireState([State.ENGINE_SINGLETON_VERIFIED]);
-    await this._setState(State.SAVE_RUNNING, 'save_begin');
+    await this._setState(State.PROJECTION_BUILDING, 'projection_build_begin');
 
-    this.sideEffects.SAVE_ATTEMPTED = true;
-    await this._persistSideEffects();
-
-    const result = await this.guardedCall('pm2Save', () => this.commands.pm2Save());
-
-    let dumpPack = null;
-    let dumpStateUnknown = false;
-    try {
-      dumpPack = await this.commands.readDump();
-    } catch {
-      dumpStateUnknown = true;
+    const live = await this.commands.listLiveProcesses();
+    const liveFp = semanticFingerprint(live);
+    const freshDb = captureCollectorDbLiveValues(liveFp);
+    if (!freshDb) {
+      await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
+      throw new T2OrchestratorError('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
+    }
+    if (!this.liveCollectorDb) {
+      await this.rollback('LIVE_COLLECTOR_DB_CAPTURE_FAILED');
+      throw new T2OrchestratorError('LIVE_COLLECTOR_DB_CAPTURE_FAILED');
     }
 
-    if (dumpPack && dumpPack.sha256 !== this.preDumpSha) {
-      this.sideEffects.DUMP_SAVE_APPLIED = true;
-      await this._persistSideEffects();
-      this._log('DUMP_SAVE_APPLIED=YES', `post_sha_prefix=${dumpPack.sha256.slice(0, 12)}`);
-    } else if (dumpPack) {
-      this._log('DUMP_SAVE_APPLIED=NO', 'sha_unchanged');
-    } else {
-      this._log('DUMP_SAVE_APPLIED=UNKNOWN');
+    let drift = false;
+    for (const key of COLLECTOR_DB_KEYS) {
+      const stable = freshDb[key] === this.liveCollectorDb[key];
+      this._log(`${key}_STABLE=${stable ? 'YES' : 'NO'}`);
+      if (!stable) drift = true;
+    }
+    if (drift) {
+      await this.rollback('COLLECTOR_DB_LIVE_DRIFT');
+      throw new T2OrchestratorError('COLLECTOR_DB_LIVE_DRIFT');
     }
 
-    if (result.exitCode !== 0) {
-      await this.rollback('SAVE_EXIT_NONZERO', { dumpStateUnknown });
-      throw new T2OrchestratorError('SAVE_EXIT_NONZERO');
+    const result = buildExpectedProjectedDump({
+      preDump: this.preDumpParsed,
+      selection: this.selection,
+      collectorDbSnapshot: this.liveCollectorDb,
+    });
+    if (!result.ok) {
+      await this.rollback(result.error || 'PROJECTION_BUILD_FAILED');
+      throw new T2OrchestratorError(result.error || 'PROJECTION_BUILD_FAILED');
     }
 
-    if (dumpStateUnknown || !dumpPack) {
-      await this.rollback('DUMP_UNPARSEABLE', { dumpStateUnknown: true });
-      throw new T2OrchestratorError('DUMP_UNPARSEABLE');
+    const liveCol = (liveFp.collectors || [])[0];
+    const liveCollectorEnvKeys = Array.isArray(liveCol?.env_keys) ? liveCol.env_keys : [];
+    const unauthorized = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: this.preDumpParsed,
+      projected: result.projected,
+      collectorDumpIndex: result.collectorMap.dumpIndex,
+      liveCollectorEnvKeys,
+    });
+    if (!unauthorized.ok) {
+      await this.rollback(unauthorized.error || 'UNAUTHORIZED_LIVE_ENV_PERSISTED');
+      throw new T2OrchestratorError(unauthorized.error || 'UNAUTHORIZED_LIVE_ENV_PERSISTED');
     }
 
-    this.postDumpSha = dumpPack.sha256;
-    if (this.postDumpSha !== this.preDumpSha) {
-      this._log('POST_SAVE_SHA_CHANGED=EXPECTED');
-    } else {
-      this._log('POST_SAVE_SHA_UNCHANGED=UNEXPECTED_BUT_NOT_ALONE_FATAL');
+    this.expectedProjected = result;
+    if (result.manifest && typeof result.manifest === 'object') {
+      for (const [k, v] of Object.entries(result.manifest)) {
+        this._log(`${k}=${v}`);
+      }
     }
 
-    await this._setState(State.SAVE_SUCCESS, 'save_success');
-    this._log('SAVE_SUCCESS', `post_sha_prefix=${this.postDumpSha.slice(0, 12)}`);
-    return { postDumpSha: this.postDumpSha };
+    await this._setState(State.PROJECTION_READY, 'projection_ready');
+    this._log('PROJECTION_READY');
+    return result;
   }
 
   /**
-   * Exactly one forward pm2 save already completed. Harden active dump to 0600.
-   * Never calls pm2 save again.
+   * Atomically write projected dump bytes to active dump path (mode 0600).
+   * Never calls pm2 save or hardenActiveDumpMode.
    */
-  async hardenDump() {
-    this._requireState([State.SAVE_SUCCESS]);
-    await this._setState(State.DUMP_HARDENING, 'dump_harden_begin');
+  async writeProjectedDump() {
+    this._requireState([State.PROJECTION_READY]);
+    await this._setState(State.PROJECTION_WRITE_RUNNING, 'projection_write_begin');
 
-    this.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED = true;
+    if (!this.expectedProjected?.bytes) {
+      await this.rollback('PROJECTION_BYTES_MISSING');
+      throw new T2OrchestratorError('PROJECTION_BYTES_MISSING');
+    }
+
+    const expectedSha256 = sha256Buffer(this.expectedProjected.bytes);
+
+    this.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED = true;
     await this._persistSideEffects();
-    this._log('DUMP_MODE_HARDEN_ATTEMPTED=YES');
+    this._log('PROJECTED_DUMP_WRITE_ATTEMPTED=YES');
 
     try {
-      await this.guardedCall('hardenActiveDumpMode', () =>
-        this.commands.hardenActiveDumpMode(REQUIRED_POST_SAVE_DUMP_MODE),
+      await this.guardedCall('writeProjectedActiveDump', () =>
+        this.commands.writeProjectedActiveDump(this.expectedProjected.bytes, {
+          expectedUid: this.preDumpUid != null ? this.preDumpUid : undefined,
+          expectedGid: this.preDumpGid != null ? this.preDumpGid : undefined,
+          expectedSha256,
+        }),
       );
     } catch (err) {
       if (err instanceof T2OrchestratorError && TERMINAL_STATES.includes(this.state)) {
         throw err;
       }
-      await this.rollback('DUMP_HARDEN_COMMAND_FAILED');
-      throw new T2OrchestratorError('DUMP_HARDEN_COMMAND_FAILED');
+      const resolution = await this.resolveUnknownProjectedWriteState();
+      await this.rollback('PROJECTED_DUMP_STATE_UNKNOWN', {
+        dumpStateUnknown: true,
+        dumpRestoreRequired: resolution.restoreRequired,
+        dumpRestoreDecision: resolution.decision,
+      });
+      throw new T2OrchestratorError(resolution.errorCode || 'PROJECTED_DUMP_STATE_UNKNOWN');
     }
 
     let dumpPack;
     try {
       dumpPack = await this.commands.readDump();
     } catch {
-      await this.rollback('DUMP_HARDEN_STAT_UNREADABLE');
-      throw new T2OrchestratorError('DUMP_HARDEN_STAT_UNREADABLE');
+      const resolution = await this.resolveUnknownProjectedWriteState();
+      await this.rollback('PROJECTED_DUMP_STATE_UNKNOWN', {
+        dumpStateUnknown: true,
+        dumpRestoreRequired: resolution.restoreRequired,
+        dumpRestoreDecision: resolution.decision,
+      });
+      throw new T2OrchestratorError(resolution.errorCode || 'PROJECTED_DUMP_STATE_UNKNOWN');
     }
 
     const mode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
-    if (mode !== REQUIRED_POST_SAVE_DUMP_MODE) {
-      this._log('DUMP_MODE_HARDEN_APPLIED=NO', `mode=${mode}`);
-      await this.rollback('DUMP_HARDEN_MODE_NOT_0600');
-      throw new T2OrchestratorError('DUMP_HARDEN_MODE_NOT_0600');
+    const shaOk = dumpPack.sha256 === expectedSha256;
+    const modeOk = mode === REQUIRED_PROJECTED_DUMP_MODE;
+    const contentOk = deepJsonEqual(dumpPack.parsed, this.expectedProjected.projected);
+
+    if (!shaOk || !modeOk || !contentOk) {
+      const resolution = await this.resolveUnknownProjectedWriteState();
+      await this.rollback('PROJECTED_DUMP_POSTWRITE_MISMATCH', {
+        dumpStateUnknown: true,
+        dumpRestoreRequired: resolution.restoreRequired,
+        dumpRestoreDecision: resolution.decision,
+      });
+      throw new T2OrchestratorError('PROJECTED_DUMP_POSTWRITE_MISMATCH');
     }
 
-    this.sideEffects.DUMP_MODE_HARDEN_APPLIED = true;
+    this.sideEffects.PROJECTED_DUMP_WRITE_APPLIED = true;
     await this._persistSideEffects();
+    this.postDumpSha = dumpPack.sha256;
     this.postDumpMode = mode;
-    await this._setState(State.DUMP_HARDENED, 'dump_hardened');
-    this._log('DUMP_MODE_HARDEN_APPLIED=YES', 'mode=0600');
-    return { mode };
+    this._log('PROJECTED_DUMP_WRITE_APPLIED=YES', 'mode=0600');
+
+    await this._setState(State.PROJECTION_WRITTEN, 'projection_written');
+    this._log('PROJECTION_WRITTEN', `post_sha_prefix=${this.postDumpSha.slice(0, 12)}`);
+    return { postDumpSha: this.postDumpSha, mode };
   }
 
-  async postsaveVerify() {
-    this._requireState([State.DUMP_HARDENED]);
+  async postwriteVerify() {
+    this._requireState([State.PROJECTION_WRITTEN]);
 
-    // Revalidate live collector DB values before persist equality check
     const liveNow = await this.commands.listLiveProcesses();
     const liveFpNow = semanticFingerprint(liveNow);
-    if ((liveFpNow.engine_online_count || 0) !== 1) {
-      await this.rollback('ENGINE_SINGLETON_POSTSAVE_FAIL');
-      throw new T2OrchestratorError('ENGINE_SINGLETON_POSTSAVE_FAIL');
+    const dumpPack = await this.commands.readDump();
+    const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
+    if (postMode !== REQUIRED_PROJECTED_DUMP_MODE) {
+      await this.rollback('POSTWRITE_DUMP_MODE_NOT_0600');
+      throw new T2OrchestratorError('POSTWRITE_DUMP_MODE_NOT_0600');
     }
-    const retainedLive = (liveFpNow.engines || []).find(
-      (e) => e.pm_id === this.selection.retained.pm_id && e.status === 'online',
-    );
-    if (!retainedLive) {
-      await this.rollback('RETAINED_NOT_ONLINE_POSTSAVE');
-      throw new T2OrchestratorError('RETAINED_NOT_ONLINE_POSTSAVE');
+    if (!this.expectedProjected?.projected) {
+      await this.rollback('PROJECTION_EXPECTED_MISSING');
+      throw new T2OrchestratorError('PROJECTION_EXPECTED_MISSING');
+    }
+    if (!deepJsonEqual(dumpPack.parsed, this.expectedProjected.projected)) {
+      await this.rollback('POSTWRITE_DUMP_CONTENT_MISMATCH');
+      throw new T2OrchestratorError('POSTWRITE_DUMP_CONTENT_MISMATCH');
+    }
+    const ownerPreserved =
+      this.preDumpUid == null ? true : typeof dumpPack.uid === 'number' && dumpPack.uid === this.preDumpUid;
+    const groupPreserved =
+      this.preDumpGid == null ? true : typeof dumpPack.gid === 'number' && dumpPack.gid === this.preDumpGid;
+    this._log(`OWNER_PRESERVED=${ownerPreserved ? 'YES' : 'NO'}`);
+    this._log(`GROUP_PRESERVED=${groupPreserved ? 'YES' : 'NO'}`);
+    this._log('MODE=0600');
+    if (!ownerPreserved) {
+      await this.rollback('POSTWRITE_OWNER_MISMATCH');
+      throw new T2OrchestratorError('POSTWRITE_OWNER_MISMATCH');
+    }
+    if (!groupPreserved) {
+      await this.rollback('POSTWRITE_GROUP_MISMATCH');
+      throw new T2OrchestratorError('POSTWRITE_GROUP_MISMATCH');
     }
 
     const liveDbNow = captureCollectorDbLiveValues(liveFpNow);
@@ -626,50 +772,12 @@ export class T2Orchestrator {
       await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
       throw new T2OrchestratorError('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
     }
-    this.liveCollectorDb = liveDbNow;
-
-    const dumpPack = await this.commands.readDump();
-    const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
-    if (postMode !== REQUIRED_POST_SAVE_DUMP_MODE) {
-      await this.rollback('POSTSAVE_DUMP_MODE_NOT_0600');
-      throw new T2OrchestratorError('POSTSAVE_DUMP_MODE_NOT_0600');
-    }
 
     const postFp = semanticFingerprint(dumpPack.parsed);
-    const { classified } = diffFingerprints(this.preDumpFp, postFp, {
-      extraPmId: this.selection.extra.pm_id,
-    });
-
-    const kinds = new Set(classified.map((c) => c.kind));
-    if (this.postDumpSha !== this.preDumpSha) {
-      kinds.add('DUMP_SHA_CHANGED');
-    }
-
-    const unexpected = classified.filter(
-      (c) =>
-        c.kind !== 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED' &&
-        c.kind !== 'COLLECTOR_DB_KEYS_APPEAR',
-    );
-    if (unexpected.length > 0) {
-      await this.rollback('SEMANTIC_ALLOWLIST_FAIL');
-      throw new T2OrchestratorError(
-        'SEMANTIC_ALLOWLIST_FAIL',
-        `unexpected=${unexpected.map((u) => u.kind).join(',')}`,
-      );
-    }
-    if (!kinds.has('ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED')) {
-      await this.rollback('MISSING_ENGINE_DIFF');
-      throw new T2OrchestratorError('MISSING_ENGINE_DIFF');
-    }
-    if (!kinds.has('COLLECTOR_DB_KEYS_APPEAR')) {
-      await this.rollback('MISSING_COLLECTOR_DB_PERSIST');
-      throw new T2OrchestratorError('MISSING_COLLECTOR_DB_PERSIST');
-    }
-
     const postCol = (postFp.collectors || [])[0];
     const liveProc = { env_keys: [...COLLECTOR_DB_KEYS] };
     Object.defineProperty(liveProc, '_envValues', {
-      value: this.liveCollectorDb,
+      value: liveDbNow,
       enumerable: false,
       writable: false,
       configurable: false,
@@ -679,29 +787,53 @@ export class T2Orchestrator {
       this._log(`${k}=${v}`);
     }
     if (!match.ok) {
-      await this.rollback('SEMANTIC_ALLOWLIST_FAIL');
-      throw new T2OrchestratorError('SEMANTIC_ALLOWLIST_FAIL', match.error);
+      await this.rollback(match.error || 'COLLECTOR_DB_LIVE_PERSIST_MISMATCH');
+      throw new T2OrchestratorError(match.error || 'COLLECTOR_DB_LIVE_PERSIST_MISMATCH');
     }
 
-    const col = postCol || {};
-    const presenceBits = COLLECTOR_DB_KEYS.map((k) => (col.db_keys_present?.[k] ? '1' : '0')).join(
-      '',
-    );
+    const liveCol = (liveFpNow.collectors || [])[0];
+    const liveCollectorEnvKeys = Array.isArray(liveCol?.env_keys) ? liveCol.env_keys : [];
+    const collectorDumpIndex =
+      this.expectedProjected.collectorMap?.dumpIndex ?? this.dumpCollectorMap?.dumpIndex;
+    const unauthorized = assertUnauthorizedLiveEnvNotPersisted({
+      preDump: this.preDumpParsed,
+      projected: dumpPack.parsed,
+      collectorDumpIndex,
+      liveCollectorEnvKeys,
+    });
+    if (!unauthorized.ok) {
+      await this.rollback(unauthorized.error || 'UNAUTHORIZED_LIVE_ENV_PERSISTED');
+      throw new T2OrchestratorError(unauthorized.error || 'UNAUTHORIZED_LIVE_ENV_PERSISTED');
+    }
+    this._log(`JWT_SECRET_LIVE_DRIFT_NOT_PERSISTED=${unauthorized.JWT_SECRET_LIVE_DRIFT_NOT_PERSISTED}`);
+    this._log(`LIVE_ONLY_CURSOR_ENV_NOT_PERSISTED=${unauthorized.LIVE_ONLY_CURSOR_ENV_NOT_PERSISTED}`);
     this._log(
-      'COLLECTOR_DB_PERSIST_PRESENT',
-      `keys_order=${COLLECTOR_DB_KEYS.join(',')}`,
-      `presence_bits=${presenceBits}`,
-      `DB_USER_EXPECTED=${col.db_user_matches_expected ? 'YES' : 'NO'}`,
-      'DUMP_MODE=0600',
+      `LIVE_ONLY_PM2_METADATA_NOT_PERSISTED=${unauthorized.LIVE_ONLY_PM2_METADATA_NOT_PERSISTED}`,
     );
+    this._log(`UNAUTHORIZED_LIVE_ENV_NOT_PERSISTED=${unauthorized.UNAUTHORIZED_LIVE_ENV_NOT_PERSISTED}`);
 
-    await this._setState(State.POSTSAVE_VERIFIED, 'postsave_verified');
-    this._log('POSTSAVE_VERIFIED', `allowlist=${[...kinds].sort().join(',')}`);
-    return { kinds: [...kinds], dbMatches: match.matches };
+    const liveProof = assertExpectedLivePostState(
+      this.preLiveFp,
+      liveFpNow,
+      this.selection,
+      this.liveCollectorDb,
+    );
+    if (!liveProof.ok) {
+      await this.rollback(liveProof.error || 'LIVE_POST_STATE_UNEXPECTED_DRIFT');
+      throw new T2OrchestratorError(liveProof.error || 'LIVE_POST_STATE_UNEXPECTED_DRIFT');
+    }
+    for (const [k, v] of Object.entries(liveProof.details || {})) {
+      this._log(`${k}=${v}`);
+    }
+    this._log('UNRELATED_LIVE_DUMP_DRIFT_PRESERVED_NOT_PERSISTED=YES');
+
+    await this._setState(State.POSTWRITE_VERIFIED, 'postwrite_verified');
+    this._log('POSTWRITE_VERIFIED');
+    return { dbMatches: match.matches };
   }
 
   async healthValidate() {
-    this._requireState([State.POSTSAVE_VERIFIED]);
+    this._requireState([State.POSTWRITE_VERIFIED]);
     const h5002 = await this.commands.healthCheck(5002);
     const h5003 = await this.commands.healthCheck(5003);
     const func = await this.commands.collectorFunctionalCheck();
@@ -718,7 +850,7 @@ export class T2Orchestrator {
   }
 
   async complete() {
-    this._requireState([State.POSTSAVE_VERIFIED]);
+    this._requireState([State.POSTWRITE_VERIFIED]);
     await this._setState(State.COMPLETED, 'completed');
     this._log('COMPLETED', 'mutation_capability=CLOSED');
     return State.COMPLETED;
@@ -756,6 +888,8 @@ export class T2Orchestrator {
 
     const plan = planRollbackActions(this.sideEffects, {
       dumpStateUnknown: opts.dumpStateUnknown === true,
+      dumpRestoreRequired: opts.dumpRestoreRequired,
+      dumpRestoreDecision: opts.dumpRestoreDecision,
     });
     this.lastRollbackPlan = plan;
     this._log(
@@ -771,8 +905,11 @@ export class T2Orchestrator {
         if (!this.backupBytes) {
           throw new T2OrchestratorError('BACKUP_BYTES_MISSING');
         }
+        const restoreOpts = { mode: this.preDumpMode };
+        if (this.preDumpUid != null) restoreOpts.uid = this.preDumpUid;
+        if (this.preDumpGid != null) restoreOpts.gid = this.preDumpGid;
         const restoreResult = await this.guardedCall('restoreDump', () =>
-          this.commands.restoreDump(this.backupBytes, { mode: this.preDumpMode }),
+          this.commands.restoreDump(this.backupBytes, restoreOpts),
         );
         if (restoreResult && restoreResult.ok === false) {
           throw new T2OrchestratorError('RESTORE_DUMP_FAILED');
@@ -783,6 +920,22 @@ export class T2Orchestrator {
           (restoreResult.mode & 0o777) !== (this.preDumpMode & 0o777)
         ) {
           throw new T2OrchestratorError('ROLLBACK_DUMP_MODE_MISMATCH');
+        }
+        if (
+          restoreResult &&
+          this.preDumpUid != null &&
+          typeof restoreResult.uid === 'number' &&
+          restoreResult.uid !== this.preDumpUid
+        ) {
+          throw new T2OrchestratorError('ROLLBACK_DUMP_UID_MISMATCH');
+        }
+        if (
+          restoreResult &&
+          this.preDumpGid != null &&
+          typeof restoreResult.gid === 'number' &&
+          restoreResult.gid !== this.preDumpGid
+        ) {
+          throw new T2OrchestratorError('ROLLBACK_DUMP_GID_MISMATCH');
         }
       }
 
@@ -857,8 +1010,66 @@ export class T2Orchestrator {
         actualDumpSha: dumpPack.sha256,
         expectedDumpMode: this.preDumpMode,
         actualDumpMode: typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null,
+        expectedDumpUid: this.preDumpUid,
+        actualDumpUid: typeof dumpPack.uid === 'number' ? dumpPack.uid : null,
+        expectedDumpGid: this.preDumpGid,
+        actualDumpGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
       },
     );
+  }
+
+  async resolveUnknownProjectedWriteState() {
+    let dumpPack;
+    try {
+      dumpPack = await this.commands.readDump();
+    } catch {
+      this.sideEffects.DUMP_RESTORE_REQUIRED = true;
+      this.sideEffects.DUMP_RESTORE_DECISION = 'ACTIVE_DUMP_UNREADABLE';
+      await this._persistSideEffects();
+      this._log('DUMP_RESTORE_REQUIRED=YES', 'DUMP_RESTORE_DECISION=ACTIVE_DUMP_UNREADABLE');
+      return {
+        restoreRequired: true,
+        decision: 'ACTIVE_DUMP_UNREADABLE',
+        errorCode: 'PROJECTED_DUMP_STATE_UNKNOWN',
+      };
+    }
+
+    const mode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
+    const isExactPre =
+      dumpPack.sha256 === this.preDumpSha &&
+      deepJsonEqual(dumpPack.parsed, this.preDumpParsed) &&
+      mode === this.preDumpMode &&
+      (this.preDumpUid == null || dumpPack.uid === this.preDumpUid) &&
+      (this.preDumpGid == null || dumpPack.gid === this.preDumpGid);
+    const projectedSha = this.expectedProjected?.bytes ? sha256Buffer(this.expectedProjected.bytes) : null;
+    const isExactProjected =
+      projectedSha != null &&
+      dumpPack.sha256 === projectedSha &&
+      mode === REQUIRED_PROJECTED_DUMP_MODE &&
+      !!this.expectedProjected?.projected &&
+      deepJsonEqual(dumpPack.parsed, this.expectedProjected.projected);
+
+    let decision = 'ACTIVE_DUMP_IS_OTHER';
+    let restoreRequired = true;
+    if (isExactPre) {
+      decision = 'ACTIVE_DUMP_IS_EXACT_PRE';
+      restoreRequired = false;
+    } else if (isExactProjected) {
+      decision = 'ACTIVE_DUMP_IS_EXACT_PROJECTED';
+    }
+
+    this.sideEffects.DUMP_RESTORE_REQUIRED = restoreRequired;
+    this.sideEffects.DUMP_RESTORE_DECISION = decision;
+    await this._persistSideEffects();
+    this._log(
+      `DUMP_RESTORE_REQUIRED=${restoreRequired ? 'YES' : 'NO'}`,
+      `DUMP_RESTORE_DECISION=${decision}`,
+    );
+    return {
+      restoreRequired,
+      decision,
+      errorCode: 'PROJECTED_DUMP_STATE_UNKNOWN',
+    };
   }
 
   async runTransaction() {
@@ -868,9 +1079,9 @@ export class T2Orchestrator {
     await this.precheck();
     await this.backup();
     await this.stopExtra();
-    await this.save();
-    await this.hardenDump();
-    await this.postsaveVerify();
+    await this.buildProjection();
+    await this.writeProjectedDump();
+    await this.postwriteVerify();
     await this.healthValidate();
     return this.complete();
   }

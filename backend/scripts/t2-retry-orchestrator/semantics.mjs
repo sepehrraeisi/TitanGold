@@ -816,6 +816,92 @@ export function diffFingerprints(pre, post, { extraPmId }) {
   return { diffs, classified };
 }
 
+/**
+ * Prove POST live state matches PRE live state exactly, except the selected EXTRA
+ * engine may transition online -> stopped. No other stable-config or env drift.
+ * Collector live DB_* must still match the PRE-captured live snapshot exactly.
+ *
+ * @param {ReturnType<typeof semanticFingerprint>} preLiveFp
+ * @param {ReturnType<typeof semanticFingerprint>} postLiveFp
+ * @param {{ retained?: { pm_id?: number }, extra?: { pm_id?: number } }} selection
+ * @param {Record<string,string>} collectorDbSnapshot
+ * @returns {{ ok: boolean, error?: string, details?: Record<string,string> }}
+ */
+export function assertExpectedLivePostState(
+  preLiveFp,
+  postLiveFp,
+  selection,
+  collectorDbSnapshot,
+) {
+  const extraPmId = selection?.extra?.pm_id;
+  const retainedPmId = selection?.retained?.pm_id;
+  if (extraPmId == null || retainedPmId == null) {
+    return { ok: false, error: 'LIVE_POST_STATE_SELECTION_MISSING' };
+  }
+
+  const diff = diffFingerprints(preLiveFp, postLiveFp, { extraPmId });
+  const allowedKinds = diff.classified.filter(
+    (d) => d.kind === 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED',
+  );
+  const unexpected = diff.classified.filter((d) => d.kind !== 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED');
+  if (allowedKinds.length !== 1 || unexpected.length > 0) {
+    return {
+      ok: false,
+      error: 'LIVE_POST_STATE_UNEXPECTED_DRIFT',
+      details: {
+        ALLOWED_EXTRA_STOP_ONLY: allowedKinds.length === 1 ? 'YES' : 'NO',
+        UNEXPECTED_DRIFT_PRESENT: unexpected.length > 0 ? 'YES' : 'NO',
+      },
+    };
+  }
+
+  const retainedPre = (preLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
+  const retainedPost = (postLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
+  const extraPost = (postLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
+  if (!retainedPre || !retainedPost || !extraPost) {
+    return { ok: false, error: 'LIVE_POST_STATE_ENGINE_IDENTITY_MISSING' };
+  }
+  if (retainedPost.status !== 'online') {
+    return { ok: false, error: 'RETAINED_NOT_ONLINE_POSTWRITE' };
+  }
+  if (extraPost.status !== 'stopped') {
+    return { ok: false, error: 'EXTRA_NOT_STOPPED_POSTWRITE' };
+  }
+
+  const liveCollector = (postLiveFp.collectors || [])[0];
+  if (!liveCollector) {
+    return { ok: false, error: 'LIVE_COLLECTOR_MISSING_POSTWRITE' };
+  }
+
+  const expectedCollector = { env_keys: [...COLLECTOR_DB_KEYS] };
+  Object.defineProperty(expectedCollector, '_envValues', {
+    value: collectorDbSnapshot || {},
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  const dbMatch = compareCollectorDbLiveToPersist(expectedCollector, liveCollector);
+  if (!dbMatch.ok) {
+    return { ok: false, error: dbMatch.error || 'COLLECTOR_DB_LIVE_DRIFT', details: dbMatch.matches };
+  }
+
+  return {
+    ok: true,
+    details: {
+      RETAINED_ENGINE_FULL_EQUIVALENCE: 'PASS',
+      EXTRA_ENGINE_STOP_ONLY: 'PASS',
+      BACKEND_FULL_EQUIVALENCE: 'PASS',
+      PROCESSOR_FULL_EQUIVALENCE: 'PASS',
+      COLLECTOR_FULL_EQUIVALENCE: 'PASS',
+      MONITOR_FULL_EQUIVALENCE: 'PASS',
+      OTHER_PROCESS_FULL_EQUIVALENCE: 'PASS',
+      NODE_ENV_FULL_EQUIVALENCE: 'PASS',
+      PATH_MUTATION: '0',
+      ...dbMatch.matches,
+    },
+  };
+}
+
 function classifyDiffs(diffs, { extraPmId }) {
   const out = [];
   for (const d of diffs) {
@@ -877,6 +963,10 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   actualDumpSha,
   expectedDumpMode,
   actualDumpMode,
+  expectedDumpUid,
+  actualDumpUid,
+  expectedDumpGid,
+  actualDumpGid,
 }) {
   if (expectedDumpSha !== actualDumpSha) {
     return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
@@ -895,6 +985,12 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
         actual_mode: actualDumpMode & 0o777,
       },
     };
+  }
+  if (expectedDumpUid != null && actualDumpUid != null && expectedDumpUid !== actualDumpUid) {
+    return { ok: false, error: 'ROLLBACK_DUMP_UID_MISMATCH' };
+  }
+  if (expectedDumpGid != null && actualDumpGid != null && expectedDumpGid !== actualDumpGid) {
+    return { ok: false, error: 'ROLLBACK_DUMP_GID_MISMATCH' };
   }
 
   if ((postLiveFp.engine_online_count || 0) !== 2) {

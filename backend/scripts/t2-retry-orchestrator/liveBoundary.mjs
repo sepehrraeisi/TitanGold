@@ -10,7 +10,11 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { ForbiddenLiveExecutionError } from './commandBoundary.mjs';
+import {
+  ForbiddenLiveExecutionError,
+  GlobalPm2SaveForbiddenError,
+} from './commandBoundary.mjs';
+import { REQUIRED_PROJECTED_DUMP_MODE } from './constants.mjs';
 
 function sha256Buffer(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -70,6 +74,83 @@ export function createLiveBoundary(opts = {}) {
     }
   }
 
+  function getExecIdentity() {
+    return {
+      euid: typeof process.geteuid === 'function' ? process.geteuid() : null,
+      egid: typeof process.getegid === 'function' ? process.getegid() : null,
+      groups: typeof process.getgroups === 'function' ? process.getgroups() : [],
+    };
+  }
+
+  async function inspectWriteOwnershipSafety() {
+    let dumpStat;
+    let parentStat;
+    try {
+      dumpStat = await fsp.stat(dumpPath);
+      parentStat = await fsp.stat(path.dirname(dumpPath));
+    } catch {
+      throw fixedError('PM2_DUMP_READ_FAILED');
+    }
+    const exec = getExecIdentity();
+    const ownerSafe = exec.euid != null && dumpStat.uid === exec.euid;
+    const groupSafe =
+      exec.egid != null &&
+      (dumpStat.gid === exec.egid || (Array.isArray(exec.groups) && exec.groups.includes(dumpStat.gid)));
+    return {
+      dumpUid: dumpStat.uid,
+      dumpGid: dumpStat.gid,
+      dumpMode: dumpStat.mode & 0o777,
+      parentUid: parentStat.uid,
+      parentGid: parentStat.gid,
+      parentMode: parentStat.mode & 0o777,
+      execEuid: exec.euid,
+      execEgid: exec.egid,
+      execGroups: exec.groups,
+      ownerSafe,
+      groupSafe,
+      safe: ownerSafe && groupSafe,
+    };
+  }
+
+  async function createOwnedTempEmpty(tmp, { uid, gid, mode }) {
+    const fh = await fsp.open(tmp, 'w', mode);
+    await fh.close();
+    try {
+      if (typeof uid === 'number' && typeof gid === 'number') {
+        await fsp.chown(tmp, uid, gid);
+      }
+      await fsp.chmod(tmp, mode);
+      const st = await fsp.stat(tmp);
+      if ((st.mode & 0o777) !== mode) {
+        throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
+      }
+      if (typeof uid === 'number' && st.uid !== uid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof gid === 'number' && st.gid !== gid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
+      }
+      return st;
+    } catch (err) {
+      try {
+        await fsp.unlink(tmp);
+      } catch {
+        /* ignore */
+      }
+      throw err.code ? err : fixedError(err.message || 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+    }
+  }
+
+  async function writeBytesAndSync(tmp, bytes) {
+    const fh = await fsp.open(tmp, 'r+');
+    try {
+      await fh.writeFile(bytes);
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  }
+
   return {
     async listLiveProcesses() {
       const result = spawnImpl('pm2', ['jlist'], { encoding: 'utf8', timeout: 60000 });
@@ -99,7 +180,26 @@ export function createLiveBoundary(opts = {}) {
       } catch {
         throw fixedError('PM2_DUMP_PARSE_FAILED');
       }
-      return { bytes, parsed, sha256: sha256Buffer(bytes), mode };
+      return {
+        bytes,
+        parsed,
+        sha256: sha256Buffer(bytes),
+        mode,
+        uid: st.uid,
+        gid: st.gid,
+      };
+    },
+
+    async inspectActiveDumpWriteSafety() {
+      const info = await inspectWriteOwnershipSafety();
+      return {
+        dumpUid: info.dumpUid,
+        dumpGid: info.dumpGid,
+        dumpMode: info.dumpMode,
+        ownerSafe: info.ownerSafe,
+        groupSafe: info.groupSafe,
+        safe: info.safe,
+      };
     },
 
     async writeBackup(bytes, destPath) {
@@ -111,7 +211,7 @@ export function createLiveBoundary(opts = {}) {
     /**
      * Atomic restore using EXACT PRE active-dump mode (never invent 0664).
      * @param {Buffer} backupBytes
-     * @param {{ mode: number }} opts
+     * @param {{ mode: number, uid?: number, gid?: number }} opts
      */
     async restoreDump(backupBytes, opts = {}) {
       if (typeof opts.mode !== 'number' || !Number.isFinite(opts.mode)) {
@@ -120,19 +220,44 @@ export function createLiveBoundary(opts = {}) {
       const mode = opts.mode & 0o777;
       const dir = path.dirname(dumpPath);
       const tmp = path.join(dir, `dump.pm2.t2restore.${process.pid}.${Date.now()}`);
-      const fh = await fsp.open(tmp, 'w', mode);
+      await createOwnedTempEmpty(tmp, {
+        uid: typeof opts.uid === 'number' ? opts.uid : undefined,
+        gid: typeof opts.gid === 'number' ? opts.gid : undefined,
+        mode,
+      });
       try {
-        await fh.writeFile(backupBytes);
-        await fh.sync();
-        await fh.chmod(mode);
-      } finally {
-        await fh.close();
+        await writeBytesAndSync(tmp, backupBytes);
+        const stBeforeRename = await fsp.stat(tmp);
+        if ((stBeforeRename.mode & 0o777) !== mode) {
+          throw fixedError('ROLLBACK_DUMP_MODE_MISMATCH');
+        }
+        if (typeof opts.uid === 'number' && stBeforeRename.uid !== opts.uid) {
+          throw fixedError('RESTORE_OWNER_MISMATCH');
+        }
+        if (typeof opts.gid === 'number' && stBeforeRename.gid !== opts.gid) {
+          throw fixedError('RESTORE_GROUP_MISMATCH');
+        }
+        await fsp.rename(tmp, dumpPath);
+        await fsyncPath(dir);
+      } catch (err) {
+        try {
+          await fsp.unlink(tmp);
+        } catch {
+          /* ignore */
+        }
+        throw err.code ? err : fixedError(err.message || 'RESTORE_DUMP_FAILED');
       }
-      await fsp.rename(tmp, dumpPath);
-      await fsyncPath(dir);
-      // Re-assert exact PRE mode after rename (filesystem may apply umask on create)
-      await fsp.chmod(dumpPath, mode);
-      return { ok: true, mode };
+      const st = await fsp.stat(dumpPath);
+      if ((st.mode & 0o777) !== mode) {
+        throw fixedError('ROLLBACK_DUMP_MODE_MISMATCH');
+      }
+      if (typeof opts.uid === 'number' && st.uid !== opts.uid) {
+        throw fixedError('RESTORE_OWNER_MISMATCH');
+      }
+      if (typeof opts.gid === 'number' && st.gid !== opts.gid) {
+        throw fixedError('RESTORE_GROUP_MISMATCH');
+      }
+      return { ok: true, mode, uid: st.uid, gid: st.gid };
     },
 
     async stopProcessByPmId(pmId) {
@@ -143,13 +268,107 @@ export function createLiveBoundary(opts = {}) {
       return runPm2(['start', String(pmId)]);
     },
 
+    /**
+     * Global pm2 save is forbidden on the v1.5.0 forward/rollback path.
+     */
     async pm2Save() {
-      return runPm2(['save']);
+      throw new GlobalPm2SaveForbiddenError();
     },
 
     /**
-     * Harden ONLY the already-resolved active dump path (never arbitrary caller paths).
-     * Returns mode only — never dump contents.
+     * Atomic projected dump write — mode 0600 from first byte; never 0664 intermediate.
+     * Targets ONLY the resolved active dump path.
+     * @param {Buffer} projectedBytes
+     * @param {{ expectedUid?: number, expectedGid?: number, expectedSha256?: string }} [opts]
+     */
+    async writeProjectedActiveDump(projectedBytes, opts = {}) {
+      if (!Buffer.isBuffer(projectedBytes)) {
+        throw fixedError('PROJECTED_BYTES_INVALID');
+      }
+      let preSt;
+      try {
+        preSt = await fsp.stat(dumpPath);
+      } catch {
+        throw fixedError('PM2_DUMP_READ_FAILED');
+      }
+      if (typeof opts.expectedUid === 'number' && preSt.uid !== opts.expectedUid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof opts.expectedGid === 'number' && preSt.gid !== opts.expectedGid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
+      }
+      const execSafety = await inspectWriteOwnershipSafety();
+      if (!execSafety.safe) {
+        throw fixedError('DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+      }
+
+      const dir = path.dirname(dumpPath);
+      const tmp = path.join(dir, `dump.pm2.t2proj.${process.pid}.${Date.now()}`);
+      const targetMode = REQUIRED_PROJECTED_DUMP_MODE;
+      await createOwnedTempEmpty(tmp, {
+        uid: typeof opts.expectedUid === 'number' ? opts.expectedUid : undefined,
+        gid: typeof opts.expectedGid === 'number' ? opts.expectedGid : undefined,
+        mode: targetMode,
+      });
+      try {
+        await writeBytesAndSync(tmp, projectedBytes);
+        const tmpSt = await fsp.stat(tmp);
+        if ((tmpSt.mode & 0o777) !== targetMode) {
+          throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
+        }
+        if (typeof opts.expectedUid === 'number' && tmpSt.uid !== opts.expectedUid) {
+          throw fixedError('DUMP_OWNER_MISMATCH');
+        }
+        if (typeof opts.expectedGid === 'number' && tmpSt.gid !== opts.expectedGid) {
+          throw fixedError('DUMP_GROUP_MISMATCH');
+        }
+        await fsp.rename(tmp, dumpPath);
+        await fsyncPath(dir);
+      } catch (err) {
+        try {
+          await fsp.unlink(tmp);
+        } catch {
+          /* ignore */
+        }
+        throw err.code ? err : fixedError(err.message || 'PROJECTED_DUMP_WRITE_FAILED');
+      }
+
+      const st = await fsp.stat(dumpPath);
+      const mode = st.mode & 0o777;
+      if (mode !== targetMode) {
+        throw fixedError('PROJECTED_DUMP_MODE_NOT_0600');
+      }
+      if (typeof opts.expectedUid === 'number' && st.uid !== opts.expectedUid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof opts.expectedGid === 'number' && st.gid !== opts.expectedGid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
+      }
+      const bytes = await fsp.readFile(dumpPath);
+      const sha = sha256Buffer(bytes);
+      if (opts.expectedSha256 && sha !== opts.expectedSha256) {
+        throw fixedError('PROJECTED_DUMP_READBACK_MISMATCH');
+      }
+      try {
+        JSON.parse(bytes.toString('utf8'));
+      } catch {
+        throw fixedError('PROJECTED_DUMP_PARSE_FAILED');
+      }
+
+      return {
+        mode,
+        sha256: sha,
+        uid: st.uid,
+        gid: st.gid,
+        ownerPreserved:
+          typeof opts.expectedUid !== 'number' ? true : st.uid === opts.expectedUid,
+        groupPreserved:
+          typeof opts.expectedGid !== 'number' ? true : st.gid === opts.expectedGid,
+      };
+    },
+
+    /**
+     * Legacy harden — not used by v1.5 forward path.
      * @param {number} [mode]
      */
     async hardenActiveDumpMode(mode = 0o600) {
