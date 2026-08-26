@@ -1,18 +1,24 @@
 /**
- * Pure projected-dump construction for T2 v1.6.0.
+ * Pure projected-dump construction for T2 v1.6.1.
  * Base = exact sanitized PRE dump clone.
- * ALREADY_PRESENT_EXACT: only engine extra online→stopped; DB_* preserved (not recopied from live).
+ * ALREADY_PRESENT_EXACT: only engine status online→stopped; DB_* preserved.
+ * Mapping modes: UNIQUE_SEMANTIC_IDENTITY | SYMMETRIC_EQUIVALENT_SLOTS.
  */
 
 import {
   COLLECTOR_DB_KEYS,
   COLLECTOR_NAME,
+  DUMP_ENGINE_MAPPING_MODE,
   ENGINE_NAME,
   EXPECTED_COLLECTOR_DB_USER,
   PM2_METADATA_KEYS,
   REQUIRED_PROJECTED_DUMP_MODE,
   STABLE_CONFIG_FIELDS,
 } from './constants.mjs';
+import {
+  assertSymmetricProjectedDumpResurrectCompatibility,
+  compareDumpEngineResurrectSemantics,
+} from './resurrectSemantics.mjs';
 import { diffStableConfig, extractProcessEnvResult, normalizeProcess } from './semantics.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
@@ -190,9 +196,15 @@ export function dumpRecordStableKey(procLike) {
 }
 
 /**
- * Map dump engine records to live retain/extra without relying on dump pm_id.
+ * Map dump engine records for projection.
+ *
+ * MODE A UNIQUE_SEMANTIC_IDENTITY: exactly one dump↔live retain/extra assignment.
+ * MODE B SYMMETRIC_EQUIVALENT_SLOTS: unique impossible AND two dump engines are
+ *   fully resurrect-equivalent; stopped slot = higher array index (deterministic
+ *   output choice only — NOT identity evidence). No dump↔live pm_id claim.
+ *
  * @param {Array} preDump
- * @param {{ retained: object, extra: object }} selection live-normalized processes
+ * @param {{ retained: object, extra: object, liveEnginePairMode?: string }} selection
  */
 export function resolveDumpEngineIdentities(preDump, selection) {
   if (!Array.isArray(preDump) || !selection?.retained || !selection?.extra) {
@@ -251,25 +263,73 @@ export function resolveDumpEngineIdentities(preDump, selection) {
   }
   const bestScore = Math.max(...assignments.map((a) => a.strictScore));
   const best = assignments.filter((a) => a.strictScore === bestScore);
-  if (best.length !== 1) {
+
+  // MODE A — unique semantic identity
+  if (best.length === 1) {
+    return {
+      ok: true,
+      mappingMode: DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+      DUMP_ENGINE_MAPPING_MODE: DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+      persistedIdentityClaim: 'UNIQUE_DUMP_LIVE_BINDING',
+      PERSISTED_SLOT_IDENTITY_CLAIM: 'UNIQUE_DUMP_LIVE_BINDING',
+      retainedDumpIndex: best[0].retainedDumpIndex,
+      extraDumpIndex: best[0].extraDumpIndex,
+      retainedLivePmId:
+        typeof selection.retained.pm_id === 'number' ? selection.retained.pm_id : null,
+      extraLivePmId: typeof selection.extra.pm_id === 'number' ? selection.extra.pm_id : null,
+      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'N/A',
+    };
+  }
+
+  // MODE B — symmetric equivalent slots (only when unique mapping impossible)
+  const bothOnline = dumpEngines.every(({ entry }) => String(entry.status) === 'online');
+  if (!bothOnline) {
     return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
   }
 
-  const retainedMap = {
-    dumpIndex: best[0].retainedDumpIndex,
-    livePmId: typeof selection.retained.pm_id === 'number' ? selection.retained.pm_id : null,
-  };
-  const extraMap = {
-    dumpIndex: best[0].extraDumpIndex,
-    livePmId: typeof selection.extra.pm_id === 'number' ? selection.extra.pm_id : null,
-  };
+  // Both dump records must independently match the live engine semantic class
+  // (pair is runtime-equivalent ⇒ either live is fine as the class reference).
+  const classLive = selection.retained;
+  for (const { entry } of dumpEngines) {
+    const cfg = stableConfigEqual(entry, classLive);
+    const envCmp = appEnvIdentityCompare(entry, classLive);
+    if (!cfg.ok || !envCmp.ok) {
+      return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+    }
+  }
+
+  const resurrectCmp = compareDumpEngineResurrectSemantics(
+    dumpEngines[0].entry,
+    dumpEngines[1].entry,
+  );
+  if (!resurrectCmp.ok) {
+    return {
+      ok: false,
+      error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED',
+      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
+      mismatchCategories: resurrectCmp.mismatchCategories,
+    };
+  }
+
+  // Deterministic output-slot choice only — NOT identity evidence.
+  const indexes = dumpEngines.map((d) => d.index).sort((x, y) => x - y);
+  const retainedDumpIndex = indexes[0];
+  const extraDumpIndex = indexes[1]; // higher array index → stopped slot
 
   return {
     ok: true,
-    retainedDumpIndex: retainedMap.dumpIndex,
-    extraDumpIndex: extraMap.dumpIndex,
-    retainedLivePmId: retainedMap.livePmId,
-    extraLivePmId: extraMap.livePmId,
+    mappingMode: DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS,
+    DUMP_ENGINE_MAPPING_MODE: DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS,
+    persistedIdentityClaim: 'NONE',
+    PERSISTED_SLOT_IDENTITY_CLAIM: 'NONE',
+    retainedDumpIndex,
+    extraDumpIndex,
+    // Explicitly no dump↔live pm_id identity claim in symmetric mode
+    retainedLivePmId: null,
+    extraLivePmId: null,
+    DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'PASS',
+    SYMMETRIC_SLOT_SELECTION: 'HIGHER_ARRAY_INDEX_STOPPED',
+    PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
   };
 }
 
@@ -439,20 +499,42 @@ export function buildExpectedProjectedDump({
 
   const bytes = Buffer.from(JSON.stringify(projected), 'utf8');
 
+  /** @type {Record<string, string|number>} */
+  const manifest = {
+    ENGINE_EXTRA_STATUS_CHANGED: 'YES',
+    COLLECTOR_DB_KEYS_ADDED: 0,
+    COLLECTOR_DB_KEYS_PRESERVED_EXACT: 5,
+    COLLECTOR_DB_KEYS_REWRITTEN: 0,
+    AUTHORIZED_SEMANTIC_DIFF_COUNT: 1,
+    PROJECTED_MODE_REQUIRED: '0600',
+    AUTHORIZED_DIFF_PATH_COUNT: 1,
+    DUMP_ENGINE_MAPPING_MODE: engineMap.mappingMode || DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+    PERSISTED_SLOT_IDENTITY_CLAIM: engineMap.PERSISTED_SLOT_IDENTITY_CLAIM || 'UNIQUE_DUMP_LIVE_BINDING',
+  };
+
+  if (engineMap.mappingMode === DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS) {
+    const compat = assertSymmetricProjectedDumpResurrectCompatibility({
+      projected,
+      engineIndexes: [engineMap.retainedDumpIndex, engineMap.extraDumpIndex],
+    });
+    if (!compat.ok) {
+      return {
+        ok: false,
+        error: 'SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY_FAIL',
+      };
+    }
+    manifest.SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY = 'PASS';
+    manifest.DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE = 'PASS';
+    manifest.PM_ID_USED_AS_PERSISTED_IDENTITY = 'NO';
+  }
+
   return {
     ok: true,
     projected,
     bytes,
     engineMap,
     collectorMap,
-    manifest: {
-      ENGINE_EXTRA_STATUS_CHANGED: 'YES',
-      COLLECTOR_DB_KEYS_ADDED: 0,
-      COLLECTOR_DB_KEYS_PRESERVED_EXACT: 5,
-      AUTHORIZED_SEMANTIC_DIFF_COUNT: 1,
-      PROJECTED_MODE_REQUIRED: '0600',
-      AUTHORIZED_DIFF_PATH_COUNT: 1,
-    },
+    manifest,
   };
 }
 

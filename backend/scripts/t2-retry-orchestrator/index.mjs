@@ -13,6 +13,9 @@ export {
   FORBIDDEN_DIFF_KINDS,
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_6_0,
+  DUMP_ENGINE_MAPPING_MODE,
+  LIVE_ENGINE_PAIR_MODE,
   REQUIRED_POST_SAVE_DUMP_MODE,
   REQUIRED_PROJECTED_DUMP_MODE,
   SESSION_IDE_ENV_KEYS,
@@ -62,6 +65,13 @@ export {
   resolveDumpEnvMutationTarget,
   structuralDiffPaths,
 } from './projection.mjs';
+
+export {
+  assertSymmetricProjectedDumpResurrectCompatibility,
+  compareDumpEngineResurrectSemantics,
+  RESURRECT_IGNORED_FIELDS,
+  RESURRECT_TOP_LEVEL_FIELDS,
+} from './resurrectSemantics.mjs';
 
 export { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
 

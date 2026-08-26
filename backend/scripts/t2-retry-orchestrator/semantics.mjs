@@ -554,7 +554,10 @@ export function resolveCanonicalPathConsensus(fp) {
 }
 
 /**
- * Engine-pair selection with NARROW PATH exception (selection-only).
+ * Engine-pair selection:
+ * - UNIQUE_CANONICAL_PATH when PATH differs and exactly one matches backend/processor consensus
+ * - SYMMETRIC_RUNTIME_EQUIVALENT when both PATH-equal to consensus + full semantic equality
+ *   (pm_id tie-break is LIVE runtime targeting only — never persisted identity)
  * PRE→POST / rollback / non-engine env gates remain full-strict via diffProcessEnv.
  */
 export function selectEngineRetainExtra(fp) {
@@ -565,31 +568,22 @@ export function selectEngineRetainExtra(fp) {
       error: `ENGINE_ONLINE_COUNT_EXPECTED_2_GOT_${online.length}`,
     };
   }
-  const [a, b] = [...online].sort((x, y) => x.pm_id - y.pm_id);
 
-  const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
-  if (configDiffs.length > 0) {
-    return {
-      ok: false,
-      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: configDiffs.map((d) => d.kind),
-    };
+  const pmIds = online.map((e) => e.pm_id);
+  if (pmIds.some((id) => id == null || id === '')) {
+    return { ok: false, error: 'ENGINE_PM_ID_INVALID' };
+  }
+  const numericIds = pmIds.map((id) =>
+    typeof id === 'number' ? id : Number(id),
+  );
+  if (numericIds.some((id) => !Number.isFinite(id))) {
+    return { ok: false, error: 'ENGINE_PM_ID_INVALID' };
+  }
+  if (new Set(numericIds).size !== 2) {
+    return { ok: false, error: 'ENGINE_PM_ID_DUPLICATE' };
   }
 
-  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
-  const pathOnlyValueDiff =
-    envDiffs.length > 0 &&
-    envDiffs.every(
-      (d) => d.kind === 'ENV_VALUE_CHANGED' && d.detail?.key === 'PATH' && d.detail?.category === 'value-changed',
-    );
-
-  if (envDiffs.length > 0 && !pathOnlyValueDiff) {
-    return {
-      ok: false,
-      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: envDiffs.map((d) => d.kind),
-    };
-  }
+  const [a, b] = [...online].sort((x, y) => Number(x.pm_id) - Number(y.pm_id));
 
   const pathA = readPathInternal(a);
   const pathB = readPathInternal(b);
@@ -599,13 +593,46 @@ export function selectEngineRetainExtra(fp) {
   const evidence = {
     ENGINE_PATH_EQUAL: pathEqual ? 'YES' : 'NO',
     ENGINE_PATH_EXCEPTION_USED: 'NO',
+    PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+    PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
   };
 
-  // Identical PATH (or both absent as equal non-present handled above via key diffs):
-  // retain lowest pm_id among fully equivalent workers.
+  const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
+  if (configDiffs.length > 0) {
+    return {
+      ok: false,
+      error: pathEqual
+        ? 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL'
+        : 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: configDiffs.map((d) => d.kind),
+      evidence,
+    };
+  }
+
+  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
+  const pathOnlyValueDiff =
+    envDiffs.length > 0 &&
+    envDiffs.every(
+      (d) =>
+        d.kind === 'ENV_VALUE_CHANGED' &&
+        d.detail?.key === 'PATH' &&
+        d.detail?.category === 'value-changed',
+    );
+
+  if (envDiffs.length > 0 && !pathOnlyValueDiff) {
+    return {
+      ok: false,
+      error: pathEqual
+        ? 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL'
+        : 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: envDiffs.map((d) => d.kind),
+      evidence,
+    };
+  }
+
+  // Equal PATH + full stable config + full application env (incl PATH) + same NODE_ENV
   if (!pathOnlyValueDiff) {
-    if (!pathEqual && (pathA.present || pathB.present)) {
-      // One missing PATH key should already have failed via envDiffs; fail closed.
+    if (!pathEqual) {
       return {
         ok: false,
         error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
@@ -613,16 +640,57 @@ export function selectEngineRetainExtra(fp) {
         evidence,
       };
     }
+
+    const consensus = resolveCanonicalPathConsensus(fp);
+    if (!consensus.ok) {
+      return {
+        ok: false,
+        error: consensus.error || 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+        evidence,
+      };
+    }
+    const aMatches = pathA.value === consensus._canonicalPath;
+    const bMatches = pathB.value === consensus._canonicalPath;
+    if (!aMatches || !bMatches) {
+      return {
+        ok: false,
+        error: 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+        evidence: {
+          ...evidence,
+          ENGINE_PATH_EQUAL: 'YES',
+          CANONICAL_PATH_REFERENCE: consensus.reference,
+        },
+      };
+    }
+
+    const nodeA = a.NODE_ENV ?? a._envValues?.NODE_ENV;
+    const nodeB = b.NODE_ENV ?? b._envValues?.NODE_ENV;
+    if (String(nodeA ?? '') !== String(nodeB ?? '')) {
+      return {
+        ok: false,
+        error: 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL',
+        detailKinds: ['NODE_ENV_MISMATCH'],
+        evidence,
+      };
+    }
+
     return {
       ok: true,
       retained: a,
       extra: b,
-      selection_rule: 'lowest_pm_id_among_fully_equivalent_online_workers',
+      liveEnginePairMode: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+      selection_rule: 'symmetric_runtime_equivalent_lower_pm_id_retain',
       unique_responsibility_proven: false,
       evidence: {
         ...evidence,
         ENGINE_PATH_EQUAL: 'YES',
         ENGINE_PATH_EXCEPTION_USED: 'NO',
+        LIVE_ENGINE_PAIR_MODE: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+        PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'YES',
+        PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
+        CANONICAL_PATH_REFERENCE: consensus.reference,
+        RETAINED_PATH_MATCH_CANONICAL: 'YES',
+        EXTRA_PATH_MATCH_CANONICAL: 'YES',
       },
     };
   }
@@ -651,6 +719,8 @@ export function selectEngineRetainExtra(fp) {
         ENGINE_PATH_EQUAL: 'NO',
         ENGINE_PATH_EXCEPTION_USED: 'YES',
         CANONICAL_PATH_REFERENCE: consensus.reference,
+        PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+        PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
       },
     };
   }
@@ -662,14 +732,18 @@ export function selectEngineRetainExtra(fp) {
     ok: true,
     retained,
     extra,
+    liveEnginePairMode: 'UNIQUE_CANONICAL_PATH',
     selection_rule: 'canonical_path_match_among_path_exception_equivalent_workers',
     unique_responsibility_proven: false,
     evidence: {
       ENGINE_PATH_EQUAL: 'NO',
       ENGINE_PATH_EXCEPTION_USED: 'YES',
+      LIVE_ENGINE_PAIR_MODE: 'UNIQUE_CANONICAL_PATH',
       CANONICAL_PATH_REFERENCE: consensus.reference,
       RETAINED_PATH_MATCH_CANONICAL: 'YES',
       EXTRA_PATH_MATCH_CANONICAL: 'NO',
+      PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+      PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
     },
   };
 }
