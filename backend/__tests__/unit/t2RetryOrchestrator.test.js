@@ -49,6 +49,13 @@ import {
   structuralDiffPaths,
   compareDumpEngineResurrectSemantics,
   assertSymmetricProjectedDumpResurrectCompatibility,
+  assertZeroUnclassifiedPersistedFields,
+  compareEnginePm2Semantics,
+  deepStableSerialize,
+  deepStructuralEqual,
+  PM2_FIELD_CLASSIFICATION,
+  PROVEN_REGENERATED_OR_VOLATILE,
+  CANONICAL_COMPARE_FIELDS,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 const SECRET_PASSWORD = 'super-secret-db-password-NEVER-IN-EVIDENCE';
@@ -2810,5 +2817,333 @@ describe('T2 v1.6.1 engine identity symmetry', () => {
     await expect(runToWrite(orch)).rejects.toBeTruthy();
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(pm2SaveCount(commands)).toBe(0);
+  });
+});
+
+describe('T2 v1.6.1 final full-semantics audit', () => {
+  function equalize(world) {
+    world.live[0].env.PATH = '/usr/bin';
+    world.live[1].env.PATH = '/usr/bin';
+  }
+
+  it('equal PATH/env but max_memory_restart differs => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].max_memory_restart = '1G';
+    world.live[1].max_memory_restart = '2G';
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL');
+  });
+
+  it('kill_timeout differs => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].kill_timeout = 1600;
+    world.live[1].kill_timeout = 3000;
+    expect(selectEngineRetainExtra(semanticFingerprint(world.live)).ok).toBe(false);
+  });
+
+  it('username differs => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].username = 'ubuntu';
+    world.live[1].username = 'other';
+    expect(selectEngineRetainExtra(semanticFingerprint(world.live)).ok).toBe(false);
+  });
+
+  it('restart/backoff option differs => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].exp_backoff_restart_delay = 100;
+    world.live[1].exp_backoff_restart_delay = 200;
+    expect(selectEngineRetainExtra(semanticFingerprint(world.live)).ok).toBe(false);
+  });
+
+  it('object-valued watch_options differs => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].watch_options = { a: 1 };
+    world.live[1].watch_options = { a: 2 };
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL');
+  });
+
+  it('deepStableSerialize distinguishes object field values', () => {
+    expect(deepStructuralEqual({ a: 1 }, { a: 2 })).toBe(false);
+    expect(deepStableSerialize({ a: 1 })).not.toBe(deepStableSerialize({ a: 2 }));
+    expect(deepStableSerialize({ a: 1 })).not.toContain('[object Object]');
+  });
+
+  it('fully equal complete config => PASS with LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    for (const e of world.live.filter((x) => x.name === 'titan-engine-worker')) {
+      e.max_memory_restart = '1G';
+      e.kill_timeout = 1600;
+      e.username = 'ubuntu';
+      e.watch_options = { ignoreInitial: true };
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(true);
+    expect(sel.evidence.LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE).toBe('PASS');
+  });
+
+  it('username difference on dump => FAIL', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      username: 'ubuntu',
+      env: { PATH: '/usr/bin' },
+    };
+    const b = { ...deepClone(a), username: 'root' };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(false);
+  });
+
+  it('kill_retry_time difference => FAIL', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      kill_retry_time: 100,
+      env: { PATH: '/usr/bin' },
+    };
+    const b = { ...deepClone(a), kill_retry_time: 200 };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(false);
+  });
+
+  it('NODE_APP_INSTANCE difference => FAIL (COMPARE)', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      NODE_APP_INSTANCE: 0,
+      env: { PATH: '/usr/bin' },
+    };
+    const b = { ...deepClone(a), NODE_APP_INSTANCE: 1 };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(false);
+  });
+
+  it('unknown persisted scalar field => DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      totally_unknown_pm2_field_xyz: '1',
+      env: { PATH: '/usr/bin' },
+    };
+    const b = deepClone(a);
+    b.totally_unknown_pm2_field_xyz = '2';
+    const cmp = compareDumpEngineResurrectSemantics(a, b);
+    expect(cmp.ok).toBe(false);
+    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.unclassifiedFields).toContain('totally_unknown_pm2_field_xyz');
+  });
+
+  it('unknown persisted object field => FAIL CLOSED', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      weird_unknown_cfg: { a: 1 },
+      env: { PATH: '/usr/bin' },
+    };
+    const b = deepClone(a);
+    b.weird_unknown_cfg = { a: 2 };
+    const cmp = compareDumpEngineResurrectSemantics(a, b);
+    expect(cmp.ok).toBe(false);
+    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+  });
+
+  it('zero unclassified fields in sanitized production-shape fixture', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    for (const e of dump.filter((x) => x.name === 'titan-engine-worker')) {
+      const proof = assertZeroUnclassifiedPersistedFields(e);
+      expect(proof.ok).toBe(true);
+      expect(proof.UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT).toBe(0);
+    }
+  });
+
+  it('dump slots mutually equal but max_memory_restart differs from live => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].max_memory_restart = '1G';
+    world.live[1].max_memory_restart = '1G';
+    const dump = prepareDumpFromLive(world.live);
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') {
+        e.env.PATH = '/usr/bin';
+        e.max_memory_restart = '2G';
+      }
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(true);
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(false);
+    expect(engines.error).toBe('DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MISMATCH');
+  });
+
+  it('dump slots equal but username differs from live class => FAIL', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    world.live[0].username = 'ubuntu';
+    world.live[1].username = 'ubuntu';
+    const dump = prepareDumpFromLive(world.live);
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') {
+        e.env.PATH = '/usr/bin';
+        e.username = 'root';
+      }
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(false);
+    expect(engines.error).toBe('DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MISMATCH');
+  });
+
+  it('complete dump↔live class match => PASS', () => {
+    const world = makeLiveAndDump();
+    equalize(world);
+    for (const e of world.live.filter((x) => x.name === 'titan-engine-worker')) {
+      e.username = 'ubuntu';
+      e.max_memory_restart = '1G';
+    }
+    const dump = prepareDumpFromLive(world.live);
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') e.env.PATH = '/usr/bin';
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(true);
+    expect(engines.DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MATCH).toBe('PASS');
+    expect(engines.DUMP_SLOT_0_MATCHES_LIVE_ENGINE_CLASS).toBe('PASS');
+    expect(engines.DUMP_SLOT_1_MATCHES_LIVE_ENGINE_CLASS).toBe('PASS');
+  });
+
+  it('PATH uniquely maps but kill_timeout mismatches => FAIL', () => {
+    const world = makeLiveAndDump();
+    // default PATH differs (unique mode)
+    world.live[0].kill_timeout = 1600;
+    world.live[1].kill_timeout = 1600;
+    const dump = prepareDumpFromLive(world.live);
+    const eng = dump.filter((e) => e.name === 'titan-engine-worker');
+    // Match PATH to unique mapping but diverge kill_timeout on one dump record
+    eng[0].kill_timeout = 9999;
+    eng[1].kill_timeout = 1600;
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.liveEnginePairMode).toBe('UNIQUE_CANONICAL_PATH');
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(false);
+  });
+
+  it('complete semantic unique mapping => PASS', () => {
+    const world = makeLiveAndDump();
+    for (const e of world.live.filter((x) => x.name === 'titan-engine-worker')) {
+      e.kill_timeout = 1600;
+      e.username = 'ubuntu';
+    }
+    const dump = prepareDumpFromLive(world.live);
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(true);
+    expect(engines.mappingMode).toBe(DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY);
+    expect(engines.DUMP_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE).toBe('PASS');
+  });
+
+  it('postwrite retained kill_timeout drift => rollback', async () => {
+    const { orch, commands } = buildOrch({
+      mutateLive: (live) => {
+        live[0].env.PATH = '/usr/bin';
+        live[1].env.PATH = '/usr/bin';
+        live[0].kill_timeout = 1600;
+        live[1].kill_timeout = 1600;
+      },
+    });
+    // Hook listLiveProcesses after stop to drift retained config
+    const origList = commands.listLiveProcesses.bind(commands);
+    let calls = 0;
+    commands.listLiveProcesses = async () => {
+      const list = await origList();
+      calls += 1;
+      // After engine stop applied, mutate retained kill_timeout during postwrite reads
+      if (orch.state === 'PROJECTION_WRITTEN' || orch.state === 'POSTWRITE_VERIFIED') {
+        const retained = list.find((e) => e.name === 'titan-engine-worker' && e.status === 'online');
+        if (retained) retained.kill_timeout = 9999;
+      }
+      return list;
+    };
+    await expect(orch.runTransaction()).rejects.toBeTruthy();
+    expect([State.ROLLED_BACK, State.FAIL_FORWARD_COMPLETE]).toContain(orch.state);
+    expect(pm2SaveCount(commands)).toBe(0);
+    void calls;
+  });
+
+  it('rollback PRE-equivalence fails closed on hidden Engine config drift', async () => {
+    const { orch, commands } = buildOrch({
+      mutateLive: (live) => {
+        live[0].env.PATH = '/usr/bin';
+        live[1].env.PATH = '/usr/bin';
+        live[0].max_memory_restart = '1G';
+        live[1].max_memory_restart = '1G';
+      },
+      forceReadbackMismatch: true,
+    });
+    const origRestore = commands.restoreDump.bind(commands);
+    commands.restoreDump = async (...args) => {
+      const r = await origRestore(...args);
+      const w = commands.world();
+      const eng = w.liveEntries.find((e) => e.name === 'titan-engine-worker' && e.pm_id === 5);
+      if (eng) eng.max_memory_restart = 'CORRUPTED';
+      return r;
+    };
+    await expect(runToWrite(orch)).rejects.toBeTruthy();
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+    expect(pm2SaveCount(commands)).toBe(0);
+  });
+
+  it('volatile proven field difference => PASS', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      created_at: 1,
+      restart_time: 1,
+      unique_id: 'aaa',
+      env: { PATH: '/usr/bin' },
+    };
+    const b = {
+      ...deepClone(a),
+      created_at: 999,
+      restart_time: 50,
+      unique_id: 'bbb',
+      pid: 12345,
+    };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(true);
+  });
+
+  it('PM2 field classification complete; UNCLASSIFIED count 0', () => {
+    expect(PM2_FIELD_CLASSIFICATION.length).toBeGreaterThan(10);
+    for (const row of PM2_FIELD_CLASSIFICATION) {
+      expect(['COMPARE', 'REGENERATED_VOLATILE']).toContain(row.class);
+      expect(row.component).toBeTruthy();
+    }
+    expect(PROVEN_REGENERATED_OR_VOLATILE).toContain('pm_id');
+    expect(CANONICAL_COMPARE_FIELDS).toContain('kill_retry_time');
+    expect(CANONICAL_COMPARE_FIELDS).toContain('username');
   });
 });

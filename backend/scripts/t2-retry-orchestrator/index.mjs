@@ -68,10 +68,22 @@ export {
 
 export {
   assertSymmetricProjectedDumpResurrectCompatibility,
+  assertZeroUnclassifiedPersistedFields,
   compareDumpEngineResurrectSemantics,
   RESURRECT_IGNORED_FIELDS,
   RESURRECT_TOP_LEVEL_FIELDS,
 } from './resurrectSemantics.mjs';
+
+export {
+  CANONICAL_COMPARE_FIELDS,
+  PM2_FIELD_CLASSIFICATION,
+  PROVEN_REGENERATED_OR_VOLATILE,
+  buildEnginePm2SemanticSignature,
+  compareEnginePm2Semantics,
+  deepStableSerialize,
+  deepStructuralEqual,
+  resolveRawPm2Entry,
+} from './pm2SemanticModel.mjs';
 
 export { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
 

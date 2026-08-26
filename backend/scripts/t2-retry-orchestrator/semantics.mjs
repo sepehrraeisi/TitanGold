@@ -17,6 +17,10 @@ import {
   STABLE_CONFIG_FIELDS,
   SUPPORTED_ENV_SHAPES,
 } from './constants.mjs';
+import {
+  compareEnginePm2Semantics,
+  resolveRawPm2Entry,
+} from './pm2SemanticModel.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
 
@@ -246,6 +250,12 @@ export function normalizeProcess(entry = {}) {
     writable: false,
     configurable: false,
   });
+  Object.defineProperty(proc, '_rawEntry', {
+    value: entry,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
 
   return proc;
 }
@@ -257,6 +267,14 @@ function attachEnv(target, src) {
     writable: false,
     configurable: false,
   });
+  if (src._rawEntry) {
+    Object.defineProperty(target, '_rawEntry', {
+      value: src._rawEntry,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
   return target;
 }
 
@@ -597,18 +615,6 @@ export function selectEngineRetainExtra(fp) {
     PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
   };
 
-  const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
-  if (configDiffs.length > 0) {
-    return {
-      ok: false,
-      error: pathEqual
-        ? 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL'
-        : 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: configDiffs.map((d) => d.kind),
-      evidence,
-    };
-  }
-
   const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
   const pathOnlyValueDiff =
     envDiffs.length > 0 &&
@@ -619,24 +625,47 @@ export function selectEngineRetainExtra(fp) {
         d.detail?.category === 'value-changed',
     );
 
-  if (envDiffs.length > 0 && !pathOnlyValueDiff) {
-    return {
-      ok: false,
-      error: pathEqual
-        ? 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL'
-        : 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: envDiffs.map((d) => d.kind),
-      evidence,
-    };
-  }
+  const rawA = resolveRawPm2Entry(a);
+  const rawB = resolveRawPm2Entry(b);
 
-  // Equal PATH + full stable config + full application env (incl PATH) + same NODE_ENV
+  /** Full PM2 semantic compare; optionally neutralize PATH for unique-PATH exception. */
+  const fullCompare = (ignorePath) => {
+    if (!ignorePath) {
+      return compareEnginePm2Semantics(rawA, rawB, { requireClassified: true });
+    }
+    const a2 = JSON.parse(JSON.stringify(rawA));
+    const b2 = JSON.parse(JSON.stringify(rawB));
+    const neutralize = (entry) => {
+      if (entry && entry.env && typeof entry.env === 'object') {
+        entry.env.PATH = '__PATH_NEUTRAL__';
+      } else if (entry) {
+        entry.PATH = '__PATH_NEUTRAL__';
+      }
+    };
+    neutralize(a2);
+    neutralize(b2);
+    return compareEnginePm2Semantics(a2, b2, { requireClassified: true });
+  };
+
+  // Equal PATH path — require complete PM2 semantic signature equality.
   if (!pathOnlyValueDiff) {
     if (!pathEqual) {
+      // Non-PATH inequality without path-only classification
+      const full = fullCompare(false);
       return {
         ok: false,
         error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-        detailKinds: ['ENV_VALUE_CHANGED'],
+        detailKinds: full.mismatchCategories || envDiffs.map((d) => d.kind),
+        evidence,
+      };
+    }
+
+    const full = fullCompare(false);
+    if (!full.ok) {
+      return {
+        ok: false,
+        error: 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL',
+        detailKinds: full.mismatchCategories || [full.error],
         evidence,
       };
     }
@@ -663,17 +692,6 @@ export function selectEngineRetainExtra(fp) {
       };
     }
 
-    const nodeA = a.NODE_ENV ?? a._envValues?.NODE_ENV;
-    const nodeB = b.NODE_ENV ?? b._envValues?.NODE_ENV;
-    if (String(nodeA ?? '') !== String(nodeB ?? '')) {
-      return {
-        ok: false,
-        error: 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL',
-        detailKinds: ['NODE_ENV_MISMATCH'],
-        evidence,
-      };
-    }
-
     return {
       ok: true,
       retained: a,
@@ -686,6 +704,7 @@ export function selectEngineRetainExtra(fp) {
         ENGINE_PATH_EQUAL: 'YES',
         ENGINE_PATH_EXCEPTION_USED: 'NO',
         LIVE_ENGINE_PAIR_MODE: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+        LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
         PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'YES',
         PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
         CANONICAL_PATH_REFERENCE: consensus.reference,
@@ -695,7 +714,20 @@ export function selectEngineRetainExtra(fp) {
     };
   }
 
-  // PATH is the only permitted engine-to-engine inequality — resolve canonical retain.
+  // PATH is the only permitted engine-to-engine inequality — full semantics otherwise equal.
+  const fullSansPath = fullCompare(true);
+  if (!fullSansPath.ok) {
+    return {
+      ok: false,
+      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: fullSansPath.mismatchCategories || [fullSansPath.error],
+      evidence: {
+        ...evidence,
+        ENGINE_PATH_EXCEPTION_USED: 'YES',
+      },
+    };
+  }
+
   const consensus = resolveCanonicalPathConsensus(fp);
   if (!consensus.ok) {
     return {
@@ -739,6 +771,7 @@ export function selectEngineRetainExtra(fp) {
       ENGINE_PATH_EQUAL: 'NO',
       ENGINE_PATH_EXCEPTION_USED: 'YES',
       LIVE_ENGINE_PAIR_MODE: 'UNIQUE_CANONICAL_PATH',
+      LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
       CANONICAL_PATH_REFERENCE: consensus.reference,
       RETAINED_PATH_MATCH_CANONICAL: 'YES',
       EXTRA_PATH_MATCH_CANONICAL: 'NO',
@@ -757,6 +790,28 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
   if (!skipStatus && pre.status !== post.status) {
     diffs.push({ kind: 'STATUS_CHANGE', detail: { scope, pre: pre.status, post: post.status } });
   }
+
+  const rawPre = resolveRawPm2Entry(pre);
+  const rawPost = resolveRawPm2Entry(post);
+  if (rawPre && rawPost && (pre.name === ENGINE_NAME || scope?.includes('engine'))) {
+    // Status-only drift is already recorded; compare full PM2 semantics with status neutralized.
+    const a = JSON.parse(JSON.stringify(rawPre));
+    const b = JSON.parse(JSON.stringify(rawPost));
+    a.status = 'online';
+    b.status = 'online';
+    const full = compareEnginePm2Semantics(a, b, { requireClassified: true });
+    if (!full.ok) {
+      for (const cat of full.mismatchCategories || [full.error || 'FULL_PM2_SEMANTIC_DRIFT']) {
+        diffs.push({
+          kind: 'PROCESS_CONFIG_CHANGED',
+          detail: { scope, category: cat },
+        });
+      }
+      return diffs;
+    }
+    return diffs;
+  }
+
   diffs.push(...diffStableConfig(pre, post, { scope }));
   diffs.push(...diffProcessEnv(pre, post, { scope, allowCollectorDbAppear }));
   return diffs;
@@ -932,7 +987,8 @@ export function assertExpectedLivePostState(
   const retainedPre = (preLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
   const retainedPost = (postLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
   const extraPost = (postLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
-  if (!retainedPre || !retainedPost || !extraPost) {
+  const extraPre = (preLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
+  if (!retainedPre || !retainedPost || !extraPost || !extraPre) {
     return { ok: false, error: 'LIVE_POST_STATE_ENGINE_IDENTITY_MISSING' };
   }
   if (retainedPost.status !== 'online') {
@@ -940,6 +996,38 @@ export function assertExpectedLivePostState(
   }
   if (extraPost.status !== 'stopped') {
     return { ok: false, error: 'EXTRA_NOT_STOPPED_POSTWRITE' };
+  }
+
+  // Full PM2 semantic PRE→POST for retained (no change) and extra (status-only).
+  const retainedFull = compareEnginePm2Semantics(
+    resolveRawPm2Entry(retainedPre),
+    resolveRawPm2Entry(retainedPost),
+    { requireClassified: true },
+  );
+  if (!retainedFull.ok) {
+    return {
+      ok: false,
+      error: 'LIVE_POST_STATE_UNEXPECTED_DRIFT',
+      details: {
+        RETAINED_ENGINE_FULL_EQUIVALENCE: 'FAIL',
+        mismatchCategories: retainedFull.mismatchCategories,
+      },
+    };
+  }
+  const extraA = JSON.parse(JSON.stringify(resolveRawPm2Entry(extraPre)));
+  const extraB = JSON.parse(JSON.stringify(resolveRawPm2Entry(extraPost)));
+  extraA.status = 'online';
+  extraB.status = 'online';
+  const extraFull = compareEnginePm2Semantics(extraA, extraB, { requireClassified: true });
+  if (!extraFull.ok) {
+    return {
+      ok: false,
+      error: 'LIVE_POST_STATE_UNEXPECTED_DRIFT',
+      details: {
+        EXTRA_ENGINE_STOP_ONLY: 'FAIL',
+        mismatchCategories: extraFull.mismatchCategories,
+      },
+    };
   }
 
   const liveCollector = (postLiveFp.collectors || [])[0];
@@ -964,6 +1052,7 @@ export function assertExpectedLivePostState(
     details: {
       RETAINED_ENGINE_FULL_EQUIVALENCE: 'PASS',
       EXTRA_ENGINE_STOP_ONLY: 'PASS',
+      LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
       BACKEND_FULL_EQUIVALENCE: 'PASS',
       PROCESSOR_FULL_EQUIVALENCE: 'PASS',
       COLLECTOR_FULL_EQUIVALENCE: 'PASS',
@@ -1088,13 +1177,14 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     [preRetained, postRetained, 'retained'],
     [preExtra, postExtra, 'extra'],
   ]) {
-    const cfg = diffStableConfig(preE, postE, { scope: `rollback-engine:${label}` });
-    const env = diffProcessEnv(preE, postE, { scope: `rollback-engine:${label}` });
-    if (cfg.length > 0 || env.length > 0) {
+    const full = compareEnginePm2Semantics(resolveRawPm2Entry(preE), resolveRawPm2Entry(postE), {
+      requireClassified: true,
+    });
+    if (!full.ok) {
       return {
         ok: false,
         error: 'ROLLBACK_ENGINE_CONFIG_DRIFT',
-        details: { kinds: [...cfg, ...env].map((d) => d.kind) },
+        details: { kinds: full.mismatchCategories || [full.error], label },
       };
     }
   }
