@@ -248,6 +248,9 @@ export class DumpSanitizer {
     if (this.expectedToolVersion !== TOOL_VERSION) {
       throw new DumpSanitizerError('TOOL_VERSION_MISMATCH');
     }
+    if (!auth.oneShotToken || typeof auth.oneShotToken !== 'string' || !auth.oneShotToken.trim()) {
+      throw new DumpSanitizerError('AUTH_TOKEN_MISSING');
+    }
     return true;
   }
 
@@ -327,9 +330,36 @@ export class DumpSanitizer {
     this.preDumpParsed = dumpPack.parsed;
     this.preDumpFp = semanticFingerprint(dumpPack.parsed);
 
-    if (this.expectedActiveDumpSha && this.preDumpSha !== this.expectedActiveDumpSha) {
+    if (!this.expectedActiveDumpSha) {
+      return this._failClosed('EXPECTED_ACTIVE_DUMP_SHA_REQUIRED');
+    }
+    if (this.preDumpSha !== this.expectedActiveDumpSha) {
       return this._failClosed('ACTIVE_DUMP_SHA_MISMATCH');
     }
+
+    if (typeof this.commands.inspectActiveDumpWriteSafety !== 'function') {
+      return this._failClosed('DUMP_OWNERSHIP_SAFETY_CHECK_UNAVAILABLE');
+    }
+    let ownership;
+    try {
+      ownership = await this.commands.inspectActiveDumpWriteSafety();
+    } catch {
+      return this._failClosed('DUMP_OWNERSHIP_SAFETY_CHECK_UNAVAILABLE');
+    }
+    if (
+      typeof ownership?.dumpUid !== 'number' ||
+      typeof ownership?.dumpGid !== 'number' ||
+      typeof ownership?.dumpMode !== 'number' ||
+      ownership.dumpUid !== this.preDumpUid ||
+      ownership.dumpGid !== this.preDumpGid ||
+      (ownership.dumpMode & 0o777) !== (this.preDumpMode & 0o777)
+    ) {
+      return this._failClosed('DUMP_OWNERSHIP_PRECHECK_METADATA_MISMATCH');
+    }
+    if (ownership.safe !== true || ownership.ownerSafe !== true || ownership.groupSafe !== true) {
+      return this._failClosed('DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+    }
+    this._log('DUMP_OWNER_GROUP_PRECHECK=PASS');
 
     const shapeCheck = assertEntriesEnvShapes(dumpPack.parsed);
     if (!shapeCheck.ok) {

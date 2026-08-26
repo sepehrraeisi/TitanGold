@@ -384,9 +384,20 @@ export class T2Orchestrator {
     if (this.preDumpGid != null) {
       this._log('PRE_DUMP_GROUP=PRESENT');
     }
+
+    if (!this.expectedActiveDumpSha) {
+      return this._failClosed('EXPECTED_ACTIVE_DUMP_SHA_REQUIRED');
+    }
+    if (this.preDumpSha !== this.expectedActiveDumpSha) {
+      return this._failClosed('ACTIVE_DUMP_SHA_MISMATCH');
+    }
+
     if (typeof this.commands.inspectActiveDumpWriteSafety === 'function') {
       const ownership = await this.commands.inspectActiveDumpWriteSafety();
-      this.dumpOwnershipSafe = ownership?.safe === true;
+      this.dumpOwnershipSafe =
+        ownership?.safe === true &&
+        ownership?.ownerSafe === true &&
+        ownership?.groupSafe === true;
       if (typeof ownership?.dumpUid === 'number') this.preDumpUid = ownership.dumpUid;
       if (typeof ownership?.dumpGid === 'number') this.preDumpGid = ownership.dumpGid;
       if (!this.dumpOwnershipSafe) {
@@ -475,6 +486,12 @@ export class T2Orchestrator {
       if (k === 'ok') continue;
       this._log(`${k}=${v}`);
     }
+
+    // Successful sanitization contract requires PRE mode 0600 (content alone is insufficient).
+    if (this.preDumpMode !== REQUIRED_PROJECTED_DUMP_MODE) {
+      return this._failClosed('SANITIZED_PRE_MODE_NOT_0600');
+    }
+    this._log('SANITIZED_PRE_MODE_0600=PASS');
 
     await this.journal.setSelection({
       retainedPmId: selection.retained.pm_id,

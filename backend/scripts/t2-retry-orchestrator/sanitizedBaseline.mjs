@@ -29,11 +29,10 @@ export function assertSanitizedPreBaselineProof({
   if (!expectedCleanPreSha || !actualCleanPreSha || expectedCleanPreSha !== actualCleanPreSha) {
     return { ok: false, error: 'CLEAN_PRE_SHA_MISMATCH' };
   }
-  if (
-    expectedActiveDumpSha &&
-    actualActiveDumpSha &&
-    expectedActiveDumpSha !== actualActiveDumpSha
-  ) {
+  if (!expectedActiveDumpSha) {
+    return { ok: false, error: 'EXPECTED_ACTIVE_DUMP_SHA_REQUIRED' };
+  }
+  if (!actualActiveDumpSha || expectedActiveDumpSha !== actualActiveDumpSha) {
     return { ok: false, error: 'ACTIVE_DUMP_SHA_MISMATCH' };
   }
   if (!Array.isArray(cleanPreDump) || !Array.isArray(activePreDump)) {

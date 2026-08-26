@@ -214,13 +214,26 @@ function createFakeBoundary(world) {
       };
     },
     async inspectActiveDumpWriteSafety() {
+      if (world.omitInspectActiveDumpWriteSafety) {
+        throw new Error('INSPECT_UNAVAILABLE');
+      }
+      const uid =
+        typeof world.forceInspectUidOverride === 'number'
+          ? world.forceInspectUidOverride
+          : dumpUid;
+      const gid =
+        typeof world.forceInspectGidOverride === 'number'
+          ? world.forceInspectGidOverride
+          : dumpGid;
+      const ownerSafe = world.forceOwnerUnsafe !== true;
+      const groupSafe = world.forceGroupUnsafe !== true;
       return {
-        dumpUid,
-        dumpGid,
+        dumpUid: uid,
+        dumpGid: gid,
         dumpMode,
-        ownerSafe: true,
-        groupSafe: true,
-        safe: true,
+        ownerSafe,
+        groupSafe,
+        safe: ownerSafe && groupSafe,
       };
     },
     async writeBackup(bytes) {
@@ -721,6 +734,8 @@ describe('T2 dump sanitizer (v1.0.0)', () => {
       'YES',
       '--backup-root',
       '/tmp/bk',
+      '--journal-root',
+      '/tmp/jr',
       '--expected-tool-version',
       '0.9.0',
       '--confirm-run-transaction',
@@ -733,6 +748,59 @@ describe('T2 dump sanitizer (v1.0.0)', () => {
     ]);
     expect(gates.ok).toBe(false);
     expect(gates.error).toBe('TOOL_VERSION_MISMATCH');
+  });
+
+  it('S22b all gates except journal-root => EXECUTION_GATES_INCOMPLETE', () => {
+    const gates = evaluateSanitizerExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/tmp/auth.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/bk',
+      '--expected-tool-version',
+      TOOL_VERSION,
+      '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
+    ]);
+    expect(gates.ok).toBe(false);
+    expect(gates.error).toBe('EXECUTION_GATES_INCOMPLETE');
+    expect(gates.missing).toContain('--journal-root');
+  });
+
+  it('S22c explicit journal-root => gate PASS', () => {
+    const gates = evaluateSanitizerExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/tmp/auth.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/bk',
+      '--journal-root',
+      '/tmp/jr',
+      '--expected-tool-version',
+      TOOL_VERSION,
+      '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
+    ]);
+    expect(gates.ok).toBe(true);
+    expect(gates.journalRoot).toBe('/tmp/jr');
   });
 
   it('S23 journal replay blocked after auth consume', async () => {
@@ -789,5 +857,98 @@ describe('T2 dump sanitizer (v1.0.0)', () => {
     });
     expect(target.ok).toBe(false);
     expect(target.error).toBe('COLLECTOR_DB_DUMP_LIVE_MISMATCH');
+  });
+
+  it('S27 safe ownership => PASS with DUMP_OWNER_GROUP_PRECHECK', async () => {
+    const { sanitizer } = buildSanitizer();
+    await sanitizer.precheck();
+    expect(sanitizer.state).toBe(State.PRECHECK_PASS);
+    expect(sanitizer.authConsumed).toBe(false);
+    expect(sanitizer.evidence.toString()).toMatch(/DUMP_OWNER_GROUP_PRECHECK=PASS/);
+  });
+
+  it('S28 unsafe owner => FAIL before auth consume', async () => {
+    const { sanitizer } = buildSanitizer({ forceOwnerUnsafe: true });
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S29 unsafe group => FAIL before auth consume', async () => {
+    const { sanitizer } = buildSanitizer({ forceGroupUnsafe: true });
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S30 inspection unavailable => FAIL before auth consume', async () => {
+    const { sanitizer } = buildSanitizer({ omitInspectActiveDumpWriteSafety: true });
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'DUMP_OWNERSHIP_SAFETY_CHECK_UNAVAILABLE',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S31 inspection uid mismatch vs readDump => FAIL', async () => {
+    const { sanitizer } = buildSanitizer({ forceInspectUidOverride: 9999 });
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'DUMP_OWNERSHIP_PRECHECK_METADATA_MISMATCH',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S32 inspection gid mismatch vs readDump => FAIL', async () => {
+    const { sanitizer } = buildSanitizer({ forceInspectGidOverride: 8888 });
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'DUMP_OWNERSHIP_PRECHECK_METADATA_MISMATCH',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S33 missing expectedActiveDumpSha => FAIL before auth', async () => {
+    const { sanitizer } = buildSanitizer({}, { expectedActiveDumpSha: null });
+    sanitizer.expectedActiveDumpSha = null;
+    await expect(sanitizer.precheck()).rejects.toMatchObject({
+      code: 'EXPECTED_ACTIVE_DUMP_SHA_REQUIRED',
+    });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S34 missing oneShotToken => FAIL before auth', async () => {
+    const runId = nextRunId();
+    const { sanitizer } = buildSanitizer(
+      {},
+      { runId, authorization: makeAuth(runId, { oneShotToken: undefined }) },
+    );
+    // makeAuth spreads overrides after defaults — need delete
+    delete sanitizer.authorization.oneShotToken;
+    await expect(sanitizer.precheck()).rejects.toMatchObject({ code: 'AUTH_TOKEN_MISSING' });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S35 empty oneShotToken => FAIL before auth', async () => {
+    const runId = nextRunId();
+    const { sanitizer } = buildSanitizer(
+      {},
+      { runId, authorization: makeAuth(runId, { oneShotToken: '   ' }) },
+    );
+    await expect(sanitizer.precheck()).rejects.toMatchObject({ code: 'AUTH_TOKEN_MISSING' });
+    expect(sanitizer.authConsumed).toBe(false);
+  });
+
+  it('S36 valid opaque token => PASS; token absent from evidence', async () => {
+    const runId = nextRunId();
+    const token = 'opaque-one-shot-not-a-credential-XYZ';
+    const { sanitizer } = buildSanitizer(
+      {},
+      { runId, authorization: makeAuth(runId, { oneShotToken: token }) },
+    );
+    await sanitizer.runTransaction();
+    expect(sanitizer.state).toBe(State.COMPLETED);
+    const evidence = sanitizer.evidence.toString();
+    expect(evidence).not.toContain(token);
+    expect(evidence).not.toMatch(/oneShotToken/i);
   });
 });

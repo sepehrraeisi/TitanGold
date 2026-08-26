@@ -9,6 +9,7 @@
  *   --authorization-file
  *   --acknowledge-production-mutation=YES
  *   --backup-root
+ *   --journal-root  (MUST be explicit; never defaulted to backup-root)
  *   --expected-tool-version  (MUST be explicit; no default for live path)
  *   --confirm-run-transaction
  *   --clean-pre-file
@@ -54,8 +55,12 @@ export function usage() {
     '  --authorization-file <path>',
     '  --acknowledge-production-mutation=YES',
     '  --backup-root <dir>',
+    '  --journal-root <dir>',
     '  --expected-tool-version ' + TOOL_VERSION,
     '  --confirm-run-transaction',
+    '  --clean-pre-file <path>',
+    '  --expected-clean-pre-sha <sha256>',
+    '  --expected-active-dump-sha <sha256>',
     '',
     `Tool: ${TOOL_NAME}@${TOOL_VERSION}`,
     `Authorized transaction id: ${AUTHORIZED_TRANSACTION}`,
@@ -65,6 +70,7 @@ export function usage() {
 /**
  * Complete live execution gate decision.
  * --expected-tool-version MUST be present on argv (not defaulted).
+ * --journal-root MUST be present on argv (never defaulted to backup-root).
  * --confirm-run-transaction is part of the gate, not a later convenience.
  */
 export function evaluateLiveExecutionGates(argv = []) {
@@ -72,7 +78,7 @@ export function evaluateLiveExecutionGates(argv = []) {
   const runId = readArg(argv, '--run-id');
   const authFile = readArg(argv, '--authorization-file');
   const backupRoot = readArg(argv, '--backup-root');
-  const journalRoot = readArg(argv, '--journal-root') || backupRoot;
+  const journalRoot = readArg(argv, '--journal-root');
   const ack = readArg(argv, '--acknowledge-production-mutation');
   const hasExplicitVersion = argv.includes('--expected-tool-version');
   const expectedVersion = hasExplicitVersion ? readArg(argv, '--expected-tool-version') : null;
@@ -87,6 +93,7 @@ export function evaluateLiveExecutionGates(argv = []) {
   if (!authFile) missing.push('--authorization-file');
   if (ack !== 'YES') missing.push('--acknowledge-production-mutation=YES');
   if (!backupRoot) missing.push('--backup-root');
+  if (!journalRoot) missing.push('--journal-root');
   if (!hasExplicitVersion || expectedVersion == null) missing.push('--expected-tool-version');
   if (!confirmRun) missing.push('--confirm-run-transaction');
   if (!cleanPreFile) missing.push('--clean-pre-file');

@@ -226,7 +226,7 @@ function makeLiveAndDump(overrides = {}) {
     forceHardenWrongMode: false,
     forceHardenSkipModeChange: false,
     forceRetainedPathChangeOnSave: false,
-    dumpMode: 0o664,
+    dumpMode: 0o600,
     dumpUid: 1000,
     dumpGid: 1000,
     restoreUidOverride: null,
@@ -339,7 +339,7 @@ function createFakeBoundary(world) {
   let dumpEntries = deepClone(world.dump);
   let liveEntries = deepClone(world.live);
   let dumpCorrupt = false;
-  let dumpMode = typeof world.dumpMode === 'number' ? world.dumpMode & 0o777 : 0o664;
+  let dumpMode = typeof world.dumpMode === 'number' ? world.dumpMode & 0o777 : 0o600;
   let dumpUid = typeof world.dumpUid === 'number' ? world.dumpUid : 1000;
   let dumpGid = typeof world.dumpGid === 'number' ? world.dumpGid : 1000;
   const mutationLog = [];
@@ -366,13 +366,15 @@ function createFakeBoundary(world) {
       };
     },
     async inspectActiveDumpWriteSafety() {
+      const ownerSafe = !world.forceOwnershipUnsafe && !world.forceOwnerUnsafe;
+      const groupSafe = !world.forceOwnershipUnsafe && !world.forceGroupUnsafe;
       return {
         dumpUid,
         dumpGid,
         dumpMode,
-        ownerSafe: !world.forceOwnershipUnsafe,
-        groupSafe: !world.forceOwnershipUnsafe,
-        safe: !world.forceOwnershipUnsafe,
+        ownerSafe,
+        groupSafe,
+        safe: ownerSafe && groupSafe,
       };
     },
     async writeBackup(bytes) {
@@ -1336,6 +1338,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--confirm-run-transaction',
       '--clean-pre-file',
       '/tmp/clean.json',
@@ -1359,6 +1363,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--expected-tool-version',
       '0.0.0',
       '--confirm-run-transaction',
@@ -1384,6 +1390,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--expected-tool-version',
       TOOL_VERSION,
       '--clean-pre-file',
@@ -1397,7 +1405,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(g.missing).toContain('--confirm-run-transaction');
   });
 
-  it('T49 all explicit gates => adapter may initialize in mocked test only', () => {
+  it('T48b all gates except journal-root => EXECUTION_GATES_INCOMPLETE', () => {
     const g = evaluateLiveExecutionGates([
       '--execute',
       '--run-id',
@@ -1418,12 +1426,41 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       '--expected-active-dump-sha',
       'b'.repeat(64),
     ]);
+    expect(g.ok).toBe(false);
+    expect(g.error).toBe('EXECUTION_GATES_INCOMPLETE');
+    expect(g.missing).toContain('--journal-root');
+  });
+
+  it('T49 all explicit gates => adapter may initialize in mocked test only', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
+      '--expected-tool-version',
+      TOOL_VERSION,
+      '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
+    ]);
     expect(g.ok).toBe(true);
     const boundary = createLiveBoundary({
       gatesSatisfied: g.ok,
       spawnSyncImpl: () => ({ status: 0, stdout: '[]', stderr: '' }),
     });
-    expect(boundary).toBeTruthy();  });
+    expect(boundary).toBeTruthy();
+  });
 
   it('T50 journal durable write invokes fsync (mocked)', async () => {
     const fs = createMemoryJournalFs();
@@ -1522,12 +1559,10 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(restoreCalls[0][1]).toBe(0o600);
   });
 
-  it('T55 PRE dump mode 0640 restored as 0640', async () => {
-    const { orch, commands } = buildOrch({ dumpMode: 0o640, forceBackendDriftOnSave: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-    expect(orch.preDumpMode).toBe(0o640);
-    expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(commands.world().dumpMode).toBe(0o640);
+  it('T55 PRE dump mode 0640 => SANITIZED_PRE_MODE_NOT_0600 before auth', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o640 });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'SANITIZED_PRE_MODE_NOT_0600' });
+    expect(orch.authConsumed).toBe(false);
   });
 
   it('T56 restore never forces 0664 unless PRE was 0664', async () => {
@@ -1913,12 +1948,18 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.postwriteVerify()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
   });
 
-  it('T82 rollback restores PRE 0664 after projected write tamper', async () => {
-    const { orch, commands } = buildOrch({ dumpMode: 0o664, forceBackendDriftOnSave: true });
+  it('T82 rollback restores PRE 0600 after projected write tamper', async () => {
+    const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
     await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-    expect(orch.preDumpMode).toBe(0o664);
+    expect(orch.preDumpMode).toBe(0o600);
     expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(commands.world().dumpMode).toBe(0o664);
+    expect(commands.world().dumpMode).toBe(0o600);
+  });
+
+  it('T82b sanitized content with PRE mode 0664 => fail before auth', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o664 });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'SANITIZED_PRE_MODE_NOT_0600' });
+    expect(orch.authConsumed).toBe(false);
   });
 
   it('T83 rollback restores PRE 0600 after projected write tamper', async () => {
@@ -2341,5 +2382,28 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     for (const k of COLLECTOR_DB_KEYS) {
       expect(postColl.env[k]).toBe(preColl.env[k]);
     }
+  });
+
+  it('missing expectedActiveDumpSha => fail before auth', async () => {
+    const { orch } = buildOrch({}, { expectedActiveDumpSha: null });
+    orch.expectedActiveDumpSha = null;
+    await expect(orch.precheck()).rejects.toMatchObject({
+      code: 'EXPECTED_ACTIVE_DUMP_SHA_REQUIRED',
+    });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('active dump SHA mismatch => fail before auth', async () => {
+    const { orch } = buildOrch({}, { expectedActiveDumpSha: 'a'.repeat(64) });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'ACTIVE_DUMP_SHA_MISMATCH' });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('sanitized exact content + 0600 => PASS', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o600 });
+    await orch.precheck();
+    expect(orch.state).toBe(State.PRECHECK_PASS);
+    expect(orch.authConsumed).toBe(false);
+    expect(orch.preDumpMode).toBe(0o600);
   });
 });

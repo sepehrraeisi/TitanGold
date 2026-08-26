@@ -32,7 +32,7 @@ export function usage() {
     '',
     'Default: non-mutating / fail-closed.',
     '',
-    'Live execution requires ALL of:',
+    'Live execution requires ALL of (all explicit — no defaults):',
     '  --execute',
     '  --run-id <id>',
     '  --authorization-file <path>',
@@ -41,6 +41,7 @@ export function usage() {
     '  --expected-clean-pre-sha <sha256>',
     '  --expected-active-dump-sha <sha256>',
     '  --backup-root <dir>',
+    '  --journal-root <dir>',
     '  --expected-tool-version 1.0.0',
     '  --confirm-run-transaction',
     '',
@@ -52,13 +53,14 @@ export function usage() {
 /**
  * Evaluate full live-execution gate set for dump sanitizer CLI.
  * Alias: evaluateSanitizerExecutionGates.
+ * --journal-root is mandatory for live path (never defaulted to backup-root).
  */
 export function evaluateLiveExecutionGates(argv = []) {
   const execute = hasFlag(argv, '--execute');
   const runId = readArg(argv, '--run-id');
   const authFile = readArg(argv, '--authorization-file');
   const backupRoot = readArg(argv, '--backup-root');
-  const journalRoot = readArg(argv, '--journal-root') || backupRoot;
+  const journalRoot = readArg(argv, '--journal-root');
   const ack = readArg(argv, '--acknowledge-production-mutation');
   const hasExplicitVersion = argv.includes('--expected-tool-version');
   const expectedVersion = hasExplicitVersion ? readArg(argv, '--expected-tool-version') : null;
@@ -73,6 +75,7 @@ export function evaluateLiveExecutionGates(argv = []) {
   if (!authFile) missing.push('--authorization-file');
   if (ack !== 'YES') missing.push('--acknowledge-production-mutation=YES');
   if (!backupRoot) missing.push('--backup-root');
+  if (!journalRoot) missing.push('--journal-root');
   if (!hasExplicitVersion || expectedVersion == null) missing.push('--expected-tool-version');
   if (!confirmRun) missing.push('--confirm-run-transaction');
   if (!cleanPreFile) missing.push('--clean-pre-file');
