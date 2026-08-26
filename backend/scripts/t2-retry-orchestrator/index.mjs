@@ -7,12 +7,15 @@ export {
   AUTHORIZED_TRANSACTION,
   ALLOWED_DIFF_KINDS,
   COLLECTOR_DB_KEYS,
+  COLLECTOR_DB_PRESTATE,
   ENGINE_NAME,
   EXPECTED_COLLECTOR_DB_USER,
   FORBIDDEN_DIFF_KINDS,
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
   REQUIRED_POST_SAVE_DUMP_MODE,
   REQUIRED_PROJECTED_DUMP_MODE,
+  SESSION_IDE_ENV_KEYS,
   State,
   TERMINAL_STATES,
   TOOL_NAME,
@@ -36,6 +39,7 @@ export {
   assertEntriesEnvShapes,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
+  classifyCollectorDbPrestate,
   compareCollectorDbLiveToPersist,
   diffFingerprints,
   diffProcessEnv,
@@ -58,6 +62,8 @@ export {
   resolveDumpEnvMutationTarget,
   structuralDiffPaths,
 } from './projection.mjs';
+
+export { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
 
 export {
   createExclusiveJournal,

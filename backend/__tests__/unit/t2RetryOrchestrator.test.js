@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  *
- * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.5.0).
+ * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.6.0).
  * Never contacts live PM2, DB, Redis, Telegram, or production services.
  */
 
@@ -36,6 +36,10 @@ import {
   selectEngineRetainExtra,
   REQUIRED_PROJECTED_DUMP_MODE,
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
+  assertSanitizedPreBaselineProof,
+  assertCollectorPersistencePreconditions,
+  classifyCollectorDbPrestate,
   buildExpectedProjectedDump,
   assertUnauthorizedLiveEnvNotPersisted,
   resolveDumpEngineIdentities,
@@ -63,8 +67,17 @@ function makeAuth(runId = 'T2R-TEST-001') {
   };
 }
 
-/** Simulate production dump: no pm_id; collector lacks DB_* keys. */
+/** Simulate sanitized PRE dump: no pm_id; collector KEEPS exact live DB_* (ALREADY_PRESENT_EXACT). */
 function prepareDumpFromLive(live) {
+  const dump = deepClone(live);
+  for (const e of dump) {
+    delete e.pm_id;
+  }
+  return dump;
+}
+
+/** Clean PRE baseline: no pm_id and no collector DB_* (construction authority for sanitizer/T2 gate). */
+function prepareCleanPreFromLive(live) {
   const dump = deepClone(live);
   for (const e of dump) {
     delete e.pm_id;
@@ -145,6 +158,7 @@ function makeLiveAndDump(overrides = {}) {
         DB_NAME: 'titangold_db',
         DB_USER: EXPECTED_COLLECTOR_DB_USER,
         DB_PASSWORD: SECRET_PASSWORD,
+        JWT_SECRET: PRE_JWT,
       },
     },
     {
@@ -163,7 +177,14 @@ function makeLiveAndDump(overrides = {}) {
     },
   ];
 
-  const dump = prepareDumpFromLive(live);
+  if (typeof overrides.mutateLive === 'function') {
+    overrides.mutateLive(live);
+  }
+
+  const dump =
+    overrides.dumpOverride != null
+      ? overrides.dumpOverride
+      : prepareDumpFromLive(live);
 
   return {
     live,
@@ -205,7 +226,7 @@ function makeLiveAndDump(overrides = {}) {
     forceHardenWrongMode: false,
     forceHardenSkipModeChange: false,
     forceRetainedPathChangeOnSave: false,
-    dumpMode: 0o664,
+    dumpMode: 0o600,
     dumpUid: 1000,
     dumpGid: 1000,
     restoreUidOverride: null,
@@ -318,7 +339,7 @@ function createFakeBoundary(world) {
   let dumpEntries = deepClone(world.dump);
   let liveEntries = deepClone(world.live);
   let dumpCorrupt = false;
-  let dumpMode = typeof world.dumpMode === 'number' ? world.dumpMode & 0o777 : 0o664;
+  let dumpMode = typeof world.dumpMode === 'number' ? world.dumpMode & 0o777 : 0o600;
   let dumpUid = typeof world.dumpUid === 'number' ? world.dumpUid : 1000;
   let dumpGid = typeof world.dumpGid === 'number' ? world.dumpGid : 1000;
   const mutationLog = [];
@@ -345,13 +366,15 @@ function createFakeBoundary(world) {
       };
     },
     async inspectActiveDumpWriteSafety() {
+      const ownerSafe = !world.forceOwnershipUnsafe && !world.forceOwnerUnsafe;
+      const groupSafe = !world.forceOwnershipUnsafe && !world.forceGroupUnsafe;
       return {
         dumpUid,
         dumpGid,
         dumpMode,
-        ownerSafe: !world.forceOwnershipUnsafe,
-        groupSafe: !world.forceOwnershipUnsafe,
-        safe: !world.forceOwnershipUnsafe,
+        ownerSafe,
+        groupSafe,
+        safe: ownerSafe && groupSafe,
       };
     },
     async writeBackup(bytes) {
@@ -559,6 +582,18 @@ function projectedWriteCount(commands) {
     .length;
 }
 
+function cleanPreOptsForWorld(world) {
+  const cleanPreDump = prepareCleanPreFromLive(world.live);
+  const actualCleanPreSha = sha256Buffer(Buffer.from(JSON.stringify(cleanPreDump), 'utf8'));
+  const expectedActiveDumpSha = sha256Buffer(Buffer.from(JSON.stringify(world.dump), 'utf8'));
+  return {
+    cleanPreDump,
+    expectedCleanPreSha: actualCleanPreSha,
+    actualCleanPreSha,
+    expectedActiveDumpSha,
+  };
+}
+
 function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   const world = makeLiveAndDump(worldOverrides);
   const commands = createFakeBoundary(world);
@@ -645,6 +680,10 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
   const runId = orchOverrides.runId || nextRunId();
   const journalFs = orchOverrides.journalFs || createMemoryJournalFs();
   const journalRoot = orchOverrides.journalRoot || '/tmp/t2-orch-journals';
+  const cleanPreDump = orchOverrides.cleanPreDump || prepareCleanPreFromLive(world.live);
+  const cleanPreBytes = Buffer.from(JSON.stringify(cleanPreDump), 'utf8');
+  const actualCleanPreSha = sha256Buffer(cleanPreBytes);
+  const activeDumpSha = sha256Buffer(Buffer.from(JSON.stringify(world.dump), 'utf8'));
   const orch = createOrchestrator({
     commands,
     authorization: orchOverrides.authorization || makeAuth(runId),
@@ -654,8 +693,12 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
     journalFs,
     productionModeAcknowledged: orchOverrides.productionModeAcknowledged !== false,
     expectedToolVersion: orchOverrides.expectedToolVersion || TOOL_VERSION,
+    cleanPreDump,
+    expectedCleanPreSha: orchOverrides.expectedCleanPreSha ?? actualCleanPreSha,
+    actualCleanPreSha: orchOverrides.actualCleanPreSha ?? actualCleanPreSha,
+    expectedActiveDumpSha: orchOverrides.expectedActiveDumpSha ?? activeDumpSha,
   });
-  return { orch, commands, world, journalFs, journalRoot, runId };
+  return { orch, commands, world, journalFs, journalRoot, runId, cleanPreDump, actualCleanPreSha };
 }
 
 /** Drive through stop + projection write; tamper flags fail inside writeProjectedDump. */
@@ -800,8 +843,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
   it('T12 collector DB-B persistence accepted as allowlisted effect', async () => {
     const { orch } = buildOrch();
     await orch.runTransaction();
-    expect(orch.evidence.lines.some((l) => l.includes('COLLECTOR_DB_KEYS_ADDED=5'))).toBe(true);
-    expect(orch.evidence.lines.some((l) => l.includes('AUTHORIZED_DIFF_PATH_COUNT=6'))).toBe(true);
+    expect(orch.evidence.lines.some((l) => l.includes('COLLECTOR_DB_KEYS_ADDED=0'))).toBe(true);
+    expect(orch.evidence.lines.some((l) => l.includes('AUTHORIZED_DIFF_PATH_COUNT=1'))).toBe(true);
   });
 
   it('T13 changed dump SHA alone never causes S2 classification', async () => {
@@ -853,7 +896,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const blob = orch.evidence.toString();
     expect(blob.includes(SECRET_PASSWORD)).toBe(false);
     expect(blob.includes('127.0.0.1')).toBe(false);
-    expect(blob).toMatch(/COLLECTOR_DB_KEYS_ADDED=5/);
+    expect(blob).toMatch(/COLLECTOR_DB_KEYS_ADDED=0/);
   });
 
   it('fail-closed boundary: pm2Save throws GlobalPm2SaveForbiddenError', async () => {
@@ -1004,7 +1047,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(built.ok).toBe(true);
     const diffs = structuralDiffPaths(dump, built.projected);
     expect(diffs.every((p) => !p.includes('BACKEND_SECRET'))).toBe(true);
-    expect(diffs).toHaveLength(6);
+    expect(diffs).toHaveLength(1);
   });
 
   it('T24 unit: projection does not copy live JWT/backend secret values into evidence paths', () => {
@@ -1130,6 +1173,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       journalRoot,
       journalFs,
       productionModeAcknowledged: true,
+      ...cleanPreOptsForWorld(world),
     });
     await orch.precheck();
     await orch.backup();
@@ -1294,7 +1338,15 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
     ]);
     expect(g.ok).toBe(false);
     expect(g.missing).toContain('--expected-tool-version');
@@ -1311,9 +1363,17 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--expected-tool-version',
       '0.0.0',
       '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
     ]);
     expect(g.ok).toBe(false);
     expect(g.error).toBe('TOOL_VERSION_MISMATCH');
@@ -1330,14 +1390,22 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'YES',
       '--backup-root',
       '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
       '--expected-tool-version',
       TOOL_VERSION,
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
     ]);
     expect(g.ok).toBe(false);
     expect(g.missing).toContain('--confirm-run-transaction');
   });
 
-  it('T49 all explicit gates => adapter may initialize in mocked test only', () => {
+  it('T48b all gates except journal-root => EXECUTION_GATES_INCOMPLETE', () => {
     const g = evaluateLiveExecutionGates([
       '--execute',
       '--run-id',
@@ -1351,6 +1419,40 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       '--expected-tool-version',
       TOOL_VERSION,
       '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
+    ]);
+    expect(g.ok).toBe(false);
+    expect(g.error).toBe('EXECUTION_GATES_INCOMPLETE');
+    expect(g.missing).toContain('--journal-root');
+  });
+
+  it('T49 all explicit gates => adapter may initialize in mocked test only', () => {
+    const g = evaluateLiveExecutionGates([
+      '--execute',
+      '--run-id',
+      'X',
+      '--authorization-file',
+      '/a.json',
+      '--acknowledge-production-mutation',
+      'YES',
+      '--backup-root',
+      '/tmp/b',
+      '--journal-root',
+      '/tmp/j',
+      '--expected-tool-version',
+      TOOL_VERSION,
+      '--confirm-run-transaction',
+      '--clean-pre-file',
+      '/tmp/clean.json',
+      '--expected-clean-pre-sha',
+      'a'.repeat(64),
+      '--expected-active-dump-sha',
+      'b'.repeat(64),
     ]);
     expect(g.ok).toBe(true);
     const boundary = createLiveBoundary({
@@ -1457,12 +1559,10 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(restoreCalls[0][1]).toBe(0o600);
   });
 
-  it('T55 PRE dump mode 0640 restored as 0640', async () => {
-    const { orch, commands } = buildOrch({ dumpMode: 0o640, forceBackendDriftOnSave: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-    expect(orch.preDumpMode).toBe(0o640);
-    expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(commands.world().dumpMode).toBe(0o640);
+  it('T55 PRE dump mode 0640 => SANITIZED_PRE_MODE_NOT_0600 before auth', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o640 });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'SANITIZED_PRE_MODE_NOT_0600' });
+    expect(orch.authConsumed).toBe(false);
   });
 
   it('T56 restore never forces 0664 unless PRE was 0664', async () => {
@@ -1518,6 +1618,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       journalRoot,
       journalFs,
       productionModeAcknowledged: true,
+      ...cleanPreOptsForWorld(world),
     });
     await expect(orch.precheck()).rejects.toMatchObject({ code: 'ENGINE_RUNTIME_IDENTITY_MISMATCH' });
     expect(orch.authConsumed).toBe(false);
@@ -1707,6 +1808,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       journalRoot,
       journalFs,
       productionModeAcknowledged: true,
+      ...cleanPreOptsForWorld(world),
     });
     await orch.precheck();
     expect(orch.selection.retained.pm_id).toBe(9);
@@ -1846,12 +1948,18 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.postwriteVerify()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
   });
 
-  it('T82 rollback restores PRE 0664 after projected write tamper', async () => {
-    const { orch, commands } = buildOrch({ dumpMode: 0o664, forceBackendDriftOnSave: true });
+  it('T82 rollback restores PRE 0600 after projected write tamper', async () => {
+    const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
     await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-    expect(orch.preDumpMode).toBe(0o664);
+    expect(orch.preDumpMode).toBe(0o600);
     expect(orch.state).toBe(State.ROLLED_BACK);
-    expect(commands.world().dumpMode).toBe(0o664);
+    expect(commands.world().dumpMode).toBe(0o600);
+  });
+
+  it('T82b sanitized content with PRE mode 0664 => fail before auth', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o664 });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'SANITIZED_PRE_MODE_NOT_0600' });
+    expect(orch.authConsumed).toBe(false);
   });
 
   it('T83 rollback restores PRE 0600 after projected write tamper', async () => {
@@ -1891,7 +1999,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
   it('T87 missing PROJECTED_DUMP_WRITE_0600 authorized effect => FAIL', async () => {
     const runId = nextRunId('NOHARDEN');
     const auth = makeAuth(runId);
-    auth.authorizedEffects = ['ENGINE_2_TO_1', 'COLLECTOR_DB_B_PERSIST'];
+    auth.authorizedEffects = ['ENGINE_2_TO_1'];
     const { orch } = buildOrch({}, { runId, authorization: auth });
     await orch.precheck();
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
@@ -1911,7 +2019,6 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const auth = makeAuth(runId);
     auth.authorizedEffects = [
       'ENGINE_2_TO_1',
-      'COLLECTOR_DB_B_PERSIST',
       'PROJECTED_DUMP_WRITE_0600',
       'PROJECTED_DUMP_WRITE_0600',
     ];
@@ -1920,13 +2027,12 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
   });
 
-  it('T88 new 1.5.0 complete mocked artifact => PASS', async () => {
+  it('T88 new 1.6.0 complete mocked artifact => PASS', async () => {
     const { orch } = buildOrch();
-    expect(TOOL_VERSION).toBe('1.5.0');
-    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST');
+    expect(TOOL_VERSION).toBe('1.6.0');
+    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_DB_ALREADY_PRESENT_PROJECTED_PERSIST');
     expect(AUTHORIZED_EFFECTS).toEqual([
       'ENGINE_2_TO_1',
-      'COLLECTOR_DB_B_PERSIST',
       'PROJECTED_DUMP_WRITE_0600',
     ]);
     const result = await orch.runTransaction();
@@ -1944,6 +2050,17 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     ).rejects.toMatchObject({ code: 'MUTATION_CLOSED' });
   });
 
+  
+  it('T90b legacy 1.5.0 transaction identity => FAIL', async () => {
+    const runId = nextRunId('LEGACY15');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_5_0;
+    auth.authorizedEffects = ['ENGINE_2_TO_1', 'COLLECTOR_DB_B_PERSIST', 'PROJECTED_DUMP_WRITE_0600'];
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
+  });
+
   it('T90 legacy 1.4.0 transaction identity => FAIL', async () => {
     const runId = nextRunId('LEGACY14');
     const auth = makeAuth(runId);
@@ -1954,7 +2071,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
   });
 });
 
-describe('T2 v1.5 projection security', () => {
+describe('T2 v1.6 projection security', () => {
   function baseSnap() {
     return {
       DB_HOST: '127.0.0.1',
@@ -2026,7 +2143,7 @@ describe('T2 v1.5 projection security', () => {
     expect(built.projected[built.collectorMap.dumpIndex].env.prev_restart_delay).toBeUndefined();
   });
 
-  it('only 5 DB_* + 1 status change (6 paths)', () => {
+  it('only 1 status change (ALREADY_PRESENT_EXACT)', () => {
     const world = makeLiveAndDump();
     const dump = prepareDumpFromLive(world.live);
     const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
@@ -2037,11 +2154,12 @@ describe('T2 v1.5 projection security', () => {
     });
     expect(built.ok).toBe(true);
     const diffs = structuralDiffPaths(dump, built.projected);
-    expect(diffs).toHaveLength(6);
-    expect(built.manifest.AUTHORIZED_DIFF_PATH_COUNT).toBe(6);
+    expect(diffs).toHaveLength(1);
+    expect(built.manifest.AUTHORIZED_DIFF_PATH_COUNT).toBe(1);
+    expect(built.manifest.COLLECTOR_DB_KEYS_PRESERVED_EXACT).toBe(5);
   });
 
-  it('seventh change fails', () => {
+  it('second change fails', () => {
     const world = makeLiveAndDump();
     const dump = prepareDumpFromLive(world.live);
     const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
@@ -2053,7 +2171,7 @@ describe('T2 v1.5 projection security', () => {
     const mutated = deepClone(built.projected);
     mutated[built.collectorMap.dumpIndex].env.EXTRA_SEVENTH = 'nope';
     const diffs = structuralDiffPaths(dump, mutated);
-    expect(diffs.length).toBeGreaterThan(6);
+    expect(diffs.length).toBeGreaterThan(1);
   });
 
   it('dump without pm_id unique mapping PASS', () => {
@@ -2138,5 +2256,154 @@ describe('T2 v1.5 projection security', () => {
     await expect(runToWrite(orch)).rejects.toBeTruthy();
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(pm2SaveCount(commands)).toBe(0);
+  });
+});
+
+describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
+  it('ALREADY_PRESENT_EXACT five keys => precheck PASS', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live);
+    const dumpFp = semanticFingerprint(prepareDumpFromLive(world.live));
+    const c = classifyCollectorDbPrestate(liveFp, dumpFp);
+    expect(c.ok).toBe(true);
+    expect(c.state).toBe('ALREADY_PRESENT_EXACT');
+    for (const k of COLLECTOR_DB_KEYS) {
+      expect(c.matches[`${k}_PRE_MATCH`]).toBe('YES');
+    }
+    const pre = assertCollectorPersistencePreconditions(liveFp, dumpFp);
+    expect(pre.ok).toBe(true);
+  });
+
+  it('ABSENT => fail', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareCleanPreFromLive(world.live);
+    const c = classifyCollectorDbPrestate(
+      semanticFingerprint(world.live),
+      semanticFingerprint(dump),
+    );
+    expect(c.state).toBe('ABSENT');
+    expect(c.ok).toBe(false);
+  });
+
+  it('PARTIAL => fail', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const coll = dump.find((e) => e.name === 'telegram-collector');
+    delete coll.env.DB_PASSWORD;
+    const c = classifyCollectorDbPrestate(
+      semanticFingerprint(world.live),
+      semanticFingerprint(dump),
+    );
+    expect(c.state).toBe('PARTIAL');
+    expect(c.ok).toBe(false);
+  });
+
+  it('one DB value mismatch => fail', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    dump.find((e) => e.name === 'telegram-collector').env.DB_HOST = '9.9.9.9';
+    const c = classifyCollectorDbPrestate(
+      semanticFingerprint(world.live),
+      semanticFingerprint(dump),
+    );
+    expect(c.state).toBe('PRESENT_MISMATCHED');
+    expect(c.ok).toBe(false);
+    expect(c.matches.DB_HOST_PRE_MATCH).toBe('NO');
+  });
+
+  it('DB_USER wrong => fail', async () => {
+    const { orch } = buildOrch({
+      mutateLive: (live) => {
+        live.find((e) => e.name === 'telegram-collector').env.DB_USER = 'wrong_user';
+      },
+    });
+    await expect(orch.runTransaction()).rejects.toMatchObject({
+      code: expect.stringMatching(/DB_USER|UNEXPECTED|PRESTATE/),
+    });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('sanitized-pre proof PASS', () => {
+    const world = makeLiveAndDump();
+    const clean = prepareCleanPreFromLive(world.live);
+    const active = prepareDumpFromLive(world.live);
+    const cleanSha = sha256Buffer(dumpToBytes(clean));
+    const activeSha = sha256Buffer(dumpToBytes(active));
+    const proof = assertSanitizedPreBaselineProof({
+      cleanPreDump: clean,
+      activePreDump: active,
+      expectedCleanPreSha: cleanSha,
+      actualCleanPreSha: cleanSha,
+      expectedActiveDumpSha: activeSha,
+      actualActiveDumpSha: activeSha,
+    });
+    expect(proof.ok).toBe(true);
+    expect(proof.SANITIZED_PRE_BASELINE_PROOF).toBe('PASS');
+  });
+
+  it('unsanitized JWT drift vs CLEAN_PRE => fail before auth consume', async () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    dump.find((e) => e.name === 'telegram-collector').env.JWT_SECRET = LIVE_JWT;
+    const { orch } = buildOrch({ dumpOverride: dump });
+    await expect(orch.runTransaction()).rejects.toMatchObject({
+      code: expect.stringMatching(/JWT|SANITIZED_PRE|UNAUTHORIZED/),
+    });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('unsanitized session/IDE drift => fail before auth consume', async () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    dump.find((e) => e.name === 'telegram-collector').env.CURSOR_CONVERSATION_ID = 'sess-x';
+    const { orch } = buildOrch({ dumpOverride: dump });
+    await expect(orch.runTransaction()).rejects.toMatchObject({
+      code: expect.stringMatching(/SESSION|SANITIZED_PRE|UNAUTHORIZED|IDE/),
+    });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('projection changes exactly engine status only; DB preserved', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const built = buildExpectedProjectedDump({
+      preDump: dump,
+      selection: sel,
+      liveFp: semanticFingerprint(world.live),
+    });
+    expect(built.ok).toBe(true);
+    expect(built.manifest.AUTHORIZED_SEMANTIC_DIFF_COUNT).toBe(1);
+    expect(built.manifest.ENGINE_EXTRA_STATUS_CHANGED).toBe('YES');
+    expect(built.manifest.COLLECTOR_DB_KEYS_ADDED).toBe(0);
+    expect(built.manifest.COLLECTOR_DB_KEYS_PRESERVED_EXACT).toBe(5);
+    const preColl = dump.find((e) => e.name === 'telegram-collector');
+    const postColl = built.projected.find((e) => e.name === 'telegram-collector');
+    for (const k of COLLECTOR_DB_KEYS) {
+      expect(postColl.env[k]).toBe(preColl.env[k]);
+    }
+  });
+
+  it('missing expectedActiveDumpSha => fail before auth', async () => {
+    const { orch } = buildOrch({}, { expectedActiveDumpSha: null });
+    orch.expectedActiveDumpSha = null;
+    await expect(orch.precheck()).rejects.toMatchObject({
+      code: 'EXPECTED_ACTIVE_DUMP_SHA_REQUIRED',
+    });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('active dump SHA mismatch => fail before auth', async () => {
+    const { orch } = buildOrch({}, { expectedActiveDumpSha: 'a'.repeat(64) });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'ACTIVE_DUMP_SHA_MISMATCH' });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('sanitized exact content + 0600 => PASS', async () => {
+    const { orch } = buildOrch({ dumpMode: 0o600 });
+    await orch.precheck();
+    expect(orch.state).toBe(State.PRECHECK_PASS);
+    expect(orch.authConsumed).toBe(false);
+    expect(orch.preDumpMode).toBe(0o600);
   });
 });

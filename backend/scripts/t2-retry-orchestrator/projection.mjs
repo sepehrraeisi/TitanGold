@@ -1,7 +1,7 @@
 /**
- * Pure projected-dump construction for T2 v1.5.0.
- * Base = exact PRE dump clone. Live supplies ONLY authorized collector DB_* values.
- * Never merges live God env / JWT / Cursor / shell / PM2 metadata.
+ * Pure projected-dump construction for T2 v1.6.0.
+ * Base = exact sanitized PRE dump clone.
+ * ALREADY_PRESENT_EXACT: only engine extra online→stopped; DB_* preserved (not recopied from live).
  */
 
 import {
@@ -333,25 +333,20 @@ export function structuralDiffPaths(pre, post, path = '') {
   return diffs;
 }
 
-function isAuthorizedProjectionDiffPath(diffPath, { extraDumpIndex, collectorDumpIndex }) {
-  // Engine status only
+function isAuthorizedProjectionDiffPath(diffPath, { extraDumpIndex }) {
+  // Engine status only (v1.6 — DB_* must not change)
   if (diffPath === `[${extraDumpIndex}].status`) return true;
-  // Collector DB_* under supported shapes
-  for (const key of COLLECTOR_DB_KEYS) {
-    if (diffPath === `[${collectorDumpIndex}].${key}`) return true;
-    if (diffPath === `[${collectorDumpIndex}].env.${key}`) return true;
-    if (diffPath === `[${collectorDumpIndex}].pm2_env.env.${key}`) return true;
-  }
   return false;
 }
 
 /**
- * Build expected projected dump from PRE dump + authorized live DB snapshot only.
+ * Build expected projected dump from sanitized PRE dump.
+ * Collector five DB_* must already be present and are preserved unchanged.
  *
  * @param {object} args
  * @param {Array} args.preDump
  * @param {object} args.selection — selectEngineRetainExtra result (live)
- * @param {Record<string,string>} args.collectorDbSnapshot — five DB_* from PRE LIVE
+ * @param {Record<string,string>} [args.collectorDbSnapshot] — optional; if provided must equal PRE dump DB_*
  */
 export function buildExpectedProjectedDump({
   preDump,
@@ -361,20 +356,6 @@ export function buildExpectedProjectedDump({
   if (!Array.isArray(preDump)) {
     return { ok: false, error: 'PROJECTION_PRE_DUMP_INVALID' };
   }
-  if (!collectorDbSnapshot || typeof collectorDbSnapshot !== 'object') {
-    return { ok: false, error: 'PROJECTION_COLLECTOR_DB_SNAPSHOT_MISSING' };
-  }
-  for (const key of COLLECTOR_DB_KEYS) {
-    if (
-      collectorDbSnapshot[key] == null ||
-      String(collectorDbSnapshot[key]).length === 0
-    ) {
-      return { ok: false, error: 'PROJECTION_COLLECTOR_DB_SNAPSHOT_INCOMPLETE' };
-    }
-  }
-  if (String(collectorDbSnapshot.DB_USER) !== EXPECTED_COLLECTOR_DB_USER) {
-    return { ok: false, error: 'PROJECTION_COLLECTOR_DB_USER_UNEXPECTED' };
-  }
 
   const engineMap = resolveDumpEngineIdentities(preDump, selection);
   if (!engineMap.ok) {
@@ -383,6 +364,32 @@ export function buildExpectedProjectedDump({
   const collectorMap = resolveDumpCollectorIdentity(preDump);
   if (!collectorMap.ok) {
     return { ok: false, error: collectorMap.error };
+  }
+
+  const collectorEntryPre = preDump[collectorMap.dumpIndex];
+  const mutPre = resolveDumpEnvMutationTarget(collectorEntryPre);
+  if (!mutPre.ok) {
+    return { ok: false, error: mutPre.error };
+  }
+
+  // Require all five already present on PRE dump
+  for (const key of COLLECTOR_DB_KEYS) {
+    const existing = scalarEnvValue(mutPre.container[key]);
+    if (existing == null) {
+      return { ok: false, error: 'PROJECTION_COLLECTOR_DB_ABSENT' };
+    }
+  }
+  if (String(mutPre.container.DB_USER) !== EXPECTED_COLLECTOR_DB_USER) {
+    return { ok: false, error: 'PROJECTION_COLLECTOR_DB_USER_UNEXPECTED' };
+  }
+
+  // If snapshot provided, must equal PRE dump values (preserve, do not rewrite from live drift)
+  if (collectorDbSnapshot && typeof collectorDbSnapshot === 'object') {
+    for (const key of COLLECTOR_DB_KEYS) {
+      if (String(collectorDbSnapshot[key] ?? '') !== String(mutPre.container[key] ?? '')) {
+        return { ok: false, error: 'PROJECTION_COLLECTOR_DB_SNAPSHOT_MISMATCH' };
+      }
+    }
   }
 
   const projected = deepCloneJson(preDump);
@@ -395,19 +402,15 @@ export function buildExpectedProjectedDump({
   }
   extraEntry.status = 'stopped';
 
-  const collectorEntry = projected[collectorMap.dumpIndex];
-  const mut = resolveDumpEnvMutationTarget(collectorEntry);
-  if (!mut.ok) {
-    return { ok: false, error: mut.error };
+  // Prove DB_* byte-identical to PRE (no delete/re-add)
+  const mutPost = resolveDumpEnvMutationTarget(projected[collectorMap.dumpIndex]);
+  if (!mutPost.ok) {
+    return { ok: false, error: mutPost.error };
   }
-
-  // Ensure none of the five keys already exist with different values — PRE should lack them.
   for (const key of COLLECTOR_DB_KEYS) {
-    const existing = scalarEnvValue(mut.container[key]);
-    if (existing != null) {
-      return { ok: false, error: 'PROJECTION_COLLECTOR_DB_ALREADY_PRESENT' };
+    if (String(mutPost.container[key] ?? '') !== String(mutPre.container[key] ?? '')) {
+      return { ok: false, error: 'PROJECTION_COLLECTOR_DB_REWRITE_FORBIDDEN' };
     }
-    mut.container[key] = String(collectorDbSnapshot[key]);
   }
 
   const diffPaths = structuralDiffPaths(preDump, projected);
@@ -415,7 +418,6 @@ export function buildExpectedProjectedDump({
     (p) =>
       !isAuthorizedProjectionDiffPath(p, {
         extraDumpIndex: engineMap.extraDumpIndex,
-        collectorDumpIndex: collectorMap.dumpIndex,
       }),
   );
   if (unexpected.length > 0) {
@@ -426,8 +428,8 @@ export function buildExpectedProjectedDump({
     };
   }
 
-  // Expect exactly 1 status + 5 DB keys = 6 paths
-  if (diffPaths.length !== 6) {
+  // Expect exactly 1 status change
+  if (diffPaths.length !== 1) {
     return {
       ok: false,
       error: 'PROJECTION_CONSTRUCTION_UNEXPECTED_DIFF',
@@ -445,9 +447,11 @@ export function buildExpectedProjectedDump({
     collectorMap,
     manifest: {
       ENGINE_EXTRA_STATUS_CHANGED: 'YES',
-      COLLECTOR_DB_KEYS_ADDED: 5,
+      COLLECTOR_DB_KEYS_ADDED: 0,
+      COLLECTOR_DB_KEYS_PRESERVED_EXACT: 5,
+      AUTHORIZED_SEMANTIC_DIFF_COUNT: 1,
       PROJECTED_MODE_REQUIRED: '0600',
-      AUTHORIZED_DIFF_PATH_COUNT: 6,
+      AUTHORIZED_DIFF_PATH_COUNT: 1,
     },
   };
 }

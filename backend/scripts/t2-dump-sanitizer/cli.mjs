@@ -1,35 +1,18 @@
 #!/usr/bin/env node
 /**
- * Fail-closed CLI for T2 retry orchestrator.
+ * Fail-closed CLI for T2 dump sanitizer.
  *
  * Default: non-mutating.
- * Live adapter selected ONLY when ALL gates are present AND explicit:
- *   --execute
- *   --run-id
- *   --authorization-file
- *   --acknowledge-production-mutation=YES
- *   --backup-root
- *   --journal-root  (MUST be explicit; never defaulted to backup-root)
- *   --expected-tool-version  (MUST be explicit; no default for live path)
- *   --confirm-run-transaction
- *   --clean-pre-file
- *   --expected-clean-pre-sha
- *   --expected-active-dump-sha
- *
- * This source task must not invoke live execution.
+ * Live adapter selected ONLY when ALL gates are present AND explicit.
  */
 
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import {
-  AUTHORIZED_TRANSACTION,
-  TOOL_NAME,
-  TOOL_VERSION,
-} from './constants.mjs';
-import { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
-import { createOrchestrator, T2OrchestratorError } from './orchestrator.mjs';
+import { AUTHORIZED_TRANSACTION, TOOL_NAME, TOOL_VERSION } from './constants.mjs';
+import { attachSanitizedWriteAlias, createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
+import { createDumpSanitizer, DumpSanitizerError } from './orchestrator.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,13 +37,13 @@ export function usage() {
     '  --run-id <id>',
     '  --authorization-file <path>',
     '  --acknowledge-production-mutation=YES',
-    '  --backup-root <dir>',
-    '  --journal-root <dir>',
-    '  --expected-tool-version ' + TOOL_VERSION,
-    '  --confirm-run-transaction',
     '  --clean-pre-file <path>',
     '  --expected-clean-pre-sha <sha256>',
     '  --expected-active-dump-sha <sha256>',
+    '  --backup-root <dir>',
+    '  --journal-root <dir>',
+    '  --expected-tool-version 1.0.0',
+    '  --confirm-run-transaction',
     '',
     `Tool: ${TOOL_NAME}@${TOOL_VERSION}`,
     `Authorized transaction id: ${AUTHORIZED_TRANSACTION}`,
@@ -68,10 +51,9 @@ export function usage() {
 }
 
 /**
- * Complete live execution gate decision.
- * --expected-tool-version MUST be present on argv (not defaulted).
- * --journal-root MUST be present on argv (never defaulted to backup-root).
- * --confirm-run-transaction is part of the gate, not a later convenience.
+ * Evaluate full live-execution gate set for dump sanitizer CLI.
+ * Alias: evaluateSanitizerExecutionGates.
+ * --journal-root is mandatory for live path (never defaulted to backup-root).
  */
 export function evaluateLiveExecutionGates(argv = []) {
   const execute = hasFlag(argv, '--execute');
@@ -146,7 +128,13 @@ export function evaluateLiveExecutionGates(argv = []) {
   };
 }
 
-export function main(argv = process.argv.slice(2), { exit = process.exit, stdout = console.log, stderr = console.error } = {}) {
+/** Canonical gate evaluator name for this tool. */
+export const evaluateSanitizerExecutionGates = evaluateLiveExecutionGates;
+
+export function main(
+  argv = process.argv.slice(2),
+  { exit = process.exit, stdout = console.log, stderr = console.error } = {},
+) {
   if (hasFlag(argv, '--help') || hasFlag(argv, '-h')) {
     stdout(usage());
     exit(0);
@@ -176,8 +164,6 @@ export function main(argv = process.argv.slice(2), { exit = process.exit, stdout
         missing: gates.missing || undefined,
         expectedVersion: gates.expectedVersion,
         toolVersion: TOOL_VERSION,
-        message:
-          'Live adapter requires explicit --execute, --run-id, --authorization-file, --acknowledge-production-mutation=YES, --backup-root, --expected-tool-version matching TOOL_VERSION, and --confirm-run-transaction',
       }),
     );
     exit(2);
@@ -205,9 +191,8 @@ export function main(argv = process.argv.slice(2), { exit = process.exit, stdout
     return;
   }
 
-  // Live adapter only when complete gate decision is ok (includes confirm).
-  const commands = createLiveBoundary({ gatesSatisfied: true });
-  const orch = createOrchestrator({
+  const commands = attachSanitizedWriteAlias(createLiveBoundary({ gatesSatisfied: true }));
+  const sanitizer = createDumpSanitizer({
     commands,
     authorization,
     runId: gates.runId,
@@ -222,7 +207,7 @@ export function main(argv = process.argv.slice(2), { exit = process.exit, stdout
     expectedActiveDumpSha: gates.expectedActiveDumpSha,
   });
 
-  return orch
+  return sanitizer
     .runTransaction()
     .then((state) => {
       stdout(JSON.stringify({ ok: true, state, runId: gates.runId }));
@@ -248,7 +233,7 @@ if (isDirect) {
   try {
     main();
   } catch (err) {
-    if (err instanceof T2OrchestratorError) {
+    if (err instanceof DumpSanitizerError) {
       console.error(JSON.stringify({ error: err.code, message: err.message }));
       process.exit(1);
     }
