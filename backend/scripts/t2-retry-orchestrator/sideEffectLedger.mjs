@@ -11,6 +11,8 @@ export function createSideEffectLedger() {
     ENGINE_STOP_APPLIED: false,
     PROJECTED_DUMP_WRITE_ATTEMPTED: false,
     PROJECTED_DUMP_WRITE_APPLIED: false,
+    DUMP_RESTORE_REQUIRED: null,
+    DUMP_RESTORE_DECISION: 'UNDECIDED',
     // Legacy 1.4.0 bits — must remain FALSE/UNUSED on v1.5 forward path
     SAVE_ATTEMPTED: false,
     DUMP_SAVE_APPLIED: false,
@@ -26,9 +28,13 @@ export function createSideEffectLedger() {
  */
 export function planRollbackActions(ledger, opts = {}) {
   const dumpStateUnknown = opts.dumpStateUnknown === true;
+  const explicitRestoreRequired =
+    typeof opts.dumpRestoreRequired === 'boolean' ? opts.dumpRestoreRequired : null;
   const restoreDump =
     ledger.PROJECTED_DUMP_WRITE_APPLIED === true ||
-    (ledger.PROJECTED_DUMP_WRITE_ATTEMPTED === true && dumpStateUnknown) ||
+    (ledger.PROJECTED_DUMP_WRITE_ATTEMPTED === true &&
+      dumpStateUnknown &&
+      explicitRestoreRequired === true) ||
     ledger.DUMP_SAVE_APPLIED === true ||
     (ledger.SAVE_ATTEMPTED === true && dumpStateUnknown);
   const startExtra = ledger.ENGINE_STOP_APPLIED === true;
@@ -41,12 +47,14 @@ export function planRollbackActions(ledger, opts = {}) {
       restore: restoreDump
         ? ledger.PROJECTED_DUMP_WRITE_APPLIED
           ? 'PROJECTED_DUMP_WRITE_APPLIED'
-          : ledger.PROJECTED_DUMP_WRITE_ATTEMPTED && dumpStateUnknown
-            ? 'PROJECTED_DUMP_WRITE_ATTEMPTED_STATE_UNKNOWN'
+          : ledger.PROJECTED_DUMP_WRITE_ATTEMPTED && dumpStateUnknown && explicitRestoreRequired
+            ? opts.dumpRestoreDecision || 'PROJECTED_DUMP_WRITE_ATTEMPTED_STATE_UNKNOWN'
             : ledger.DUMP_SAVE_APPLIED
               ? 'DUMP_SAVE_APPLIED'
               : 'SAVE_ATTEMPTED_DUMP_STATE_UNKNOWN'
-        : 'NO_PROVEN_DUMP_MUTATION',
+        : dumpStateUnknown && explicitRestoreRequired === false
+          ? opts.dumpRestoreDecision || 'ACTIVE_DUMP_IS_EXACT_PRE'
+          : 'NO_PROVEN_DUMP_MUTATION',
       start: startExtra ? 'ENGINE_STOP_APPLIED' : 'NO_PROVEN_ENGINE_STOP',
       harden:
         ledger.DUMP_MODE_HARDEN_APPLIED === true

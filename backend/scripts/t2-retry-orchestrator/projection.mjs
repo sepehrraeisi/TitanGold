@@ -11,8 +11,9 @@ import {
   EXPECTED_COLLECTOR_DB_USER,
   PM2_METADATA_KEYS,
   REQUIRED_PROJECTED_DUMP_MODE,
+  STABLE_CONFIG_FIELDS,
 } from './constants.mjs';
-import { extractProcessEnvResult, normalizeProcess } from './semantics.mjs';
+import { diffStableConfig, extractProcessEnvResult, normalizeProcess } from './semantics.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
 
@@ -74,35 +75,6 @@ export function resolveDumpEnvMutationTarget(entry) {
   return { ok: false, error: 'DUMP_ENV_SHAPE_UNSUPPORTED' };
 }
 
-/**
- * Stable identity key for dump↔live engine matching (no pm_id).
- * Accepts raw PM2 entries or already-normalized semantic procs.
- * Uses script/cwd/exec_mode/created_at — never PATH values in returned key.
- */
-export function dumpRecordStableKey(procLike) {
-  // Name omitted: fingerprint engines (mapFull) do not carry `name`, while dump
-  // entries do. Identity is script|cwd|exec_mode|created_at within a name filter.
-  if (
-    procLike &&
-    (Array.isArray(procLike.env_keys) ||
-      (procLike.script != null && procLike.cwd != null && !procLike.pm_exec_path && !procLike.env))
-  ) {
-    return [
-      procLike.script || '',
-      procLike.cwd || '',
-      procLike.exec_mode || '',
-      procLike.created_at == null ? '' : String(procLike.created_at),
-    ].join('|');
-  }
-  const n = normalizeProcess(procLike);
-  return [
-    n.script || '',
-    n.cwd || '',
-    n.exec_mode || '',
-    n.created_at == null ? '' : String(n.created_at),
-  ].join('|');
-}
-
 function readAppEnvMap(procLike) {
   if (procLike && procLike._envValues && typeof procLike._envValues === 'object') {
     return { ok: true, env: { ...procLike._envValues } };
@@ -114,7 +86,7 @@ function readAppEnvMap(procLike) {
  * Application env equality for identity (ignore PATH + proven PM2 metadata keys).
  * PATH compared only when both present for uniqueness — returned as boolean, never value.
  */
-function appEnvIdentityEqual(aProc, bProc) {
+function appEnvIdentityCompare(aProc, bProc) {
   const a = readAppEnvMap(aProc);
   const b = readAppEnvMap(bProc);
   if (!a.ok || !b.ok) return { ok: false, pathEqual: null };
@@ -137,19 +109,84 @@ function appEnvIdentityEqual(aProc, bProc) {
       : aPath != null && bPath != null
         ? aPath === bPath
         : false;
-  return { ok: true, pathEqual };
+  return { ok: true, pathEqual, aHasPath: aPath != null, bHasPath: bPath != null };
 }
 
-function stableFields(procLike) {
+function stableConfigEqual(aProc, bProc) {
+  const aNorm =
+    aProc && Array.isArray(aProc.env_keys)
+      ? {
+          name: ENGINE_NAME,
+          script: aProc.script || null,
+          cwd: aProc.cwd || null,
+          exec_mode: aProc.exec_mode || null,
+          interpreter: aProc.interpreter || null,
+          instances: aProc.instances ?? null,
+          namespace: aProc.namespace || null,
+          args: aProc.args ?? null,
+          node_args: aProc.node_args ?? null,
+          autorestart: aProc.autorestart ?? null,
+          watch: aProc.watch ?? null,
+        }
+      : normalizeProcess(aProc);
+  const bNorm =
+    bProc && Array.isArray(bProc.env_keys)
+      ? {
+          name: ENGINE_NAME,
+          script: bProc.script || null,
+          cwd: bProc.cwd || null,
+          exec_mode: bProc.exec_mode || null,
+          interpreter: bProc.interpreter || null,
+          instances: bProc.instances ?? null,
+          namespace: bProc.namespace || null,
+          args: bProc.args ?? null,
+          node_args: bProc.node_args ?? null,
+          autorestart: bProc.autorestart ?? null,
+          watch: bProc.watch ?? null,
+        }
+      : normalizeProcess(bProc);
+  const diffs = diffStableConfig(aNorm, bNorm, { scope: 'dump-live-engine-identity' });
+  return {
+    ok: diffs.length === 0,
+    diffKinds: diffs.map((d) => d.kind),
+    stableFieldCount: STABLE_CONFIG_FIELDS.length,
+  };
+}
+
+/**
+ * Redacted stable identity summary for tests/evidence only.
+ * Never includes PATH or secret env values.
+ */
+export function dumpRecordStableKey(procLike) {
   if (procLike && Array.isArray(procLike.env_keys)) {
-    return {
-      script: procLike.script || null,
-      cwd: procLike.cwd || null,
-      exec_mode: procLike.exec_mode || null,
-    };
+    return [
+      procLike.script || '',
+      procLike.cwd || '',
+      procLike.exec_mode || '',
+      procLike.interpreter || '',
+      procLike.instances == null ? '' : String(procLike.instances),
+      procLike.namespace || '',
+      procLike.args || '',
+      procLike.node_args || '',
+      procLike.autorestart == null ? '' : String(procLike.autorestart),
+      procLike.watch == null ? '' : String(procLike.watch),
+      `env:${(procLike.env_keys || []).filter((k) => k !== 'PATH' && !META.has(k)).sort().join(',')}`,
+    ].join('|');
   }
   const n = normalizeProcess(procLike);
-  return { script: n.script, cwd: n.cwd, exec_mode: n.exec_mode };
+  return [
+    n.script || '',
+    n.cwd || '',
+    n.exec_mode || '',
+    n.interpreter || '',
+    n.instances == null ? '' : String(n.instances),
+    n.namespace || '',
+    n.args || '',
+    n.node_args || '',
+    n.autorestart == null ? '' : String(n.autorestart),
+    n.watch == null ? '' : String(n.watch),
+    `env:${(n.env_keys || []).filter((k) => k !== 'PATH' && !META.has(k)).sort().join(',')}`,
+  ].join('|');
 }
 
 /**
@@ -171,54 +208,61 @@ export function resolveDumpEngineIdentities(preDump, selection) {
   }
 
   const livePair = [
-    { role: 'retained', live: selection.retained },
-    { role: 'extra', live: selection.extra },
+    { role: 'retained', live: selection.retained, pmId: selection.retained.pm_id },
+    { role: 'extra', live: selection.extra, pmId: selection.extra.pm_id },
   ];
+  const candidateMap = new Map();
+  for (const liveSpec of livePair) {
+    const hits = dumpEngines.filter(({ entry }) => {
+      const cfg = stableConfigEqual(entry, liveSpec.live);
+      if (!cfg.ok) return false;
+      const envCmp = appEnvIdentityCompare(entry, liveSpec.live);
+      return envCmp.ok;
+    });
+    candidateMap.set(liveSpec.role, hits);
+  }
 
-  /** @type {Array<{ role: string, dumpIndex: number, livePmId: number|null }>} */
-  const mapped = [];
+  const retainedHits = candidateMap.get('retained') || [];
+  const extraHits = candidateMap.get('extra') || [];
+  if (retainedHits.length === 0 || extraHits.length === 0) {
+    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+  }
 
-  for (const { role, live } of livePair) {
-    const liveKey = dumpRecordStableKey(live);
-    const candidates = dumpEngines.filter(({ entry }) => dumpRecordStableKey(entry) === liveKey);
-    let chosen = candidates;
-
-    if (chosen.length === 0) {
-      // Fallback: stable config without created_at + app env (PATH exception allowed)
-      chosen = dumpEngines.filter(({ entry }) => {
-        const nDump = stableFields(entry);
-        const nLive = stableFields(live);
-        if (
-          nDump.script !== nLive.script ||
-          nDump.cwd !== nLive.cwd ||
-          nDump.exec_mode !== nLive.exec_mode
-        ) {
-          return false;
-        }
-        const envId = appEnvIdentityEqual(entry, live);
-        return envId.ok;
+  const assignments = [];
+  for (const retainedHit of retainedHits) {
+    for (const extraHit of extraHits) {
+      if (retainedHit.index === extraHit.index) continue;
+      const retainedEnv = appEnvIdentityCompare(retainedHit.entry, selection.retained);
+      const extraEnv = appEnvIdentityCompare(extraHit.entry, selection.extra);
+      const strictScore =
+        (retainedEnv.pathEqual === true ? 1 : 0) + (extraEnv.pathEqual === true ? 1 : 0);
+      assignments.push({
+        retainedDumpIndex: retainedHit.index,
+        extraDumpIndex: extraHit.index,
+        retainedPathEqual: retainedEnv.pathEqual === true,
+        extraPathEqual: extraEnv.pathEqual === true,
+        strictScore,
       });
     }
-
-    if (chosen.length !== 1) {
-      return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
-    }
-    mapped.push({
-      role,
-      dumpIndex: chosen[0].index,
-      livePmId: typeof live.pm_id === 'number' ? live.pm_id : null,
-    });
   }
 
-  if (mapped[0].dumpIndex === mapped[1].dumpIndex) {
+  if (assignments.length === 0) {
+    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+  }
+  const bestScore = Math.max(...assignments.map((a) => a.strictScore));
+  const best = assignments.filter((a) => a.strictScore === bestScore);
+  if (best.length !== 1) {
     return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
   }
 
-  const retainedMap = mapped.find((m) => m.role === 'retained');
-  const extraMap = mapped.find((m) => m.role === 'extra');
-  if (!retainedMap || !extraMap) {
-    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
-  }
+  const retainedMap = {
+    dumpIndex: best[0].retainedDumpIndex,
+    livePmId: typeof selection.retained.pm_id === 'number' ? selection.retained.pm_id : null,
+  };
+  const extraMap = {
+    dumpIndex: best[0].extraDumpIndex,
+    livePmId: typeof selection.extra.pm_id === 'number' ? selection.extra.pm_id : null,
+  };
 
   return {
     ok: true,

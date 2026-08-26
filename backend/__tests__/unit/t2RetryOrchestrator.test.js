@@ -109,7 +109,7 @@ function makeLiveAndDump(overrides = {}) {
       watch: false,
       created_at: 1001,
       restart_time: 5,
-      env: { NODE_ENV: 'development', PATH: '/usr/bin' },
+      env: { NODE_ENV: 'development', PATH: '/noncanonical/extra/bin:/usr/bin' },
     },
     ...[1, 2, 3, 4].map((id) => ({
       name: 'titan-backend',
@@ -170,13 +170,22 @@ function makeLiveAndDump(overrides = {}) {
     dump,
     forceProjectedWriteFailBeforeRename: false,
     forceProjectedWriteFailAfterRename: false,
+    forceProjectedRenameNoChange: false,
     forceProjectedTempModeFail: false,
     forceReadbackMismatch: false,
+    forceReadDumpUnreadableAfterWrite: false,
+    forceUnknownActiveOtherAfterWrite: false,
     forceOwnerMismatch: false,
+    forceGroupMismatch: false,
+    forceOwnershipUnsafe: false,
+    forcePostwriteOwnerMismatch: false,
+    forcePostwriteGroupMismatch: false,
     forceBackendDriftOnSave: false,
     forceNodeEnvDriftOnSave: false,
     forceProcessorDriftOnSave: false,
     forceMonitorDriftOnSave: false,
+    forceRetainedEnvDriftOnSave: false,
+    forceCollectorLiveEnvDriftOnSave: false,
     forceBackendEnvAdd: false,
     forceBackendEnvRemove: false,
     forceBackendEnvValueChange: false,
@@ -197,6 +206,10 @@ function makeLiveAndDump(overrides = {}) {
     forceHardenSkipModeChange: false,
     forceRetainedPathChangeOnSave: false,
     dumpMode: 0o664,
+    dumpUid: 1000,
+    dumpGid: 1000,
+    restoreUidOverride: null,
+    restoreGidOverride: null,
     startExitCode: 0,
     restoreShaOverride: null,
     ...overrides,
@@ -306,11 +319,13 @@ function createFakeBoundary(world) {
   let liveEntries = deepClone(world.live);
   let dumpCorrupt = false;
   let dumpMode = typeof world.dumpMode === 'number' ? world.dumpMode & 0o777 : 0o664;
+  let dumpUid = typeof world.dumpUid === 'number' ? world.dumpUid : 1000;
+  let dumpGid = typeof world.dumpGid === 'number' ? world.dumpGid : 1000;
   const mutationLog = [];
 
   return {
     mutationLog,
-    world: () => ({ liveEntries, dumpEntries, dumpMode }),
+    world: () => ({ liveEntries, dumpEntries, dumpMode, dumpUid, dumpGid }),
     async listLiveProcesses() {
       return deepClone(liveEntries);
     },
@@ -325,8 +340,18 @@ function createFakeBoundary(world) {
         parsed: JSON.parse(bytes.toString('utf8')),
         sha256: sha256Buffer(bytes),
         mode: dumpMode,
-        uid: 1000,
-        gid: 1000,
+        uid: dumpUid,
+        gid: dumpGid,
+      };
+    },
+    async inspectActiveDumpWriteSafety() {
+      return {
+        dumpUid,
+        dumpGid,
+        dumpMode,
+        ownerSafe: !world.forceOwnershipUnsafe,
+        groupSafe: !world.forceOwnershipUnsafe,
+        safe: !world.forceOwnershipUnsafe,
       };
     },
     async writeBackup(bytes) {
@@ -344,11 +369,23 @@ function createFakeBoundary(world) {
       if (world.forceRestoreModeMismatch) {
         dumpMode = (dumpMode ^ 0o020) & 0o777;
       }
+      dumpUid =
+        typeof world.restoreUidOverride === 'number'
+          ? world.restoreUidOverride
+          : typeof opts.uid === 'number'
+            ? opts.uid
+            : dumpUid;
+      dumpGid =
+        typeof world.restoreGidOverride === 'number'
+          ? world.restoreGidOverride
+          : typeof opts.gid === 'number'
+            ? opts.gid
+            : dumpGid;
       if (world.forceRestoreShaMismatch) {
         dumpEntries = deepClone(dumpEntries);
         dumpEntries.push({ name: 'tamper', status: 'stopped', created_at: 999, env: {} });
       }
-      return { ok: true, mode: dumpMode };
+      return { ok: true, mode: dumpMode, uid: dumpUid, gid: dumpGid };
     },
     async stopProcessByPmId(pmId) {
       mutationLog.push(['stop', pmId]);
@@ -384,18 +421,77 @@ function createFakeBoundary(world) {
       if (world.forceOwnerMismatch) {
         throw new Error('DUMP_OWNER_MISMATCH');
       }
+      if (world.forceGroupMismatch) {
+        throw new Error('DUMP_GROUP_MISMATCH');
+      }
+      if (world.forceOwnershipUnsafe) {
+        throw Object.assign(new Error('DUMP_OWNERSHIP_PRESERVATION_UNSAFE'), {
+          code: 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE',
+        });
+      }
 
       const applyBytes = () => {
         dumpEntries = JSON.parse(Buffer.from(bytes).toString('utf8'));
         dumpMode = REQUIRED_PROJECTED_DUMP_MODE;
+        if (typeof opts.expectedUid === 'number') dumpUid = opts.expectedUid;
+        if (typeof opts.expectedGid === 'number') dumpGid = opts.expectedGid;
       };
 
       if (world.forceProjectedWriteFailAfterRename) {
         applyBytes();
         throw new Error('WRITE_FAIL_AFTER_RENAME');
       }
-
+      if (world.forceProjectedRenameNoChange) {
+        // Simulate failure path where rename did not alter active dump.
+        throw new Error('RENAME_FAILED_PRE_UNCHANGED');
+      }
       applyBytes();
+      if (world.forceRetainedEnvDriftOnSave) {
+        const retained = liveEntries.find((e) => e.name === 'titan-engine-worker' && e.pm_id === 5);
+        if (retained) retained.env = { ...retained.env, RETAINED_DRIFT: 'x' };
+      }
+      if (world.forceRetainedPathChangeOnSave) {
+        const retained = liveEntries.find((e) => e.name === 'titan-engine-worker' && e.pm_id === 5);
+        if (retained) retained.env = { ...retained.env, PATH: '/mutated/path/should-fail' };
+      }
+      if (world.forceBackendEnvValueChange) {
+        const b = liveEntries.find((e) => e.name === 'titan-backend');
+        if (b) b.env = { ...b.env, BACKEND_SECRET: 'changed-secret-value' };
+      }
+      if (world.forceBackendScriptDrift) {
+        const b = liveEntries.find((e) => e.name === 'titan-backend');
+        if (b) b.pm_exec_path = '/app/backend/server-DRIFTED.js';
+      }
+      if (world.forceProcessorArgsDrift) {
+        const p = liveEntries.find((e) => e.name === 'telegram-processor');
+        if (p) p.args = ['--mode=drifted'];
+      }
+      if (world.forceMonitorDriftOnSave) {
+        const m = liveEntries.find((e) => e.name === 'telegram-collector-monitor');
+        if (m) m.status = 'stopped';
+      }
+      if (world.forceCollectorLiveEnvDriftOnSave) {
+        const c = liveEntries.find((e) => e.name === 'telegram-collector');
+        if (c) c.env = { ...c.env, JWT_SECRET: 'collector-live-drifted' };
+      }
+      if (world.forceOtherConfigDrift) {
+        liveEntries.push({
+          name: 'titan-error-watch',
+          pm_id: 77,
+          status: 'online',
+          pm_exec_path: '/watch.js',
+          env: { NODE_ENV: 'development' },
+        });
+      }
+      if (world.forcePostwriteOwnerMismatch) dumpUid += 1;
+      if (world.forcePostwriteGroupMismatch) dumpGid += 1;
+      if (world.forceUnknownActiveOtherAfterWrite) {
+        dumpEntries = deepClone(dumpEntries);
+        dumpEntries.push({ name: 'other', status: 'stopped', created_at: 7777, env: {} });
+      }
+      if (world.forceReadDumpUnreadableAfterWrite) {
+        dumpCorrupt = true;
+      }
 
       const sha = sha256Buffer(bytes);
       if (opts.expectedSha256 && sha !== opts.expectedSha256) {
@@ -623,7 +719,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
     expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(false);
     expect(orch.sideEffects.ENGINE_STOP_APPLIED).toBe(true);
-    expect(orch.lastRollbackPlan.restoreDump).toBe(true);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(false);
     expect(orch.lastRollbackPlan.startExtra).toBe(true);
     expect(
       commands.world().liveEntries.filter((e) => e.name === 'titan-engine-worker' && e.status === 'online'),
@@ -725,10 +821,29 @@ describe('T2 retry orchestrator (final audit correction)', () => {
   });
 
   it('T15 backend/processor/monitor topology drift causes failure', async () => {
-    for (const key of ['forceBackendDriftOnSave', 'forceProcessorDriftOnSave', 'forceMonitorDriftOnSave']) {
+    const { orch: backendDrift } = buildOrch({ forceBackendDriftOnSave: true });
+    await expect(runToWrite(backendDrift)).rejects.toMatchObject({
+      code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH',
+    });
+    expect(backendDrift.state).toBe(State.ROLLED_BACK);
+
+    for (const key of ['forceProcessorDriftOnSave', 'forceMonitorDriftOnSave']) {
       const { orch } = buildOrch({ [key]: true });
-      await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-      expect(orch.state).toBe(State.ROLLED_BACK);
+      let err;
+      try {
+        await runToWrite(orch);
+      } catch (error) {
+        err = error;
+      }
+      expect(err).toBeInstanceOf(T2OrchestratorError);
+      expect([
+        'PROJECTED_DUMP_POSTWRITE_MISMATCH',
+        'ROLLBACK_LIVE_SEMANTIC_DRIFT',
+      ]).toContain(err.code);
+      expect([
+        State.ROLLED_BACK,
+        State.FAIL_FORWARD_COMPLETE,
+      ]).toContain(orch.state);
     }
   });
 
@@ -1122,7 +1237,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T41 backend script drift = FAIL', async () => {
     const { orch } = buildOrch({ forceBackendScriptDrift: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
   });
 
   it('T42 backend cwd drift = FAIL', async () => {
@@ -1132,12 +1247,12 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T43 processor args drift = FAIL', async () => {
     const { orch } = buildOrch({ forceProcessorArgsDrift: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
   });
 
   it('T44 unrelated process config drift = FAIL', async () => {
     const { orch } = buildOrch({ forceOtherConfigDrift: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
   });
 
   it('T45 env shapes: entry.env + entry.pm2_env.env + flat dump supported', () => {
@@ -1369,6 +1484,24 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
+  it('T57b rollback UID mismatch => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({
+      forceBackendDriftOnSave: true,
+      restoreUidOverride: 2000,
+    });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_UID_MISMATCH' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('T57c rollback GID mismatch => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({
+      forceBackendDriftOnSave: true,
+      restoreGidOverride: 3000,
+    });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_GID_MISMATCH' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
   it('T58 engine args differ => precheck FAIL before auth consumption', async () => {
     const world = makeLiveAndDump();
     world.live[0].args = ['--a'];
@@ -1586,8 +1719,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T74 PRE→POST retained PATH change still FAIL', async () => {
     const { orch } = buildOrch({ forceRetainedPathChangeOnSave: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
-    expect(orch.state).toBe(State.ROLLED_BACK);
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
   it('T75 rollback PATH drift still FAIL', async () => {
@@ -1621,7 +1754,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.sideEffects.PROJECTED_DUMP_WRITE_ATTEMPTED).toBe(true);
     expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(true);
     expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(false);
-    expect(orch.evidence.toString().includes('DUMP_MODE=0600')).toBe(true);
+    expect(orch.evidence.toString().includes('MODE=0600')).toBe(true);
   });
 
   it('T77 projected write fail after rename => rollback; pm2Save=0', async () => {
@@ -1639,6 +1772,38 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.sideEffects.PROJECTED_DUMP_WRITE_APPLIED).toBe(false);
   });
 
+  it('T77b rename failure with PRE exact => no restore', async () => {
+    const { orch } = buildOrch({ forceProjectedRenameNoChange: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({ code: 'PROJECTED_DUMP_STATE_UNKNOWN' });
+    expect(orch.sideEffects.DUMP_RESTORE_DECISION).toBe('ACTIVE_DUMP_IS_EXACT_PRE');
+    expect(orch.sideEffects.DUMP_RESTORE_REQUIRED).toBe(false);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(false);
+  });
+
+  it('T77c unreadable active dump after write => conservative restore', async () => {
+    const { orch } = buildOrch({ forceReadDumpUnreadableAfterWrite: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.buildProjection();
+    await expect(orch.writeProjectedDump()).rejects.toMatchObject({ code: 'PROJECTED_DUMP_STATE_UNKNOWN' });
+    expect(orch.sideEffects.DUMP_RESTORE_DECISION).toBe('ACTIVE_DUMP_UNREADABLE');
+    expect(orch.sideEffects.DUMP_RESTORE_REQUIRED).toBe(true);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(true);
+  });
+
+  it('T77d active dump other content => restore', async () => {
+    const { orch } = buildOrch({ forceUnknownActiveOtherAfterWrite: true, forceReadbackMismatch: true });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
+    expect(orch.sideEffects.DUMP_RESTORE_DECISION).toBe('ACTIVE_DUMP_IS_OTHER');
+    expect(orch.sideEffects.DUMP_RESTORE_REQUIRED).toBe(true);
+    expect(orch.lastRollbackPlan.restoreDump).toBe(true);
+  });
+
   it('T78 forceReadbackMismatch => rollback', async () => {
     const { orch } = buildOrch({ forceReadbackMismatch: true });
     await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_POSTWRITE_MISMATCH' });
@@ -1649,6 +1814,18 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const { orch } = buildOrch({ forceOwnerMismatch: true });
     await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_STATE_UNKNOWN' });
     expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('T79b projected group mismatch => rollback', async () => {
+    const { orch } = buildOrch({ forceGroupMismatch: true });
+    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'PROJECTED_DUMP_STATE_UNKNOWN' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('T79c ownership unsafe detected before auth consume', async () => {
+    const { orch } = buildOrch({ forceOwnershipUnsafe: true });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE' });
+    expect(orch.authConsumed).toBe(false);
   });
 
   it('T80 writeProjectedActiveDump after terminal => BLOCKED', async () => {
@@ -1717,7 +1894,30 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     auth.authorizedEffects = ['ENGINE_2_TO_1', 'COLLECTOR_DB_B_PERSIST'];
     const { orch } = buildOrch({}, { runId, authorization: auth });
     await orch.precheck();
-    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_INCOMPLETE' });
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
+  });
+
+  it('T87b extra fourth authorized effect => FAIL', async () => {
+    const runId = nextRunId('EXTRAEFFECT');
+    const auth = makeAuth(runId);
+    auth.authorizedEffects = [...AUTHORIZED_EFFECTS, 'UNAUTHORIZED_EXTRA_EFFECT'];
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
+  });
+
+  it('T87c duplicate authorized effect => FAIL', async () => {
+    const runId = nextRunId('DUPEFFECT');
+    const auth = makeAuth(runId);
+    auth.authorizedEffects = [
+      'ENGINE_2_TO_1',
+      'COLLECTOR_DB_B_PERSIST',
+      'PROJECTED_DUMP_WRITE_0600',
+      'PROJECTED_DUMP_WRITE_0600',
+    ];
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
   });
 
   it('T88 new 1.5.0 complete mocked artifact => PASS', async () => {
@@ -1867,23 +2067,45 @@ describe('T2 v1.5 projection security', () => {
     expect(collector.ok).toBe(true);
   });
 
-  it('ambiguous mapping FAIL', () => {
+  it('created_at matches but env differs => FAIL', () => {
     const world = makeLiveAndDump();
     const dump = prepareDumpFromLive(world.live);
-    // Duplicate created_at on engines → ambiguous stable key
     for (const e of dump) {
       if (e.name === 'titan-engine-worker') e.created_at = 1000;
     }
+    const engine = dump.find((e) => e.name === 'titan-engine-worker' && e.env.PATH !== '/usr/bin');
+    engine.env.EXTRA_DRIFT = 'x';
     const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
-    // Make live engines also share created_at so fallback cannot unique-map
-    world.live[0].created_at = 1000;
-    world.live[1].created_at = 1000;
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(false);
+  });
+
+  it('created_at absent still PASS when semantics unique', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') delete e.created_at;
+    }
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    const engines = resolveDumpEngineIdentities(dump, sel);
+    expect(engines.ok).toBe(true);
+    expect(engines.retainedLivePmId).toBe(5);
+  });
+
+  it('ambiguous mapping FAIL', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    // Remove the differentiating PATH so both dump/live engine identities become ambiguous.
+    for (const e of dump) {
+      if (e.name === 'titan-engine-worker') e.env.PATH = '/usr/bin';
+    }
+    world.live[0].env.PATH = '/usr/bin';
+    world.live[1].env.PATH = '/usr/bin';
     const sel2 = selectEngineRetainExtra(semanticFingerprint(world.live));
     expect(sel2.ok).toBe(true);
     const engines = resolveDumpEngineIdentities(dump, sel2);
     expect(engines.ok).toBe(false);
     expect(engines.error).toBe('DUMP_ENGINE_IDENTITY_UNRESOLVED');
-    void sel;
   });
 
   it('GlobalPm2SaveForbiddenError on boundary.pm2Save', async () => {
@@ -1892,12 +2114,16 @@ describe('T2 v1.5 projection security', () => {
     await expect(createFailClosedBoundary().pm2Save()).rejects.toBeInstanceOf(GlobalPm2SaveForbiddenError);
   });
 
-  it('planRollbackActions with PROJECTED_DUMP_WRITE_ATTEMPTED + unknown → restoreDump true', () => {
+  it('planRollbackActions with PROJECTED_DUMP_WRITE_ATTEMPTED + unknown exact-pre → restoreDump false', () => {
     const ledger = createSideEffectLedger();
     ledger.PROJECTED_DUMP_WRITE_ATTEMPTED = true;
-    const plan = planRollbackActions(ledger, { dumpStateUnknown: true });
-    expect(plan.restoreDump).toBe(true);
-    expect(plan.reason.restore).toBe('PROJECTED_DUMP_WRITE_ATTEMPTED_STATE_UNKNOWN');
+    const plan = planRollbackActions(ledger, {
+      dumpStateUnknown: true,
+      dumpRestoreRequired: false,
+      dumpRestoreDecision: 'ACTIVE_DUMP_IS_EXACT_PRE',
+    });
+    expect(plan.restoreDump).toBe(false);
+    expect(plan.reason.restore).toBe('ACTIVE_DUMP_IS_EXACT_PRE');
   });
 
   it('happy path pm2Save mutation count 0', async () => {

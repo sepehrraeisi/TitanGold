@@ -74,6 +74,83 @@ export function createLiveBoundary(opts = {}) {
     }
   }
 
+  function getExecIdentity() {
+    return {
+      euid: typeof process.geteuid === 'function' ? process.geteuid() : null,
+      egid: typeof process.getegid === 'function' ? process.getegid() : null,
+      groups: typeof process.getgroups === 'function' ? process.getgroups() : [],
+    };
+  }
+
+  async function inspectWriteOwnershipSafety() {
+    let dumpStat;
+    let parentStat;
+    try {
+      dumpStat = await fsp.stat(dumpPath);
+      parentStat = await fsp.stat(path.dirname(dumpPath));
+    } catch {
+      throw fixedError('PM2_DUMP_READ_FAILED');
+    }
+    const exec = getExecIdentity();
+    const ownerSafe = exec.euid != null && dumpStat.uid === exec.euid;
+    const groupSafe =
+      exec.egid != null &&
+      (dumpStat.gid === exec.egid || (Array.isArray(exec.groups) && exec.groups.includes(dumpStat.gid)));
+    return {
+      dumpUid: dumpStat.uid,
+      dumpGid: dumpStat.gid,
+      dumpMode: dumpStat.mode & 0o777,
+      parentUid: parentStat.uid,
+      parentGid: parentStat.gid,
+      parentMode: parentStat.mode & 0o777,
+      execEuid: exec.euid,
+      execEgid: exec.egid,
+      execGroups: exec.groups,
+      ownerSafe,
+      groupSafe,
+      safe: ownerSafe && groupSafe,
+    };
+  }
+
+  async function createOwnedTempEmpty(tmp, { uid, gid, mode }) {
+    const fh = await fsp.open(tmp, 'w', mode);
+    await fh.close();
+    try {
+      if (typeof uid === 'number' && typeof gid === 'number') {
+        await fsp.chown(tmp, uid, gid);
+      }
+      await fsp.chmod(tmp, mode);
+      const st = await fsp.stat(tmp);
+      if ((st.mode & 0o777) !== mode) {
+        throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
+      }
+      if (typeof uid === 'number' && st.uid !== uid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof gid === 'number' && st.gid !== gid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
+      }
+      return st;
+    } catch (err) {
+      try {
+        await fsp.unlink(tmp);
+      } catch {
+        /* ignore */
+      }
+      throw err.code ? err : fixedError(err.message || 'DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+    }
+  }
+
+  async function writeBytesAndSync(tmp, bytes) {
+    const fh = await fsp.open(tmp, 'r+');
+    try {
+      await fh.writeFile(bytes);
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  }
+
   return {
     async listLiveProcesses() {
       const result = spawnImpl('pm2', ['jlist'], { encoding: 'utf8', timeout: 60000 });
@@ -113,6 +190,18 @@ export function createLiveBoundary(opts = {}) {
       };
     },
 
+    async inspectActiveDumpWriteSafety() {
+      const info = await inspectWriteOwnershipSafety();
+      return {
+        dumpUid: info.dumpUid,
+        dumpGid: info.dumpGid,
+        dumpMode: info.dumpMode,
+        ownerSafe: info.ownerSafe,
+        groupSafe: info.groupSafe,
+        safe: info.safe,
+      };
+    },
+
     async writeBackup(bytes, destPath) {
       await fsp.writeFile(destPath, bytes, { mode: 0o600 });
       await fsp.chmod(destPath, 0o600);
@@ -131,25 +220,44 @@ export function createLiveBoundary(opts = {}) {
       const mode = opts.mode & 0o777;
       const dir = path.dirname(dumpPath);
       const tmp = path.join(dir, `dump.pm2.t2restore.${process.pid}.${Date.now()}`);
-      const fh = await fsp.open(tmp, 'w', mode);
+      await createOwnedTempEmpty(tmp, {
+        uid: typeof opts.uid === 'number' ? opts.uid : undefined,
+        gid: typeof opts.gid === 'number' ? opts.gid : undefined,
+        mode,
+      });
       try {
-        await fh.writeFile(backupBytes);
-        await fh.sync();
-        await fh.chmod(mode);
-      } finally {
-        await fh.close();
-      }
-      await fsp.rename(tmp, dumpPath);
-      await fsyncPath(dir);
-      await fsp.chmod(dumpPath, mode);
-      if (typeof opts.uid === 'number' && typeof opts.gid === 'number') {
-        try {
-          await fsp.chown(dumpPath, opts.uid, opts.gid);
-        } catch {
+        await writeBytesAndSync(tmp, backupBytes);
+        const stBeforeRename = await fsp.stat(tmp);
+        if ((stBeforeRename.mode & 0o777) !== mode) {
+          throw fixedError('ROLLBACK_DUMP_MODE_MISMATCH');
+        }
+        if (typeof opts.uid === 'number' && stBeforeRename.uid !== opts.uid) {
           throw fixedError('RESTORE_OWNER_MISMATCH');
         }
+        if (typeof opts.gid === 'number' && stBeforeRename.gid !== opts.gid) {
+          throw fixedError('RESTORE_GROUP_MISMATCH');
+        }
+        await fsp.rename(tmp, dumpPath);
+        await fsyncPath(dir);
+      } catch (err) {
+        try {
+          await fsp.unlink(tmp);
+        } catch {
+          /* ignore */
+        }
+        throw err.code ? err : fixedError(err.message || 'RESTORE_DUMP_FAILED');
       }
-      return { ok: true, mode };
+      const st = await fsp.stat(dumpPath);
+      if ((st.mode & 0o777) !== mode) {
+        throw fixedError('ROLLBACK_DUMP_MODE_MISMATCH');
+      }
+      if (typeof opts.uid === 'number' && st.uid !== opts.uid) {
+        throw fixedError('RESTORE_OWNER_MISMATCH');
+      }
+      if (typeof opts.gid === 'number' && st.gid !== opts.gid) {
+        throw fixedError('RESTORE_GROUP_MISMATCH');
+      }
+      return { ok: true, mode, uid: st.uid, gid: st.gid };
     },
 
     async stopProcessByPmId(pmId) {
@@ -189,54 +297,52 @@ export function createLiveBoundary(opts = {}) {
       if (typeof opts.expectedGid === 'number' && preSt.gid !== opts.expectedGid) {
         throw fixedError('DUMP_GROUP_MISMATCH');
       }
+      const execSafety = await inspectWriteOwnershipSafety();
+      if (!execSafety.safe) {
+        throw fixedError('DUMP_OWNERSHIP_PRESERVATION_UNSAFE');
+      }
 
       const dir = path.dirname(dumpPath);
       const tmp = path.join(dir, `dump.pm2.t2proj.${process.pid}.${Date.now()}`);
       const targetMode = REQUIRED_PROJECTED_DUMP_MODE;
-
-      const fh = await fsp.open(tmp, 'w', targetMode);
+      await createOwnedTempEmpty(tmp, {
+        uid: typeof opts.expectedUid === 'number' ? opts.expectedUid : undefined,
+        gid: typeof opts.expectedGid === 'number' ? opts.expectedGid : undefined,
+        mode: targetMode,
+      });
       try {
-        await fh.chmod(targetMode);
-        await fh.writeFile(projectedBytes);
-        await fh.sync();
-        await fh.chmod(targetMode);
-      } finally {
-        await fh.close();
-      }
-
-      const tmpSt = await fsp.stat(tmp);
-      if ((tmpSt.mode & 0o777) !== targetMode) {
+        await writeBytesAndSync(tmp, projectedBytes);
+        const tmpSt = await fsp.stat(tmp);
+        if ((tmpSt.mode & 0o777) !== targetMode) {
+          throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
+        }
+        if (typeof opts.expectedUid === 'number' && tmpSt.uid !== opts.expectedUid) {
+          throw fixedError('DUMP_OWNER_MISMATCH');
+        }
+        if (typeof opts.expectedGid === 'number' && tmpSt.gid !== opts.expectedGid) {
+          throw fixedError('DUMP_GROUP_MISMATCH');
+        }
+        await fsp.rename(tmp, dumpPath);
+        await fsyncPath(dir);
+      } catch (err) {
         try {
           await fsp.unlink(tmp);
         } catch {
           /* ignore */
         }
-        throw fixedError('PROJECTED_TEMP_MODE_NOT_0600');
-      }
-
-      await fsp.rename(tmp, dumpPath);
-      await fsyncPath(dir);
-
-      // Preserve owner/group when we are the same user; fail closed if required and cannot.
-      if (typeof opts.expectedUid === 'number' && typeof opts.expectedGid === 'number') {
-        try {
-          await fsp.chown(dumpPath, opts.expectedUid, opts.expectedGid);
-        } catch {
-          throw fixedError('DUMP_OWNER_PRESERVE_FAILED');
-        }
-      }
-
-      await fsp.chmod(dumpPath, targetMode);
-      try {
-        await fsyncPath(dumpPath);
-      } catch {
-        // Best-effort
+        throw err.code ? err : fixedError(err.message || 'PROJECTED_DUMP_WRITE_FAILED');
       }
 
       const st = await fsp.stat(dumpPath);
       const mode = st.mode & 0o777;
       if (mode !== targetMode) {
         throw fixedError('PROJECTED_DUMP_MODE_NOT_0600');
+      }
+      if (typeof opts.expectedUid === 'number' && st.uid !== opts.expectedUid) {
+        throw fixedError('DUMP_OWNER_MISMATCH');
+      }
+      if (typeof opts.expectedGid === 'number' && st.gid !== opts.expectedGid) {
+        throw fixedError('DUMP_GROUP_MISMATCH');
       }
       const bytes = await fsp.readFile(dumpPath);
       const sha = sha256Buffer(bytes);
@@ -252,6 +358,8 @@ export function createLiveBoundary(opts = {}) {
       return {
         mode,
         sha256: sha,
+        uid: st.uid,
+        gid: st.gid,
         ownerPreserved:
           typeof opts.expectedUid !== 'number' ? true : st.uid === opts.expectedUid,
         groupPreserved:

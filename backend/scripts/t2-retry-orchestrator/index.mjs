@@ -31,6 +31,7 @@ export {
 export { SecretSafeEvidence, assertSecretSafeLine } from './evidence.mjs';
 
 export {
+  assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
   assertPreEquivalent,
