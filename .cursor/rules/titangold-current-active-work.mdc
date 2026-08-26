@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2 v1.5.0 ONE-SHOT STOPPED_BEFORE_AUTH_CONSUME; dump DB_* already present + SHA drift; mutation CLOSED
+description: TitanGold Rule 02 — T2 dump/DB state reconciliation COMPLETE; GLOBAL_PM2_SAVE origin; unauthorized JWT/session in dump; DB-B exact live match; sanitization required; mutation CLOSED
 alwaysApply: true
 ---
 
@@ -50,8 +50,9 @@ ACCOUNTS_ENDPOINT = 200 /
 COLLECTOR_CHANNELS_ENDPOINT = 200 /
 COLLECTOR_DB_USER = tg_rot_b_0824 /
 COLLECTOR_DB_RUNTIME_ALIGNED_LIVE = YES /
-COLLECTOR_DB_RUNTIME_PERSISTED = NO /
-PM2_SAVE_PERFORMED = NO /
+COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH /
+CDBR_PM2_SAVE_PERFORMED = NO /
+UNAUTHORIZED_GLOBAL_PM2_SAVE_LATER_PERSISTED_DB_B = YES /
 REBOOT_RESURRECT_REGRESSION_RISK = OPEN /
 T2_RETRY_REARM_DESIGN = COMPLETE /
 T2_REARM_DESIGN_COMPLETE = YES /
@@ -78,7 +79,7 @@ T2_RETRY_AUTHORIZATION_CONSUMED = NO /
 ORCHESTRATOR_INVOKED = NO /
 T2_FORWARD_PM2_SAVE_COUNT = 0 /
 ENGINE_TOPOLOGY_2_TO_1 = NOT_EXECUTED /
-COLLECTOR_DB_RUNTIME_PERSISTED = NO /
+COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH /
 T2_ENGINE_ENV_EQUIVALENCE_RCA = COMPLETE /
 PATH_DIFFERENCE_CLASS = COMPONENT_SET_DIFFERENCE /
 ENGINE_PATH_RUNTIME_RELEVANCE = NONE /
@@ -145,27 +146,46 @@ PRODUCTION_MUTATION_CAPABILITY = CLOSED /
 ENGINE_TOPOLOGY_2_TO_1 = NOT_EXECUTED /
 ENGINE_ONLINE_COUNT = 2 /
 PATH_MUTATION = 0 /
-COLLECTOR_DB_RUNTIME_PERSISTED = DUMP_ALREADY_CONTAINS_DB_KEYS /
+T2_DUMP_DB_STATE_RECONCILIATION = COMPLETE /
+CURRENT_DUMP_ORIGIN = GLOBAL_PM2_SAVE /
+CURRENT_DUMP_ORIGIN_CONFIDENCE = HIGH /
+CURRENT_DUMP_UNAUTHORIZED_SECRET_PERSISTENCE = YES /
+JWT_SECRET_UNAUTHORIZED_PERSISTENCE = YES /
+PROVIDER_SECRET_UNAUTHORIZED_PERSISTENCE = NO /
+SESSION_ENV_UNAUTHORIZED_PERSISTENCE = YES /
+SECURITY_CLASSIFICATION = C /
+CURRENT_DUMP_HAS_UNAUTHORIZED_SECRET_STATE = YES /
+SECURITY_REMEDIATION_REQUIRED = YES /
+T2_DUMP_SANITIZATION_REQUIRED = YES /
+T2_ALREADY_PERSISTED_DB_SOURCE_ADAPTATION_REQUIRED = YES /
+T2_DUMP_DB_B_RECONCILIATION_REQUIRED = NO /
+COLLECTOR_DB_B_CURRENT_DUMP_EXACT = YES /
+COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH /
 REBOOT_RESURRECT_REGRESSION_RISK = OPEN /
 ACTIVE_PM2_DUMP_MODE = 0664 /
 ACTIVE_DUMP_SHA256 = c1783e3d90072341875f0f228107ce2fba27e34ad964eb0ea563eac79ab6cc7d /
+CLEAN_PRE_DUMP_SHA256 = 6cbf24ca4293451c17d39b14a91bc3dcc52a6aa693c18af7f910b6df0c25b81f /
+CLEAN_PRE_BASELINE_FOUND = YES /
 DUMP_COLLECTOR_DB_ABSENT = NO /
 DUMP_COLLECTOR_DB_COMPLETE = YES /
+CURRENT_DUMP_EFFECTIVE_READABILITY = SAFE_BY_PARENT_TRAVERSAL /
+CURRENT_SECRET_EXPOSURE_BOUNDARY_CHANGED = NO /
+CONTENT_SECRET_SURFACE_EXPANDED = YES /
 T2_RETRY_STOP_REASON = PRECHECK_MANDATORY_CONDITION_MISMATCH /
 T2_RETRY_STOP_DETAIL = DUMP_COLLECTOR_DB_ALREADY_PRESENT_AND_DUMP_SHA_DRIFT_FROM_PRIOR_BASELINE /
 T2_FORWARD_PM2_SAVE_COUNT = 0 /
 NO_POST_TERMINAL_MUTATION = PASS /
-NEXT_GATE = T2_DUMP_COLLECTOR_DB_STATE_RECONCILIATION_THEN_OWNER_REAUTH /
+NEXT_GATE = T2_UNAUTHORIZED_DUMP_SANITIZATION_DESIGN /
 DO_NOT_ADVANCE_TO_B1 = YES /
 B1_DEPLOY_AUTHORIZED = NO /
 C2_052_EXECUTION_AUTHORIZED = NO /
 NODE_ENV_NORMALIZATION_AUTHORIZED = NO /
 EXPLICIT_EXCLUSIONS = B1 / C2-052 / NODE_ENV / PATH_MUTATION / GLOBAL_PM2_SAVE / UNRELATED_LIVE_OR_PERSISTED_STATE /
-CANONICAL_GITHUB_MAIN = 0876d067a0e0aca11854ac9ab7ee71cd8f2638aa /
-GOVERNANCE_BRANCH = chore/c2-t2-retry-one-shot-execution-v1-5-0 /
+CANONICAL_GITHUB_MAIN = 28bde0e77dad12b9e19476af9599c5d3093980dd /
+GOVERNANCE_BRANCH = chore/c2-t2-dump-db-state-reconciliation /
 GOVERNANCE_AUTH_CAPTURE_COMMIT = 6ce92897049327b17b6d1b0925f109e488a066b7 /
-EVIDENCE = /home/ubuntu/TITANGOLD_T2_RETRY_STOP_PRECHECK_T2R15-20260826T092753Z.txt /
-EVIDENCE_SHA256 = 027a47c8413920181abe950b1cf73224fe9016366e72df1239c800fbe1d9bebc /
+EVIDENCE = /home/ubuntu/TITANGOLD_T2_DUMP_DB_STATE_RECONCILIATION_20260826.txt /
+EVIDENCE_SHA256 = 9bff17e54227601e37075a4852a11b50c52fef2d4f9c44842f3c39db98d8d7ff /
 PRODUCTION_MUTATION = 0 /
 PM2_MUTATION = 0 /
 ACTIVE_DUMP_MUTATION = 0 /
@@ -3027,13 +3047,131 @@ Owner explicit authorization (verbatim material; historical/closed after stop):
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 **B1_DEPLOY_AUTHORIZED = NO** · **C2_052_EXECUTION_AUTHORIZED = NO** · **NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
 **DO_NOT_ADVANCE_TO_B1 = YES**
-**NEXT_GATE = T2_DUMP_COLLECTOR_DB_STATE_RECONCILIATION_THEN_OWNER_REAUTH**
+**NEXT_GATE (HISTORICAL AT T2R15 STOP) = T2_DUMP_COLLECTOR_DB_STATE_RECONCILIATION_THEN_OWNER_REAUTH**
 **EVIDENCE = `/home/ubuntu/TITANGOLD_T2_RETRY_STOP_PRECHECK_T2R15-20260826T092753Z.txt`**
 **EVIDENCE_SHA256 = `027a47c8413920181abe950b1cf73224fe9016366e72df1239c800fbe1d9bebc`** · mode **0600** · tmp/home equality = **YES**
 **SECURE_EXEC = `/home/ubuntu/TITANGOLD_T2_EXEC_T2R15-20260826T092753Z`**
+**COLLECTOR_DB_RUNTIME_PERSISTED (HISTORICAL AT T2R15 STOP) = DUMP_ALREADY_CONTAINS_DB_KEYS** (presence only; superseded by reconciliation equality proof below)
 
 Do **NOT** claim T2 COMPLETED. Do **NOT** advance to B1. Do **NOT** mutate PM2/dump under this closed attempt.
 Do **NOT** treat the historical authorization capture as reusable live authority.
+
+### T2 dump / collector DB state reconciliation (COMPLETE / READ-ONLY / 20260826)
+
+**T2_DUMP_DB_STATE_RECONCILIATION = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY PRODUCTION RCA + GOVERNANCE ONLY**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **ACTIVE_DUMP_WRITE = 0** · **CHMOD = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **SECRET_MUTATION = 0**
+
+**CANONICAL_GITHUB_MAIN = `28bde0e77dad12b9e19476af9599c5d3093980dd`**
+**GOVERNANCE_BRANCH = `chore/c2-t2-dump-db-state-reconciliation`**
+**SUBJECT_STOP = T2R15-20260826T092753Z**
+
+#### Fresh baseline (re-proved)
+
+engine online **2** · backend **4** · processor **1** · collector **1** · monitor **2**
+health 5002/5003/accounts/channels = **200/200/200/200**
+collector live DB-B complete = **YES** · `DB_USER = tg_rot_b_0824`
+active dump SHA = `c1783e3d90072341875f0f228107ce2fba27e34ad964eb0ea563eac79ab6cc7d`
+mode **0664** · uid/gid **1000/1000** · inode **917943**
+mtime/ctime = `2026-08-26T08:17:35.266947097Z`
+five collector `DB_*` present in active dump = **YES**
+**NO_PRODUCTION_MUTATION_AFTER_T2R15_STOP = YES**
+
+#### Clean PRE baseline
+
+**CLEAN_PRE_BASELINE_FOUND = YES**
+**CLEAN_PRE_BASELINE_SHA_MATCH = YES**
+SHA256 = `6cbf24ca4293451c17d39b14a91bc3dcc52a6aa693c18af7f910b6df0c25b81f`
+preferred = `/home/ubuntu/TITANGOLD_T2_EXEC_T2R14-20260826T080119Z/TITANGOLD_T2_RUN_T2R14-20260826T080119Z/dump.pm2.pre` (mode **0600**)
+also = `/home/ubuntu/.pm2/dump.pm2.bak` (same SHA; mode **0664**)
+**RESTORE_TO_ACTIVE = NOT_PERFORMED**
+
+#### Current vs CLEAN PRE (secret-safe; no values)
+
+**CURRENT_DUMP_VS_CLEAN_PRE_DIFF_COUNT = 20**
+**CURRENT_DUMP_UNAUTHORIZED_DIFF_COUNT = 15**
+**CURRENT_DUMP_UNAUTHORIZED_SECRET_PERSISTENCE = YES**
+All 20 diffs on **telegram-collector** only (engines/backends/processor/monitors/unrelated = **0**).
+
+| PROCESS | KEY/FIELD | CHANGE | CLASS |
+|---|---|---|---|
+| telegram-collector | AGENT_TRANSCRIPTS | VALUE_CHANGED | UNKNOWN |
+| telegram-collector | PWD | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | CURSOR_CONVERSATION_ID | VALUE_CHANGED | IDE_CURSOR_VSCODE_ENV |
+| telegram-collector | CURSOR_RIPGREP_PATH | VALUE_CHANGED | IDE_CURSOR_VSCODE_ENV |
+| telegram-collector | SSH_CONNECTION | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | XDG_SESSION_ID | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | SSH_CLIENT | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | BROWSER | VALUE_CHANGED | UNKNOWN |
+| telegram-collector | PATH | VALUE_CHANGED | OS_RUNTIME_ENV |
+| telegram-collector | VSCODE_NLS_CONFIG | VALUE_CHANGED | IDE_CURSOR_VSCODE_ENV |
+| telegram-collector | JWT_SECRET | VALUE_CHANGED | APPLICATION_SECRET |
+| telegram-collector | OLDPWD | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | VSCODE_IPC_HOOK_CLI | VALUE_CHANGED | IDE_CURSOR_VSCODE_ENV |
+| telegram-collector | _ | VALUE_CHANGED | SHELL_SESSION_ENV |
+| telegram-collector | DB_PASSWORD | ADDED | AUTHORIZED_COLLECTOR_DB_B |
+| telegram-collector | DB_USER | ADDED | AUTHORIZED_COLLECTOR_DB_B |
+| telegram-collector | DB_NAME | ADDED | AUTHORIZED_COLLECTOR_DB_B |
+| telegram-collector | DB_PORT | ADDED | AUTHORIZED_COLLECTOR_DB_B |
+| telegram-collector | DB_HOST | ADDED | AUTHORIZED_COLLECTOR_DB_B |
+| telegram-collector | __CURSOR_SANDBOX_ENV_RESTORE | ADDED | SHELL_SESSION_ENV |
+
+#### Five DB_* three-way
+
+**DB_HOST_DUMP_LIVE_MATCH = YES**
+**DB_PORT_DUMP_LIVE_MATCH = YES**
+**DB_NAME_DUMP_LIVE_MATCH = YES**
+**DB_USER_DUMP_LIVE_MATCH = YES**
+**DB_PASSWORD_DUMP_LIVE_MATCH = YES**
+all five absent from CLEAN PRE = **YES**
+**COLLECTOR_DB_B_CURRENT_DUMP_EXACT = YES**
+**COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH**
+(presence-only `DUMP_ALREADY_CONTAINS_DB_KEYS` superseded)
+
+#### Sensitive three-way
+
+**JWT_SECRET_UNAUTHORIZED_PERSISTENCE = YES** (dump≠PRE · dump=LIVE)
+**PROVIDER_SECRET_UNAUTHORIZED_PERSISTENCE = NO**
+**SESSION_ENV_UNAUTHORIZED_PERSISTENCE = YES**
+`prev_restart_delay`: PRE=NO · DUMP=NO · LIVE=YES (not persisted by dumpProcessList)
+
+#### Mutation window / writer
+
+**ACTIVE_DUMP_CHANGE_WINDOW_START = `2026-08-26T08:04:10.815Z`** (T2R14 ROLLED_BACK / mutationClosed)
+**ACTIVE_DUMP_CHANGE_WINDOW_END = `2026-08-26T08:17:35.266Z`**
+**ACTIVE_DUMP_MTIME / CTIME = `2026-08-26T08:17:35.266947097Z`**
+**BAK_SHA_EQUALS_CLEAN_PRE = YES** · **BAK_SHA_EQUALS_CURRENT = NO** · bak→dump ≈ **4 ms**
+**ABANDONED_T2R14_SHELL_POST_TERMINAL_EXECUTION = NO**
+cron/systemd `pm2 save` in window = **NO**
+**CURRENT_DUMP_ORIGIN = GLOBAL_PM2_SAVE** · **CONFIDENCE = HIGH** (mechanism)
+likely caller correlation = semantic-allowlist RCA simulate-save session (MATRIX 08:15:06 → dump 08:17:35 → packet 08:18:01 with stale SHA 6cbf) · writer identity **NOT cryptographically proven** · **MEDIUM**
+
+#### Exposure / security
+
+**CURRENT_DUMP_EFFECTIVE_READABILITY = SAFE_BY_PARENT_TRAVERSAL**
+PM2_HOME **0700** · dump **0664** · no ACL xattr · **CURRENT_SECRET_EXPOSURE_BOUNDARY_CHANGED = NO**
+**CONTENT_SECRET_SURFACE_EXPANDED = YES** (DB_PASSWORD now in dump; PRE lacked it)
+**SECURITY_CLASSIFICATION = C** · **SECURITY_REMEDIATION_REQUIRED = YES**
+**T2_DUMP_SANITIZATION_REQUIRED = YES** · **T2_REAUTH_READY = NO**
+Do **not** auto-class as new S2 solely from this dump rewrite.
+Sanitization design only (NOT executed): CLEAN_PRE base + exact five DB_* · forbid JWT/session/IDE/PATH · atomic **0600** · new Owner envelope.
+
+#### Next T2 model
+
+Case 3 applies (unauthorized persisted state).
+**T2_ALREADY_PERSISTED_DB_SOURCE_ADAPTATION_REQUIRED = YES** (future PRE with exact DB_* must preserve five keys unchanged; projected diff = engine extra online→stopped; final 0600)
+**T2_DUMP_DB_B_RECONCILIATION_REQUIRED = NO**
+**T2_RETRY_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**B1_DEPLOY_AUTHORIZED = NO** · **C2_052_EXECUTION_AUTHORIZED = NO** · **NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**DO_NOT_ADVANCE_TO_B1 = YES**
+**NEXT_GATE = T2_UNAUTHORIZED_DUMP_SANITIZATION_DESIGN**
+
+Evidence:
+`/home/ubuntu/TITANGOLD_T2_DUMP_DB_STATE_RECONCILIATION_20260826.txt`
+SHA256 = `9bff17e54227601e37075a4852a11b50c52fef2d4f9c44842f3c39db98d8d7ff` · mode **0600** · tmp/home equality = **YES**
+
+**THIS RCA PERFORMED NO PRODUCTION MUTATION.**
 
 ### T2 retry one-shot production execution — STOPPED BEFORE AUTH CONSUME (COMPLETE / NO MUTATION)
 
@@ -4147,14 +4285,15 @@ Execution:
 - Restarted only pm_id **16** (`telegram-collector`); restart 13555 → 13556; PID refreshed.
 - `pm2 save` = 0 · pg_hba unchanged · roles/grants unchanged · no other process restart.
 
-Durability (truthful):
-- DB-B discrete `DB_*` values exist only in the **live** telegram-collector PM2/God environment.
-- Because `pm2 save` was explicitly outside the Owner-authorized envelope, persistence across daemon resurrect / host reboot is **NOT** proven.
+Durability (truthful at CDBR closeout; later superseded):
+- DB-B discrete `DB_*` values existed only in the **live** telegram-collector PM2/God environment at CDBR terminal.
+- Because `pm2 save` was explicitly outside the Owner-authorized CDBR envelope, persistence was **NOT** proven by CDBR.
 - **COLLECTOR_DB_RUNTIME_ALIGNED_LIVE = YES**
-- **COLLECTOR_DB_RUNTIME_PERSISTED = NO**
-- **PM2_SAVE_PERFORMED = NO**
-- **REBOOT_RESURRECT_REGRESSION_RISK = OPEN**
-- Do **NOT** claim durable collector restore. A separate bounded persistence gate is required before durability. Persistence is **NOT** authorized here.
+- **COLLECTOR_DB_RUNTIME_PERSISTED (HISTORICAL AT CDBR) = NO**
+- **PM2_SAVE_PERFORMED (CDBR) = NO**
+- **REBOOT_RESURRECT_REGRESSION_RISK = OPEN** at CDBR terminal
+- **SUPERSEDED 20260826:** unauthorized `GLOBAL_PM2_SAVE` wrote active dump; reconciliation proved **COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH** (see T2 dump/DB state reconciliation). Durability of DB-B is now true; unauthorized JWT/session persistence still blocks T2 reauth.
+- Do **NOT** treat CDBR envelope as having authorized dump persistence.
 
 **BEFORE:** health=200 · accounts=500 · channels=500 (SASL empty password)
 **AFTER:** health=200 · accounts=200 · channels=200
