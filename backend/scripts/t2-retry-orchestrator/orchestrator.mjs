@@ -9,6 +9,7 @@ import {
   AUTHORIZED_EFFECTS,
   AUTHORIZED_TRANSACTION,
   COLLECTOR_DB_KEYS,
+  REQUIRED_POST_SAVE_DUMP_MODE,
   ROLLBACK_ELIGIBLE_STATES,
   State,
   TERMINAL_STATES,
@@ -77,6 +78,7 @@ export class T2Orchestrator {
 
     this.preDumpSha = null;
     this.preDumpMode = null;
+    this.postDumpMode = null;
     this.postDumpSha = null;
     this.preDumpFp = null;
     this.preLiveFp = null;
@@ -183,6 +185,8 @@ export class T2Orchestrator {
       `ENGINE_STOP_APPLIED=${this.sideEffects.ENGINE_STOP_APPLIED ? 'YES' : 'NO'}`,
       `SAVE_ATTEMPTED=${this.sideEffects.SAVE_ATTEMPTED ? 'YES' : 'NO'}`,
       `DUMP_SAVE_APPLIED=${this.sideEffects.DUMP_SAVE_APPLIED ? 'YES' : 'NO'}`,
+      `DUMP_MODE_HARDEN_ATTEMPTED=${this.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED ? 'YES' : 'NO'}`,
+      `DUMP_MODE_HARDEN_APPLIED=${this.sideEffects.DUMP_MODE_HARDEN_APPLIED ? 'YES' : 'NO'}`,
     );
     await this._persistSideEffects();
     await this._failClosed(code, message);
@@ -324,6 +328,11 @@ export class T2Orchestrator {
       return this._failClosed(selection.error);
     }
     this.selection = selection;
+    if (selection.evidence && typeof selection.evidence === 'object') {
+      for (const [k, v] of Object.entries(selection.evidence)) {
+        this._log(`${k}=${v}`);
+      }
+    }
     this.recordedExtraIdentity = {
       pm_id: selection.extra.pm_id,
       script: selection.extra.script,
@@ -547,12 +556,71 @@ export class T2Orchestrator {
     return { postDumpSha: this.postDumpSha };
   }
 
-  async postsaveVerify() {
+  /**
+   * Exactly one forward pm2 save already completed. Harden active dump to 0600.
+   * Never calls pm2 save again.
+   */
+  async hardenDump() {
     this._requireState([State.SAVE_SUCCESS]);
+    await this._setState(State.DUMP_HARDENING, 'dump_harden_begin');
+
+    this.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED = true;
+    await this._persistSideEffects();
+    this._log('DUMP_MODE_HARDEN_ATTEMPTED=YES');
+
+    try {
+      await this.guardedCall('hardenActiveDumpMode', () =>
+        this.commands.hardenActiveDumpMode(REQUIRED_POST_SAVE_DUMP_MODE),
+      );
+    } catch (err) {
+      if (err instanceof T2OrchestratorError && TERMINAL_STATES.includes(this.state)) {
+        throw err;
+      }
+      await this.rollback('DUMP_HARDEN_COMMAND_FAILED');
+      throw new T2OrchestratorError('DUMP_HARDEN_COMMAND_FAILED');
+    }
+
+    let dumpPack;
+    try {
+      dumpPack = await this.commands.readDump();
+    } catch {
+      await this.rollback('DUMP_HARDEN_STAT_UNREADABLE');
+      throw new T2OrchestratorError('DUMP_HARDEN_STAT_UNREADABLE');
+    }
+
+    const mode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
+    if (mode !== REQUIRED_POST_SAVE_DUMP_MODE) {
+      this._log('DUMP_MODE_HARDEN_APPLIED=NO', `mode=${mode}`);
+      await this.rollback('DUMP_HARDEN_MODE_NOT_0600');
+      throw new T2OrchestratorError('DUMP_HARDEN_MODE_NOT_0600');
+    }
+
+    this.sideEffects.DUMP_MODE_HARDEN_APPLIED = true;
+    await this._persistSideEffects();
+    this.postDumpMode = mode;
+    await this._setState(State.DUMP_HARDENED, 'dump_hardened');
+    this._log('DUMP_MODE_HARDEN_APPLIED=YES', 'mode=0600');
+    return { mode };
+  }
+
+  async postsaveVerify() {
+    this._requireState([State.DUMP_HARDENED]);
 
     // Revalidate live collector DB values before persist equality check
     const liveNow = await this.commands.listLiveProcesses();
     const liveFpNow = semanticFingerprint(liveNow);
+    if ((liveFpNow.engine_online_count || 0) !== 1) {
+      await this.rollback('ENGINE_SINGLETON_POSTSAVE_FAIL');
+      throw new T2OrchestratorError('ENGINE_SINGLETON_POSTSAVE_FAIL');
+    }
+    const retainedLive = (liveFpNow.engines || []).find(
+      (e) => e.pm_id === this.selection.retained.pm_id && e.status === 'online',
+    );
+    if (!retainedLive) {
+      await this.rollback('RETAINED_NOT_ONLINE_POSTSAVE');
+      throw new T2OrchestratorError('RETAINED_NOT_ONLINE_POSTSAVE');
+    }
+
     const liveDbNow = captureCollectorDbLiveValues(liveFpNow);
     if (!liveDbNow) {
       await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
@@ -561,6 +629,12 @@ export class T2Orchestrator {
     this.liveCollectorDb = liveDbNow;
 
     const dumpPack = await this.commands.readDump();
+    const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
+    if (postMode !== REQUIRED_POST_SAVE_DUMP_MODE) {
+      await this.rollback('POSTSAVE_DUMP_MODE_NOT_0600');
+      throw new T2OrchestratorError('POSTSAVE_DUMP_MODE_NOT_0600');
+    }
+
     const postFp = semanticFingerprint(dumpPack.parsed);
     const { classified } = diffFingerprints(this.preDumpFp, postFp, {
       extraPmId: this.selection.extra.pm_id,
@@ -618,6 +692,7 @@ export class T2Orchestrator {
       `keys_order=${COLLECTOR_DB_KEYS.join(',')}`,
       `presence_bits=${presenceBits}`,
       `DB_USER_EXPECTED=${col.db_user_matches_expected ? 'YES' : 'NO'}`,
+      'DUMP_MODE=0600',
     );
 
     await this._setState(State.POSTSAVE_VERIFIED, 'postsave_verified');
@@ -794,6 +869,7 @@ export class T2Orchestrator {
     await this.backup();
     await this.stopExtra();
     await this.save();
+    await this.hardenDump();
     await this.postsaveVerify();
     await this.healthValidate();
     return this.complete();

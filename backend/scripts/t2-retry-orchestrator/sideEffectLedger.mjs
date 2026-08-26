@@ -10,6 +10,8 @@ export function createSideEffectLedger() {
     ENGINE_STOP_APPLIED: false,
     SAVE_ATTEMPTED: false,
     DUMP_SAVE_APPLIED: false,
+    DUMP_MODE_HARDEN_ATTEMPTED: false,
+    DUMP_MODE_HARDEN_APPLIED: false,
   };
 }
 
@@ -36,6 +38,12 @@ export function planRollbackActions(ledger, opts = {}) {
           : 'SAVE_ATTEMPTED_DUMP_STATE_UNKNOWN'
         : 'NO_PROVEN_DUMP_MUTATION',
       start: startExtra ? 'ENGINE_STOP_APPLIED' : 'NO_PROVEN_ENGINE_STOP',
+      harden:
+        ledger.DUMP_MODE_HARDEN_APPLIED === true
+          ? 'DUMP_MODE_HARDEN_APPLIED'
+          : ledger.DUMP_MODE_HARDEN_ATTEMPTED === true
+            ? 'DUMP_MODE_HARDEN_ATTEMPTED'
+            : 'NO_DUMP_MODE_HARDEN',
     },
   };
 }

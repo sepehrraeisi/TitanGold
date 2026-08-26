@@ -96,7 +96,7 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/backend',
       pm_exec_path: '/app/backend/server.js',
       exec_mode: 'cluster_mode',
-      env: { NODE_ENV: 'development', BACKEND_SECRET: SECRET_BACKEND },
+      env: { NODE_ENV: 'development', BACKEND_SECRET: SECRET_BACKEND, PATH: '/usr/bin' },
     })),
     {
       name: 'telegram-processor',
@@ -105,7 +105,7 @@ function makeLiveAndDump(overrides = {}) {
       pm_cwd: '/app/telegram-collector',
       pm_exec_path: '/app/telegram-collector/processor.js',
       args: ['--mode=normal'],
-      env: { NODE_ENV: 'development' },
+      env: { NODE_ENV: 'development', PATH: '/usr/bin' },
     },
     {
       name: 'telegram-collector',
@@ -167,6 +167,10 @@ function makeLiveAndDump(overrides = {}) {
     forceOtherConfigDrift: false,
     forceRestoreShaMismatch: false,
     forceRestoreModeMismatch: false,
+    forceHardenCommandFail: false,
+    forceHardenWrongMode: false,
+    forceHardenSkipModeChange: false,
+    forceRetainedPathChangeOnSave: false,
     dumpMode: 0o664,
     startExitCode: 0,
     restoreShaOverride: null,
@@ -320,7 +324,31 @@ function createFakeBoundary(world) {
       if (world.forceEngineCountNotRestoredOnRollback) {
         world._blockEngineRestore = true;
       }
+      if (world.forceRetainedPathChangeOnSave) {
+        for (const e of dumpEntries) {
+          if (e.name === 'titan-engine-worker' && e.status === 'online') {
+            e.env = { ...(e.env || {}), PATH: '/mutated/path/should-fail' };
+          }
+        }
+      }
+      // Simulate PM2 save recreating dump with umask → 0664
+      dumpMode = 0o664;
       return { exitCode: 0 };
+    },
+    async hardenActiveDumpMode(mode = 0o600) {
+      mutationLog.push(['hardenActiveDumpMode', mode & 0o777]);
+      if (world.forceHardenCommandFail) {
+        throw new Error('HARDEN_CMD_FAIL');
+      }
+      if (world.forceHardenSkipModeChange) {
+        return { mode: dumpMode, ok: false };
+      }
+      if (world.forceHardenWrongMode) {
+        dumpMode = 0o640;
+        return { mode: dumpMode, ok: false };
+      }
+      dumpMode = mode & 0o777;
+      return { mode: dumpMode, ok: dumpMode === (mode & 0o777) };
     },
     async healthCheck(port) {
       return { statusCode: 200, port };
@@ -466,6 +494,8 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.save();
     expect(orch.state).toBe(State.SAVE_SUCCESS);
     expect(orch.postDumpSha).not.toBe(pre);
+    await orch.hardenDump();
+    expect(orch.state).toBe(State.DUMP_HARDENED);
     await orch.postsaveVerify();
     await orch.healthValidate();
     expect(await orch.complete()).toBe(State.COMPLETED);
@@ -494,6 +524,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
   });
@@ -552,6 +583,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -588,6 +620,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -598,6 +631,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       await orch.backup();
       await orch.stopExtra();
       await orch.save();
+      await orch.hardenDump();
       await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
       expect(orch.state).toBe(State.ROLLED_BACK);
     }
@@ -716,6 +750,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -725,6 +760,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -734,6 +770,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.evidence.toString().includes('changed-secret-value')).toBe(false);
   });
@@ -744,6 +781,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -753,6 +791,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -762,6 +801,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.evidence.toString().includes(SECRET_TOKEN)).toBe(false);
   });
@@ -834,6 +874,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
       'chmod',
       'stopProcessByPmId',
       'pm2Save',
+      'hardenActiveDumpMode',
       'restoreDump',
       'startProcessByPmId',
     ]) {
@@ -859,6 +900,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -878,6 +920,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -889,6 +932,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.stopExtra();
     await orch.save();
     expect(orch.sideEffects.DUMP_SAVE_APPLIED).toBe(true);
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
@@ -900,6 +944,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.evidence.lines.some((l) => l.includes('DB_PASSWORD_MATCH=NO'))).toBe(true);
     expect(orch.evidence.toString().includes('wrong-password')).toBe(false);
@@ -911,6 +956,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.evidence.lines.some((l) => l.includes('DB_HOST_MATCH=NO'))).toBe(true);
     expect(orch.evidence.toString().includes('10.0.0.1')).toBe(false);
@@ -922,6 +968,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.evidence.lines.some((l) => l.includes('DB_NAME_MATCH=NO'))).toBe(true);
   });
@@ -944,6 +991,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -953,6 +1001,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -962,6 +1011,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -971,6 +1021,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
   });
 
@@ -1175,6 +1226,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o600);
@@ -1189,6 +1241,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(commands.world().dumpMode).toBe(0o640);
@@ -1200,6 +1253,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toBeTruthy();
     expect(commands.world().dumpMode).not.toBe(0o664);
     expect(commands.mutationLog.some((m) => Array.isArray(m) && m[0] === 'restoreDump' && m[1] === 0o664)).toBe(
@@ -1217,6 +1271,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_MODE_MISMATCH' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -1248,14 +1303,23 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     expect(orch.journal.authConsumed).toBe(false);
   });
 
-  it('T59 engine unrelated env value differs => FAIL', async () => {
+  it('T59 PATH-only difference with canonical consensus => PASS retain canonical', async () => {
     const world = makeLiveAndDump();
-    world.live[0].env = { ...world.live[0].env, PATH: '/usr/bin' };
-    world.live[1].env = { ...world.live[1].env, PATH: '/different/bin' };
+    // lower pm_id noncanonical; higher matches backend/processor canonical /usr/bin
+    world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical/extra/bin:/usr/bin' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
     const fp = semanticFingerprint(world.live);
     const sel = selectEngineRetainExtra(fp);
-    expect(sel.ok).toBe(false);
-    expect(sel.error).toBe('ENGINE_RUNTIME_IDENTITY_MISMATCH');
+    expect(sel.ok).toBe(true);
+    expect(sel.retained.pm_id).toBe(9);
+    expect(sel.extra.pm_id).toBe(5);
+    expect(sel.evidence.ENGINE_PATH_EXCEPTION_USED).toBe('YES');
+    expect(sel.evidence.CANONICAL_PATH_REFERENCE).toBe('BACKEND_PROCESSOR_CONSENSUS');
+    expect(sel.evidence.RETAINED_PATH_MATCH_CANONICAL).toBe('YES');
+    expect(sel.evidence.EXTRA_PATH_MATCH_CANONICAL).toBe('NO');
+    const blob = JSON.stringify(sel);
+    expect(blob.includes('/usr/bin')).toBe(false);
+    expect(blob.includes('/noncanonical')).toBe(false);
   });
 
   it('T60 engine env key differs => FAIL', async () => {
@@ -1291,6 +1355,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
     expect(orch.evidence.toString().includes('drifted-after-rollback')).toBe(false);
@@ -1305,6 +1370,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -1318,6 +1384,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -1331,6 +1398,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_LIVE_SEMANTIC_DRIFT' });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
@@ -1341,6 +1409,7 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await orch.backup();
     await orch.stopExtra();
     await orch.save();
+    await orch.hardenDump();
     await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
     expect(orch.state).toBe(State.ROLLED_BACK);
     expect(orch.evidence.lines.some((l) => l.includes('PRE_EQUIVALENT=YES'))).toBe(true);
@@ -1378,4 +1447,269 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     }
     await fs.unlink(tmpDump).catch(() => {});
   });
+
+  // ---- 1.4.0 PATH selection + dump harden ----
+
+  it('T68 PATH differs plus another env value => FAIL', () => {
+    const world = makeLiveAndDump();
+    world.live[0].env = { ...world.live[0].env, PATH: '/a', FOO: '1' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/b', FOO: '2' };
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_RUNTIME_IDENTITY_MISMATCH');
+  });
+
+  it('T69 PATH key missing on one engine => FAIL', () => {
+    const world = makeLiveAndDump();
+    delete world.live[1].env.PATH;
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_RUNTIME_IDENTITY_MISMATCH');
+  });
+
+  it('T70 backend PATH disagreement => ENGINE_CANONICAL_PATH_UNRESOLVED', () => {
+    const world = makeLiveAndDump();
+    world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical:/usr/bin' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
+    const b2 = world.live.find((e) => e.name === 'titan-backend' && e.pm_id === 2);
+    b2.env = { ...b2.env, PATH: '/other/backend/path' };
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_CANONICAL_PATH_UNRESOLVED');
+  });
+
+  it('T71 backend vs processor PATH disagreement => unresolved', () => {
+    const world = makeLiveAndDump();
+    world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical:/usr/bin' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
+    const proc = world.live.find((e) => e.name === 'telegram-processor');
+    proc.env = { ...proc.env, PATH: '/processor/other' };
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_CANONICAL_PATH_UNRESOLVED');
+  });
+
+  it('T72 neither engine matches canonical PATH => unresolved', () => {
+    const world = makeLiveAndDump();
+    world.live[0].env = { ...world.live[0].env, PATH: '/engine/a' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/engine/b' };
+    const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
+    expect(sel.ok).toBe(false);
+    expect(sel.error).toBe('ENGINE_CANONICAL_PATH_UNRESOLVED');
+  });
+
+  it('T73 no raw PATH in evidence for PATH exception precheck', async () => {
+    const world = makeLiveAndDump();
+    world.live[0].env = { ...world.live[0].env, PATH: '/noncanonical/extra/bin:/usr/bin' };
+    world.live[1].env = { ...world.live[1].env, PATH: '/usr/bin' };
+    world.dump = deepClone(world.live);
+    for (const e of world.dump) {
+      if (e.name === 'telegram-collector') {
+        for (const k of COLLECTOR_DB_KEYS) delete e.env[k];
+      }
+    }
+    const runId = nextRunId('PATHEV');
+    const journalFs = createMemoryJournalFs();
+    const journalRoot = '/tmp/t2-path-ev';
+    const orch = createOrchestrator({
+      commands: createFakeBoundary(world),
+      authorization: makeAuth(runId),
+      runId,
+      backupRoot: journalRoot,
+      journalRoot,
+      journalFs,
+      productionModeAcknowledged: true,
+    });
+    await orch.precheck();
+    expect(orch.selection.retained.pm_id).toBe(9);
+    const ev = orch.evidence.toString();
+    expect(ev.includes('ENGINE_PATH_EXCEPTION_USED=YES')).toBe(true);
+    expect(ev.includes('/usr/bin')).toBe(false);
+    expect(ev.includes('/noncanonical')).toBe(false);
+    expect(ev.includes(SECRET_PASSWORD)).toBe(false);
+  });
+
+  it('T74 PRE→POST retained PATH change still FAIL', async () => {
+    const { orch } = buildOrch({ forceRetainedPathChangeOnSave: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await orch.hardenDump();
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('T75 rollback PATH drift still FAIL', async () => {
+    const { orch, commands } = buildOrch({ forceBackendDriftOnSave: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await orch.hardenDump();
+    // Inject PATH drift on rollback start for retained engine live state
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      for (const e of commands.world().liveEntries) {
+        if (e.name === 'titan-engine-worker') {
+          e.env = { ...(e.env || {}), PATH: '/rollback/drift/path' };
+        }
+      }
+      return r;
+    };
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'ROLLBACK_ENGINE_CONFIG_DRIFT' });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+    expect(orch.evidence.toString().includes('/rollback/drift')).toBe(false);
+  });
+
+  it('T76 exactly one pm2 save; harden after SAVE_SUCCESS; final mode 0600', async () => {
+    const { orch, commands } = buildOrch();
+    await orch.runTransaction();
+    expect(orch.state).toBe(State.COMPLETED);
+    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
+    const hardenCalls = commands.mutationLog.filter((m) => Array.isArray(m) && m[0] === 'hardenActiveDumpMode');
+    expect(hardenCalls.length).toBe(1);
+    expect(hardenCalls[0][1]).toBe(0o600);
+    expect(commands.world().dumpMode).toBe(0o600);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(true);
+    expect(orch.evidence.toString().includes('DUMP_MODE=0600')).toBe(true);
+  });
+
+  it('T77 harden command failure => rollback', async () => {
+    const { orch, commands } = buildOrch({ forceHardenCommandFail: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_COMMAND_FAILED' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(false);
+  });
+
+  it('T78 harden leaves 0664 => rollback', async () => {
+    const { orch } = buildOrch({ forceHardenSkipModeChange: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_MODE_NOT_0600' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('T79 harden wrong mode 0640 => rollback', async () => {
+    const { orch } = buildOrch({ forceHardenWrongMode: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'DUMP_HARDEN_MODE_NOT_0600' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('T80 harden after terminal => BLOCKED', async () => {
+    const { orch } = buildOrch();
+    await orch.runTransaction();
+    await expect(orch.hardenDump()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
+  });
+
+  it('T81 postsaveVerify before DUMP_HARDENED => BLOCKED', async () => {
+    const { orch } = buildOrch();
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    expect(orch.state).toBe(State.SAVE_SUCCESS);
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'STATE_BLOCKED' });
+  });
+
+  it('T82 rollback restores PRE 0664 after harden', async () => {
+    const { orch, commands } = buildOrch({ dumpMode: 0o664, forceBackendDriftOnSave: true });
+    await orch.precheck();
+    expect(orch.preDumpMode).toBe(0o664);
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await orch.hardenDump();
+    expect(commands.world().dumpMode).toBe(0o600);
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(commands.world().dumpMode).toBe(0o664);
+  });
+
+  it('T83 rollback restores PRE 0600 after harden', async () => {
+    const { orch, commands } = buildOrch({ dumpMode: 0o600, forceBackendDriftOnSave: true });
+    await orch.precheck();
+    expect(orch.preDumpMode).toBe(0o600);
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    expect(commands.world().dumpMode).toBe(0o664);
+    await orch.hardenDump();
+    expect(commands.world().dumpMode).toBe(0o600);
+    await expect(orch.postsaveVerify()).rejects.toMatchObject({ code: 'SEMANTIC_ALLOWLIST_FAIL' });
+    expect(orch.state).toBe(State.ROLLED_BACK);
+    expect(commands.world().dumpMode).toBe(0o600);
+  });
+
+  it('T84 no second save during hardening/rollback', async () => {
+    const { orch, commands } = buildOrch({ forceHardenWrongMode: true });
+    await orch.precheck();
+    await orch.backup();
+    await orch.stopExtra();
+    await orch.save();
+    await expect(orch.hardenDump()).rejects.toBeTruthy();
+    expect(commands.mutationLog.filter((m) => m === 'pm2Save').length).toBe(1);
+  });
+
+  it('T85 ledger harden attempted/applied persists durably', async () => {
+    const { orch, journalFs, journalRoot, runId } = buildOrch();
+    await orch.runTransaction();
+    const j = await loadJournal({ runId, journalRoot, fs: journalFs });
+    expect(j.record.sideEffects.DUMP_MODE_HARDEN_ATTEMPTED).toBe(true);
+    expect(j.record.sideEffects.DUMP_MODE_HARDEN_APPLIED).toBe(true);
+  });
+
+  it('T86 old TOOL_VERSION 1.3.0 artifact => FAIL', async () => {
+    const { orch } = buildOrch({}, { expectedToolVersion: '1.3.0' });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'TOOL_VERSION_MISMATCH' });
+    expect(orch.authConsumed).toBe(false);
+  });
+
+  it('T87 missing DUMP_MODE_HARDEN_0600 authorized effect => FAIL', async () => {
+    const runId = nextRunId('NOHARDEN');
+    const auth = makeAuth(runId);
+    auth.authorizedEffects = ['ENGINE_2_TO_1', 'COLLECTOR_DB_B_PERSIST'];
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_INCOMPLETE' });
+  });
+
+  it('T88 new 1.4.0 complete mocked artifact => PASS', async () => {
+    const { orch } = buildOrch();
+    expect(TOOL_VERSION).toBe('1.4.0');
+    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN');
+    expect(AUTHORIZED_EFFECTS).toEqual([
+      'ENGINE_2_TO_1',
+      'COLLECTOR_DB_B_PERSIST',
+      'DUMP_MODE_HARDEN_0600',
+    ]);
+    const result = await orch.runTransaction();
+    expect(result).toBe(State.COMPLETED);
+  });
+
+  it('T89 mutation after COMPLETED cannot harden or save', async () => {
+    const { orch } = buildOrch();
+    await orch.runTransaction();
+    await expect(orch.guardedCall('pm2Save', async () => ({ exitCode: 0 }))).rejects.toMatchObject({
+      code: 'MUTATION_CLOSED',
+    });
+    await expect(
+      orch.guardedCall('hardenActiveDumpMode', async () => ({ mode: 0o600, ok: true })),
+    ).rejects.toMatchObject({ code: 'MUTATION_CLOSED' });
+  });
 });
+

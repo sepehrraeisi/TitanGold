@@ -21,6 +21,7 @@
  *   stopProcessByPmId: (pmId: number) => Promise<CommandResult>,
  *   startProcessByPmId: (pmId: number) => Promise<CommandResult>,
  *   pm2Save: () => Promise<CommandResult>,
+ *   hardenActiveDumpMode: (mode?: number) => Promise<{ mode: number, ok: boolean }>,
  *   healthCheck: (port: number) => Promise<{ statusCode: number }>,
  *   collectorFunctionalCheck: () => Promise<{ accounts: number, channels: number, health: number }>,
  *   ensureDir: (path: string, mode: number) => Promise<void>,
@@ -51,6 +52,7 @@ export function createFailClosedBoundary() {
     stopProcessByPmId: () => deny('stopProcessByPmId'),
     startProcessByPmId: () => deny('startProcessByPmId'),
     pm2Save: () => deny('pm2Save'),
+    hardenActiveDumpMode: () => deny('hardenActiveDumpMode'),
     healthCheck: () => deny('healthCheck'),
     collectorFunctionalCheck: () => deny('collectorFunctionalCheck'),
     ensureDir: () => deny('ensureDir'),
@@ -67,5 +69,6 @@ export const MUTATING_OPS = Object.freeze([
   'stopProcessByPmId',
   'startProcessByPmId',
   'pm2Save',
+  'hardenActiveDumpMode',
   'restoreDump',
 ]);

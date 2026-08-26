@@ -497,6 +497,66 @@ export function summarizeEnvEquality(preProc, postProc) {
   };
 }
 
+/**
+ * Read PATH presence/equality bits without exposing values to evidence.
+ * @param {object} proc
+ * @returns {{ present: boolean, value: string|null }}
+ */
+function readPathInternal(proc) {
+  const vals = proc?._envValues || {};
+  const keys = new Set(proc?.env_keys || Object.keys(vals));
+  if (!keys.has('PATH')) {
+    return { present: false, value: null };
+  }
+  const v = vals.PATH;
+  if (v == null) {
+    return { present: false, value: null };
+  }
+  return { present: true, value: String(v) };
+}
+
+/**
+ * Backend+processor PATH consensus for engine retain selection only.
+ * Never returns PATH into caller evidence — value stays internal.
+ * @param {ReturnType<typeof semanticFingerprint>} fp
+ */
+export function resolveCanonicalPathConsensus(fp) {
+  const backends = fp.backends || [];
+  if (backends.length === 0) {
+    return { ok: false, error: 'ENGINE_CANONICAL_PATH_UNRESOLVED' };
+  }
+  const backendPaths = backends.map((b) => readPathInternal(b));
+  if (backendPaths.some((p) => !p.present)) {
+    return { ok: false, error: 'ENGINE_CANONICAL_PATH_UNRESOLVED' };
+  }
+  const canonical = backendPaths[0].value;
+  if (backendPaths.some((p) => p.value !== canonical)) {
+    return { ok: false, error: 'ENGINE_CANONICAL_PATH_UNRESOLVED' };
+  }
+
+  const processors = (fp.processors || []).filter((p) => p.status === 'online');
+  if (processors.length === 0) {
+    return { ok: false, error: 'ENGINE_CANONICAL_PATH_UNRESOLVED' };
+  }
+  for (const proc of processors) {
+    const pp = readPathInternal(proc);
+    if (!pp.present || pp.value !== canonical) {
+      return { ok: false, error: 'ENGINE_CANONICAL_PATH_UNRESOLVED' };
+    }
+  }
+
+  return {
+    ok: true,
+    /** @private internal only — never log */
+    _canonicalPath: canonical,
+    reference: 'BACKEND_PROCESSOR_CONSENSUS',
+  };
+}
+
+/**
+ * Engine-pair selection with NARROW PATH exception (selection-only).
+ * PRE→POST / rollback / non-engine env gates remain full-strict via diffProcessEnv.
+ */
 export function selectEngineRetainExtra(fp) {
   const online = (fp.engines || []).filter((e) => e.status === 'online');
   if (online.length !== 2) {
@@ -507,24 +567,110 @@ export function selectEngineRetainExtra(fp) {
   }
   const [a, b] = [...online].sort((x, y) => x.pm_id - y.pm_id);
 
-  // Full semantic equivalence except volatile identity/runtime metadata (pm_id/pid/timestamps/restarts).
   const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
-  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
-  if (configDiffs.length > 0 || envDiffs.length > 0) {
-    const kinds = [...configDiffs, ...envDiffs].map((d) => d.kind);
+  if (configDiffs.length > 0) {
     return {
       ok: false,
       error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: kinds,
+      detailKinds: configDiffs.map((d) => d.kind),
     };
   }
 
+  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
+  const pathOnlyValueDiff =
+    envDiffs.length > 0 &&
+    envDiffs.every(
+      (d) => d.kind === 'ENV_VALUE_CHANGED' && d.detail?.key === 'PATH' && d.detail?.category === 'value-changed',
+    );
+
+  if (envDiffs.length > 0 && !pathOnlyValueDiff) {
+    return {
+      ok: false,
+      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: envDiffs.map((d) => d.kind),
+    };
+  }
+
+  const pathA = readPathInternal(a);
+  const pathB = readPathInternal(b);
+  const pathEqual = pathA.present && pathB.present && pathA.value === pathB.value;
+
+  /** @type {Record<string, string|boolean>} */
+  const evidence = {
+    ENGINE_PATH_EQUAL: pathEqual ? 'YES' : 'NO',
+    ENGINE_PATH_EXCEPTION_USED: 'NO',
+  };
+
+  // Identical PATH (or both absent as equal non-present handled above via key diffs):
+  // retain lowest pm_id among fully equivalent workers.
+  if (!pathOnlyValueDiff) {
+    if (!pathEqual && (pathA.present || pathB.present)) {
+      // One missing PATH key should already have failed via envDiffs; fail closed.
+      return {
+        ok: false,
+        error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+        detailKinds: ['ENV_VALUE_CHANGED'],
+        evidence,
+      };
+    }
+    return {
+      ok: true,
+      retained: a,
+      extra: b,
+      selection_rule: 'lowest_pm_id_among_fully_equivalent_online_workers',
+      unique_responsibility_proven: false,
+      evidence: {
+        ...evidence,
+        ENGINE_PATH_EQUAL: 'YES',
+        ENGINE_PATH_EXCEPTION_USED: 'NO',
+      },
+    };
+  }
+
+  // PATH is the only permitted engine-to-engine inequality — resolve canonical retain.
+  const consensus = resolveCanonicalPathConsensus(fp);
+  if (!consensus.ok) {
+    return {
+      ok: false,
+      error: consensus.error || 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+      evidence: {
+        ...evidence,
+        ENGINE_PATH_EXCEPTION_USED: 'YES',
+      },
+    };
+  }
+
+  const aMatches = pathA.present && pathA.value === consensus._canonicalPath;
+  const bMatches = pathB.present && pathB.value === consensus._canonicalPath;
+  const matchCount = (aMatches ? 1 : 0) + (bMatches ? 1 : 0);
+  if (matchCount !== 1) {
+    return {
+      ok: false,
+      error: 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+      evidence: {
+        ENGINE_PATH_EQUAL: 'NO',
+        ENGINE_PATH_EXCEPTION_USED: 'YES',
+        CANONICAL_PATH_REFERENCE: consensus.reference,
+      },
+    };
+  }
+
+  const retained = aMatches ? a : b;
+  const extra = aMatches ? b : a;
+
   return {
     ok: true,
-    retained: a,
-    extra: b,
-    selection_rule: 'lowest_pm_id_among_fully_equivalent_online_workers',
+    retained,
+    extra,
+    selection_rule: 'canonical_path_match_among_path_exception_equivalent_workers',
     unique_responsibility_proven: false,
+    evidence: {
+      ENGINE_PATH_EQUAL: 'NO',
+      ENGINE_PATH_EXCEPTION_USED: 'YES',
+      CANONICAL_PATH_REFERENCE: consensus.reference,
+      RETAINED_PATH_MATCH_CANONICAL: 'YES',
+      EXTRA_PATH_MATCH_CANONICAL: 'NO',
+    },
   };
 }
 

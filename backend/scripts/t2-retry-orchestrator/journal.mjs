@@ -113,6 +113,8 @@ export async function createExclusiveJournal(opts) {
       ENGINE_STOP_APPLIED: false,
       SAVE_ATTEMPTED: false,
       DUMP_SAVE_APPLIED: false,
+      DUMP_MODE_HARDEN_ATTEMPTED: false,
+      DUMP_MODE_HARDEN_APPLIED: false,
     },
     createdAt: new Date().toISOString(),
   };
@@ -255,6 +257,8 @@ export class TransactionJournal {
       ENGINE_STOP_APPLIED: !!ledger.ENGINE_STOP_APPLIED,
       SAVE_ATTEMPTED: !!ledger.SAVE_ATTEMPTED,
       DUMP_SAVE_APPLIED: !!ledger.DUMP_SAVE_APPLIED,
+      DUMP_MODE_HARDEN_ATTEMPTED: !!ledger.DUMP_MODE_HARDEN_ATTEMPTED,
+      DUMP_MODE_HARDEN_APPLIED: !!ledger.DUMP_MODE_HARDEN_APPLIED,
     };
     await this.persist();
   }
