@@ -147,6 +147,24 @@ export function createLiveBoundary(opts = {}) {
       return runPm2(['save']);
     },
 
+    /**
+     * Harden ONLY the already-resolved active dump path (never arbitrary caller paths).
+     * Returns mode only — never dump contents.
+     * @param {number} [mode]
+     */
+    async hardenActiveDumpMode(mode = 0o600) {
+      const targetMode = mode & 0o777;
+      await fsp.chmod(dumpPath, targetMode);
+      try {
+        await fsyncPath(dumpPath);
+      } catch {
+        // Best-effort fsync; mode verification below is authoritative.
+      }
+      const st = await fsp.stat(dumpPath);
+      const actual = st.mode & 0o777;
+      return { mode: actual, ok: actual === targetMode };
+    },
+
     async healthCheck(port) {
       const statusCode = httpStatus(`http://127.0.0.1:${port}/health`);
       return { statusCode };

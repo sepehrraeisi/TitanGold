@@ -3,14 +3,15 @@
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.3.0';
+export const TOOL_VERSION = '1.4.0';
 
 export const AUTHORIZED_TRANSACTION =
-  'T2_ENGINE_SINGLETON_AND_COLLECTOR_DB_B_PERSIST';
+  'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN';
 
 export const AUTHORIZED_EFFECTS = Object.freeze([
   'ENGINE_2_TO_1',
   'COLLECTOR_DB_B_PERSIST',
+  'DUMP_MODE_HARDEN_0600',
 ]);
 
 export const ENGINE_NAME = 'titan-engine-worker';
@@ -28,6 +29,9 @@ export const COLLECTOR_DB_KEYS = Object.freeze([
   'DB_USER',
   'DB_PASSWORD',
 ]);
+
+/** Final active dump mode required after successful forward save + harden. */
+export const REQUIRED_POST_SAVE_DUMP_MODE = 0o600;
 
 /** PM2 metadata / launch fields that must never be treated as application env. */
 export const PM2_METADATA_KEYS = Object.freeze([
@@ -133,6 +137,8 @@ export const State = Object.freeze({
   ENGINE_SINGLETON_VERIFIED: 'ENGINE_SINGLETON_VERIFIED',
   SAVE_RUNNING: 'SAVE_RUNNING',
   SAVE_SUCCESS: 'SAVE_SUCCESS',
+  DUMP_HARDENING: 'DUMP_HARDENING',
+  DUMP_HARDENED: 'DUMP_HARDENED',
   POSTSAVE_VERIFIED: 'POSTSAVE_VERIFIED',
   ROLLBACK_RUNNING: 'ROLLBACK_RUNNING',
   COMPLETED: 'COMPLETED',
@@ -155,6 +161,8 @@ export const ROLLBACK_ELIGIBLE_STATES = Object.freeze([
   State.ENGINE_SINGLETON_VERIFIED,
   State.SAVE_RUNNING,
   State.SAVE_SUCCESS,
+  State.DUMP_HARDENING,
+  State.DUMP_HARDENED,
   State.POSTSAVE_VERIFIED,
   State.ROLLBACK_RUNNING,
 ]);
