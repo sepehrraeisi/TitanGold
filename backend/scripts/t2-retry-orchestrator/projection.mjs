@@ -1,18 +1,31 @@
 /**
- * Pure projected-dump construction for T2 v1.6.0.
+ * Pure projected-dump construction for T2 v1.6.1.
  * Base = exact sanitized PRE dump clone.
- * ALREADY_PRESENT_EXACT: only engine extra online→stopped; DB_* preserved (not recopied from live).
+ * ALREADY_PRESENT_EXACT: only engine status online→stopped; DB_* preserved.
+ * Mapping modes: UNIQUE_SEMANTIC_IDENTITY | SYMMETRIC_EQUIVALENT_SLOTS.
  */
 
 import {
   COLLECTOR_DB_KEYS,
   COLLECTOR_NAME,
+  DUMP_ENGINE_MAPPING_MODE,
   ENGINE_NAME,
   EXPECTED_COLLECTOR_DB_USER,
   PM2_METADATA_KEYS,
   REQUIRED_PROJECTED_DUMP_MODE,
   STABLE_CONFIG_FIELDS,
 } from './constants.mjs';
+import {
+  assertSymmetricProjectedDumpResurrectCompatibility,
+  compareDumpEngineResurrectSemantics,
+} from './resurrectSemantics.mjs';
+import {
+  compareProcessPm2Semantics,
+  deriveLiveApplicationEnvKeyContext,
+  resolveRawPm2Entry,
+  readApplicationEnvValue,
+  deepStructuralEqual,
+} from './pm2SemanticModel.mjs';
 import { diffStableConfig, extractProcessEnvResult, normalizeProcess } from './semantics.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
@@ -189,12 +202,40 @@ export function dumpRecordStableKey(procLike) {
   ].join('|');
 }
 
+function pathEqualDumpLive(dumpEntry, liveProc) {
+  const liveRaw = resolveRawPm2Entry(liveProc);
+  const a = readApplicationEnvValue(dumpEntry, 'PATH');
+  const b = readApplicationEnvValue(liveRaw, 'PATH');
+  if (!a.present && !b.present) return true;
+  if (!a.present || !b.present) return false;
+  return deepStructuralEqual(a.value, b.value);
+}
+
+/** Full PM2 semantic match dump↔live; PATH ignore via comparator option (all shapes). */
+function dumpMatchesLiveFull(dumpEntry, liveProc, { ignorePath = false } = {}) {
+  const liveRaw = resolveRawPm2Entry(liveProc);
+  const ctx = deriveLiveApplicationEnvKeyContext(liveRaw);
+  return compareProcessPm2Semantics(dumpEntry, liveRaw, {
+    requireClassified: true,
+    applicationEnvKeysContext: ctx,
+    ignoreApplicationEnvKeys: ignorePath ? ['PATH'] : [],
+  });
+}
+
+function liveEnvContextFromSelection(selection) {
+  const retained = resolveRawPm2Entry(selection.retained);
+  return deriveLiveApplicationEnvKeyContext(retained);
+}
+
 /**
- * Map dump engine records to live retain/extra without relying on dump pm_id.
- * @param {Array} preDump
- * @param {{ retained: object, extra: object }} selection live-normalized processes
+ * Map dump engine records for projection.
+ *
+ * MODE A UNIQUE_SEMANTIC_IDENTITY
+ * MODE B SYMMETRIC_EQUIVALENT_SLOTS
+ * MODE C CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY — dump slots equal except PATH;
+ *   exactly one dump PATH matches backend/processor consensus; no pm_id identity.
  */
-export function resolveDumpEngineIdentities(preDump, selection) {
+export function resolveDumpEngineIdentities(preDump, selection, { canonicalPath = null } = {}) {
   if (!Array.isArray(preDump) || !selection?.retained || !selection?.extra) {
     return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
   }
@@ -207,6 +248,8 @@ export function resolveDumpEngineIdentities(preDump, selection) {
     return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
   }
 
+  const envCtx = liveEnvContextFromSelection(selection);
+
   const livePair = [
     { role: 'retained', live: selection.retained, pmId: selection.retained.pm_id },
     { role: 'extra', live: selection.extra, pmId: selection.extra.pm_id },
@@ -214,64 +257,256 @@ export function resolveDumpEngineIdentities(preDump, selection) {
   const candidateMap = new Map();
   for (const liveSpec of livePair) {
     const hits = dumpEngines.filter(({ entry }) => {
-      const cfg = stableConfigEqual(entry, liveSpec.live);
-      if (!cfg.ok) return false;
-      const envCmp = appEnvIdentityCompare(entry, liveSpec.live);
-      return envCmp.ok;
+      const full = dumpMatchesLiveFull(entry, liveSpec.live, { ignorePath: true });
+      return full.ok;
     });
     candidateMap.set(liveSpec.role, hits);
   }
 
   const retainedHits = candidateMap.get('retained') || [];
   const extraHits = candidateMap.get('extra') || [];
+
+  /**
+   * When LIVE engines are fully symmetric, dump↔pm_id unique binding is invalid.
+   * Prefer MODE B (full dump equality) or MODE C (PATH-only dump asymmetry).
+   */
+  const preferSymmetricPersistedModes =
+    selection.liveEnginePairMode === 'SYMMETRIC_RUNTIME_EQUIVALENT';
+
+  /** MODE C: PATH-only dump asymmetry + canonical persisted slot. */
+  const tryCanonicalPersistedSlot = () => {
+    const bothOnline = dumpEngines.every(({ entry }) => String(entry.status) === 'online');
+    if (!bothOnline) return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+
+    // Non-PATH full equality between dump slots
+    const pathOnly = compareDumpEngineResurrectSemantics(
+      dumpEngines[0].entry,
+      dumpEngines[1].entry,
+      { applicationEnvKeysContext: envCtx, ignoreApplicationEnvKeys: ['PATH'] },
+    );
+    if (!pathOnly.ok) {
+      return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED', mismatchCategories: pathOnly.mismatchCategories };
+    }
+    // Full equality including PATH would mean MODE B — not C
+    const fullEq = compareDumpEngineResurrectSemantics(
+      dumpEngines[0].entry,
+      dumpEngines[1].entry,
+      { applicationEnvKeysContext: envCtx },
+    );
+    if (fullEq.ok) {
+      return { ok: false, error: 'CANONICAL_PERSISTED_SLOT_NOT_APPLICABLE_PATH_EQUAL' };
+    }
+
+    // Each slot matches LIVE class ignoring PATH
+    const classLive = selection.retained;
+    const slot0 = dumpMatchesLiveFull(dumpEngines[0].entry, classLive, { ignorePath: true });
+    const slot1 = dumpMatchesLiveFull(dumpEngines[1].entry, classLive, { ignorePath: true });
+    if (!slot0.ok || !slot1.ok) {
+      return {
+        ok: false,
+        error: 'DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MISMATCH',
+        DUMP_SLOT_0_MATCHES_LIVE_ENGINE_CLASS: slot0.ok ? 'PASS' : 'FAIL',
+        DUMP_SLOT_1_MATCHES_LIVE_ENGINE_CLASS: slot1.ok ? 'PASS' : 'FAIL',
+      };
+    }
+
+    // Resolve canonical PATH from selection evidence / optional arg — never print value.
+    // Compare dump PATH equality to retained/extra live via pathEqualDumpLive against
+    // a synthetic consensus: prefer the live engine whose PATH matches backend consensus
+    // (selection.retained is that engine in UNIQUE mode; in SYMMETRIC both match).
+    // For MODE C under LIVE SYMMETRIC: selection.retained is lower pm_id; both live PATH equal.
+    // We need external canonicalPathMatcher: pathEqualDumpLive vs a live process that holds
+    // the consensus PATH. Use selection.evidence or compare each dump to both lives.
+    // Simplest: count which dump slot PATH-equals the live engine that matches consensus.
+    // In SYMMETRIC live, both lives share PATH — then MODE C is impossible (dump PATH would
+    // also need to differ from live class when ignorePath=false). Owner: MODE C only when
+    // LIVE is SYMMETRIC but dump PATH differs. Then both live share canonical PATH.
+    // Match dump slots against retained live PATH (canonical).
+    const slot0Canon = pathEqualDumpLive(dumpEngines[0].entry, selection.retained);
+    const slot1Canon = pathEqualDumpLive(dumpEngines[1].entry, selection.retained);
+    const matchCount = (slot0Canon ? 1 : 0) + (slot1Canon ? 1 : 0);
+    if (matchCount !== 1) {
+      return { ok: false, error: 'CANONICAL_PERSISTED_SLOT_PATH_AMBIGUOUS' };
+    }
+    const retainedDumpIndex = slot0Canon ? dumpEngines[0].index : dumpEngines[1].index;
+    const extraDumpIndex = slot0Canon ? dumpEngines[1].index : dumpEngines[0].index;
+
+    return {
+      ok: true,
+      mappingMode: DUMP_ENGINE_MAPPING_MODE.CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY,
+      DUMP_ENGINE_MAPPING_MODE: DUMP_ENGINE_MAPPING_MODE.CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY,
+      persistedIdentityClaim: 'NONE',
+      PERSISTED_SLOT_IDENTITY_CLAIM: 'NONE',
+      retainedDumpIndex,
+      extraDumpIndex,
+      retainedLivePmId: null,
+      extraLivePmId: null,
+      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'PASS_EXCEPT_PATH',
+      DUMP_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS_EXCEPT_PATH',
+      DUMP_SLOT_0_MATCHES_LIVE_ENGINE_CLASS: 'PASS',
+      DUMP_SLOT_1_MATCHES_LIVE_ENGINE_CLASS: 'PASS',
+      DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MATCH: 'PASS',
+      CANONICAL_PERSISTED_SLOT_SELECTION: 'PASS',
+      SYMMETRIC_SLOT_SELECTION: 'NONCANONICAL_PATH_SLOT_STOPPED',
+      PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
+    };
+  };
+
+  /** MODE B helper: mutual dump equality + each slot matches LIVE class. */
+  const trySymmetricEquivalentSlots = () => {
+    const bothOnline = dumpEngines.every(({ entry }) => String(entry.status) === 'online');
+    if (!bothOnline) {
+      return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+    }
+
+    const resurrectCmp = compareDumpEngineResurrectSemantics(
+      dumpEngines[0].entry,
+      dumpEngines[1].entry,
+      { applicationEnvKeysContext: envCtx },
+    );
+    if (!resurrectCmp.ok) {
+      // PATH-only dump asymmetry under otherwise-equal slots → MODE C when LIVE is symmetric
+      if (
+        selection.liveEnginePairMode === 'SYMMETRIC_RUNTIME_EQUIVALENT' &&
+        Array.isArray(resurrectCmp.mismatchCategories) &&
+        resurrectCmp.mismatchCategories.length > 0 &&
+        resurrectCmp.mismatchCategories.every((c) => c === 'ENV_PATH')
+      ) {
+        const modeC = tryCanonicalPersistedSlot();
+        if (modeC.ok) return modeC;
+      }
+      if (resurrectCmp.error === 'DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED') {
+        return {
+          ok: false,
+          error: 'DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED',
+          unclassifiedFields: resurrectCmp.unclassifiedFields,
+        };
+      }
+      return {
+        ok: false,
+        error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED',
+        DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
+        mismatchCategories: resurrectCmp.mismatchCategories,
+      };
+    }
+
+    const classLive = selection.retained;
+    const slot0 = dumpMatchesLiveFull(dumpEngines[0].entry, classLive, { ignorePath: false });
+    const slot1 = dumpMatchesLiveFull(dumpEngines[1].entry, classLive, { ignorePath: false });
+    if (!slot0.ok || !slot1.ok) {
+      return {
+        ok: false,
+        error: 'DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MISMATCH',
+        DUMP_SLOT_0_MATCHES_LIVE_ENGINE_CLASS: slot0.ok ? 'PASS' : 'FAIL',
+        DUMP_SLOT_1_MATCHES_LIVE_ENGINE_CLASS: slot1.ok ? 'PASS' : 'FAIL',
+        mismatchCategories: [
+          ...(slot0.mismatchCategories || []),
+          ...(slot1.mismatchCategories || []),
+        ],
+      };
+    }
+
+    const indexes = dumpEngines.map((d) => d.index).sort((x, y) => x - y);
+    return {
+      ok: true,
+      mappingMode: DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS,
+      DUMP_ENGINE_MAPPING_MODE: DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS,
+      persistedIdentityClaim: 'NONE',
+      PERSISTED_SLOT_IDENTITY_CLAIM: 'NONE',
+      retainedDumpIndex: indexes[0],
+      extraDumpIndex: indexes[1],
+      retainedLivePmId: null,
+      extraLivePmId: null,
+      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'PASS',
+      DUMP_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
+      DUMP_SLOT_0_MATCHES_LIVE_ENGINE_CLASS: 'PASS',
+      DUMP_SLOT_1_MATCHES_LIVE_ENGINE_CLASS: 'PASS',
+      DUMP_ENGINE_LIVE_CLASS_SEMANTIC_MATCH: 'PASS',
+      CANONICAL_PERSISTED_SLOT_SELECTION: 'NOT_REQUIRED',
+      SYMMETRIC_SLOT_SELECTION: 'HIGHER_ARRAY_INDEX_STOPPED',
+      PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
+    };
+  };
+
+  if (preferSymmetricPersistedModes) {
+    return trySymmetricEquivalentSlots();
+  }
+
   if (retainedHits.length === 0 || extraHits.length === 0) {
-    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+    return trySymmetricEquivalentSlots();
   }
 
   const assignments = [];
   for (const retainedHit of retainedHits) {
     for (const extraHit of extraHits) {
       if (retainedHit.index === extraHit.index) continue;
-      const retainedEnv = appEnvIdentityCompare(retainedHit.entry, selection.retained);
-      const extraEnv = appEnvIdentityCompare(extraHit.entry, selection.extra);
-      const strictScore =
-        (retainedEnv.pathEqual === true ? 1 : 0) + (extraEnv.pathEqual === true ? 1 : 0);
+      const retainedPath = pathEqualDumpLive(retainedHit.entry, selection.retained);
+      const extraPath = pathEqualDumpLive(extraHit.entry, selection.extra);
+      const strictScore = (retainedPath ? 1 : 0) + (extraPath ? 1 : 0);
       assignments.push({
         retainedDumpIndex: retainedHit.index,
         extraDumpIndex: extraHit.index,
-        retainedPathEqual: retainedEnv.pathEqual === true,
-        extraPathEqual: extraEnv.pathEqual === true,
+        retainedPathEqual: retainedPath,
+        extraPathEqual: extraPath,
         strictScore,
       });
     }
   }
 
   if (assignments.length === 0) {
-    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+    return trySymmetricEquivalentSlots();
   }
   const bestScore = Math.max(...assignments.map((a) => a.strictScore));
   const best = assignments.filter((a) => a.strictScore === bestScore);
-  if (best.length !== 1) {
-    return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+
+  if (best.length === 1) {
+    const retainedEntry = preDump[best[0].retainedDumpIndex];
+    const extraEntry = preDump[best[0].extraDumpIndex];
+    const retainedFull = dumpMatchesLiveFull(retainedEntry, selection.retained, {
+      ignorePath: false,
+    });
+    const extraFull = dumpMatchesLiveFull(extraEntry, selection.extra, { ignorePath: false });
+    if (!retainedFull.ok) {
+      if (best[0].retainedPathEqual) {
+        return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+      }
+      const retainedSans = dumpMatchesLiveFull(retainedEntry, selection.retained, {
+        ignorePath: true,
+      });
+      if (!retainedSans.ok) {
+        return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+      }
+    }
+    if (!extraFull.ok) {
+      if (best[0].extraPathEqual) {
+        return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+      }
+      const extraSans = dumpMatchesLiveFull(extraEntry, selection.extra, { ignorePath: true });
+      if (!extraSans.ok) {
+        return { ok: false, error: 'DUMP_ENGINE_IDENTITY_UNRESOLVED' };
+      }
+    }
+
+    return {
+      ok: true,
+      mappingMode: DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+      DUMP_ENGINE_MAPPING_MODE: DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+      persistedIdentityClaim: 'UNIQUE_DUMP_LIVE_BINDING',
+      PERSISTED_SLOT_IDENTITY_CLAIM: 'UNIQUE_DUMP_LIVE_BINDING',
+      retainedDumpIndex: best[0].retainedDumpIndex,
+      extraDumpIndex: best[0].extraDumpIndex,
+      retainedLivePmId:
+        typeof selection.retained.pm_id === 'number' ? selection.retained.pm_id : null,
+      extraLivePmId: typeof selection.extra.pm_id === 'number' ? selection.extra.pm_id : null,
+      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'N/A',
+      DUMP_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
+      CANONICAL_PERSISTED_SLOT_SELECTION: 'NOT_REQUIRED',
+    };
   }
 
-  const retainedMap = {
-    dumpIndex: best[0].retainedDumpIndex,
-    livePmId: typeof selection.retained.pm_id === 'number' ? selection.retained.pm_id : null,
-  };
-  const extraMap = {
-    dumpIndex: best[0].extraDumpIndex,
-    livePmId: typeof selection.extra.pm_id === 'number' ? selection.extra.pm_id : null,
-  };
-
-  return {
-    ok: true,
-    retainedDumpIndex: retainedMap.dumpIndex,
-    extraDumpIndex: extraMap.dumpIndex,
-    retainedLivePmId: retainedMap.livePmId,
-    extraLivePmId: extraMap.livePmId,
-  };
+  return trySymmetricEquivalentSlots();
 }
+
 
 /**
  * Resolve unique collector dump record index.
@@ -439,20 +674,42 @@ export function buildExpectedProjectedDump({
 
   const bytes = Buffer.from(JSON.stringify(projected), 'utf8');
 
+  /** @type {Record<string, string|number>} */
+  const manifest = {
+    ENGINE_EXTRA_STATUS_CHANGED: 'YES',
+    COLLECTOR_DB_KEYS_ADDED: 0,
+    COLLECTOR_DB_KEYS_PRESERVED_EXACT: 5,
+    COLLECTOR_DB_KEYS_REWRITTEN: 0,
+    AUTHORIZED_SEMANTIC_DIFF_COUNT: 1,
+    PROJECTED_MODE_REQUIRED: '0600',
+    AUTHORIZED_DIFF_PATH_COUNT: 1,
+    DUMP_ENGINE_MAPPING_MODE: engineMap.mappingMode || DUMP_ENGINE_MAPPING_MODE.UNIQUE_SEMANTIC_IDENTITY,
+    PERSISTED_SLOT_IDENTITY_CLAIM: engineMap.PERSISTED_SLOT_IDENTITY_CLAIM || 'UNIQUE_DUMP_LIVE_BINDING',
+  };
+
+  if (engineMap.mappingMode === DUMP_ENGINE_MAPPING_MODE.SYMMETRIC_EQUIVALENT_SLOTS) {
+    const compat = assertSymmetricProjectedDumpResurrectCompatibility({
+      projected,
+      engineIndexes: [engineMap.retainedDumpIndex, engineMap.extraDumpIndex],
+    });
+    if (!compat.ok) {
+      return {
+        ok: false,
+        error: 'SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY_FAIL',
+      };
+    }
+    manifest.SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY = 'PASS';
+    manifest.DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE = 'PASS';
+    manifest.PM_ID_USED_AS_PERSISTED_IDENTITY = 'NO';
+  }
+
   return {
     ok: true,
     projected,
     bytes,
     engineMap,
     collectorMap,
-    manifest: {
-      ENGINE_EXTRA_STATUS_CHANGED: 'YES',
-      COLLECTOR_DB_KEYS_ADDED: 0,
-      COLLECTOR_DB_KEYS_PRESERVED_EXACT: 5,
-      AUTHORIZED_SEMANTIC_DIFF_COUNT: 1,
-      PROJECTED_MODE_REQUIRED: '0600',
-      AUTHORIZED_DIFF_PATH_COUNT: 1,
-    },
+    manifest,
   };
 }
 

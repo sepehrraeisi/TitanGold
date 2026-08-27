@@ -17,6 +17,13 @@ import {
   STABLE_CONFIG_FIELDS,
   SUPPORTED_ENV_SHAPES,
 } from './constants.mjs';
+import {
+  compareEnginePm2Semantics,
+  compareProcessPm2Semantics,
+  resolveRawPm2Entry,
+  buildApplicationEnvKeysContext,
+  PM2_NESTED_ENV_VOLATILE_KEYS,
+} from './pm2SemanticModel.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
 
@@ -246,6 +253,12 @@ export function normalizeProcess(entry = {}) {
     writable: false,
     configurable: false,
   });
+  Object.defineProperty(proc, '_rawEntry', {
+    value: entry,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
 
   return proc;
 }
@@ -257,6 +270,14 @@ function attachEnv(target, src) {
     writable: false,
     configurable: false,
   });
+  if (src._rawEntry) {
+    Object.defineProperty(target, '_rawEntry', {
+      value: src._rawEntry,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
   return target;
 }
 
@@ -554,7 +575,10 @@ export function resolveCanonicalPathConsensus(fp) {
 }
 
 /**
- * Engine-pair selection with NARROW PATH exception (selection-only).
+ * Engine-pair selection:
+ * - UNIQUE_CANONICAL_PATH when PATH differs and exactly one matches backend/processor consensus
+ * - SYMMETRIC_RUNTIME_EQUIVALENT when both PATH-equal to consensus + full semantic equality
+ *   (pm_id tie-break is LIVE runtime targeting only — never persisted identity)
  * PRE→POST / rollback / non-engine env gates remain full-strict via diffProcessEnv.
  */
 export function selectEngineRetainExtra(fp) {
@@ -565,31 +589,22 @@ export function selectEngineRetainExtra(fp) {
       error: `ENGINE_ONLINE_COUNT_EXPECTED_2_GOT_${online.length}`,
     };
   }
-  const [a, b] = [...online].sort((x, y) => x.pm_id - y.pm_id);
 
-  const configDiffs = diffStableConfig(a, b, { scope: 'engine-pair' });
-  if (configDiffs.length > 0) {
-    return {
-      ok: false,
-      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: configDiffs.map((d) => d.kind),
-    };
+  const pmIds = online.map((e) => e.pm_id);
+  if (pmIds.some((id) => id == null || id === '')) {
+    return { ok: false, error: 'ENGINE_PM_ID_INVALID' };
+  }
+  const numericIds = pmIds.map((id) =>
+    typeof id === 'number' ? id : Number(id),
+  );
+  if (numericIds.some((id) => !Number.isFinite(id))) {
+    return { ok: false, error: 'ENGINE_PM_ID_INVALID' };
+  }
+  if (new Set(numericIds).size !== 2) {
+    return { ok: false, error: 'ENGINE_PM_ID_DUPLICATE' };
   }
 
-  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
-  const pathOnlyValueDiff =
-    envDiffs.length > 0 &&
-    envDiffs.every(
-      (d) => d.kind === 'ENV_VALUE_CHANGED' && d.detail?.key === 'PATH' && d.detail?.category === 'value-changed',
-    );
-
-  if (envDiffs.length > 0 && !pathOnlyValueDiff) {
-    return {
-      ok: false,
-      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-      detailKinds: envDiffs.map((d) => d.kind),
-    };
-  }
+  const [a, b] = [...online].sort((x, y) => Number(x.pm_id) - Number(y.pm_id));
 
   const pathA = readPathInternal(a);
   const pathB = readPathInternal(b);
@@ -599,35 +614,117 @@ export function selectEngineRetainExtra(fp) {
   const evidence = {
     ENGINE_PATH_EQUAL: pathEqual ? 'YES' : 'NO',
     ENGINE_PATH_EXCEPTION_USED: 'NO',
+    PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+    PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
   };
 
-  // Identical PATH (or both absent as equal non-present handled above via key diffs):
-  // retain lowest pm_id among fully equivalent workers.
-  if (!pathOnlyValueDiff) {
-    if (!pathEqual && (pathA.present || pathB.present)) {
-      // One missing PATH key should already have failed via envDiffs; fail closed.
+  const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
+  // PATH-only vs other: unique_id is PM2-injected nested volatile (not app semantic).
+  const pathOnlyValueDiff =
+    envDiffs.length > 0 &&
+    envDiffs.every(
+      (d) =>
+        (d.kind === 'ENV_VALUE_CHANGED' &&
+          d.detail?.key === 'PATH' &&
+          d.detail?.category === 'value-changed') ||
+        (d.kind === 'ENV_VALUE_CHANGED' &&
+          PM2_NESTED_ENV_VOLATILE_KEYS.includes(d.detail?.key)),
+    ) &&
+    envDiffs.some(
+      (d) =>
+        d.kind === 'ENV_VALUE_CHANGED' &&
+        d.detail?.key === 'PATH' &&
+        d.detail?.category === 'value-changed',
+    );
+
+  const rawA = resolveRawPm2Entry(a);
+  const rawB = resolveRawPm2Entry(b);
+
+  /** Full PM2 semantic compare; optionally ignore PATH for unique-PATH exception (all shapes). */
+  const fullCompare = (ignorePath) => {
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(rawA).keys,
+      ...buildApplicationEnvKeysContext(rawB).keys,
+    ]);
+    return compareEnginePm2Semantics(rawA, rawB, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx,
+      ignoreApplicationEnvKeys: ignorePath ? ['PATH'] : [],
+    });
+  };
+
+  // Equal PATH — require complete PM2 semantic signature equality (symmetric mode).
+  if (pathEqual) {
+    const full = fullCompare(false);
+    if (!full.ok) {
       return {
         ok: false,
-        error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-        detailKinds: ['ENV_VALUE_CHANGED'],
+        error: 'ENGINE_EQUAL_PATH_SEMANTIC_EQUIVALENCE_FAIL',
+        detailKinds: full.mismatchCategories || [full.error],
         evidence,
       };
     }
+
+    const consensus = resolveCanonicalPathConsensus(fp);
+    if (!consensus.ok) {
+      return {
+        ok: false,
+        error: consensus.error || 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+        evidence,
+      };
+    }
+    const aMatches = pathA.value === consensus._canonicalPath;
+    const bMatches = pathB.value === consensus._canonicalPath;
+    if (!aMatches || !bMatches) {
+      return {
+        ok: false,
+        error: 'ENGINE_CANONICAL_PATH_UNRESOLVED',
+        evidence: {
+          ...evidence,
+          ENGINE_PATH_EQUAL: 'YES',
+          CANONICAL_PATH_REFERENCE: consensus.reference,
+        },
+      };
+    }
+
     return {
       ok: true,
       retained: a,
       extra: b,
-      selection_rule: 'lowest_pm_id_among_fully_equivalent_online_workers',
+      liveEnginePairMode: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+      selection_rule: 'symmetric_runtime_equivalent_lower_pm_id_retain',
       unique_responsibility_proven: false,
       evidence: {
         ...evidence,
         ENGINE_PATH_EQUAL: 'YES',
         ENGINE_PATH_EXCEPTION_USED: 'NO',
+        LIVE_ENGINE_PAIR_MODE: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+        LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
+        PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'YES',
+        PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
+        CANONICAL_PATH_REFERENCE: consensus.reference,
+        RETAINED_PATH_MATCH_CANONICAL: 'YES',
+        EXTRA_PATH_MATCH_CANONICAL: 'YES',
       },
     };
   }
 
-  // PATH is the only permitted engine-to-engine inequality — resolve canonical retain.
+  // PATH differs — unique canonical PATH mode if (and only if) all other PM2
+  // semantics match (PATH + nested PM2-injected unique_id ignored).
+  void pathOnlyValueDiff;
+  const fullSansPath = fullCompare(true);
+  if (!fullSansPath.ok) {
+    return {
+      ok: false,
+      error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
+      detailKinds: fullSansPath.mismatchCategories || [fullSansPath.error],
+      evidence: {
+        ...evidence,
+        ENGINE_PATH_EXCEPTION_USED: 'YES',
+      },
+    };
+  }
+
   const consensus = resolveCanonicalPathConsensus(fp);
   if (!consensus.ok) {
     return {
@@ -651,6 +748,8 @@ export function selectEngineRetainExtra(fp) {
         ENGINE_PATH_EQUAL: 'NO',
         ENGINE_PATH_EXCEPTION_USED: 'YES',
         CANONICAL_PATH_REFERENCE: consensus.reference,
+        PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+        PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
       },
     };
   }
@@ -662,14 +761,19 @@ export function selectEngineRetainExtra(fp) {
     ok: true,
     retained,
     extra,
+    liveEnginePairMode: 'UNIQUE_CANONICAL_PATH',
     selection_rule: 'canonical_path_match_among_path_exception_equivalent_workers',
     unique_responsibility_proven: false,
     evidence: {
       ENGINE_PATH_EQUAL: 'NO',
       ENGINE_PATH_EXCEPTION_USED: 'YES',
+      LIVE_ENGINE_PAIR_MODE: 'UNIQUE_CANONICAL_PATH',
+      LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
       CANONICAL_PATH_REFERENCE: consensus.reference,
       RETAINED_PATH_MATCH_CANONICAL: 'YES',
       EXTRA_PATH_MATCH_CANONICAL: 'NO',
+      PM_ID_USED_FOR_RUNTIME_STOP_TARGET_ONLY: 'NO',
+      PM_ID_USED_AS_PERSISTED_IDENTITY: 'NO',
     },
   };
 }
@@ -683,6 +787,39 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
   if (!skipStatus && pre.status !== post.status) {
     diffs.push({ kind: 'STATUS_CHANGE', detail: { scope, pre: pre.status, post: post.status } });
   }
+
+  const rawPre = resolveRawPm2Entry(pre);
+  const rawPost = resolveRawPm2Entry(post);
+  if (rawPre && rawPost) {
+    // Full-fleet PM2 semantic PRE→POST (status neutralized when skipStatus / already recorded).
+    const a = JSON.parse(JSON.stringify(rawPre));
+    const b = JSON.parse(JSON.stringify(rawPost));
+    a.status = 'online';
+    b.status = 'online';
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(a).keys,
+      ...buildApplicationEnvKeysContext(b).keys,
+    ]);
+    const full = compareProcessPm2Semantics(a, b, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx,
+    });
+    if (!full.ok) {
+      for (const cat of full.mismatchCategories || [full.error || 'FULL_PM2_SEMANTIC_DRIFT']) {
+        diffs.push({
+          kind: 'PROCESS_CONFIG_CHANGED',
+          detail: { scope, category: cat },
+        });
+      }
+      return diffs;
+    }
+    // Collector DB_* appear is separately allowlisted via env gate when needed.
+    if (allowCollectorDbAppear) {
+      // Already covered by full compare of exact DB_* values; no extra widen.
+    }
+    return diffs;
+  }
+
   diffs.push(...diffStableConfig(pre, post, { scope }));
   diffs.push(...diffProcessEnv(pre, post, { scope, allowCollectorDbAppear }));
   return diffs;
@@ -709,8 +846,12 @@ export function diffFingerprints(pre, post, { extraPmId }) {
         detail: { pm_id: pmId, pre: a.status, post: b.status },
       });
     }
-    diffs.push(...diffStableConfig(a, b, { scope: `engine:${pmId}` }));
-    diffs.push(...diffProcessEnv(a, b, { scope: `engine:${pmId}` }));
+    diffs.push(
+      ...diffProcessPair(a, b, {
+        scope: `engine:${pmId}`,
+        skipStatus: true,
+      }),
+    );
   }
 
   if (pre.backend_count !== post.backend_count) {
@@ -769,11 +910,13 @@ export function diffFingerprints(pre, post, { extraPmId }) {
   if (!preCol || !postCol || preCol.pm_id !== postCol.pm_id || preCol.status !== postCol.status) {
     diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { collector: true } });
   } else {
-    const envDiffs = diffProcessEnv(preCol, postCol, {
-      scope: `collector:${preCol.pm_id}`,
-      allowCollectorDbAppear: true,
-    });
-    diffs.push(...diffStableConfig(preCol, postCol, { scope: `collector:${preCol.pm_id}` }));
+    diffs.push(
+      ...diffProcessPair(preCol, postCol, {
+        scope: `collector:${preCol.pm_id}`,
+        skipStatus: true,
+        allowCollectorDbAppear: true,
+      }),
+    );
 
     const preKeys = preCol.db_keys_present || {};
     const postKeys = postCol.db_keys_present || {};
@@ -789,10 +932,6 @@ export function diffFingerprints(pre, post, { extraPmId }) {
       diffs.push({ kind: 'COLLECTOR_DB_KEYS_APPEAR' });
     } else if (JSON.stringify(preKeys) !== JSON.stringify(postKeys) || preCol.NODE_ENV !== postCol.NODE_ENV) {
       diffs.push({ kind: 'UNRELATED_ENV_CHANGE', detail: 'COLLECTOR_DB_UNEXPECTED' });
-    }
-
-    for (const d of envDiffs) {
-      diffs.push(d);
     }
   }
 
@@ -858,7 +997,8 @@ export function assertExpectedLivePostState(
   const retainedPre = (preLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
   const retainedPost = (postLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
   const extraPost = (postLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
-  if (!retainedPre || !retainedPost || !extraPost) {
+  const extraPre = (preLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
+  if (!retainedPre || !retainedPost || !extraPost || !extraPre) {
     return { ok: false, error: 'LIVE_POST_STATE_ENGINE_IDENTITY_MISSING' };
   }
   if (retainedPost.status !== 'online') {
@@ -866,6 +1006,51 @@ export function assertExpectedLivePostState(
   }
   if (extraPost.status !== 'stopped') {
     return { ok: false, error: 'EXTRA_NOT_STOPPED_POSTWRITE' };
+  }
+
+  // Full PM2 semantic PRE→POST for retained (no change) and extra (status-only).
+  const retainedCtx = new Set([
+    ...buildApplicationEnvKeysContext(resolveRawPm2Entry(retainedPre)).keys,
+    ...buildApplicationEnvKeysContext(resolveRawPm2Entry(retainedPost)).keys,
+  ]);
+  const retainedFull = compareEnginePm2Semantics(
+    resolveRawPm2Entry(retainedPre),
+    resolveRawPm2Entry(retainedPost),
+    { requireClassified: true, applicationEnvKeysContext: retainedCtx },
+  );
+  if (!retainedFull.ok) {
+    return {
+      ok: false,
+      error: 'LIVE_POST_STATE_UNEXPECTED_DRIFT',
+      details: {
+        RETAINED_ENGINE_FULL_EQUIVALENCE: 'FAIL',
+        mismatchCategories: retainedFull.mismatchCategories,
+        FULL_FLEET_PM2_POST_STATE_PROOF: 'FAIL',
+      },
+    };
+  }
+  const extraA = JSON.parse(JSON.stringify(resolveRawPm2Entry(extraPre)));
+  const extraB = JSON.parse(JSON.stringify(resolveRawPm2Entry(extraPost)));
+  extraA.status = 'online';
+  extraB.status = 'online';
+  const extraCtx = new Set([
+    ...buildApplicationEnvKeysContext(extraA).keys,
+    ...buildApplicationEnvKeysContext(extraB).keys,
+  ]);
+  const extraFull = compareEnginePm2Semantics(extraA, extraB, {
+    requireClassified: true,
+    applicationEnvKeysContext: extraCtx,
+  });
+  if (!extraFull.ok) {
+    return {
+      ok: false,
+      error: 'LIVE_POST_STATE_UNEXPECTED_DRIFT',
+      details: {
+        EXTRA_ENGINE_STOP_ONLY: 'FAIL',
+        mismatchCategories: extraFull.mismatchCategories,
+        FULL_FLEET_PM2_POST_STATE_PROOF: 'FAIL',
+      },
+    };
   }
 
   const liveCollector = (postLiveFp.collectors || [])[0];
@@ -890,6 +1075,8 @@ export function assertExpectedLivePostState(
     details: {
       RETAINED_ENGINE_FULL_EQUIVALENCE: 'PASS',
       EXTRA_ENGINE_STOP_ONLY: 'PASS',
+      LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
+      FULL_FLEET_PM2_POST_STATE_PROOF: 'PASS',
       BACKEND_FULL_EQUIVALENCE: 'PASS',
       PROCESSOR_FULL_EQUIVALENCE: 'PASS',
       COLLECTOR_FULL_EQUIVALENCE: 'PASS',
@@ -1014,13 +1201,25 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     [preRetained, postRetained, 'retained'],
     [preExtra, postExtra, 'extra'],
   ]) {
-    const cfg = diffStableConfig(preE, postE, { scope: `rollback-engine:${label}` });
-    const env = diffProcessEnv(preE, postE, { scope: `rollback-engine:${label}` });
-    if (cfg.length > 0 || env.length > 0) {
+    const rawPre = resolveRawPm2Entry(preE);
+    const rawPost = resolveRawPm2Entry(postE);
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(rawPre).keys,
+      ...buildApplicationEnvKeysContext(rawPost).keys,
+    ]);
+    const full = compareEnginePm2Semantics(rawPre, rawPost, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx,
+    });
+    if (!full.ok) {
       return {
         ok: false,
         error: 'ROLLBACK_ENGINE_CONFIG_DRIFT',
-        details: { kinds: [...cfg, ...env].map((d) => d.kind) },
+        details: {
+          kinds: full.mismatchCategories || [full.error],
+          label,
+          FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL',
+        },
       };
     }
   }
@@ -1079,6 +1278,7 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     details: {
       PRE_EQUIVALENT: 'YES',
       dump_mode: expectedDumpMode != null ? expectedDumpMode & 0o777 : null,
+      FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'PASS',
     },
   };
 }

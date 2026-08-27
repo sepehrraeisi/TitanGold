@@ -13,6 +13,9 @@ export {
   FORBIDDEN_DIFF_KINDS,
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_6_0,
+  DUMP_ENGINE_MAPPING_MODE,
+  LIVE_ENGINE_PAIR_MODE,
   REQUIRED_POST_SAVE_DUMP_MODE,
   REQUIRED_PROJECTED_DUMP_MODE,
   SESSION_IDE_ENV_KEYS,
@@ -62,6 +65,42 @@ export {
   resolveDumpEnvMutationTarget,
   structuralDiffPaths,
 } from './projection.mjs';
+
+export {
+  assertSymmetricProjectedDumpResurrectCompatibility,
+  assertZeroUnclassifiedPersistedFields,
+  compareDumpEngineResurrectSemantics,
+  RESURRECT_IGNORED_FIELDS,
+  RESURRECT_TOP_LEVEL_FIELDS,
+} from './resurrectSemantics.mjs';
+
+export {
+  CANONICAL_COMPARE_FIELDS,
+  PM2_FIELD_CLASSIFICATION,
+  PROVEN_REGENERATED_OR_VOLATILE,
+  DUMP_PROCESS_LIST_DELETED_FIELDS,
+  PM2_DUMP_TRANSFORM_FIELDS,
+  buildEnginePm2SemanticSignature,
+  buildPm2EffectiveSemanticModel,
+  buildApplicationEnvKeysContext,
+  deriveLiveApplicationEnvKeyContext,
+  compareEnginePm2Semantics,
+  compareProcessPm2Semantics,
+  deepStableSerialize,
+  deepStructuralEqual,
+  resolveRawPm2Entry,
+  readApplicationEnvValue,
+  effectiveInstancesValue,
+  effectiveInstancesSemantics,
+  PM2_NESTED_ENV_VOLATILE_KEYS,
+} from './pm2SemanticModel.mjs';
+
+export {
+  buildProductionDumpShapeFixture,
+  buildLiveEnginePairMatchingFixture,
+} from './productionDumpShapeFixture.mjs';
+
+export { runProductionCompatibilityProof } from './productionCompatibilityProof.mjs';
 
 export { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
 

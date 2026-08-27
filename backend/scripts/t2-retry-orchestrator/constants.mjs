@@ -1,26 +1,42 @@
 /**
  * T2 retry orchestrator — durable constants (no production side effects).
- * TOOL_VERSION 1.6.0 — ALREADY_PRESENT_EXACT collector DB + projected engine singleton.
+ * TOOL_VERSION 1.6.1 — equal-PATH live tie-break + symmetric equivalent dump slots.
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.6.0';
+export const TOOL_VERSION = '1.6.1';
 
 export const AUTHORIZED_TRANSACTION =
-  'T2_ENGINE_SINGLETON_DB_ALREADY_PRESENT_PROJECTED_PERSIST';
+  'T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST';
 
 export const AUTHORIZED_EFFECTS = Object.freeze([
   'ENGINE_2_TO_1',
   'PROJECTED_DUMP_WRITE_0600',
 ]);
 
-/** Legacy 1.5.0 identity — must fail closed against 1.6.0 auth. */
+/** Legacy 1.6.0 identity — must fail closed against 1.6.1 auth. */
+export const LEGACY_AUTHORIZED_TRANSACTION_1_6_0 =
+  'T2_ENGINE_SINGLETON_DB_ALREADY_PRESENT_PROJECTED_PERSIST';
+
+/** Legacy 1.5.0 identity — must fail closed. */
 export const LEGACY_AUTHORIZED_TRANSACTION_1_5_0 =
   'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST';
 
 /** Legacy 1.4.0 identity — must fail closed. */
 export const LEGACY_AUTHORIZED_TRANSACTION_1_4_0 =
   'T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PERSIST_DUMP_HARDEN';
+
+export const DUMP_ENGINE_MAPPING_MODE = Object.freeze({
+  UNIQUE_SEMANTIC_IDENTITY: 'UNIQUE_SEMANTIC_IDENTITY',
+  SYMMETRIC_EQUIVALENT_SLOTS: 'SYMMETRIC_EQUIVALENT_SLOTS',
+  /** Persisted PATH-only dump asymmetry under LIVE symmetric class — no pm_id identity. */
+  CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY: 'CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY',
+});
+
+export const LIVE_ENGINE_PAIR_MODE = Object.freeze({
+  UNIQUE_CANONICAL_PATH: 'UNIQUE_CANONICAL_PATH',
+  SYMMETRIC_RUNTIME_EQUIVALENT: 'SYMMETRIC_RUNTIME_EQUIVALENT',
+});
 
 export const ENGINE_NAME = 'titan-engine-worker';
 export const BACKEND_NAME = 'titan-backend';

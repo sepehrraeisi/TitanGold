@@ -1,6 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
- * TOOL_VERSION 1.6.0 — ALREADY_PRESENT_EXACT DB + projected engine singleton (no global pm2 save).
+ * TOOL_VERSION 1.6.1 — equal-PATH live tie-break + symmetric equivalent dump slots (no global pm2 save).
  * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
@@ -444,6 +444,14 @@ export class T2Orchestrator {
       return this._failClosed(engineMap.error || 'DUMP_ENGINE_IDENTITY_UNRESOLVED');
     }
     this.dumpEngineMap = engineMap;
+    this._log(`DUMP_ENGINE_MAPPING_MODE=${engineMap.mappingMode || 'UNKNOWN'}`);
+    this._log(`PERSISTED_SLOT_IDENTITY_CLAIM=${engineMap.PERSISTED_SLOT_IDENTITY_CLAIM || 'UNKNOWN'}`);
+    if (engineMap.DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE) {
+      this._log(
+        `DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE=${engineMap.DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE}`,
+      );
+    }
+    this._log('PM_ID_USED_AS_PERSISTED_IDENTITY=NO');
 
     const collectorMap = resolveDumpCollectorIdentity(dumpPack.parsed);
     if (!collectorMap.ok) {
@@ -561,6 +569,22 @@ export class T2Orchestrator {
   async _revalidateExtraIdentity() {
     const live = await this.commands.listLiveProcesses();
     const fp = semanticFingerprint(live);
+    const reselect = selectEngineRetainExtra(fp);
+    if (!reselect.ok) {
+      throw new T2OrchestratorError(reselect.error || 'STALE_EXTRA_PROCESS');
+    }
+    if (
+      reselect.retained.pm_id !== this.selection.retained.pm_id ||
+      reselect.extra.pm_id !== this.selection.extra.pm_id
+    ) {
+      throw new T2OrchestratorError('STALE_EXTRA_PROCESS');
+    }
+    if (
+      this.selection.liveEnginePairMode === 'SYMMETRIC_RUNTIME_EQUIVALENT' &&
+      reselect.liveEnginePairMode !== 'SYMMETRIC_RUNTIME_EQUIVALENT'
+    ) {
+      throw new T2OrchestratorError('STALE_EXTRA_PROCESS');
+    }
     const extra = (fp.engines || []).find((e) => e.pm_id === this.recordedExtraIdentity.pm_id);
     if (!extra || extra.status !== 'online') {
       throw new T2OrchestratorError('STALE_EXTRA_PROCESS');
@@ -859,6 +883,33 @@ export class T2Orchestrator {
       `LIVE_ONLY_PM2_METADATA_NOT_PERSISTED=${unauthorized.LIVE_ONLY_PM2_METADATA_NOT_PERSISTED}`,
     );
     this._log(`UNAUTHORIZED_LIVE_ENV_NOT_PERSISTED=${unauthorized.UNAUTHORIZED_LIVE_ENV_NOT_PERSISTED}`);
+
+    const mapMode =
+      this.dumpEngineMap?.mappingMode ||
+      this.expectedProjected?.engineMap?.mappingMode ||
+      'UNKNOWN';
+    this._log(`DUMP_ENGINE_MAPPING_MODE=${mapMode}`);
+    this._log(
+      `PERSISTED_SLOT_IDENTITY_CLAIM=${
+        this.dumpEngineMap?.PERSISTED_SLOT_IDENTITY_CLAIM ||
+        this.expectedProjected?.engineMap?.PERSISTED_SLOT_IDENTITY_CLAIM ||
+        'UNKNOWN'
+      }`,
+    );
+    if (mapMode === 'SYMMETRIC_EQUIVALENT_SLOTS') {
+      const engIdx = [
+        this.dumpEngineMap.retainedDumpIndex,
+        this.dumpEngineMap.extraDumpIndex,
+      ];
+      const statuses = engIdx.map((i) => String(dumpPack.parsed[i]?.status)).sort();
+      if (statuses[0] !== 'online' || statuses[1] !== 'stopped') {
+        await this.rollback('SYMMETRIC_DUMP_STATUS_PAIR_FAIL');
+        throw new T2OrchestratorError('SYMMETRIC_DUMP_STATUS_PAIR_FAIL');
+      }
+      this._log('PERSISTED_SLOT_IDENTITY_CLAIM=NONE');
+      this._log('PM_ID_USED_AS_PERSISTED_IDENTITY=NO');
+      this._log('SYMMETRIC_DUMP_ONE_ONLINE_ONE_STOPPED=PASS');
+    }
 
     const liveProof = assertExpectedLivePostState(
       this.preLiveFp,

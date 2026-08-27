@@ -10,11 +10,13 @@ Default CLI is non-mutating. Live adapter (`liveBoundary.mjs`) is selected only 
 
 ## Tool version
 
-**TOOL_VERSION = 1.5.0**  
-Authorized transaction: `T2_ENGINE_SINGLETON_COLLECTOR_DB_B_PROJECTED_PERSIST`  
-Authorized effects: `ENGINE_2_TO_1` · `COLLECTOR_DB_B_PERSIST` · `PROJECTED_DUMP_WRITE_0600`
+**TOOL_VERSION = 1.6.1**  
+Authorized transaction: `T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST`  
+Authorized effects: `ENGINE_2_TO_1` · `PROJECTED_DUMP_WRITE_0600`
 
-Old `1.4.0` / `DUMP_MODE_HARDEN_0600` / global-save artifacts **fail closed**.
+Collector DB_* must already be exact on sanitized PRE (ALREADY_PRESENT_EXACT).  
+Equal-PATH engines use live pm_id tie-break for stop target only; dump slots may use `SYMMETRIC_EQUIVALENT_SLOTS` with no dump↔live pm_id identity claim.  
+Old `1.6.0` / `1.5.0` / `1.4.0` artifacts **fail closed**.
 
 ## Why not `pm2 save`
 
