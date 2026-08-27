@@ -52,6 +52,10 @@ import {
   planRollbackActions,
   setRollbackApplyState,
 } from './sideEffectLedger.mjs';
+import {
+  toRollbackHealthError,
+  validateRequiredHealth,
+} from './requiredHealth.mjs';
 
 const FORWARD_MUTATING_OPS = Object.freeze([
   'ensureDir',
@@ -965,20 +969,65 @@ export class T2Orchestrator {
     return { dbMatches: match.matches };
   }
 
+  /**
+   * Fetch live health surfaces and validate via canonical five-surface helper.
+   * @returns {Promise<ReturnType<typeof validateRequiredHealth> & { error?: string }>}
+   */
+  async _fetchValidateRequiredHealth() {
+    try {
+      const h5002 = await this.commands.healthCheck(5002);
+      const h5003 = await this.commands.healthCheck(5003);
+      const func = await this.commands.collectorFunctionalCheck();
+      return validateRequiredHealth({
+        status5002: h5002?.statusCode,
+        status5003: h5003?.statusCode,
+        collectorHealth: func?.health,
+        accounts: func?.accounts,
+        channels: func?.channels,
+      });
+    } catch {
+      return {
+        ok: false,
+        error: 'HEALTH_READ_FAIL',
+        surfaces: {
+          HEALTH_5002: 'FAIL',
+          HEALTH_5003: 'FAIL',
+          COLLECTOR_HEALTH: 'FAIL',
+          ACCOUNTS: 'FAIL',
+          CHANNELS: 'FAIL',
+        },
+        CURRENT_FULL_REQUIRED_HEALTH: 'FAIL',
+        CURRENT_HEALTH_5002: null,
+        CURRENT_HEALTH_5003: null,
+        CURRENT_COLLECTOR_HEALTH: null,
+        CURRENT_ACCOUNTS: null,
+        CURRENT_CHANNELS: null,
+      };
+    }
+  }
+
   async healthValidate() {
     this._requireState([State.POSTWRITE_VERIFIED]);
-    const h5002 = await this.commands.healthCheck(5002);
-    const h5003 = await this.commands.healthCheck(5003);
-    const func = await this.commands.collectorFunctionalCheck();
-    if (h5002.statusCode !== 200 || h5003.statusCode !== 200) {
-      await this.rollback('HEALTH_FAIL');
-      throw new T2OrchestratorError('HEALTH_FAIL');
+    const health = await this._fetchValidateRequiredHealth();
+    if (!health.ok) {
+      const code =
+        health.error === 'HEALTH_READ_FAIL'
+          ? 'HEALTH_FAIL'
+          : health.error === 'HEALTH_5002_FAIL' || health.error === 'HEALTH_5003_FAIL'
+            ? 'HEALTH_FAIL'
+            : 'COLLECTOR_FUNCTIONAL_FAIL';
+      await this.rollback(code);
+      throw new T2OrchestratorError(code);
     }
-    if (func.accounts !== 200 || func.channels !== 200 || func.health !== 200) {
-      await this.rollback('COLLECTOR_FUNCTIONAL_FAIL');
-      throw new T2OrchestratorError('COLLECTOR_FUNCTIONAL_FAIL');
-    }
-    this._log('HEALTH_PASS', '5002=200', '5003=200', 'accounts=200', 'channels=200');
+    this._log(
+      'HEALTH_PASS',
+      '5002=200',
+      '5003=200',
+      'collector_health=200',
+      'accounts=200',
+      'channels=200',
+      'CURRENT_FULL_REQUIRED_HEALTH=PASS',
+    );
     return true;
   }
 
@@ -1205,7 +1254,7 @@ export class T2Orchestrator {
       return { ok: false, error: 'ROLLBACK_DUMP_UNREADABLE' };
     }
 
-    // Physical-first: NO postDumpFp / dump semanticFingerprint on exact-byte success path.
+    // 1) Physical-first: NO postDumpFp / dump semanticFingerprint on exact-byte success path.
     const physical = assertExactDumpPhysicalPreEquivalent({
       expectedBytes: this.backupBytes,
       actualBytes: dumpPack.bytes,
@@ -1223,21 +1272,33 @@ export class T2Orchestrator {
       return physical;
     }
 
+    // 2) Fresh LIVE read
     const live = await this.commands.listLiveProcesses();
-    const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
 
-    // Collector live functional health during rollback proof
-    try {
-      const h5003 = await this.commands.healthCheck(5003);
-      const func = await this.commands.collectorFunctionalCheck();
-      if (h5003.statusCode !== 200 || func.accounts !== 200 || func.channels !== 200) {
-        return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
-      }
-    } catch {
-      return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
+    // 3) LIVE fleet pm_id integrity (presence / numeric / global unique)
+    const pmIdIntegrity = assertLiveFleetPmIdIntegrity(live);
+    if (!pmIdIntegrity.ok) {
+      this._log(
+        'ROLLBACK_LIVE_PM_ID_REVALIDATION=FAIL',
+        `PRESENT=${pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT}`,
+        `NUMERIC=${pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC}`,
+        `UNIQUE=${pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE}`,
+      );
+      return {
+        ok: false,
+        error: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+        details: {
+          LIVE_FLEET_PM_ID_PRESENT: pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT,
+          LIVE_FLEET_PM_ID_NUMERIC: pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC,
+          LIVE_FLEET_PM_ID_GLOBAL_UNIQUE: pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE,
+        },
+      };
     }
+    this._log('ROLLBACK_LIVE_PM_ID_REVALIDATION=PASS');
 
-    return assertPreEquivalent(
+    // 4) Full LIVE semantic PRE-equivalence (dump semantic still short-circuited by exact bytes)
+    const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
+    const liveProof = assertPreEquivalent(
       this.preDumpFp,
       this.preLiveFp,
       null,
@@ -1258,6 +1319,49 @@ export class T2Orchestrator {
         dumpParsedOk: true,
       },
     );
+    if (!liveProof.ok) {
+      return liveProof;
+    }
+
+    // 5) Complete five-surface health validation (same helper as forward healthValidate)
+    const health = await this._fetchValidateRequiredHealth();
+    if (!health.ok) {
+      const rollbackError = toRollbackHealthError(health.error);
+      this._log('ROLLBACK_FULL_REQUIRED_HEALTH=FAIL', rollbackError);
+      return {
+        ok: false,
+        error: rollbackError,
+        details: {
+          ...(liveProof.details || {}),
+          CURRENT_FULL_REQUIRED_HEALTH: 'FAIL',
+          surfaces: health.surfaces,
+        },
+      };
+    }
+    this._log(
+      'ROLLBACK_FULL_REQUIRED_HEALTH=PASS',
+      'ROLLBACK_HEALTH_5002_REQUIRED=PASS',
+      'ROLLBACK_HEALTH_5003_REQUIRED=PASS',
+      'ROLLBACK_COLLECTOR_HEALTH_REQUIRED=PASS',
+      'ROLLBACK_ACCOUNTS_REQUIRED=PASS',
+      'ROLLBACK_CHANNELS_REQUIRED=PASS',
+    );
+
+    // 6) PRE_EQUIVALENT only when dump physical + LIVE semantic + full health all PASS
+    return {
+      ...liveProof,
+      ok: true,
+      details: {
+        ...(liveProof.details || {}),
+        CURRENT_FULL_REQUIRED_HEALTH: 'PASS',
+        ROLLBACK_LIVE_PM_ID_REVALIDATION: 'PASS',
+        ROLLBACK_HEALTH_5002_REQUIRED: 'PASS',
+        ROLLBACK_HEALTH_5003_REQUIRED: 'PASS',
+        ROLLBACK_COLLECTOR_HEALTH_REQUIRED: 'PASS',
+        ROLLBACK_ACCOUNTS_REQUIRED: 'PASS',
+        ROLLBACK_CHANNELS_REQUIRED: 'PASS',
+      },
+    };
   }
 
   async resolveUnknownProjectedWriteState() {

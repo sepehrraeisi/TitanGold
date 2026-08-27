@@ -75,6 +75,8 @@ import {
   entryProcessName,
   buildProcessNameClassAppEnvProvenance,
   APPLY_STATE,
+  validateRequiredHealth,
+  toRollbackHealthError,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 
@@ -582,10 +584,26 @@ function createFakeBoundary(world) {
       return { mode: dumpMode, ok: dumpMode === (mode & 0o777) };
     },
     async healthCheck(port) {
+      if (world.forceHealthReadThrow) {
+        throw new Error('HEALTH_READ_THROW');
+      }
+      if (port === 5002 && world.forceHealth5002 != null) {
+        return { statusCode: world.forceHealth5002, port };
+      }
+      if (port === 5003 && world.forceHealth5003 != null) {
+        return { statusCode: world.forceHealth5003, port };
+      }
       return { statusCode: 200, port };
     },
     async collectorFunctionalCheck() {
-      return { accounts: 200, channels: 200, health: 200 };
+      if (world.forceHealthReadThrow) {
+        throw new Error('HEALTH_READ_THROW');
+      }
+      return {
+        accounts: world.forceAccounts != null ? world.forceAccounts : 200,
+        channels: world.forceChannels != null ? world.forceChannels : 200,
+        health: world.forceCollectorHealth != null ? world.forceCollectorHealth : 200,
+      };
     },
     async ensureDir() {
       mutationLog.push('ensureDir');
@@ -706,6 +724,66 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
         pm_exec_path: '/watch.js',
         env: { NODE_ENV: 'development' },
       });
+      return r;
+    };
+  }
+  if (worldOverrides.forceDuplicatePmIdOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      const live = commands.world().liveEntries;
+      const backend = live.find((e) => e.name === 'titan-backend');
+      if (backend) {
+        live.push({
+          ...deepClone(backend),
+          pm_id: backend.pm_id,
+          name: 'titan-backend',
+        });
+      }
+      return r;
+    };
+  }
+  if (worldOverrides.forceMissingPmIdOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      const backend = commands.world().liveEntries.find((e) => e.name === 'titan-backend');
+      if (backend) delete backend.pm_id;
+      return r;
+    };
+  }
+  // Health failure flags apply only during rollback proof (after projected write),
+  // so forward path can complete write before rollback health gate fires.
+  if (
+    worldOverrides.forceRollbackHealth5002 != null ||
+    worldOverrides.forceRollbackHealth5003 != null ||
+    worldOverrides.forceRollbackCollectorHealth != null ||
+    worldOverrides.forceRollbackAccounts != null ||
+    worldOverrides.forceRollbackChannels != null ||
+    worldOverrides.forceRollbackHealthReadThrow
+  ) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      // Mutate the closed-over fake-boundary world (not ephemeral world() snapshot).
+      if (worldOverrides.forceRollbackHealth5002 != null) {
+        world.forceHealth5002 = worldOverrides.forceRollbackHealth5002;
+      }
+      if (worldOverrides.forceRollbackHealth5003 != null) {
+        world.forceHealth5003 = worldOverrides.forceRollbackHealth5003;
+      }
+      if (worldOverrides.forceRollbackCollectorHealth != null) {
+        world.forceCollectorHealth = worldOverrides.forceRollbackCollectorHealth;
+      }
+      if (worldOverrides.forceRollbackAccounts != null) {
+        world.forceAccounts = worldOverrides.forceRollbackAccounts;
+      }
+      if (worldOverrides.forceRollbackChannels != null) {
+        world.forceChannels = worldOverrides.forceRollbackChannels;
+      }
+      if (worldOverrides.forceRollbackHealthReadThrow) {
+        world.forceHealthReadThrow = true;
+      }
       return r;
     };
   }
@@ -3923,5 +4001,108 @@ describe('T2 v1.6.2 legacy auth gate', () => {
     const { orch } = buildOrch({}, { runId, authorization: auth });
     await orch.precheck();
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
+  });
+});
+
+describe('T2 v1.6.2 rollback full-health audit', () => {
+  it('validateRequiredHealth requires all five surfaces = 200', () => {
+    expect(
+      validateRequiredHealth({
+        status5002: 200,
+        status5003: 200,
+        collectorHealth: 200,
+        accounts: 200,
+        channels: 200,
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateRequiredHealth({
+        status5002: 500,
+        status5003: 200,
+        collectorHealth: 200,
+        accounts: 200,
+        channels: 200,
+      }).error,
+    ).toBe('HEALTH_5002_FAIL');
+    expect(toRollbackHealthError('HEALTH_5002_FAIL')).toBe('ROLLBACK_HEALTH_5002_FAIL');
+  });
+
+  it('rollback 5002=500 => FAIL_FORWARD_COMPLETE never ROLLED_BACK', async () => {
+    const { orch } = buildOrch({ forceRollbackHealth5002: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_5002_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback 5003=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackHealth5003: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_5003_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback functional.health=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackCollectorHealth: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_COLLECTOR_HEALTH_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback accounts=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackAccounts: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_ACCOUNTS_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback channels=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackChannels: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_CHANNELS_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback health read throws => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackHealthReadThrow: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_READ_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback duplicate LIVE pm_id => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceDuplicatePmIdOnRollback: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback missing LIVE pm_id => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceMissingPmIdOnRollback: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('exact PRE + all five health 200 => ROLLED_BACK', async () => {
+    const { orch } = buildOrch({});
+    await runToWrite(orch);
+    await orch.rollback('test');
+    expect(orch.state).toBe(State.ROLLED_BACK);
   });
 });

@@ -105,6 +105,11 @@ export {
 } from './pm2SemanticModel.mjs';
 
 export {
+  validateRequiredHealth,
+  toRollbackHealthError,
+} from './requiredHealth.mjs';
+
+export {
   buildProductionDumpShapeFixture,
   buildLiveEnginePairMatchingFixture,
 } from './productionDumpShapeFixture.mjs';

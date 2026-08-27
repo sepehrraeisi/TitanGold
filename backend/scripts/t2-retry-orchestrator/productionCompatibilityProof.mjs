@@ -29,6 +29,7 @@ import {
   compareProcessPm2Semantics,
   deriveLiveApplicationEnvKeyContext,
 } from './pm2SemanticModel.mjs';
+import { validateRequiredHealth } from './requiredHealth.mjs';
 
 function pathEqualCategorical(aEntry, bEntry) {
   const cmp = compareProcessPm2Semantics(aEntry, bEntry, {
@@ -255,27 +256,42 @@ export function runProductionCompatibilityProof({
     },
   );
 
-  // Canonical TitanGold health paths (values-free status codes only).
+  // Canonical five-surface health (status codes only — never bodies).
   let health5002 = null;
   let health5003 = null;
+  let collectorHealth = null;
+  let accounts = null;
+  let channels = null;
   try {
-    const h2 = spawnSync(
-      'curl',
-      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', 'http://127.0.0.1:5002/health'],
-      { encoding: 'utf8' },
-    );
-    const h3 = spawnSync(
-      'curl',
-      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', 'http://127.0.0.1:5003/health'],
-      { encoding: 'utf8' },
-    );
-    health5002 = String(h2.stdout || '').trim();
-    health5003 = String(h3.stdout || '').trim();
+    const curlCode = (url) => {
+      const r = spawnSync(
+        'curl',
+        ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', url],
+        { encoding: 'utf8' },
+      );
+      const code = Number.parseInt(String(r.stdout || '').trim(), 10);
+      return Number.isFinite(code) ? code : null;
+    };
+    health5002 = curlCode('http://127.0.0.1:5002/health');
+    health5003 = curlCode('http://127.0.0.1:5003/health');
+    collectorHealth = curlCode('http://127.0.0.1:5003/api/telegram-collector/health');
+    accounts = curlCode('http://127.0.0.1:5003/api/telegram-collector/accounts');
+    channels = curlCode('http://127.0.0.1:5003/api/telegram-collector/collector-channels');
   } catch {
     health5002 = null;
     health5003 = null;
+    collectorHealth = null;
+    accounts = null;
+    channels = null;
   }
-  const healthPass = health5002 === '200' && health5003 === '200';
+  const healthProof = validateRequiredHealth({
+    status5002: health5002,
+    status5003: health5003,
+    collectorHealth,
+    accounts,
+    channels,
+  });
+  const healthPass = healthProof.ok === true;
 
   const reflexivityOk =
     liveSelfDiff.classified.length === 0 && dumpSelfDiff.classified.length === 0;
@@ -322,6 +338,10 @@ export function runProductionCompatibilityProof({
     CURRENT_HEALTH: healthPass ? 'PASS' : 'FAIL',
     CURRENT_HEALTH_5002: health5002,
     CURRENT_HEALTH_5003: health5003,
+    CURRENT_COLLECTOR_HEALTH: collectorHealth,
+    CURRENT_ACCOUNTS: accounts,
+    CURRENT_CHANNELS: channels,
+    CURRENT_FULL_REQUIRED_HEALTH: healthProof.CURRENT_FULL_REQUIRED_HEALTH,
     CURRENT_ACTIVE_DUMP_MODE:
       dumpStat && typeof dumpStat.mode === 'number'
         ? String((dumpStat.mode & 0o777).toString(8).padStart(3, '0'))
