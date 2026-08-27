@@ -19,7 +19,10 @@ import {
 } from './constants.mjs';
 import {
   compareEnginePm2Semantics,
+  compareProcessPm2Semantics,
   resolveRawPm2Entry,
+  buildApplicationEnvKeysContext,
+  PM2_NESTED_ENV_VOLATILE_KEYS,
 } from './pm2SemanticModel.mjs';
 
 const META = new Set(PM2_METADATA_KEYS);
@@ -616,9 +619,18 @@ export function selectEngineRetainExtra(fp) {
   };
 
   const envDiffs = diffProcessEnv(a, b, { scope: 'engine-pair' });
+  // PATH-only vs other: unique_id is PM2-injected nested volatile (not app semantic).
   const pathOnlyValueDiff =
     envDiffs.length > 0 &&
     envDiffs.every(
+      (d) =>
+        (d.kind === 'ENV_VALUE_CHANGED' &&
+          d.detail?.key === 'PATH' &&
+          d.detail?.category === 'value-changed') ||
+        (d.kind === 'ENV_VALUE_CHANGED' &&
+          PM2_NESTED_ENV_VOLATILE_KEYS.includes(d.detail?.key)),
+    ) &&
+    envDiffs.some(
       (d) =>
         d.kind === 'ENV_VALUE_CHANGED' &&
         d.detail?.key === 'PATH' &&
@@ -628,38 +640,21 @@ export function selectEngineRetainExtra(fp) {
   const rawA = resolveRawPm2Entry(a);
   const rawB = resolveRawPm2Entry(b);
 
-  /** Full PM2 semantic compare; optionally neutralize PATH for unique-PATH exception. */
+  /** Full PM2 semantic compare; optionally ignore PATH for unique-PATH exception (all shapes). */
   const fullCompare = (ignorePath) => {
-    if (!ignorePath) {
-      return compareEnginePm2Semantics(rawA, rawB, { requireClassified: true });
-    }
-    const a2 = JSON.parse(JSON.stringify(rawA));
-    const b2 = JSON.parse(JSON.stringify(rawB));
-    const neutralize = (entry) => {
-      if (entry && entry.env && typeof entry.env === 'object') {
-        entry.env.PATH = '__PATH_NEUTRAL__';
-      } else if (entry) {
-        entry.PATH = '__PATH_NEUTRAL__';
-      }
-    };
-    neutralize(a2);
-    neutralize(b2);
-    return compareEnginePm2Semantics(a2, b2, { requireClassified: true });
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(rawA).keys,
+      ...buildApplicationEnvKeysContext(rawB).keys,
+    ]);
+    return compareEnginePm2Semantics(rawA, rawB, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx,
+      ignoreApplicationEnvKeys: ignorePath ? ['PATH'] : [],
+    });
   };
 
-  // Equal PATH path — require complete PM2 semantic signature equality.
-  if (!pathOnlyValueDiff) {
-    if (!pathEqual) {
-      // Non-PATH inequality without path-only classification
-      const full = fullCompare(false);
-      return {
-        ok: false,
-        error: 'ENGINE_RUNTIME_IDENTITY_MISMATCH',
-        detailKinds: full.mismatchCategories || envDiffs.map((d) => d.kind),
-        evidence,
-      };
-    }
-
+  // Equal PATH — require complete PM2 semantic signature equality (symmetric mode).
+  if (pathEqual) {
     const full = fullCompare(false);
     if (!full.ok) {
       return {
@@ -714,7 +709,9 @@ export function selectEngineRetainExtra(fp) {
     };
   }
 
-  // PATH is the only permitted engine-to-engine inequality — full semantics otherwise equal.
+  // PATH differs — unique canonical PATH mode if (and only if) all other PM2
+  // semantics match (PATH + nested PM2-injected unique_id ignored).
+  void pathOnlyValueDiff;
   const fullSansPath = fullCompare(true);
   if (!fullSansPath.ok) {
     return {
@@ -793,13 +790,20 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
 
   const rawPre = resolveRawPm2Entry(pre);
   const rawPost = resolveRawPm2Entry(post);
-  if (rawPre && rawPost && (pre.name === ENGINE_NAME || scope?.includes('engine'))) {
-    // Status-only drift is already recorded; compare full PM2 semantics with status neutralized.
+  if (rawPre && rawPost) {
+    // Full-fleet PM2 semantic PRE→POST (status neutralized when skipStatus / already recorded).
     const a = JSON.parse(JSON.stringify(rawPre));
     const b = JSON.parse(JSON.stringify(rawPost));
     a.status = 'online';
     b.status = 'online';
-    const full = compareEnginePm2Semantics(a, b, { requireClassified: true });
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(a).keys,
+      ...buildApplicationEnvKeysContext(b).keys,
+    ]);
+    const full = compareProcessPm2Semantics(a, b, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx,
+    });
     if (!full.ok) {
       for (const cat of full.mismatchCategories || [full.error || 'FULL_PM2_SEMANTIC_DRIFT']) {
         diffs.push({
@@ -808,6 +812,10 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
         });
       }
       return diffs;
+    }
+    // Collector DB_* appear is separately allowlisted via env gate when needed.
+    if (allowCollectorDbAppear) {
+      // Already covered by full compare of exact DB_* values; no extra widen.
     }
     return diffs;
   }
@@ -838,8 +846,12 @@ export function diffFingerprints(pre, post, { extraPmId }) {
         detail: { pm_id: pmId, pre: a.status, post: b.status },
       });
     }
-    diffs.push(...diffStableConfig(a, b, { scope: `engine:${pmId}` }));
-    diffs.push(...diffProcessEnv(a, b, { scope: `engine:${pmId}` }));
+    diffs.push(
+      ...diffProcessPair(a, b, {
+        scope: `engine:${pmId}`,
+        skipStatus: true,
+      }),
+    );
   }
 
   if (pre.backend_count !== post.backend_count) {
@@ -898,11 +910,13 @@ export function diffFingerprints(pre, post, { extraPmId }) {
   if (!preCol || !postCol || preCol.pm_id !== postCol.pm_id || preCol.status !== postCol.status) {
     diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { collector: true } });
   } else {
-    const envDiffs = diffProcessEnv(preCol, postCol, {
-      scope: `collector:${preCol.pm_id}`,
-      allowCollectorDbAppear: true,
-    });
-    diffs.push(...diffStableConfig(preCol, postCol, { scope: `collector:${preCol.pm_id}` }));
+    diffs.push(
+      ...diffProcessPair(preCol, postCol, {
+        scope: `collector:${preCol.pm_id}`,
+        skipStatus: true,
+        allowCollectorDbAppear: true,
+      }),
+    );
 
     const preKeys = preCol.db_keys_present || {};
     const postKeys = postCol.db_keys_present || {};
@@ -918,10 +932,6 @@ export function diffFingerprints(pre, post, { extraPmId }) {
       diffs.push({ kind: 'COLLECTOR_DB_KEYS_APPEAR' });
     } else if (JSON.stringify(preKeys) !== JSON.stringify(postKeys) || preCol.NODE_ENV !== postCol.NODE_ENV) {
       diffs.push({ kind: 'UNRELATED_ENV_CHANGE', detail: 'COLLECTOR_DB_UNEXPECTED' });
-    }
-
-    for (const d of envDiffs) {
-      diffs.push(d);
     }
   }
 
@@ -999,10 +1009,14 @@ export function assertExpectedLivePostState(
   }
 
   // Full PM2 semantic PRE→POST for retained (no change) and extra (status-only).
+  const retainedCtx = new Set([
+    ...buildApplicationEnvKeysContext(resolveRawPm2Entry(retainedPre)).keys,
+    ...buildApplicationEnvKeysContext(resolveRawPm2Entry(retainedPost)).keys,
+  ]);
   const retainedFull = compareEnginePm2Semantics(
     resolveRawPm2Entry(retainedPre),
     resolveRawPm2Entry(retainedPost),
-    { requireClassified: true },
+    { requireClassified: true, applicationEnvKeysContext: retainedCtx },
   );
   if (!retainedFull.ok) {
     return {
@@ -1011,6 +1025,7 @@ export function assertExpectedLivePostState(
       details: {
         RETAINED_ENGINE_FULL_EQUIVALENCE: 'FAIL',
         mismatchCategories: retainedFull.mismatchCategories,
+        FULL_FLEET_PM2_POST_STATE_PROOF: 'FAIL',
       },
     };
   }
@@ -1018,7 +1033,14 @@ export function assertExpectedLivePostState(
   const extraB = JSON.parse(JSON.stringify(resolveRawPm2Entry(extraPost)));
   extraA.status = 'online';
   extraB.status = 'online';
-  const extraFull = compareEnginePm2Semantics(extraA, extraB, { requireClassified: true });
+  const extraCtx = new Set([
+    ...buildApplicationEnvKeysContext(extraA).keys,
+    ...buildApplicationEnvKeysContext(extraB).keys,
+  ]);
+  const extraFull = compareEnginePm2Semantics(extraA, extraB, {
+    requireClassified: true,
+    applicationEnvKeysContext: extraCtx,
+  });
   if (!extraFull.ok) {
     return {
       ok: false,
@@ -1026,6 +1048,7 @@ export function assertExpectedLivePostState(
       details: {
         EXTRA_ENGINE_STOP_ONLY: 'FAIL',
         mismatchCategories: extraFull.mismatchCategories,
+        FULL_FLEET_PM2_POST_STATE_PROOF: 'FAIL',
       },
     };
   }
@@ -1053,6 +1076,7 @@ export function assertExpectedLivePostState(
       RETAINED_ENGINE_FULL_EQUIVALENCE: 'PASS',
       EXTRA_ENGINE_STOP_ONLY: 'PASS',
       LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'PASS',
+      FULL_FLEET_PM2_POST_STATE_PROOF: 'PASS',
       BACKEND_FULL_EQUIVALENCE: 'PASS',
       PROCESSOR_FULL_EQUIVALENCE: 'PASS',
       COLLECTOR_FULL_EQUIVALENCE: 'PASS',
@@ -1177,14 +1201,25 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     [preRetained, postRetained, 'retained'],
     [preExtra, postExtra, 'extra'],
   ]) {
-    const full = compareEnginePm2Semantics(resolveRawPm2Entry(preE), resolveRawPm2Entry(postE), {
+    const rawPre = resolveRawPm2Entry(preE);
+    const rawPost = resolveRawPm2Entry(postE);
+    const ctx = new Set([
+      ...buildApplicationEnvKeysContext(rawPre).keys,
+      ...buildApplicationEnvKeysContext(rawPost).keys,
+    ]);
+    const full = compareEnginePm2Semantics(rawPre, rawPost, {
       requireClassified: true,
+      applicationEnvKeysContext: ctx,
     });
     if (!full.ok) {
       return {
         ok: false,
         error: 'ROLLBACK_ENGINE_CONFIG_DRIFT',
-        details: { kinds: full.mismatchCategories || [full.error], label },
+        details: {
+          kinds: full.mismatchCategories || [full.error],
+          label,
+          FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL',
+        },
       };
     }
   }
@@ -1243,6 +1278,7 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     details: {
       PRE_EQUIVALENT: 'YES',
       dump_mode: expectedDumpMode != null ? expectedDumpMode & 0o777 : null,
+      FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'PASS',
     },
   };
 }

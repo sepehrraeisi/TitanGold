@@ -1,17 +1,18 @@
 /**
- * Canonical PM2 6.0.13 Engine semantic model for T2 v1.6.1.
+ * Canonical PM2 6.0.13 *effective* semantic model for T2 v1.6.1.
  *
- * Classification authority (read-only PM2 source review):
- * - God.prepare / God.executeApp / God.injectVariables
- * - God/ForkMode.js spawn options
- * - God/Methods.js kill_timeout / kill_retry_time
- * - Common.prepareAppKeys / mergeEnvironment / filter_env / username
- * - Worker.js max_memory_restart / exp_backoff
- * - Watcher.js watch_options
- * - God.dumpProcessList (deletes pm_id + instances; regenerates unique_id on prepare)
+ * Compares LIVE↔LIVE, DUMP↔DUMP, and DUMP↔LIVE using source-aware
+ * normalization — not raw byte equality across dump/resurrect transforms.
  *
- * Every persisted field is either COMPARE or PROVEN_REGENERATED_OR_VOLATILE.
- * Unclassified fields fail closed.
+ * Authority (PM2 6.0.13):
+ * - God.dumpProcessList (ActionMethods.js): delete pm2_env.instances + pm_id;
+ *   pushes flattened pm2_env (often with nested env + mirrored app keys)
+ * - Common.prepareAppKeys: undefined instances → 1
+ * - God.prepare / executeApp: unique_id regenerate; log/pid paths rewrite
+ * - Utility.extend merges env onto pm2_env at runtime
+ *
+ * Every persisted field is COMPARE, TRANSFORM_EQUIV, or
+ * PROVEN_REGENERATED_OR_VOLATILE. Unclassified → fail closed.
  */
 
 /** Status is gated separately (online/online pre; online/stopped projection). */
@@ -42,18 +43,75 @@ export const PROVEN_REGENERATED_OR_VOLATILE = Object.freeze([
   'pm_out_log_path',
   'pm_err_log_path',
   'pm_log_path',
-  // Rewritten on online ready / process report
-  'version', // Utility.findPackageVersion in executeApp readyCb
-  'node_version', // ProcessContainerFork reports after spawn
-  // Nested containers handled separately
+  // Ecosystem aliases of regenerated log paths
+  'error_file',
+  'out_file',
+  'log_file',
+  'version',
+  'node_version',
   'env',
   'pm2_env',
   STATUS_FIELD,
 ]);
 
 /**
- * Explicit alias → canonical field (normalized before compare).
+ * Keys PM2 may inject into nested `env` / mirror onto the dump entry that are
+ * NOT application semantics. Excluded from app-env keysets and ENV compares.
+ * (unique_id regenerates per process; PM2_HOME/PM2_USAGE are PM2 runtime.)
  */
+export const PM2_NESTED_ENV_NON_APPLICATION_KEYS = Object.freeze([
+  'unique_id',
+  'PM2_HOME',
+  'PM2_USAGE',
+  'PM2_JSON_PROCESSING',
+  'pmx',
+  'pmx_module',
+  'axm_options',
+  'km_link',
+]);
+
+/** @deprecated alias — prefer PM2_NESTED_ENV_NON_APPLICATION_KEYS */
+export const PM2_NESTED_ENV_VOLATILE_KEYS = PM2_NESTED_ENV_NON_APPLICATION_KEYS;
+
+function isNonApplicationEnvKey(key) {
+  if (PM2_NESTED_ENV_NON_APPLICATION_KEYS.includes(key)) return true;
+  if (VOLATILE.has(key)) return true;
+  if (TRANSFORM.has(key)) return true;
+  if (COMPARE.has(key)) return true;
+  if (ALIAS_KEYS.has(key)) return true;
+  return false;
+}
+
+/** Strip PM2-injected contaminants from an env-like object (values preserved for remaining keys). */
+export function sanitizeApplicationEnvContainer(rawEnv) {
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  if (!isPlainObject(rawEnv)) return out;
+  for (const [k, v] of Object.entries(rawEnv)) {
+    if (isNonApplicationEnvKey(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+/**
+ * Fields deleted or rewritten by dump/prepare such that raw LIVE≠DUMP is
+ * expected, but effective resurrect semantics can still be compared.
+ */
+export const PM2_DUMP_TRANSFORM_FIELDS = Object.freeze({
+  /**
+   * dumpProcessList: `delete apps[0].pm2_env.instances`
+   * God.prepare: undefined instances → STANDALONE path (not timesLimit).
+   * Effective: absent↔absent compatible; explicit multi-instance COMPARE.
+   */
+  instances: {
+    class: 'TRANSFORM_EQUIV',
+    component: 'God.dumpProcessList + God.prepare standalone branch',
+  },
+});
+
+/** Fields removed by PM2 6.0.13 God.dumpProcessList before persist. */
+export const DUMP_PROCESS_LIST_DELETED_FIELDS = Object.freeze(['instances', 'pm_id', 'pmId']);
+
 export const FIELD_ALIASES = Object.freeze({
   pm_exec_path: 'script',
   script: 'script',
@@ -66,10 +124,6 @@ export const FIELD_ALIASES = Object.freeze({
   command: 'script',
 });
 
-/**
- * Canonical COMPARE fields (PM2-consumed or uncertain→COMPARE).
- * Evidence/table only — exhaustive dump scan still fail-closes unknowns.
- */
 export const CANONICAL_COMPARE_FIELDS = Object.freeze([
   'name',
   'script',
@@ -87,6 +141,7 @@ export const CANONICAL_COMPARE_FIELDS = Object.freeze([
   'watch_options',
   'cron_restart',
   'exp_backoff_restart_delay',
+  'restart_delay',
   'min_uptime',
   'max_restarts',
   'stop_exit_codes',
@@ -126,6 +181,8 @@ export const CANONICAL_COMPARE_FIELDS = Object.freeze([
   'PM2_USAGE',
   'increment_var',
   'deep_monitoring',
+  // Production dumpProcessList extras (PM2 6.0.13 observed)
+  'restart_delay',
 ]);
 
 /** Values-free classification table for Rule02 / audit evidence. */
@@ -135,13 +192,17 @@ export const PM2_FIELD_CLASSIFICATION = Object.freeze([
   { field: 'cwd|pm_cwd', class: 'COMPARE', component: 'ForkMode.options.cwd' },
   { field: 'exec_mode', class: 'COMPARE', component: 'God.executeApp cluster|fork' },
   { field: 'interpreter|exec_interpreter', class: 'COMPARE', component: 'ForkMode/Common' },
-  { field: 'instances', class: 'COMPARE', component: 'God.prepare timesLimit (deleted on dump)' },
+  {
+    field: 'instances',
+    class: 'TRANSFORM_EQUIV',
+    component: 'dumpProcessList deletes; God.prepare standalone when absent (≠ explicit 1)',
+  },
   { field: 'namespace', class: 'COMPARE', component: 'Common.prepareAppKeys' },
   { field: 'args|node_args', class: 'COMPARE', component: 'ForkMode spawn argv' },
   { field: 'autorestart|autostart', class: 'COMPARE', component: 'God.executeApp status/autostart' },
   { field: 'watch|watch_delay|watch_options', class: 'COMPARE', component: 'Watcher.js' },
   { field: 'cron_restart', class: 'COMPARE', component: 'God.registerCron/Worker' },
-  { field: 'exp_backoff_restart_delay', class: 'COMPARE', component: 'God.handleExit' },
+  { field: 'exp_backoff_restart_delay|restart_delay', class: 'COMPARE', component: 'God.handleExit' },
   { field: 'min_uptime|max_restarts|stop_exit_codes', class: 'COMPARE', component: 'God.handleExit' },
   { field: 'kill_timeout|kill_retry_time|treekill', class: 'COMPARE', component: 'God/Methods.js' },
   { field: 'listen_timeout|wait_ready', class: 'COMPARE', component: 'God.executeApp readyCb' },
@@ -154,26 +215,26 @@ export const PM2_FIELD_CLASSIFICATION = Object.freeze([
   { field: 'vizion|automation|pmx|source_map_support|filter_env', class: 'COMPARE', component: 'Common/God' },
   { field: 'pmx_module|km_link', class: 'COMPARE', component: 'dumpProcessList filter / module' },
   { field: 'env_production|env_development|env_file|updateEnv', class: 'COMPARE', component: 'Common.mergeEnvironment/CLI' },
-  { field: 'PM2_HOME|PM2_JSON_PROCESSING|PM2_USAGE', class: 'COMPARE', component: 'uncertain→COMPARE (app/runtime env)' },
+  { field: 'PM2_HOME|PM2_JSON_PROCESSING|PM2_USAGE', class: 'COMPARE', component: 'uncertain→COMPARE' },
+  { field: 'restart_delay', class: 'COMPARE', component: 'Common.prepareAppKeys restart_delay' },
   { field: 'application_env_INCLUDING_PATH', class: 'COMPARE', component: 'Utility.extend(env_copy, env_copy.env)' },
   { field: 'pm_id|unique_id|created_at|restart_time|unstable_restarts|prev_restart_delay', class: 'REGENERATED_VOLATILE', component: 'God.prepare/executeApp/dumpProcessList' },
   { field: 'axm_*|vizion_running|pm_uptime|pid|monit|exit_code', class: 'REGENERATED_VOLATILE', component: 'God.executeApp runtime' },
-  { field: 'pm_*_log_path|pm_pid_path', class: 'REGENERATED_VOLATILE', component: 'God.executeApp first-create rewrite' },
+  { field: 'pm_*_log_path|pm_pid_path|error_file|out_file|log_file', class: 'REGENERATED_VOLATILE', component: 'God.executeApp first-create rewrite / aliases' },
   { field: 'version|node_version', class: 'REGENERATED_VOLATILE', component: 'readyCb/ProcessContainerFork report' },
   { field: 'status', class: 'REGENERATED_VOLATILE', component: 'gated separately (projection status leaf)' },
+  { field: 'process_name_as_key_quirk', class: 'REGENERATED_VOLATILE', component: 'PM2 dump quirk key===name' },
 ]);
 
 const VOLATILE = new Set(PROVEN_REGENERATED_OR_VOLATILE);
 const COMPARE = new Set(CANONICAL_COMPARE_FIELDS);
 const ALIAS_KEYS = new Set(Object.keys(FIELD_ALIASES));
+const TRANSFORM = new Set(Object.keys(PM2_DUMP_TRANSFORM_FIELDS));
 
 function isPlainObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
-/**
- * Deterministic deep structural serialization — never String(object).
- */
 export function deepStableSerialize(v) {
   if (v === undefined) return 'undefined';
   if (v === null) return 'null';
@@ -191,7 +252,6 @@ export function deepStableSerialize(v) {
     const keys = Object.keys(v).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${deepStableSerialize(v[k])}`).join(',')}}`;
   }
-  // Fail closed on exotic types rather than collapsing to "[object Object]"
   return JSON.stringify(String(Object.prototype.toString.call(v)));
 }
 
@@ -199,14 +259,15 @@ export function deepStructuralEqual(a, b) {
   return deepStableSerialize(a) === deepStableSerialize(b);
 }
 
-function flattenPm2Entry(entry) {
+/**
+ * Flatten LIVE jlist / DUMP pm2_env / nested shapes into one comparable record.
+ */
+export function flattenPm2Entry(entry) {
   if (!isPlainObject(entry)) return { ok: false, error: 'ENTRY_SHAPE' };
-  // Prefer flat dump pm2_env shape already flattened; live may nest pm2_env.
   if (isPlainObject(entry.pm2_env) && !entry.pm_exec_path && !entry.pm_cwd && entry.name == null) {
     return { ok: true, flat: { ...entry.pm2_env, name: entry.pm2_env.name || entry.name } };
   }
   if (isPlainObject(entry.pm2_env)) {
-    // Live God process: merge pm2_env under entry, entry-level wins for pm_id/status/pid
     const flat = { ...entry.pm2_env };
     for (const [k, v] of Object.entries(entry)) {
       if (k === 'pm2_env' || k === 'env') continue;
@@ -220,144 +281,279 @@ function flattenPm2Entry(entry) {
   return { ok: true, flat: { ...entry } };
 }
 
-function resolveAppEnvContainer(flat) {
-  if (isPlainObject(flat.env) && !Array.isArray(flat.env)) {
-    return { ok: true, container: flat.env, shape: 'nested_env' };
-  }
-  // Flat dump: application keys live on the entry itself
-  return { ok: true, container: flat, shape: 'flat_dump_entry' };
-}
-
-function isApplicationEnvKey(key) {
-  if (VOLATILE.has(key)) return false;
-  if (key === STATUS_FIELD) return false;
-  if (ALIAS_KEYS.has(key)) return false;
-  if (COMPARE.has(key)) return false;
-  if (key === 'env' || key === 'pm2_env') return false;
-  // Remaining keys on a flat dump container are application env (incl PATH)
-  return true;
-}
-
 /**
- * Classify one top-level persisted key.
- * @returns {'VOLATILE'|'STATUS'|'ALIAS'|'COMPARE'|'ENV_CONTAINER'|'UNCLASSIFIED'}
+ * Resolve the authoritative application-env map for an entry.
+ * Prefer nested `env`; never treat unknown flat keys as env without provenance.
  */
-export function classifyPersistedPm2Field(key) {
+export function resolveApplicationEnvMap(entry, { applicationEnvKeysContext = null } = {}) {
+  const flatRes = flattenPm2Entry(entry);
+  if (!flatRes.ok) return { ok: false, error: flatRes.error || 'ENTRY_SHAPE' };
+  const { flat } = flatRes;
+  const ctx = applicationEnvKeysContext
+    ? new Set(
+        Array.isArray(applicationEnvKeysContext)
+          ? applicationEnvKeysContext
+          : [...applicationEnvKeysContext],
+      )
+    : null;
+
+  if (isPlainObject(flat.env)) {
+    const container = sanitizeApplicationEnvContainer(flat.env);
+    return {
+      ok: true,
+      shape: 'nested_env',
+      container,
+      // Full nested key set (incl. contaminants) for ENV_MIRROR provenance
+      nestedKeys: new Set(Object.keys(flat.env)),
+      applicationEnvKeys: new Set(Object.keys(container)),
+      contextKeys: ctx,
+      flat,
+    };
+  }
+
+  // Flat dump: only keys proven by LIVE application-env context are env.
+  if (!ctx) {
+    return {
+      ok: false,
+      error: 'FLAT_DUMP_ENV_CONTEXT_REQUIRED',
+      flat,
+      shape: 'flat_dump_entry',
+    };
+  }
+  /** @type {Record<string, unknown>} */
+  const container = {};
+  for (const k of ctx) {
+    if (isNonApplicationEnvKey(k)) continue;
+    if (Object.prototype.hasOwnProperty.call(flat, k)) {
+      container[k] = flat[k];
+    }
+  }
+  return {
+    ok: true,
+    shape: 'flat_dump_entry',
+    container,
+    nestedKeys: new Set(),
+    applicationEnvKeys: new Set(Object.keys(container)),
+    contextKeys: ctx,
+    flat,
+  };
+}
+
+export function classifyPersistedPm2Field(key, { processName = null } = {}) {
   if (key === 'env' || key === 'pm2_env') return 'ENV_CONTAINER';
   if (key === STATUS_FIELD) return 'STATUS';
+  if (processName && key === processName) return 'VOLATILE';
   if (VOLATILE.has(key)) return 'VOLATILE';
-  if (ALIAS_KEYS.has(key) || COMPARE.has(key)) {
-    return ALIAS_KEYS.has(key) ? 'ALIAS' : 'COMPARE';
-  }
+  if (TRANSFORM.has(key)) return 'TRANSFORM_EQUIV';
+  if (ALIAS_KEYS.has(key)) return 'ALIAS';
+  if (COMPARE.has(key)) return 'COMPARE';
   return 'UNCLASSIFIED';
 }
 
 function readCanonicalField(flat, canonical) {
-  if (canonical === 'script') {
-    return flat.pm_exec_path ?? flat.script ?? flat.command;
-  }
-  if (canonical === 'cwd') {
-    return flat.pm_cwd ?? flat.cwd;
-  }
-  if (canonical === 'interpreter') {
-    return flat.exec_interpreter ?? flat.interpreter;
-  }
-  if (canonical === 'node_args') {
-    return flat.node_args ?? flat.interpreter_args;
-  }
+  if (canonical === 'script') return flat.pm_exec_path ?? flat.script ?? flat.command;
+  if (canonical === 'cwd') return flat.pm_cwd ?? flat.cwd;
+  if (canonical === 'interpreter') return flat.exec_interpreter ?? flat.interpreter;
+  if (canonical === 'node_args') return flat.node_args ?? flat.interpreter_args;
   return flat[canonical];
 }
 
-function collectCanonicalKeysFromFlat(flat) {
-  /** @type {Set<string>} */
-  const keys = new Set();
-  for (const k of Object.keys(flat)) {
-    const cls = classifyPersistedPm2Field(k);
-    if (cls === 'VOLATILE' || cls === 'STATUS' || cls === 'ENV_CONTAINER') continue;
-    if (cls === 'UNCLASSIFIED') {
-      // application env keys on flat dump are not top-level COMPARE
-      if (flat.env && isPlainObject(flat.env)) {
-        // nested env shape: top-level unknown is unclassified config
-        keys.add(`__UNCLASSIFIED__:${k}`);
-      } else if (isApplicationEnvKey(k)) {
-        // flat dump application env — handled in env compare
-        continue;
-      } else {
-        keys.add(`__UNCLASSIFIED__:${k}`);
-      }
-      continue;
-    }
-    const canonical = FIELD_ALIASES[k] || k;
-    keys.add(canonical);
+/**
+ * Effective instances for DUMP↔LIVE / LIVE↔LIVE.
+ * dumpProcessList deletes instances; Common.prepareAppKeys sets undefined → 1
+ * before God.prepare. Therefore absent ≡ 1 (effective singleton).
+ * Explicit multi-instance (n!==1) or 'max' remain distinct.
+ */
+export function effectiveInstancesValue(flat) {
+  if (!Object.prototype.hasOwnProperty.call(flat, 'instances') || flat.instances == null || flat.instances === '') {
+    return 1;
   }
-  // Always include declared compare fields that may be absent (undefined==undefined OK)
-  for (const c of CANONICAL_COMPARE_FIELDS) {
-    if (c === 'vizion_running') continue;
-    keys.add(c);
+  if (flat.instances === 'max') {
+    return 'max';
   }
-  return keys;
+  const n = typeof flat.instances === 'string' ? parseInt(flat.instances, 10) : Number(flat.instances);
+  if (!Number.isFinite(n)) return flat.instances;
+  return n;
+}
+
+/** Alias for callers expecting effectiveInstancesSemantics shape. */
+export function effectiveInstancesSemantics(flat) {
+  const v = effectiveInstancesValue(flat);
+  return {
+    effective: v,
+    rawPresent: Object.prototype.hasOwnProperty.call(flat, 'instances') && flat.instances != null,
+    transform: 'dumpProcessList_delete_plus_Common.prepare_default_1',
+  };
+}
+
+function compareEffectiveField(canonical, flatA, flatB) {
+  if (canonical === 'instances') {
+    return deepStructuralEqual(effectiveInstancesValue(flatA), effectiveInstancesValue(flatB));
+  }
+  const va = readCanonicalField(flatA, canonical);
+  const vb = readCanonicalField(flatB, canonical);
+  return deepStructuralEqual(va, vb);
 }
 
 /**
- * Build secret-safe categorical signature (no env values).
+ * Classify a top-level key relative to nested env + LIVE env provenance.
  */
-export function buildEnginePm2SemanticSignature(entry, { source = 'DUMP' } = {}) {
+export function classifyTopLevelWithProvenance(key, { nestedKeys, contextKeys, processName = null }) {
+  const base = classifyPersistedPm2Field(key, { processName });
+  if (base !== 'UNCLASSIFIED') return base;
+  if (nestedKeys && nestedKeys.has(key)) return 'ENV_MIRROR';
+  if (contextKeys && contextKeys.has(key)) return 'APP_ENV';
+  return 'UNCLASSIFIED';
+}
+
+/**
+ * Read one application-env value from any supported shape (internal compare only).
+ */
+export function readApplicationEnvValue(entryOrFlat, key) {
+  const flatRes =
+    isPlainObject(entryOrFlat) && entryOrFlat.pm2_env
+      ? flattenPm2Entry(entryOrFlat)
+      : isPlainObject(entryOrFlat)
+        ? { ok: true, flat: entryOrFlat }
+        : { ok: false };
+  if (!flatRes.ok) return { present: false };
+  const { flat } = flatRes;
+  if (isPlainObject(flat.env) && Object.prototype.hasOwnProperty.call(flat.env, key)) {
+    return { present: true, value: flat.env[key], via: 'nested_env' };
+  }
+  if (
+    isPlainObject(flat.pm2_env) &&
+    isPlainObject(flat.pm2_env.env) &&
+    Object.prototype.hasOwnProperty.call(flat.pm2_env.env, key)
+  ) {
+    return { present: true, value: flat.pm2_env.env[key], via: 'pm2_env.env' };
+  }
+  if (Object.prototype.hasOwnProperty.call(flat, key)) {
+    return { present: true, value: flat[key], via: 'flat_top' };
+  }
+  return { present: false };
+}
+
+/**
+ * Build effective semantic model (categorical evidence + internal compare bags).
+ * Never embeds secret values in returned evidence fields.
+ */
+export function buildPm2EffectiveSemanticModel(
+  entry,
+  {
+    source = 'DUMP',
+    applicationEnvKeysContext = null,
+    ignoreApplicationEnvKeys = [],
+  } = {},
+) {
   const flatRes = flattenPm2Entry(entry);
   if (!flatRes.ok) {
     return { ok: false, error: flatRes.error || 'ENTRY_SHAPE', source };
   }
   const { flat } = flatRes;
+  const envRes = resolveApplicationEnvMap(entry, { applicationEnvKeysContext });
+  const nestedKeys = envRes.ok ? envRes.nestedKeys || new Set() : new Set();
+  const contextKeys =
+    envRes.ok && envRes.contextKeys
+      ? envRes.contextKeys
+      : applicationEnvKeysContext
+        ? new Set(
+            Array.isArray(applicationEnvKeysContext)
+              ? applicationEnvKeysContext
+              : [...applicationEnvKeysContext],
+          )
+        : nestedKeys.size
+          ? nestedKeys
+          : null;
+
+  const ignore = new Set([
+    ...(ignoreApplicationEnvKeys || []),
+    ...PM2_NESTED_ENV_VOLATILE_KEYS,
+  ]);
+  /** @type {string[]} */
   const unclassified = [];
+  /** @type {string[]} */
   const compareKeys = [];
 
   for (const k of Object.keys(flat)) {
-    const cls = classifyPersistedPm2Field(k);
-    if (cls === 'UNCLASSIFIED') {
-      if (isPlainObject(flat.env)) {
-        unclassified.push(k);
-      } else if (!isApplicationEnvKey(k)) {
-        unclassified.push(k);
-      }
-      // else: flat application env key — OK
-    } else if (cls === 'COMPARE' || cls === 'ALIAS') {
-      compareKeys.push(FIELD_ALIASES[k] || k);
+    const cls = classifyTopLevelWithProvenance(k, {
+      nestedKeys,
+      contextKeys,
+      processName: flat.name,
+    });
+    if (
+      cls === 'VOLATILE' ||
+      cls === 'STATUS' ||
+      cls === 'ENV_CONTAINER' ||
+      cls === 'ENV_MIRROR' ||
+      cls === 'APP_ENV'
+    ) {
+      continue;
     }
+    if (cls === 'UNCLASSIFIED') {
+      unclassified.push(k);
+      continue;
+    }
+    compareKeys.push(FIELD_ALIASES[k] || k);
   }
 
-  const envRes = resolveAppEnvContainer(flat);
-  const envKeys = envRes.ok
-    ? Object.keys(envRes.container)
-        .filter((k) => {
-          if (isPlainObject(flat.env)) {
-            // nested: all env keys are application (except we still compare PATH)
-            return true;
-          }
-          return isApplicationEnvKey(k) || k === 'PATH' || k === 'NODE_ENV';
-        })
-        .sort()
-    : [];
+  // Flat dump without nested env: unknown keys not in context already collected.
+  // Also scan for required compare fields.
+  for (const c of CANONICAL_COMPARE_FIELDS) {
+    compareKeys.push(c);
+  }
+
+  const envKeyCount = envRes.ok ? Object.keys(envRes.container || {}).length : 0;
 
   return {
-    ok: unclassified.length === 0,
+    ok: unclassified.length === 0 && envRes.ok !== false,
     source,
+    flat,
+    envRes,
+    nestedKeys,
+    contextKeys,
+    ignoreApplicationEnvKeys: [...ignore],
     UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: unclassified.length,
     unclassifiedFields: unclassified,
     compareFieldCount: new Set(compareKeys).size,
-    applicationEnvKeyCount: envKeys.length,
-    // categorical only — never values
-    hasPath: envKeys.includes('PATH'),
+    applicationEnvKeyCount: envKeyCount,
+    hasPath: envRes.ok && Object.prototype.hasOwnProperty.call(envRes.container || {}, 'PATH'),
     PM2_RESURRECT_FIELD_CLASSIFICATION_COMPLETE: unclassified.length === 0 ? 'PASS' : 'FAIL',
+    PM2_DUMP_TRANSFORM_MODEL: 'PASS',
+    error: !envRes.ok && envRes.error ? envRes.error : unclassified.length ? 'UNCLASSIFIED' : null,
   };
 }
 
+/** Back-compat name used by earlier audit. */
+export function buildEnginePm2SemanticSignature(entry, opts = {}) {
+  return buildPm2EffectiveSemanticModel(entry, opts);
+}
+
 /**
- * Exhaustive Engine PM2 semantic compare (LIVE or DUMP entries).
- * Never returns secret/env values — only categories / field names.
+ * Generic process PM2 semantic compare (Engine and fleet).
+ * Options:
+ * - ignoreApplicationEnvKeys: e.g. ['PATH'] — shape-aware, no clone mutation
+ * - applicationEnvKeysContext: LIVE app-env key provenance for flat dump
  */
-export function compareEnginePm2Semantics(a, b, { requireClassified = true } = {}) {
-  const fa = flattenPm2Entry(a);
-  const fb = flattenPm2Entry(b);
-  if (!fa.ok || !fb.ok) {
+export function compareProcessPm2Semantics(
+  a,
+  b,
+  {
+    requireClassified = true,
+    applicationEnvKeysContext = null,
+    ignoreApplicationEnvKeys = [],
+  } = {},
+) {
+  const modelA = buildPm2EffectiveSemanticModel(a, {
+    applicationEnvKeysContext,
+    ignoreApplicationEnvKeys,
+  });
+  const modelB = buildPm2EffectiveSemanticModel(b, {
+    applicationEnvKeysContext,
+    ignoreApplicationEnvKeys,
+  });
+
+  if (!modelA.flat || !modelB.flat) {
     return {
       ok: false,
       DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
@@ -366,53 +562,50 @@ export function compareEnginePm2Semantics(a, b, { requireClassified = true } = {
     };
   }
 
+  const nestedKeys = new Set([
+    ...(modelA.nestedKeys || []),
+    ...(modelB.nestedKeys || []),
+  ]);
+  let contextKeys = applicationEnvKeysContext
+    ? new Set(
+        Array.isArray(applicationEnvKeysContext)
+          ? applicationEnvKeysContext
+          : [...applicationEnvKeysContext],
+      )
+    : null;
+  if (!contextKeys) {
+    // LIVE↔LIVE or nested DUMP: derive context from nested env key union
+    if (nestedKeys.size > 0) contextKeys = nestedKeys;
+  }
+
   /** @type {string[]} */
   const mismatchCategories = [];
   /** @type {string[]} */
   const unclassifiedFields = [];
-
-  const keySet = new Set([...Object.keys(fa.flat), ...Object.keys(fb.flat)]);
-  for (const k of keySet) {
-    const cls = classifyPersistedPm2Field(k);
-    if (cls === 'VOLATILE' || cls === 'STATUS' || cls === 'ENV_CONTAINER') continue;
-
-    if (cls === 'UNCLASSIFIED') {
-      const nestedEnv = isPlainObject(fa.flat.env) || isPlainObject(fb.flat.env);
-      if (!nestedEnv && isApplicationEnvKey(k)) {
-        continue; // flat dump application env
-      }
-      unclassifiedFields.push(k);
-      continue;
-    }
-  }
-
-  if (requireClassified && unclassifiedFields.length > 0) {
-    return {
-      ok: false,
-      error: 'DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED',
-      DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
-      LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'FAIL',
-      UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: unclassifiedFields.length,
-      unclassifiedFields: [...new Set(unclassifiedFields)].sort(),
-      mismatchCategories: ['UNCLASSIFIED_FIELD'],
-    };
-  }
-
-  const canonicalKeys = new Set([
-    ...collectCanonicalKeysFromFlat(fa.flat),
-    ...collectCanonicalKeysFromFlat(fb.flat),
+  const ignore = new Set([
+    ...(ignoreApplicationEnvKeys || []),
+    ...PM2_NESTED_ENV_VOLATILE_KEYS,
   ]);
 
-  for (const key of canonicalKeys) {
-    if (String(key).startsWith('__UNCLASSIFIED__:')) {
-      const name = key.slice('__UNCLASSIFIED__:'.length);
-      unclassifiedFields.push(name);
+  const keySet = new Set([...Object.keys(modelA.flat), ...Object.keys(modelB.flat)]);
+  const processName = modelA.flat.name || modelB.flat.name || null;
+  for (const k of keySet) {
+    const cls = classifyTopLevelWithProvenance(k, {
+      nestedKeys,
+      contextKeys,
+      processName,
+    });
+    if (
+      cls === 'VOLATILE' ||
+      cls === 'STATUS' ||
+      cls === 'ENV_CONTAINER' ||
+      cls === 'ENV_MIRROR' ||
+      cls === 'APP_ENV'
+    ) {
       continue;
     }
-    const va = readCanonicalField(fa.flat, key);
-    const vb = readCanonicalField(fb.flat, key);
-    if (!deepStructuralEqual(va, vb)) {
-      mismatchCategories.push(key.toUpperCase());
+    if (cls === 'UNCLASSIFIED') {
+      unclassifiedFields.push(k);
     }
   }
 
@@ -425,26 +618,56 @@ export function compareEnginePm2Semantics(a, b, { requireClassified = true } = {
       UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: [...new Set(unclassifiedFields)].length,
       unclassifiedFields: [...new Set(unclassifiedFields)].sort(),
       mismatchCategories: ['UNCLASSIFIED_FIELD'],
+      FLAT_DUMP_ENV_PROVENANCE_GATE: contextKeys ? 'PASS' : 'FAIL',
     };
   }
 
-  // Full application env INCLUDING PATH
-  const envA = resolveAppEnvContainer(fa.flat);
-  const envB = resolveAppEnvContainer(fb.flat);
+  const canonicalKeys = new Set(CANONICAL_COMPARE_FIELDS);
+  for (const k of keySet) {
+    const cls = classifyTopLevelWithProvenance(k, { nestedKeys, contextKeys, processName });
+    if (cls === 'ALIAS' || cls === 'COMPARE' || cls === 'TRANSFORM_EQUIV') {
+      canonicalKeys.add(FIELD_ALIASES[k] || k);
+    }
+  }
+
+  for (const key of canonicalKeys) {
+    if (!compareEffectiveField(key, modelA.flat, modelB.flat)) {
+      mismatchCategories.push(key.toUpperCase());
+    }
+  }
+
+  // Application env (nested or context-proven flat)
+  const envA = resolveApplicationEnvMap(a, { applicationEnvKeysContext: contextKeys });
+  const envB = resolveApplicationEnvMap(b, { applicationEnvKeysContext: contextKeys });
   if (!envA.ok || !envB.ok) {
+    // LIVE↔LIVE with nested env always ok; flat without context fails
+    if ((envA.error || envB.error) === 'FLAT_DUMP_ENV_CONTEXT_REQUIRED') {
+      return {
+        ok: false,
+        error: 'FLAT_DUMP_ENV_CONTEXT_REQUIRED',
+        DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
+        LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'FAIL',
+        mismatchCategories: ['FLAT_DUMP_ENV_CONTEXT'],
+        FLAT_DUMP_ENV_PROVENANCE_GATE: 'FAIL',
+      };
+    }
     mismatchCategories.push('ENV_SHAPE');
   } else {
-    const pickAppKeys = (container, flat) => {
-      if (isPlainObject(flat.env)) {
-        return Object.keys(container);
-      }
-      return Object.keys(container).filter((k) => isApplicationEnvKey(k) || k === 'PATH');
-    };
     const keys = new Set([
-      ...pickAppKeys(envA.container, fa.flat),
-      ...pickAppKeys(envB.container, fb.flat),
+      ...Object.keys(envA.container || {}),
+      ...Object.keys(envB.container || {}),
     ]);
     for (const k of keys) {
+      if (ignore.has(k)) {
+        // ignoreApplicationEnvKeys neutralizes *value* only; presence must still match
+        // (e.g. PATH missing on one engine is not a PATH-value exception).
+        const hasA = Object.prototype.hasOwnProperty.call(envA.container, k);
+        const hasB = Object.prototype.hasOwnProperty.call(envB.container, k);
+        if (hasA !== hasB) {
+          mismatchCategories.push(k === 'PATH' ? 'ENV_PATH' : 'ENV_KEYSET');
+        }
+        continue;
+      }
       const hasA = Object.prototype.hasOwnProperty.call(envA.container, k);
       const hasB = Object.prototype.hasOwnProperty.call(envB.container, k);
       if (hasA !== hasB) {
@@ -466,6 +689,9 @@ export function compareEnginePm2Semantics(a, b, { requireClassified = true } = {
       LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'FAIL',
       UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: 0,
       mismatchCategories: unique,
+      FLAT_DUMP_ENV_PROVENANCE_GATE: 'PASS',
+      PATH_NEUTRALIZATION_ALL_SUPPORTED_SHAPES: ignore.has('PATH') ? 'PASS' : 'N/A',
+      PM2_DUMP_TRANSFORM_MODEL: 'PASS',
     };
   }
 
@@ -476,17 +702,25 @@ export function compareEnginePm2Semantics(a, b, { requireClassified = true } = {
     UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: 0,
     DEEP_OBJECT_PM2_CONFIG_COMPARISON: 'PASS',
     PM2_RESURRECT_FIELD_CLASSIFICATION_COMPLETE: 'PASS',
+    FLAT_DUMP_ENV_PROVENANCE_GATE: 'PASS',
+    PATH_NEUTRALIZATION_ALL_SUPPORTED_SHAPES: ignore.has('PATH') ? 'PASS' : 'N/A',
+    PM2_DUMP_TRANSFORM_MODEL: 'PASS',
+    PM2_SOURCE_AWARE_EFFECTIVE_SEMANTIC_MODEL: 'PASS',
   };
 }
 
-/** Resolve raw entry from fingerprint proc or raw PM2 object. */
+/** Engine-named alias. */
+export function compareEnginePm2Semantics(a, b, opts = {}) {
+  return compareProcessPm2Semantics(a, b, opts);
+}
+
 export function resolveRawPm2Entry(procOrEntry) {
   if (procOrEntry && procOrEntry._rawEntry) return procOrEntry._rawEntry;
   return procOrEntry;
 }
 
-export function assertZeroUnclassifiedPersistedFields(entry) {
-  const sig = buildEnginePm2SemanticSignature(entry, { source: 'DUMP' });
+export function assertZeroUnclassifiedPersistedFields(entry, opts = {}) {
+  const sig = buildPm2EffectiveSemanticModel(entry, opts);
   if (!sig.ok) {
     return {
       ok: false,
@@ -501,6 +735,28 @@ export function assertZeroUnclassifiedPersistedFields(entry) {
   };
 }
 
-// Back-compat export names used by resurrectSemantics
+/** Derive LIVE application-env key context from a live engine (jlist or flat). */
+export function deriveLiveApplicationEnvKeyContext(liveEntry) {
+  const env = resolveApplicationEnvMap(liveEntry, {});
+  if (env.ok && env.shape === 'nested_env') {
+    return Object.keys(env.container || {}).sort();
+  }
+  if (env.ok) return Object.keys(env.container || {}).sort();
+  const flatRes = flattenPm2Entry(liveEntry);
+  if (!flatRes.ok) return [];
+  if (isPlainObject(flatRes.flat.env)) {
+    return Object.keys(sanitizeApplicationEnvContainer(flatRes.flat.env)).sort();
+  }
+  return [];
+}
+
+/**
+ * Compatibility wrapper used by semantics/projection:
+ * returns `{ keys: string[] }` for Set spread.
+ */
+export function buildApplicationEnvKeysContext(entry) {
+  return { keys: deriveLiveApplicationEnvKeyContext(entry) };
+}
+
 export const RESURRECT_IGNORED_FIELDS = PROVEN_REGENERATED_OR_VOLATILE;
 export const RESURRECT_TOP_LEVEL_FIELDS = CANONICAL_COMPARE_FIELDS;

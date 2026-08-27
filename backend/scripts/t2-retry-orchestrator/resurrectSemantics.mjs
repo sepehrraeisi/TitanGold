@@ -1,13 +1,13 @@
 /**
- * Dump resurrect semantic comparison — thin adapter over canonical pm2SemanticModel.
- * Exhaustive fail-closed field classification is enforced in compareEnginePm2Semantics.
+ * Dump resurrect semantic comparison — adapter over effective pm2SemanticModel.
  */
 
 import {
   RESURRECT_IGNORED_FIELDS,
   RESURRECT_TOP_LEVEL_FIELDS,
-  compareEnginePm2Semantics,
+  compareProcessPm2Semantics,
   assertZeroUnclassifiedPersistedFields,
+  deriveLiveApplicationEnvKeyContext,
 } from './pm2SemanticModel.mjs';
 
 export {
@@ -18,10 +18,16 @@ export {
 
 /**
  * Compare two dump engine records for PM2 6.0.13 resurrect semantic equivalence.
- * Never returns env/PATH values — only categorical PASS/FAIL + field categories.
+ * @param {object} a
+ * @param {object} b
+ * @param {{ applicationEnvKeysContext?: string[], ignoreApplicationEnvKeys?: string[] }} [opts]
  */
-export function compareDumpEngineResurrectSemantics(a, b) {
-  return compareEnginePm2Semantics(a, b, { requireClassified: true });
+export function compareDumpEngineResurrectSemantics(a, b, opts = {}) {
+  return compareProcessPm2Semantics(a, b, {
+    requireClassified: true,
+    applicationEnvKeysContext: opts.applicationEnvKeysContext || null,
+    ignoreApplicationEnvKeys: opts.ignoreApplicationEnvKeys || [],
+  });
 }
 
 /**
@@ -31,6 +37,7 @@ export function compareDumpEngineResurrectSemantics(a, b) {
 export function assertSymmetricProjectedDumpResurrectCompatibility({
   projected,
   engineIndexes,
+  applicationEnvKeysContext = null,
 }) {
   if (!Array.isArray(projected) || !Array.isArray(engineIndexes) || engineIndexes.length !== 2) {
     return { ok: false, SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY: 'FAIL' };
@@ -47,7 +54,9 @@ export function assertSymmetricProjectedDumpResurrectCompatibility({
   }
   const aSans = { ...a, status: 'online' };
   const bSans = { ...b, status: 'online' };
-  const cmp = compareDumpEngineResurrectSemantics(aSans, bSans);
+  const cmp = compareDumpEngineResurrectSemantics(aSans, bSans, {
+    applicationEnvKeysContext,
+  });
   if (!cmp.ok) {
     return {
       ok: false,
@@ -58,3 +67,5 @@ export function assertSymmetricProjectedDumpResurrectCompatibility({
   }
   return { ok: true, SYMMETRIC_PROJECTED_DUMP_RESURRECT_COMPATIBILITY: 'PASS' };
 }
+
+export { deriveLiveApplicationEnvKeyContext };

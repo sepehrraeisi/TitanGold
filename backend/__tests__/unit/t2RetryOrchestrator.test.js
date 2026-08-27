@@ -56,7 +56,15 @@ import {
   PM2_FIELD_CLASSIFICATION,
   PROVEN_REGENERATED_OR_VOLATILE,
   CANONICAL_COMPARE_FIELDS,
+  buildProductionDumpShapeFixture,
+  buildLiveEnginePairMatchingFixture,
+  compareProcessPm2Semantics,
+  deriveLiveApplicationEnvKeyContext,
+  effectiveInstancesValue,
+  diffFingerprints,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
+
+
 
 const SECRET_PASSWORD = 'super-secret-db-password-NEVER-IN-EVIDENCE';
 const SECRET_TOKEN = '123456789:AAHsecretTelegramTokenValueXXXX';
@@ -2563,7 +2571,7 @@ describe('T2 v1.6.1 engine identity symmetry', () => {
     expect(engines.extraDumpIndex).toBeGreaterThan(engines.retainedDumpIndex);
   });
 
-  it('PATH difference between dump engines fails symmetry unless unique resolves', () => {
+  it('PATH difference between dump engines uses CANONICAL_PERSISTED_SLOT when LIVE symmetric', () => {
     const world = makeLiveAndDump();
     equalizeEnginePaths(world);
     const dump = prepareDumpFromLive(world.live);
@@ -2573,9 +2581,13 @@ describe('T2 v1.6.1 engine identity symmetry', () => {
     const sel = selectEngineRetainExtra(semanticFingerprint(world.live));
     expect(sel.liveEnginePairMode).toBe('SYMMETRIC_RUNTIME_EQUIVALENT');
     const engines = resolveDumpEngineIdentities(dump, sel);
-    // Live class match may fail for the divergent dump PATH entry → unresolved
-    expect(engines.ok).toBe(false);
-    expect(engines.error).toBe('DUMP_ENGINE_IDENTITY_UNRESOLVED');
+    expect(engines.ok).toBe(true);
+    expect(engines.mappingMode).toBe(
+      DUMP_ENGINE_MAPPING_MODE.CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY,
+    );
+    expect(engines.CANONICAL_PERSISTED_SLOT_SELECTION).toBe('PASS');
+    expect(engines.PM_ID_USED_AS_PERSISTED_IDENTITY).toBe('NO');
+    expect(engines.PERSISTED_SLOT_IDENTITY_CLAIM).toBe('NONE');
   });
 
   it('args difference => resurrect equivalence FAIL', () => {
@@ -3139,11 +3151,300 @@ describe('T2 v1.6.1 final full-semantics audit', () => {
   it('PM2 field classification complete; UNCLASSIFIED count 0', () => {
     expect(PM2_FIELD_CLASSIFICATION.length).toBeGreaterThan(10);
     for (const row of PM2_FIELD_CLASSIFICATION) {
-      expect(['COMPARE', 'REGENERATED_VOLATILE']).toContain(row.class);
+      expect(['COMPARE', 'REGENERATED_VOLATILE', 'TRANSFORM_EQUIV']).toContain(row.class);
       expect(row.component).toBeTruthy();
     }
     expect(PROVEN_REGENERATED_OR_VOLATILE).toContain('pm_id');
     expect(CANONICAL_COMPARE_FIELDS).toContain('kill_retry_time');
     expect(CANONICAL_COMPARE_FIELDS).toContain('username');
+  });
+});
+
+describe('T2 v1.6.1 production-shape semantic final correction', () => {
+  function equalizeEnginePaths(world) {
+    const path = world.live.find((e) => e.name === 'titan-backend')?.env?.PATH || '/usr/bin';
+    for (const e of world.live.filter((x) => x.name === 'titan-engine-worker')) {
+      if (e.env) e.env.PATH = path;
+      if (e.pm2_env?.env) e.pm2_env.env.PATH = path;
+    }
+  }
+
+  it('PRODUCTION_DUMP_SHAPE_FIXTURE zero unclassified with live env context', () => {
+    const { dump, liveClassEnvKeys, meta } = buildProductionDumpShapeFixture({ pathEqual: true });
+    expect(meta.PRODUCTION_DUMP_SHAPE_FIXTURE).toBe('PASS');
+    expect(meta.hasPmId).toBe(false);
+    expect(meta.hasInstances).toBe(false);
+    for (const e of dump.filter((x) => x.name === 'titan-engine-worker')) {
+      const proof = assertZeroUnclassifiedPersistedFields(e, {
+        applicationEnvKeysContext: [...liveClassEnvKeys],
+      });
+      expect(proof.ok).toBe(true);
+      expect(proof.UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT).toBe(0);
+    }
+  });
+
+  it('dump missing instances vs live effective singleton => compatible', () => {
+    const { dump } = buildProductionDumpShapeFixture({ pathEqual: true });
+    const live = buildLiveEnginePairMatchingFixture(
+      dump.filter((e) => e.name === 'titan-engine-worker'),
+    );
+    // Live God after Common.prepare defaults undefined instances → 1
+    live[0].pm2_env.instances = 1;
+    const ctx = deriveLiveApplicationEnvKeyContext(live[0]);
+    const cmp = compareProcessPm2Semantics(dump[0], live[0], {
+      applicationEnvKeysContext: ctx,
+    });
+    expect(cmp.ok).toBe(true);
+    expect(effectiveInstancesValue(dump[0])).toBe(1);
+    expect(effectiveInstancesValue(live[0].pm2_env)).toBe(1);
+    expect(cmp.PM2_DUMP_TRANSFORM_MODEL).toBe('PASS');
+  });
+
+  it('incompatible live instances=4 vs dump absent => FAIL', () => {
+    const dump = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      env: { PATH: '/usr/bin', NODE_ENV: 'development' },
+    };
+    const live = {
+      name: 'titan-engine-worker',
+      pm_id: 5,
+      status: 'online',
+      pm2_env: {
+        name: 'titan-engine-worker',
+        status: 'online',
+        pm_exec_path: '/app/x.js',
+        pm_cwd: '/app',
+        exec_mode: 'fork_mode',
+        instances: 4,
+        env: { PATH: '/usr/bin', NODE_ENV: 'development' },
+      },
+    };
+    const cmp = compareProcessPm2Semantics(dump, live, {
+      applicationEnvKeysContext: ['PATH', 'NODE_ENV'],
+    });
+    expect(cmp.ok).toBe(false);
+    expect(cmp.mismatchCategories).toContain('INSTANCES');
+  });
+
+  it('unknown flat key absent from live env => UNCLASSIFIED FAIL', () => {
+    const flat = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      totally_unknown_pm2_cfg: 'x',
+      PATH: '/usr/bin',
+      NODE_ENV: 'development',
+    };
+    const cmp = compareProcessPm2Semantics(flat, flat, {
+      applicationEnvKeysContext: ['PATH', 'NODE_ENV'],
+    });
+    expect(cmp.ok).toBe(false);
+    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+  });
+
+  it('custom key present in live app env treated as env and compared', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      MY_CUSTOM_APP_KEY: 'v1',
+      PATH: '/usr/bin',
+    };
+    const b = { ...a, MY_CUSTOM_APP_KEY: 'v2' };
+    const ctx = ['PATH', 'MY_CUSTOM_APP_KEY'];
+    const eq = compareProcessPm2Semantics(a, { ...a }, { applicationEnvKeysContext: ctx });
+    expect(eq.ok).toBe(true);
+    const ne = compareProcessPm2Semantics(a, b, { applicationEnvKeysContext: ctx });
+    expect(ne.ok).toBe(false);
+  });
+
+  it('nested LIVE pm2_env.env PATH-only difference => unique mode PASS', () => {
+    const world = makeLiveAndDump();
+    // default unique PATH
+    world.live[0].pm2_env = {
+      ...world.live[0],
+      env: { ...world.live[0].env },
+    };
+    world.live[1].pm2_env = {
+      ...world.live[1],
+      env: { ...world.live[1].env },
+    };
+    // Put PATH only under pm2_env.env for engine 0 style
+    delete world.live[0].env;
+    delete world.live[1].env;
+    world.live[0].env = undefined;
+    const fp = semanticFingerprint(world.live);
+    const sel = selectEngineRetainExtra(fp);
+    expect(sel.ok).toBe(true);
+    expect(sel.liveEnginePairMode).toBe('UNIQUE_CANONICAL_PATH');
+  });
+
+  it('fleet backend kill_timeout drift => post state fail', () => {
+    const world = makeLiveAndDump();
+    equalizeEnginePaths(world);
+    for (const e of world.live.filter((x) => x.name === 'titan-backend')) {
+      e.kill_timeout = 1600;
+    }
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'titan-backend' && e.pm_id === 1).kill_timeout = 9999;
+    const post = semanticFingerprint(world.live);
+    const { diffs } = diffFingerprints(pre, post, { extraPmId: 5 });
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('nested LIVE vs flat DUMP PATH exception mapping PASS', () => {
+    const live = {
+      name: 'titan-engine-worker',
+      pm_id: 9,
+      status: 'online',
+      pm_cwd: '/app/backend',
+      pm_exec_path: '/app/backend/workers/engineWorkerLeader.js',
+      exec_mode: 'fork_mode',
+      pm2_env: {
+        name: 'titan-engine-worker',
+        status: 'online',
+        pm_cwd: '/app/backend',
+        pm_exec_path: '/app/backend/workers/engineWorkerLeader.js',
+        exec_mode: 'fork_mode',
+        env: { NODE_ENV: 'development', PATH: '/canonical/path' },
+      },
+    };
+    const dump = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_cwd: '/app/backend',
+      pm_exec_path: '/app/backend/workers/engineWorkerLeader.js',
+      exec_mode: 'fork_mode',
+      NODE_ENV: 'development',
+      PATH: '/noncanonical/path',
+    };
+    const ctx = deriveLiveApplicationEnvKeyContext(live);
+    const full = compareProcessPm2Semantics(dump, live, {
+      applicationEnvKeysContext: ctx,
+    });
+    expect(full.ok).toBe(false);
+    expect(full.mismatchCategories.every((c) => c === 'ENV_PATH')).toBe(true);
+    const sans = compareProcessPm2Semantics(dump, live, {
+      applicationEnvKeysContext: ctx,
+      ignoreApplicationEnvKeys: ['PATH'],
+    });
+    expect(sans.ok).toBe(true);
+    expect(sans.PATH_NEUTRALIZATION_ALL_SUPPORTED_SHAPES).toBe('PASS');
+    expect(JSON.stringify(sans)).not.toMatch(/\/canonical\/path|\/noncanonical\/path/);
+  });
+
+  it('fleet backend max_memory_restart drift => PROCESS_CONFIG_CHANGED', () => {
+    const world = makeLiveAndDump();
+    for (const e of world.live.filter((x) => x.name === 'titan-backend')) {
+      e.max_memory_restart = '1G';
+    }
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'titan-backend' && e.pm_id === 1).max_memory_restart =
+      '9G';
+    const post = semanticFingerprint(world.live);
+    const diffs = diffFingerprints(pre, post, { extraPmId: 5 }).diffs;
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('fleet processor restart-policy drift => PROCESS_CONFIG_CHANGED', () => {
+    const world = makeLiveAndDump();
+    const proc = world.live.find((e) => e.name === 'telegram-processor');
+    proc.autorestart = true;
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'telegram-processor').autorestart = false;
+    const post = semanticFingerprint(world.live);
+    const diffs = diffFingerprints(pre, post, { extraPmId: 5 }).diffs;
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('fleet collector PM2 config drift => PROCESS_CONFIG_CHANGED', () => {
+    const world = makeLiveAndDump();
+    world.live.find((e) => e.name === 'telegram-collector').kill_timeout = 1600;
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'telegram-collector').kill_timeout = 9999;
+    const post = semanticFingerprint(world.live);
+    const diffs = diffFingerprints(pre, post, { extraPmId: 5 }).diffs;
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('fleet monitor config drift => PROCESS_CONFIG_CHANGED', () => {
+    const world = makeLiveAndDump();
+    world.live.find((e) => e.name === 'telegram-collector-monitor').max_memory_restart = '1G';
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'telegram-collector-monitor').max_memory_restart = '2G';
+    const post = semanticFingerprint(world.live);
+    const diffs = diffFingerprints(pre, post, { extraPmId: 5 }).diffs;
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('fleet backend kill_timeout drift => PROCESS_CONFIG_CHANGED', () => {
+    const world = makeLiveAndDump();
+    for (const e of world.live.filter((x) => x.name === 'titan-backend')) {
+      e.kill_timeout = 1600;
+    }
+    const pre = semanticFingerprint(deepClone(world.live));
+    world.live.find((e) => e.name === 'titan-backend' && e.pm_id === 1).kill_timeout = 9999;
+    const post = semanticFingerprint(world.live);
+    const diffs = diffFingerprints(pre, post, { extraPmId: 5 }).diffs;
+    expect(diffs.some((d) => d.kind === 'PROCESS_CONFIG_CHANGED')).toBe(true);
+  });
+
+  it('regenerated log paths differ => PASS', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      pm_out_log_path: '/a/out.log',
+      error_file: '/a/err.log',
+      env: { PATH: '/usr/bin' },
+    };
+    const b = {
+      ...deepClone(a),
+      pm_out_log_path: '/b/out.log',
+      error_file: '/b/err.log',
+    };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(true);
+  });
+
+  it('meaningful lifecycle field differs => FAIL', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      max_restarts: 10,
+      env: { PATH: '/usr/bin' },
+    };
+    const b = { ...deepClone(a), max_restarts: 99 };
+    expect(compareDumpEngineResurrectSemantics(a, b).ok).toBe(false);
+  });
+
+  it('nested env unique_id difference is volatile => PASS', () => {
+    const a = {
+      name: 'titan-engine-worker',
+      status: 'online',
+      pm_exec_path: '/app/x.js',
+      pm_cwd: '/app',
+      exec_mode: 'fork_mode',
+      env: { PATH: '/usr/bin', unique_id: 'aaa-aaa-aaa' },
+    };
+    const b = {
+      ...deepClone(a),
+      env: { PATH: '/usr/bin', unique_id: 'bbb-bbb-bbb' },
+    };
+    expect(compareProcessPm2Semantics(a, b, { applicationEnvKeysContext: ['PATH', 'unique_id'] }).ok).toBe(
+      true,
+    );
   });
 });
