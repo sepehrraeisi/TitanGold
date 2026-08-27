@@ -28,9 +28,11 @@ import {
   assertFleetPm2SemanticModelComplete,
 } from './pm2SemanticModel.mjs';
 import {
+  assertExactDumpPhysicalPreEquivalent,
   assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
+  assertLiveFleetPmIdIntegrity,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
   compareCollectorDbLiveToPersist,
@@ -44,7 +46,12 @@ import {
   resolveDumpEngineIdentities,
 } from './projection.mjs';
 import { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
-import { createSideEffectLedger, planRollbackActions } from './sideEffectLedger.mjs';
+import {
+  APPLY_STATE,
+  createSideEffectLedger,
+  planRollbackActions,
+  setRollbackApplyState,
+} from './sideEffectLedger.mjs';
 
 const FORWARD_MUTATING_OPS = Object.freeze([
   'ensureDir',
@@ -368,9 +375,14 @@ export class T2Orchestrator {
       `dump=${dumpShape.shapes.join('+')}`,
     );
 
-    this.liveFp = semanticFingerprint(live, { source: 'LIVE' });
-    this.preLiveFp = this.liveFp;
-    this.preDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
+    const pmIdIntegrity = assertLiveFleetPmIdIntegrity(live);
+    this._log(`LIVE_FLEET_PM_ID_PRESENT=${pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT}`);
+    this._log(`LIVE_FLEET_PM_ID_NUMERIC=${pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC}`);
+    this._log(`LIVE_FLEET_PM_ID_GLOBAL_UNIQUE=${pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE}`);
+    this._log('PM_ID_USED_FOR_LIVE_PRE_POST_IDENTITY=YES');
+    if (!pmIdIntegrity.ok) {
+      return this._failClosed('LIVE_FLEET_PM_ID_INTEGRITY_FAIL');
+    }
 
     const fleetClass = assertFleetPm2SemanticModelComplete(live, dumpPack.parsed);
     if (!fleetClass.ok) {
@@ -383,6 +395,13 @@ export class T2Orchestrator {
     }
     this._log('LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
     this._log('DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
+    this._log(`DUMP_APP_ENV_PROVENANCE_SCOPE=${fleetClass.DUMP_APP_ENV_PROVENANCE_SCOPE}`);
+    this._log(`FLEET_GLOBAL_ENV_PROVENANCE=${fleetClass.FLEET_GLOBAL_ENV_PROVENANCE}`);
+
+    this.liveFp = semanticFingerprint(live, { source: 'LIVE' });
+    this.preLiveFp = this.liveFp;
+    this.preDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
+
     this.preDumpSha = dumpPack.sha256;
     if (typeof dumpPack.mode !== 'number' || !Number.isFinite(dumpPack.mode)) {
       return this._failClosed('PRE_DUMP_MODE_MISSING');
@@ -1023,54 +1042,134 @@ export class T2Orchestrator {
         if (this.preDumpUid != null) restoreOpts.uid = this.preDumpUid;
         if (this.preDumpGid != null) restoreOpts.gid = this.preDumpGid;
         this.sideEffects.DUMP_RESTORE_ATTEMPTED = true;
+        setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.UNKNOWN);
         await this._persistSideEffects();
-        const restoreResult = await this.guardedCall('restoreDump', () =>
-          this.commands.restoreDump(this.backupBytes, restoreOpts),
-        );
-        if (restoreResult && restoreResult.ok === false) {
+
+        let restoreCommandError = null;
+        let restoreResult = null;
+        try {
+          restoreResult = await this.guardedCall('restoreDump', () =>
+            this.commands.restoreDump(this.backupBytes, restoreOpts),
+          );
+        } catch (err) {
+          restoreCommandError = err;
+        }
+
+        // ALWAYS fresh-read dump after restore attempt (even on throw).
+        let freshDumpPack = null;
+        let freshDumpReadable = false;
+        try {
+          freshDumpPack = await this.commands.readDump();
+          freshDumpReadable = true;
+        } catch {
+          freshDumpReadable = false;
+        }
+
+        if (freshDumpReadable && freshDumpPack) {
+          const physical = assertExactDumpPhysicalPreEquivalent({
+            expectedBytes: this.backupBytes,
+            actualBytes: freshDumpPack.bytes,
+            expectedSha: this.preDumpSha,
+            actualSha: freshDumpPack.sha256,
+            expectedMode: this.preDumpMode,
+            actualMode:
+              typeof freshDumpPack.mode === 'number' ? freshDumpPack.mode & 0o777 : null,
+            expectedUid: this.preDumpUid,
+            actualUid: typeof freshDumpPack.uid === 'number' ? freshDumpPack.uid : null,
+            expectedGid: this.preDumpGid,
+            actualGid: typeof freshDumpPack.gid === 'number' ? freshDumpPack.gid : null,
+            dumpParsedOk: true,
+          });
+          if (physical.ok) {
+            setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.APPLIED);
+          } else {
+            setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.NOT_APPLIED);
+          }
+        } else {
+          setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.UNKNOWN);
+        }
+        await this._persistSideEffects();
+
+        // Command failed AND fresh-read did not prove applied → surface command error.
+        // Otherwise continue to provePreEquivalent (physical FAIL → FAIL_FORWARD with dump codes).
+        if (
+          this.sideEffects.DUMP_RESTORE_APPLIED !== true &&
+          restoreCommandError &&
+          !freshDumpReadable
+        ) {
+          throw restoreCommandError;
+        }
+        // If restore returned ok:false and not applied and unreadable — fail closed.
+        if (
+          this.sideEffects.DUMP_RESTORE_APPLIED !== true &&
+          restoreResult &&
+          restoreResult.ok === false &&
+          !freshDumpReadable
+        ) {
           throw new T2OrchestratorError('RESTORE_DUMP_FAILED');
         }
-        if (
-          restoreResult &&
-          typeof restoreResult.mode === 'number' &&
-          (restoreResult.mode & 0o777) !== (this.preDumpMode & 0o777)
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_MODE_MISMATCH');
-        }
-        if (
-          restoreResult &&
-          this.preDumpUid != null &&
-          typeof restoreResult.uid === 'number' &&
-          restoreResult.uid !== this.preDumpUid
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_UID_MISMATCH');
-        }
-        if (
-          restoreResult &&
-          this.preDumpGid != null &&
-          typeof restoreResult.gid === 'number' &&
-          restoreResult.gid !== this.preDumpGid
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_GID_MISMATCH');
-        }
-        this.sideEffects.DUMP_RESTORE_APPLIED = true;
-        await this._persistSideEffects();
       }
 
       if (plan.startExtra) {
         if (this.selection?.extra?.pm_id == null) {
           throw new T2OrchestratorError('EXTRA_PM_ID_MISSING');
         }
+        const extraPmId = this.selection.extra.pm_id;
         this.sideEffects.EXTRA_START_ATTEMPTED = true;
+        setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.UNKNOWN);
         await this._persistSideEffects();
-        const startResult = await this.guardedCall('startProcessByPmId', () =>
-          this.commands.startProcessByPmId(this.selection.extra.pm_id),
-        );
-        if (!startResult || startResult.exitCode !== 0) {
-          throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
+
+        let startCommandError = null;
+        let startResult = null;
+        try {
+          startResult = await this.guardedCall('startProcessByPmId', () =>
+            this.commands.startProcessByPmId(extraPmId),
+          );
+        } catch (err) {
+          startCommandError = err;
         }
-        this.sideEffects.EXTRA_START_APPLIED = true;
+
+        // ALWAYS fresh listLiveProcesses after start attempt (even on throw). Exit code alone is NOT proof.
+        let freshLive = null;
+        let liveListOk = false;
+        try {
+          freshLive = await this.commands.listLiveProcesses();
+          liveListOk = true;
+        } catch {
+          liveListOk = false;
+        }
+
+        if (liveListOk && Array.isArray(freshLive)) {
+          const extra = freshLive.find(
+            (e) =>
+              (e.pm_id === extraPmId || e.pm2_env?.pm_id === extraPmId) &&
+              (e.name === 'titan-engine-worker' || e.pm2_env?.name === 'titan-engine-worker'),
+          );
+          const online = extra && (extra.status === 'online' || extra.pm2_env?.status === 'online');
+          if (online) {
+            setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.APPLIED);
+          } else {
+            setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.NOT_APPLIED);
+          }
+        } else {
+          setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.UNKNOWN);
+        }
         await this._persistSideEffects();
+
+        // No second start attempt.
+        // exitCode alone is NOT application proof; fresh online is.
+        // If not APPLIED: nonzero/throw → fail with START_ROLLBACK_NONZERO;
+        // exit 0 but still stopped → continue to provePreEquivalent (ENGINE_COUNT).
+        if (this.sideEffects.EXTRA_START_APPLIED !== true) {
+          if (startCommandError) throw startCommandError;
+          if (!liveListOk) {
+            throw new T2OrchestratorError('EXTRA_START_NOT_APPLIED');
+          }
+          if (!startResult || startResult.exitCode !== 0) {
+            throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
+          }
+        }
+        // If command threw/nonzero but fresh-read proved APPLIED — continue.
       }
 
       // If no PM2 inverse mutations were needed, still require PRE_EQUIVALENT proof.
@@ -1105,6 +1204,25 @@ export class T2Orchestrator {
     } catch {
       return { ok: false, error: 'ROLLBACK_DUMP_UNREADABLE' };
     }
+
+    // Physical-first: NO postDumpFp / dump semanticFingerprint on exact-byte success path.
+    const physical = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: this.backupBytes,
+      actualBytes: dumpPack.bytes,
+      expectedSha: this.preDumpSha,
+      actualSha: dumpPack.sha256,
+      expectedMode: this.preDumpMode,
+      actualMode: typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null,
+      expectedUid: this.preDumpUid,
+      actualUid: typeof dumpPack.uid === 'number' ? dumpPack.uid : null,
+      expectedGid: this.preDumpGid,
+      actualGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
+      dumpParsedOk: true,
+    });
+    if (!physical.ok) {
+      return physical;
+    }
+
     const live = await this.commands.listLiveProcesses();
     const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
 
@@ -1119,12 +1237,10 @@ export class T2Orchestrator {
       return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
     }
 
-    const postDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
-
     return assertPreEquivalent(
       this.preDumpFp,
       this.preLiveFp,
-      postDumpFp,
+      null,
       postLiveFp,
       {
         retainedPmId: this.selection?.retained?.pm_id,
@@ -1139,6 +1255,7 @@ export class T2Orchestrator {
         actualDumpGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
         expectedDumpBytes: this.backupBytes,
         actualDumpBytes: dumpPack.bytes,
+        dumpParsedOk: true,
       },
     );
   }

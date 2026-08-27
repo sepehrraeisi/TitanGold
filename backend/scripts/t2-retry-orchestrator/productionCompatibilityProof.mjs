@@ -6,6 +6,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {
   ENGINE_NAME,
@@ -14,10 +15,11 @@ import {
 import {
   semanticFingerprint,
   selectEngineRetainExtra,
-  diffFingerprints,
   diffLiveFingerprints,
   diffDumpFingerprints,
   assertExpectedLivePostState,
+  assertExactDumpPhysicalPreEquivalent,
+  assertLiveFleetPmIdIntegrity,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
 } from './semantics.mjs';
@@ -124,8 +126,10 @@ export function runProductionCompatibilityProof({
 
   let dump;
   let dumpBytes;
+  let dumpSha;
   try {
     dumpBytes = fs.readFileSync(dumpPath);
+    dumpSha = crypto.createHash('sha256').update(dumpBytes).digest('hex');
     dump = JSON.parse(dumpBytes.toString('utf8'));
   } catch {
     return {
@@ -135,10 +139,12 @@ export function runProductionCompatibilityProof({
     };
   }
 
+  const pmIdIntegrity = assertLiveFleetPmIdIntegrity(live);
+  const fleetClass = assertFleetPm2SemanticModelComplete(live, dump);
+
   const liveFp = semanticFingerprint(live, { source: 'LIVE' });
   const dumpFp = semanticFingerprint(dump, { source: 'DUMP' });
 
-  const fleetClass = assertFleetPm2SemanticModelComplete(live, dump);
   const liveSelfDiff = diffLiveFingerprints(liveFp, liveFp, {});
   const dumpSelfDiff = diffDumpFingerprints(dumpFp, dumpFp, {});
 
@@ -149,6 +155,11 @@ export function runProductionCompatibilityProof({
       error: selection.error || 'LIVE_SELECTION_FAIL',
       LIVE_ENGINE_PAIR_MODE: null,
       CURRENT_PRODUCTION_V1_6_2_PRECHECK_COMPATIBLE: 'NO',
+      LIVE_FLEET_PM_ID_PRESENT: pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT,
+      LIVE_FLEET_PM_ID_NUMERIC: pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC,
+      LIVE_FLEET_PM_ID_GLOBAL_UNIQUE: pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE,
+      DUMP_APP_ENV_PROVENANCE_SCOPE: fleetClass.DUMP_APP_ENV_PROVENANCE_SCOPE,
+      FLEET_GLOBAL_ENV_PROVENANCE: fleetClass.FLEET_GLOBAL_ENV_PROVENANCE,
       LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE:
         fleetClass.LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE,
       DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE:
@@ -203,31 +214,81 @@ export function runProductionCompatibilityProof({
   } catch {
     dumpStat = null;
   }
+
+  const expectedMode = dumpStat ? dumpStat.mode & 0o777 : null;
+  const expectedUid = dumpStat && typeof dumpStat.uid === 'number' ? dumpStat.uid : null;
+  const expectedGid = dumpStat && typeof dumpStat.gid === 'number' ? dumpStat.gid : null;
+
+  const physicalProof = assertExactDumpPhysicalPreEquivalent({
+    expectedBytes: dumpBytes,
+    actualBytes: dumpBytes,
+    expectedSha: dumpSha,
+    actualSha: dumpSha,
+    expectedMode,
+    actualMode: expectedMode,
+    expectedUid,
+    actualUid: expectedUid,
+    expectedGid,
+    actualGid: expectedGid,
+    dumpParsedOk: true,
+  });
+
   const rollbackOfflineProof = assertPreEquivalent(
     dumpFp,
     liveFp,
-    dumpFp,
+    null,
     liveFp,
     {
       retainedPmId: selection.retained.pm_id,
       extraPmId: selection.extra.pm_id,
-      expectedDumpSha: null,
-      actualDumpSha: null,
+      expectedDumpSha: dumpSha,
+      actualDumpSha: dumpSha,
       expectedDumpBytes: dumpBytes,
       actualDumpBytes: dumpBytes,
-      expectedDumpMode: dumpStat ? dumpStat.mode & 0o777 : null,
-      actualDumpMode: dumpStat ? dumpStat.mode & 0o777 : null,
+      expectedDumpMode: expectedMode,
+      actualDumpMode: expectedMode,
+      expectedDumpUid: expectedUid,
+      actualDumpUid: expectedUid,
+      expectedDumpGid: expectedGid,
+      actualDumpGid: expectedGid,
+      dumpParsedOk: true,
     },
   );
+
+  // Canonical TitanGold health paths (values-free status codes only).
+  let health5002 = null;
+  let health5003 = null;
+  try {
+    const h2 = spawnSync(
+      'curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', 'http://127.0.0.1:5002/health'],
+      { encoding: 'utf8' },
+    );
+    const h3 = spawnSync(
+      'curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', 'http://127.0.0.1:5003/health'],
+      { encoding: 'utf8' },
+    );
+    health5002 = String(h2.stdout || '').trim();
+    health5003 = String(h3.stdout || '').trim();
+  } catch {
+    health5002 = null;
+    health5003 = null;
+  }
+  const healthPass = health5002 === '200' && health5003 === '200';
 
   const reflexivityOk =
     liveSelfDiff.classified.length === 0 && dumpSelfDiff.classified.length === 0;
   const compatible =
+    pmIdIntegrity.ok === true &&
     engines.ok === true &&
     fleetClass.ok === true &&
     reflexivityOk &&
     offlineExtraProof.ok === true &&
-    rollbackOfflineProof.ok === true;
+    physicalProof.ok === true &&
+    rollbackOfflineProof.ok === true &&
+    healthPass === true &&
+    liveFp.engine_online_count === 2;
 
   return {
     ok: compatible,
@@ -242,6 +303,11 @@ export function runProductionCompatibilityProof({
       predicted === DUMP_ENGINE_MAPPING_MODE.CANONICAL_PERSISTED_SLOT_NO_LIVE_IDENTITY
         ? 'PASS'
         : 'NOT_REQUIRED',
+    LIVE_FLEET_PM_ID_PRESENT: pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT,
+    LIVE_FLEET_PM_ID_NUMERIC: pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC,
+    LIVE_FLEET_PM_ID_GLOBAL_UNIQUE: pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE,
+    DUMP_APP_ENV_PROVENANCE_SCOPE: fleetClass.DUMP_APP_ENV_PROVENANCE_SCOPE,
+    FLEET_GLOBAL_ENV_PROVENANCE: fleetClass.FLEET_GLOBAL_ENV_PROVENANCE,
     LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE:
       fleetClass.LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE,
     DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE:
@@ -251,6 +317,15 @@ export function runProductionCompatibilityProof({
     DUMP_FLEET_PM_ID_KEYING_SAFE: 'PASS / PM_ID_NOT_USED',
     OFFLINE_EXTRA_STOP_ONLY_SIMULATION: offlineExtraProof.ok ? 'PASS' : 'FAIL',
     ROLLBACK_EXACT_PRE_OFFLINE_PROOF: rollbackOfflineProof.ok ? 'PASS' : 'FAIL',
+    ROLLBACK_PHYSICAL_PRE_EQUIVALENT: physicalProof.ok ? 'PASS' : 'FAIL',
+    CURRENT_TOPOLOGY_ENGINE_ONLINE: liveFp.engine_online_count,
+    CURRENT_HEALTH: healthPass ? 'PASS' : 'FAIL',
+    CURRENT_HEALTH_5002: health5002,
+    CURRENT_HEALTH_5003: health5003,
+    CURRENT_ACTIVE_DUMP_MODE:
+      dumpStat && typeof dumpStat.mode === 'number'
+        ? String((dumpStat.mode & 0o777).toString(8).padStart(3, '0'))
+        : null,
     dumpEngineCount: dumpEngines.length,
     liveEngineOnline: liveFp.engine_online_count,
     mappingError: engines.ok ? null : engines.error || null,

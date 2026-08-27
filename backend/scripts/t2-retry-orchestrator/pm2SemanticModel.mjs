@@ -786,21 +786,64 @@ export function buildApplicationEnvKeysContext(entry) {
 export const RESURRECT_IGNORED_FIELDS = PROVEN_REGENERATED_OR_VOLATILE;
 export const RESURRECT_TOP_LEVEL_FIELDS = CANONICAL_COMPARE_FIELDS;
 
+/** DUMP flat app-env provenance is scoped to same-name LIVE process class only. */
+export const DUMP_APP_ENV_PROVENANCE_SCOPE = 'PROCESS_NAME_CLASS';
+
+/**
+ * Resolve process name from a LIVE or DUMP entry (never values).
+ * @param {Record<string, unknown>|null|undefined} entry
+ * @returns {string|null}
+ */
+export function entryProcessName(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const name = entry.name || entry.pm2_env?.name;
+  return typeof name === 'string' && name.length > 0 ? name : null;
+}
+
+/**
+ * Build process-name-class application-env key provenance from LIVE entries.
+ * For each exact process name: INTERSECTION of application-env keys across all
+ * LIVE instances with that name. Never unions across unrelated names.
+ *
+ * @param {Array<Record<string, unknown>>} liveEntries
+ * @returns {Record<string, string[]>}
+ */
+export function buildProcessNameClassAppEnvProvenance(liveEntries = []) {
+  /** @type {Map<string, string[][]>} */
+  const groups = new Map();
+  for (const entry of liveEntries) {
+    const name = entryProcessName(entry);
+    if (!name) continue;
+    const keys = deriveLiveApplicationEnvKeyContext(entry);
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(keys);
+  }
+
+  /** @type {Record<string, string[]>} */
+  const out = {};
+  for (const [name, keyLists] of groups) {
+    if (!keyLists.length) {
+      out[name] = [];
+      continue;
+    }
+    let inter = new Set(keyLists[0]);
+    for (let i = 1; i < keyLists.length; i++) {
+      const next = new Set(keyLists[i]);
+      inter = new Set([...inter].filter((k) => next.has(k)));
+    }
+    out[name] = [...inter].sort();
+  }
+  return out;
+}
+
 /**
  * Pre-auth gate: every LIVE and DUMP process must be fully classified.
+ * DUMP flat app-env provenance is PROCESS_NAME_CLASS intersection only —
+ * fleet-global LIVE env UNION is FORBIDDEN.
  * Evidence: field names / process class only — never values.
  *
  * @param {Array<Record<string, unknown>>} liveEntries
  * @param {Array<Record<string, unknown>>} dumpEntries
- * @returns {{
- *   ok: boolean,
- *   error?: string,
- *   LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: string,
- *   DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: string,
- *   LIVE_FLEET_UNCLASSIFIED_FIELD_COUNT: number,
- *   DUMP_FLEET_UNCLASSIFIED_FIELD_COUNT: number,
- *   unclassifiedByScope?: Array<{ scope: string, fields: string[] }>,
- * }}
  */
 export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntries = []) {
   /** @type {Array<{ scope: string, fields: string[] }>} */
@@ -808,31 +851,26 @@ export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntrie
   let liveUnclassified = 0;
   let dumpUnclassified = 0;
 
-  function classifyOne(entry, scopePrefix, index) {
-    const name = entry?.name || entry?.pm2_env?.name || 'unknown';
-    const pmId = entry?.pm_id ?? entry?.pm2_env?.pm_id ?? null;
-    const scope = `${scopePrefix}:${name}:${pmId == null ? 'null' : pmId}:idx${index}`;
-    const ctx = deriveLiveApplicationEnvKeyContext(entry);
-    // For dump flat entries, use union of all LIVE app-env keys as provenance.
+  const processProvenance = buildProcessNameClassAppEnvProvenance(liveEntries);
+
+  function classifyWithContext(entry, scope, applicationEnvKeysContext) {
     const model = buildPm2EffectiveSemanticModel(entry, {
-      applicationEnvKeysContext: ctx.length ? ctx : null,
+      applicationEnvKeysContext,
     });
-    // Re-scan with requireClassified semantics when flat needs LIVE context
     const cmp = compareProcessPm2Semantics(entry, entry, {
       requireClassified: true,
-      applicationEnvKeysContext: ctx.length ? ctx : null,
+      applicationEnvKeysContext,
     });
     if (!cmp.ok && cmp.error === 'CLASSIFICATION_INCOMPLETE') {
       const fields = [...(cmp.unclassifiedFields || model.unclassifiedFields || [])].sort();
       unclassifiedByScope.push({ scope, fields });
-      return fields.length;
+      return fields.length || 1;
     }
     if (model.unclassifiedFields?.length) {
       const fields = [...model.unclassifiedFields].sort();
       unclassifiedByScope.push({ scope, fields });
       return fields.length;
     }
-    // Self-compare must pass for fully classified entries
     if (!cmp.ok && (cmp.mismatchCategories || []).includes('CLASSIFICATION_INCOMPLETE')) {
       const fields = [...(cmp.unclassifiedFields || [])].sort();
       unclassifiedByScope.push({ scope, fields });
@@ -841,39 +879,27 @@ export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntrie
     return 0;
   }
 
-  // Build LIVE context union for DUMP flat provenance
-  const liveCtxUnion = new Set();
-  for (const e of liveEntries) {
-    for (const k of deriveLiveApplicationEnvKeyContext(e)) liveCtxUnion.add(k);
-  }
-  const liveCtxArr = [...liveCtxUnion].sort();
-
   for (let i = 0; i < liveEntries.length; i++) {
-    liveUnclassified += classifyOne(liveEntries[i], 'LIVE', i);
+    const entry = liveEntries[i];
+    const name = entryProcessName(entry) || 'unknown';
+    const pmId = entry?.pm_id ?? entry?.pm2_env?.pm_id ?? null;
+    const scope = `LIVE:${name}:${pmId == null ? 'null' : pmId}:idx${i}`;
+    const ctx = deriveLiveApplicationEnvKeyContext(entry);
+    liveUnclassified += classifyWithContext(entry, scope, ctx.length ? ctx : null);
   }
 
   for (let i = 0; i < dumpEntries.length; i++) {
     const entry = dumpEntries[i];
-    const name = entry?.name || entry?.pm2_env?.name || 'unknown';
-    const scope = `DUMP:${name}:null:idx${i}`;
-    const cmp = compareProcessPm2Semantics(entry, entry, {
-      requireClassified: true,
-      applicationEnvKeysContext: liveCtxArr,
-    });
-    if (!cmp.ok && (cmp.error === 'CLASSIFICATION_INCOMPLETE' ||
-        (cmp.mismatchCategories || []).includes('CLASSIFICATION_INCOMPLETE'))) {
-      const fields = [...(cmp.unclassifiedFields || [])].sort();
-      unclassifiedByScope.push({ scope, fields });
-      dumpUnclassified += fields.length || 1;
-      continue;
-    }
-    const model = buildPm2EffectiveSemanticModel(entry, {
-      applicationEnvKeysContext: liveCtxArr,
-    });
-    if (model.unclassifiedFields?.length) {
-      unclassifiedByScope.push({ scope, fields: [...model.unclassifiedFields].sort() });
-      dumpUnclassified += model.unclassifiedFields.length;
-    }
+    const name = entryProcessName(entry);
+    const scopeName = name || 'unknown';
+    const scope = `DUMP:${scopeName}:null:idx${i}`;
+    // Process-scoped only: no LIVE name class ⇒ null provenance (unknown flat keys UNCLASSIFIED).
+    // Never use fleet-global LIVE env UNION.
+    const applicationEnvKeysContext =
+      name != null && Object.prototype.hasOwnProperty.call(processProvenance, name)
+        ? processProvenance[name]
+        : null;
+    dumpUnclassified += classifyWithContext(entry, scope, applicationEnvKeysContext);
   }
 
   const liveOk = liveUnclassified === 0;
@@ -886,6 +912,8 @@ export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntrie
     DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: dumpOk ? 'PASS' : 'FAIL',
     LIVE_FLEET_UNCLASSIFIED_FIELD_COUNT: liveUnclassified,
     DUMP_FLEET_UNCLASSIFIED_FIELD_COUNT: dumpUnclassified,
+    DUMP_APP_ENV_PROVENANCE_SCOPE,
+    FLEET_GLOBAL_ENV_PROVENANCE: 'FORBIDDEN',
     unclassifiedByScope: ok ? undefined : unclassifiedByScope,
   };
 }

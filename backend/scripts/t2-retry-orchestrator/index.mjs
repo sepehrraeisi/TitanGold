@@ -41,6 +41,8 @@ export {
   assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
+  assertExactDumpPhysicalPreEquivalent,
+  assertLiveFleetPmIdIntegrity,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
   classifyCollectorDbPrestate,
@@ -83,10 +85,13 @@ export {
   PROVEN_REGENERATED_OR_VOLATILE,
   DUMP_PROCESS_LIST_DELETED_FIELDS,
   PM2_DUMP_TRANSFORM_FIELDS,
+  DUMP_APP_ENV_PROVENANCE_SCOPE,
   buildEnginePm2SemanticSignature,
   buildPm2EffectiveSemanticModel,
   buildApplicationEnvKeysContext,
+  buildProcessNameClassAppEnvProvenance,
   deriveLiveApplicationEnvKeyContext,
+  entryProcessName,
   compareEnginePm2Semantics,
   compareProcessPm2Semantics,
   assertFleetPm2SemanticModelComplete,
@@ -119,8 +124,10 @@ export {
 export { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
 
 export {
+  APPLY_STATE,
   createSideEffectLedger,
   planRollbackActions,
+  setRollbackApplyState,
 } from './sideEffectLedger.mjs';
 
 export {

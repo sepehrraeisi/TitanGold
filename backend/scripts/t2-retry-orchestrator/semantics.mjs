@@ -858,18 +858,136 @@ function dumpSlotKey(proc) {
 }
 
 /**
- * Diff LIVE fingerprints — identity keyed by pm_id (fail-closed on null/missing).
+ * Fail-closed LIVE fleet pm_id integrity over the COMPLETE live process list.
+ * pm_id is used only for LIVE PRE→POST identity — never as persisted dump authority.
+ *
+ * @param {Array<Record<string, unknown>>} liveEntries
  */
-export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
-  const diffs = [];
+export function assertLiveFleetPmIdIntegrity(liveEntries = []) {
+  let presentOk = true;
+  let numericOk = true;
+  let uniqueOk = true;
+  const seen = new Set();
 
-  const preEng = new Map((pre.engines || []).map((e) => [e.pm_id, e]));
-  const postEng = new Map((post.engines || []).map((e) => [e.pm_id, e]));
-  for (const pmId of new Set([...preEng.keys(), ...postEng.keys()])) {
+  for (const entry of liveEntries) {
+    const pmId = entry?.pm_id ?? entry?.pm2_env?.pm_id;
     if (pmId == null) {
-      diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { engine_pm_id: null } });
+      presentOk = false;
       continue;
     }
+    if (
+      typeof pmId !== 'number' ||
+      !Number.isFinite(pmId) ||
+      !Number.isInteger(pmId) ||
+      pmId < 0
+    ) {
+      numericOk = false;
+      continue;
+    }
+    if (seen.has(pmId)) {
+      uniqueOk = false;
+    }
+    seen.add(pmId);
+  }
+
+  const ok = presentOk && numericOk && uniqueOk;
+  return {
+    ok,
+    error: ok ? undefined : 'LIVE_FLEET_PM_ID_INTEGRITY_FAIL',
+    LIVE_FLEET_PM_ID_PRESENT: presentOk ? 'PASS' : 'FAIL',
+    LIVE_FLEET_PM_ID_NUMERIC: numericOk ? 'PASS' : 'FAIL',
+    LIVE_FLEET_PM_ID_GLOBAL_UNIQUE: uniqueOk ? 'PASS' : 'FAIL',
+    PM_ID_USED_FOR_LIVE_PRE_POST_IDENTITY: 'YES',
+  };
+}
+
+/**
+ * Build a pm_id→entry Map only when every id is a finite integer >= 0 and unique.
+ * Never silently collapses duplicates.
+ * @param {Array<{ pm_id?: unknown }>} arr
+ * @returns {{ ok: true, map: Map<any, any> } | { ok: false }}
+ */
+function buildLivePmIdMapOrFail(arr) {
+  const list = arr || [];
+  for (const e of list) {
+    const id = e?.pm_id;
+    if (
+      id == null ||
+      typeof id !== 'number' ||
+      !Number.isFinite(id) ||
+      !Number.isInteger(id) ||
+      id < 0
+    ) {
+      return { ok: false };
+    }
+  }
+  const map = new Map(list.map((e) => [e.pm_id, e]));
+  if (map.size !== list.length) {
+    return { ok: false };
+  }
+  return { ok: true, map };
+}
+
+/**
+ * Diff LIVE fingerprints — identity keyed by pm_id (fail-closed on null/invalid/duplicate).
+ */
+export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
+  const integrityFail = {
+    diffs: [{ kind: 'LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL' }],
+    classified: [{ kind: 'LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL' }],
+    source: 'LIVE',
+  };
+
+  const preEngBuilt = buildLivePmIdMapOrFail(pre.engines);
+  const postEngBuilt = buildLivePmIdMapOrFail(post.engines);
+  const preBBuilt = buildLivePmIdMapOrFail(pre.backends);
+  const postBBuilt = buildLivePmIdMapOrFail(post.backends);
+  const prePBuilt = buildLivePmIdMapOrFail(pre.processors);
+  const postPBuilt = buildLivePmIdMapOrFail(post.processors);
+  const preMBuilt = buildLivePmIdMapOrFail(pre.monitors);
+  const postMBuilt = buildLivePmIdMapOrFail(post.monitors);
+  const preCBuilt = buildLivePmIdMapOrFail(pre.collectors);
+  const postCBuilt = buildLivePmIdMapOrFail(post.collectors);
+
+  // Others keyed by name:pm_id — still require valid unique pm_ids within the list.
+  for (const side of [pre.others || [], post.others || []]) {
+    for (const e of side) {
+      const id = e?.pm_id;
+      if (
+        id == null ||
+        typeof id !== 'number' ||
+        !Number.isFinite(id) ||
+        !Number.isInteger(id) ||
+        id < 0
+      ) {
+        return integrityFail;
+      }
+    }
+    const otherKeys = side.map((e) => `${e.name}:${e.pm_id}`);
+    if (new Set(otherKeys).size !== otherKeys.length) {
+      return integrityFail;
+    }
+  }
+
+  if (
+    !preEngBuilt.ok ||
+    !postEngBuilt.ok ||
+    !preBBuilt.ok ||
+    !postBBuilt.ok ||
+    !prePBuilt.ok ||
+    !postPBuilt.ok ||
+    !preMBuilt.ok ||
+    !postMBuilt.ok ||
+    !preCBuilt.ok ||
+    !postCBuilt.ok
+  ) {
+    return integrityFail;
+  }
+
+  const diffs = [];
+  const preEng = preEngBuilt.map;
+  const postEng = postEngBuilt.map;
+  for (const pmId of new Set([...preEng.keys(), ...postEng.keys()])) {
     const a = preEng.get(pmId);
     const b = postEng.get(pmId);
     if (!a || !b) {
@@ -893,8 +1011,8 @@ export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
   if (pre.backend_count !== post.backend_count) {
     diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE' });
   } else {
-    const preB = new Map((pre.backends || []).map((e) => [e.pm_id, e]));
-    const postB = new Map((post.backends || []).map((e) => [e.pm_id, e]));
+    const preB = preBBuilt.map;
+    const postB = postBBuilt.map;
     for (const pmId of new Set([...preB.keys(), ...postB.keys()])) {
       const a = preB.get(pmId);
       const b = postB.get(pmId);
@@ -912,8 +1030,8 @@ export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
   if (pre.processor_count !== post.processor_count) {
     diffs.push({ kind: 'PROCESSOR_TOPOLOGY_CHANGE' });
   } else {
-    const preP = new Map((pre.processors || []).map((e) => [e.pm_id, e]));
-    const postP = new Map((post.processors || []).map((e) => [e.pm_id, e]));
+    const preP = prePBuilt.map;
+    const postP = postPBuilt.map;
     for (const pmId of new Set([...preP.keys(), ...postP.keys()])) {
       const a = preP.get(pmId);
       const b = postP.get(pmId);
@@ -928,8 +1046,8 @@ export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
   if (pre.monitor_count !== post.monitor_count) {
     diffs.push({ kind: 'MONITOR_TOPOLOGY_CHANGE' });
   } else {
-    const preM = new Map((pre.monitors || []).map((e) => [e.pm_id, e]));
-    const postM = new Map((post.monitors || []).map((e) => [e.pm_id, e]));
+    const preM = preMBuilt.map;
+    const postM = postMBuilt.map;
     for (const pmId of new Set([...preM.keys(), ...postM.keys()])) {
       const a = preM.get(pmId);
       const b = postM.get(pmId);
@@ -1295,6 +1413,10 @@ function classifyDiffs(diffs, { extraPmId, dumpExtraArrayIndex, source = 'LIVE' 
       out.push({ kind: 'CLASSIFICATION_INCOMPLETE', detail: d.detail });
       continue;
     }
+    if (d.kind === 'LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL') {
+      out.push({ kind: 'LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL', detail: d.detail });
+      continue;
+    }
     if (
       [
         'NODE_ENV_CHANGE',
@@ -1330,7 +1452,128 @@ function classifyDiffs(diffs, { extraPmId, dumpExtraArrayIndex, source = 'LIVE' 
 }
 
 /**
+ * Physical-first dump PRE-equivalence: exact bytes + SHA + mode + owner/group.
+ * Missing actual metadata = FAIL (never skip). No semantic dump fallback.
+ *
+ * @returns {{ ok: boolean, error?: string, details?: Record<string, string> }}
+ */
+export function assertExactDumpPhysicalPreEquivalent({
+  expectedBytes,
+  actualBytes,
+  expectedSha,
+  actualSha,
+  expectedMode,
+  actualMode,
+  expectedUid,
+  actualUid,
+  expectedGid,
+  actualGid,
+  dumpParsedOk = true,
+} = {}) {
+  /** @type {Record<string, string>} */
+  const details = {};
+
+  if (!Buffer.isBuffer(expectedBytes)) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_EXPECTED_BYTES_MISSING',
+      details: { ROLLBACK_DUMP_EXACT_BYTE_IDENTITY: 'FAIL' },
+    };
+  }
+  if (!Buffer.isBuffer(actualBytes)) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_ACTUAL_BYTES_MISSING',
+      details: { ROLLBACK_DUMP_EXACT_BYTE_IDENTITY: 'FAIL' },
+    };
+  }
+  if (Buffer.compare(expectedBytes, actualBytes) !== 0) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_BYTE_MISMATCH',
+      details: { ROLLBACK_DUMP_EXACT_BYTE_IDENTITY: 'FAIL' },
+    };
+  }
+  details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY = 'PASS';
+
+  if (expectedSha == null || actualSha == null) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_SHA_MISSING',
+      details: { ...details, ROLLBACK_DUMP_SHA_PRE_EQUIVALENT: 'FAIL' },
+    };
+  }
+  if (expectedSha !== actualSha) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_SHA_MISMATCH',
+      details: { ...details, ROLLBACK_DUMP_SHA_PRE_EQUIVALENT: 'FAIL' },
+    };
+  }
+  details.ROLLBACK_DUMP_SHA_PRE_EQUIVALENT = 'PASS';
+
+  if (expectedMode == null || actualMode == null) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_MODE_MISSING',
+      details: { ...details, ROLLBACK_DUMP_MODE_PRE_EQUIVALENT: 'FAIL' },
+    };
+  }
+  if ((expectedMode & 0o777) !== (actualMode & 0o777)) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_MODE_MISMATCH',
+      details: {
+        ...details,
+        ROLLBACK_DUMP_MODE_PRE_EQUIVALENT: 'FAIL',
+        expected_mode: String(expectedMode & 0o777),
+        actual_mode: String(actualMode & 0o777),
+      },
+    };
+  }
+  details.ROLLBACK_DUMP_MODE_PRE_EQUIVALENT = 'PASS';
+
+  if (expectedUid != null) {
+    if (actualUid == null || actualUid !== expectedUid) {
+      return {
+        ok: false,
+        error: 'ROLLBACK_DUMP_UID_MISMATCH',
+        details: { ...details, ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
+      };
+    }
+  }
+  if (expectedGid != null) {
+    if (actualGid == null || actualGid !== expectedGid) {
+      return {
+        ok: false,
+        error: 'ROLLBACK_DUMP_GID_MISMATCH',
+        details: { ...details, ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
+      };
+    }
+  }
+  if (expectedUid != null || expectedGid != null) {
+    details.ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT = 'PASS';
+  }
+
+  if (dumpParsedOk !== true) {
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_PARSE_FAIL',
+      details: { ...details, DUMP_PRE_EQUIVALENT: 'FAIL' },
+    };
+  }
+
+  details.DUMP_PRE_EQUIVALENT = 'PASS';
+  details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT = 'PASS';
+  return { ok: true, details };
+}
+
+/**
  * Prove live+persisted state is PRE-equivalent after rollback.
+ * Physical dump proof is mandatory first. On physical PASS, postDumpFp is ignored
+ * (no dump semantic fallback / no dump collector / no dump process-count compare).
+ * Signature remains backward-compatible; postDumpFp may be null when physical opts provided.
+ *
  * @returns {{ ok: boolean, error?: string, details?: object }}
  */
 export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp, {
@@ -1346,89 +1589,35 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   actualDumpGid,
   expectedDumpBytes,
   actualDumpBytes,
-  dumpExtraArrayIndex,
+  dumpParsedOk = true,
+  dumpExtraArrayIndex: _dumpExtraArrayIndex,
 } = {}) {
+  void preDumpFp;
+  void postDumpFp;
+  void _dumpExtraArrayIndex;
+
+  const physical = assertExactDumpPhysicalPreEquivalent({
+    expectedBytes: expectedDumpBytes,
+    actualBytes: actualDumpBytes,
+    expectedSha: expectedDumpSha,
+    actualSha: actualDumpSha,
+    expectedMode: expectedDumpMode,
+    actualMode: actualDumpMode,
+    expectedUid: expectedDumpUid,
+    actualUid: actualDumpUid,
+    expectedGid: expectedDumpGid,
+    actualGid: actualDumpGid,
+    dumpParsedOk,
+  });
+  if (!physical.ok) {
+    return physical;
+  }
+
   /** @type {Record<string, string>} */
-  const details = {};
-
-  let dumpPhysicalPass = true;
-
-  if (expectedDumpBytes && actualDumpBytes) {
-    if (Buffer.compare(expectedDumpBytes, actualDumpBytes) !== 0) {
-      return {
-        ok: false,
-        error: 'ROLLBACK_DUMP_BYTE_MISMATCH',
-        details: { ROLLBACK_DUMP_EXACT_BYTE_IDENTITY: 'FAIL' },
-      };
-    }
-    details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY = 'PASS';
-    details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT = 'YES';
-  } else if (expectedDumpSha !== actualDumpSha) {
-    return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
-  }
-
-  if (
-    expectedDumpMode != null &&
-    actualDumpMode != null &&
-    (expectedDumpMode & 0o777) !== (actualDumpMode & 0o777)
-  ) {
-    dumpPhysicalPass = false;
-    return {
-      ok: false,
-      error: 'ROLLBACK_DUMP_MODE_MISMATCH',
-      details: {
-        ROLLBACK_DUMP_MODE_PRE_EQUIVALENT: 'FAIL',
-        expected_mode: String(expectedDumpMode & 0o777),
-        actual_mode: String(actualDumpMode & 0o777),
-      },
-    };
-  }
-  if (expectedDumpMode != null && actualDumpMode != null) {
-    details.ROLLBACK_DUMP_MODE_PRE_EQUIVALENT = 'PASS';
-  }
-
-  if (expectedDumpUid != null && actualDumpUid != null && expectedDumpUid !== actualDumpUid) {
-    dumpPhysicalPass = false;
-    return {
-      ok: false,
-      error: 'ROLLBACK_DUMP_UID_MISMATCH',
-      details: { ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
-    };
-  }
-  if (expectedDumpGid != null && actualDumpGid != null && expectedDumpGid !== actualDumpGid) {
-    dumpPhysicalPass = false;
-    return {
-      ok: false,
-      error: 'ROLLBACK_DUMP_GID_MISMATCH',
-      details: { ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
-    };
-  }
-  if (
-    (expectedDumpUid != null && actualDumpUid != null) ||
-    (expectedDumpGid != null && actualDumpGid != null)
-  ) {
-    details.ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT = 'PASS';
-  }
-
-  const dumpByteIdentical =
-    (expectedDumpBytes &&
-      actualDumpBytes &&
-      Buffer.compare(expectedDumpBytes, actualDumpBytes) === 0) ||
-    (expectedDumpSha != null && expectedDumpSha === actualDumpSha);
-
-  const dumpPreEquivalentShortCircuit = dumpPhysicalPass && dumpByteIdentical;
-  if (dumpPreEquivalentShortCircuit) {
-    details.DUMP_PRE_EQUIVALENT = 'YES';
-    if (!details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT) {
-      details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT = 'YES';
-    }
-    if (!details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY) {
-      details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY = 'PASS';
-    }
-  }
+  const details = { ...physical.details };
 
   if ((postLiveFp.engine_online_count || 0) !== 2) {
-    return { ok: false, error: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED' };
+    return { ok: false, error: 'ROLLBACK_ENGINE_COUNT_NOT_RESTORED', details };
   }
 
   const preRetained = (preLiveFp.engines || []).find((e) => e.pm_id === retainedPmId);
@@ -1437,10 +1626,10 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   const postExtra = (postLiveFp.engines || []).find((e) => e.pm_id === extraPmId);
 
   if (!preRetained || !preExtra || !postRetained || !postExtra) {
-    return { ok: false, error: 'ROLLBACK_ENGINE_IDENTITY_MISSING' };
+    return { ok: false, error: 'ROLLBACK_ENGINE_IDENTITY_MISSING', details };
   }
   if (postRetained.status !== 'online' || postExtra.status !== 'online') {
-    return { ok: false, error: 'ROLLBACK_ENGINE_NOT_BOTH_ONLINE' };
+    return { ok: false, error: 'ROLLBACK_ENGINE_NOT_BOTH_ONLINE', details };
   }
 
   for (const [preE, postE, label] of [
@@ -1462,6 +1651,7 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
         ok: false,
         error: 'ROLLBACK_ENGINE_CONFIG_DRIFT',
         details: {
+          ...details,
           kinds: full.mismatchCategories || [full.error],
           label,
           FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL',
@@ -1470,55 +1660,27 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     }
   }
 
-  if (!dumpPreEquivalentShortCircuit) {
-    const dumpDiff = diffDumpFingerprints(preDumpFp, postDumpFp, { dumpExtraArrayIndex });
-    if (dumpDiff.classified.length > 0) {
-      return {
-        ok: false,
-        error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
-        details: { kinds: dumpDiff.classified.map((c) => c.kind), ...details },
-      };
-    }
-    details.DUMP_PRE_EQUIVALENT = 'YES';
-  }
-
   const liveDiff = diffLiveFingerprints(preLiveFp, postLiveFp, { extraPmId });
   if (liveDiff.classified.length > 0) {
     return {
       ok: false,
       error: 'ROLLBACK_LIVE_SEMANTIC_DRIFT',
-      details: { kinds: liveDiff.classified.map((c) => c.kind), FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL' },
+      details: {
+        ...details,
+        kinds: liveDiff.classified.map((c) => c.kind),
+        FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL',
+      },
     };
   }
 
   const postColLive = (postLiveFp.collectors || [])[0];
   const preColLive = (preLiveFp.collectors || [])[0];
   if (!postColLive || !preColLive) {
-    return { ok: false, error: 'ROLLBACK_COLLECTOR_MISSING' };
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_MISSING', details };
   }
   const liveDb = compareCollectorDbLiveToPersist(preColLive, postColLive);
   if (!liveDb.ok) {
-    return { ok: false, error: 'ROLLBACK_COLLECTOR_LIVE_DB_B_LOST' };
-  }
-
-  if (!dumpPreEquivalentShortCircuit) {
-    const postColDump = (postDumpFp.collectors || [])[0];
-    const preColDump = (preDumpFp.collectors || [])[0];
-    if (!postColDump || !preColDump) {
-      return { ok: false, error: 'ROLLBACK_COLLECTOR_DUMP_MISSING' };
-    }
-    const dumpDb = compareCollectorDbLiveToPersist(preColDump, postColDump);
-    if (!dumpDb.ok) {
-      return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_NOT_PRESERVED', details: dumpDb.matches };
-    }
-  }
-
-  if (
-    postDumpFp.backend_count !== preDumpFp.backend_count ||
-    postDumpFp.processor_count !== preDumpFp.processor_count ||
-    postDumpFp.monitor_count !== preDumpFp.monitor_count
-  ) {
-    return { ok: false, error: 'ROLLBACK_UNRELATED_TOPOLOGY_DRIFT' };
+    return { ok: false, error: 'ROLLBACK_COLLECTOR_LIVE_DB_B_LOST', details };
   }
 
   return {
