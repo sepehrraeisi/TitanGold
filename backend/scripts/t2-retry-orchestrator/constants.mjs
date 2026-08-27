@@ -1,20 +1,24 @@
 /**
  * T2 retry orchestrator — durable constants (no production side effects).
- * TOOL_VERSION 1.6.1 — equal-PATH live tie-break + symmetric equivalent dump slots.
+ * TOOL_VERSION 1.6.2 — fleet classification gate + LIVE/DUMP split + exact-byte rollback.
  */
 
 export const TOOL_NAME = 't2-retry-orchestrator';
-export const TOOL_VERSION = '1.6.1';
+export const TOOL_VERSION = '1.6.2';
 
 export const AUTHORIZED_TRANSACTION =
-  'T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST';
+  'T2_ENGINE_SINGLETON_FLEET_PROOF_PROJECTED_PERSIST';
 
 export const AUTHORIZED_EFFECTS = Object.freeze([
   'ENGINE_2_TO_1',
   'PROJECTED_DUMP_WRITE_0600',
 ]);
 
-/** Legacy 1.6.0 identity — must fail closed against 1.6.1 auth. */
+/** Legacy 1.6.1 identity — must fail closed against 1.6.2 auth. */
+export const LEGACY_AUTHORIZED_TRANSACTION_1_6_1 =
+  'T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST';
+
+/** Legacy 1.6.0 identity — must fail closed. */
 export const LEGACY_AUTHORIZED_TRANSACTION_1_6_0 =
   'T2_ENGINE_SINGLETON_DB_ALREADY_PRESENT_PROJECTED_PERSIST';
 

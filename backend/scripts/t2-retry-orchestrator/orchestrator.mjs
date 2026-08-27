@@ -1,6 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
- * TOOL_VERSION 1.6.1 — equal-PATH live tie-break + symmetric equivalent dump slots (no global pm2 save).
+ * TOOL_VERSION 1.6.2 — LIVE/DUMP split comparators + exact-byte rollback short-circuit (no global pm2 save).
  * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
@@ -24,6 +24,9 @@ import {
   JournalError,
   loadJournal,
 } from './journal.mjs';
+import {
+  assertFleetPm2SemanticModelComplete,
+} from './pm2SemanticModel.mjs';
 import {
   assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
@@ -365,9 +368,21 @@ export class T2Orchestrator {
       `dump=${dumpShape.shapes.join('+')}`,
     );
 
-    this.liveFp = semanticFingerprint(live);
+    this.liveFp = semanticFingerprint(live, { source: 'LIVE' });
     this.preLiveFp = this.liveFp;
-    this.preDumpFp = semanticFingerprint(dumpPack.parsed);
+    this.preDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
+
+    const fleetClass = assertFleetPm2SemanticModelComplete(live, dumpPack.parsed);
+    if (!fleetClass.ok) {
+      if (fleetClass.unclassifiedByScope) {
+        for (const entry of fleetClass.unclassifiedByScope) {
+          this._log('FLEET_UNCLASSIFIED', entry.scope, `fields=${entry.fields.join(',')}`);
+        }
+      }
+      return this._failClosed('FLEET_PM2_FIELD_CLASSIFICATION_INCOMPLETE');
+    }
+    this._log('LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
+    this._log('DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
     this.preDumpSha = dumpPack.sha256;
     if (typeof dumpPack.mode !== 'number' || !Number.isFinite(dumpPack.mode)) {
       return this._failClosed('PRE_DUMP_MODE_MISSING');
@@ -568,7 +583,7 @@ export class T2Orchestrator {
 
   async _revalidateExtraIdentity() {
     const live = await this.commands.listLiveProcesses();
-    const fp = semanticFingerprint(live);
+    const fp = semanticFingerprint(live, { source: 'LIVE' });
     const reselect = selectEngineRetainExtra(fp);
     if (!reselect.ok) {
       throw new T2OrchestratorError(reselect.error || 'STALE_EXTRA_PROCESS');
@@ -624,7 +639,7 @@ export class T2Orchestrator {
 
     // Fresh-read live state — never trust exit code alone for ENGINE_STOP_APPLIED
     const live = await this.commands.listLiveProcesses();
-    const fp = semanticFingerprint(live);
+    const fp = semanticFingerprint(live, { source: 'LIVE' });
     const extra = (fp.engines || []).find((e) => e.pm_id === extraId);
     const stopProven = extra && extra.status === 'stopped';
     if (stopProven) {
@@ -668,7 +683,7 @@ export class T2Orchestrator {
     await this._setState(State.PROJECTION_BUILDING, 'projection_build_begin');
 
     const live = await this.commands.listLiveProcesses();
-    const liveFp = semanticFingerprint(live);
+    const liveFp = semanticFingerprint(live, { source: 'LIVE' });
     const freshDb = captureCollectorDbLiveValues(liveFp);
     if (!freshDb) {
       await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
@@ -808,7 +823,7 @@ export class T2Orchestrator {
     this._requireState([State.PROJECTION_WRITTEN]);
 
     const liveNow = await this.commands.listLiveProcesses();
-    const liveFpNow = semanticFingerprint(liveNow);
+    const liveFpNow = semanticFingerprint(liveNow, { source: 'LIVE' });
     const dumpPack = await this.commands.readDump();
     const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
     if (postMode !== REQUIRED_PROJECTED_DUMP_MODE) {
@@ -845,7 +860,7 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
     }
 
-    const postFp = semanticFingerprint(dumpPack.parsed);
+    const postFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
     const postCol = (postFp.collectors || [])[0];
     const liveProc = { env_keys: [...COLLECTOR_DB_KEYS] };
     Object.defineProperty(liveProc, '_envValues', {
@@ -1007,6 +1022,8 @@ export class T2Orchestrator {
         const restoreOpts = { mode: this.preDumpMode };
         if (this.preDumpUid != null) restoreOpts.uid = this.preDumpUid;
         if (this.preDumpGid != null) restoreOpts.gid = this.preDumpGid;
+        this.sideEffects.DUMP_RESTORE_ATTEMPTED = true;
+        await this._persistSideEffects();
         const restoreResult = await this.guardedCall('restoreDump', () =>
           this.commands.restoreDump(this.backupBytes, restoreOpts),
         );
@@ -1036,18 +1053,24 @@ export class T2Orchestrator {
         ) {
           throw new T2OrchestratorError('ROLLBACK_DUMP_GID_MISMATCH');
         }
+        this.sideEffects.DUMP_RESTORE_APPLIED = true;
+        await this._persistSideEffects();
       }
 
       if (plan.startExtra) {
         if (this.selection?.extra?.pm_id == null) {
           throw new T2OrchestratorError('EXTRA_PM_ID_MISSING');
         }
+        this.sideEffects.EXTRA_START_ATTEMPTED = true;
+        await this._persistSideEffects();
         const startResult = await this.guardedCall('startProcessByPmId', () =>
           this.commands.startProcessByPmId(this.selection.extra.pm_id),
         );
         if (!startResult || startResult.exitCode !== 0) {
           throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
         }
+        this.sideEffects.EXTRA_START_APPLIED = true;
+        await this._persistSideEffects();
       }
 
       // If no PM2 inverse mutations were needed, still require PRE_EQUIVALENT proof.
@@ -1083,8 +1106,7 @@ export class T2Orchestrator {
       return { ok: false, error: 'ROLLBACK_DUMP_UNREADABLE' };
     }
     const live = await this.commands.listLiveProcesses();
-    const postDumpFp = semanticFingerprint(dumpPack.parsed);
-    const postLiveFp = semanticFingerprint(live);
+    const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
 
     // Collector live functional health during rollback proof
     try {
@@ -1096,6 +1118,8 @@ export class T2Orchestrator {
     } catch {
       return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
     }
+
+    const postDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
 
     return assertPreEquivalent(
       this.preDumpFp,
@@ -1113,6 +1137,8 @@ export class T2Orchestrator {
         actualDumpUid: typeof dumpPack.uid === 'number' ? dumpPack.uid : null,
         expectedDumpGid: this.preDumpGid,
         actualDumpGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
+        expectedDumpBytes: this.backupBytes,
+        actualDumpBytes: dumpPack.bytes,
       },
     );
   }

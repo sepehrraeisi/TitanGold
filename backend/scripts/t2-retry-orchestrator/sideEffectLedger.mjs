@@ -13,6 +13,10 @@ export function createSideEffectLedger() {
     PROJECTED_DUMP_WRITE_APPLIED: false,
     DUMP_RESTORE_REQUIRED: null,
     DUMP_RESTORE_DECISION: 'UNDECIDED',
+    DUMP_RESTORE_ATTEMPTED: false,
+    DUMP_RESTORE_APPLIED: false,
+    EXTRA_START_ATTEMPTED: false,
+    EXTRA_START_APPLIED: false,
     // Legacy 1.4.0 bits — must remain FALSE/UNUSED on v1.5 forward path
     SAVE_ATTEMPTED: false,
     DUMP_SAVE_APPLIED: false,

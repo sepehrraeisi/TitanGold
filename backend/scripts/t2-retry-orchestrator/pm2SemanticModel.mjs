@@ -1,5 +1,5 @@
 /**
- * Canonical PM2 6.0.13 *effective* semantic model for T2 v1.6.1.
+ * Canonical PM2 6.0.13 *effective* semantic model for T2 v1.6.2.
  *
  * Compares LIVE↔LIVE, DUMP↔DUMP, and DUMP↔LIVE using source-aware
  * normalization — not raw byte equality across dump/resurrect transforms.
@@ -10,6 +10,8 @@
  * - Common.prepareAppKeys: undefined instances → 1
  * - God.prepare / executeApp: unique_id regenerate; log/pid paths rewrite
  * - Utility.extend merges env onto pm2_env at runtime
+ * - God/ClusterMode.js: env_copy._pm2_version = pkg.version (cluster start)
+ * - CLI `-f --force` / mergeEnvironmentVariables may persist `force` on pm2_env
  *
  * Every persisted field is COMPARE, TRANSFORM_EQUIV, or
  * PROVEN_REGENERATED_OR_VOLATILE. Unclassified → fail closed.
@@ -49,6 +51,12 @@ export const PROVEN_REGENERATED_OR_VOLATILE = Object.freeze([
   'log_file',
   'version',
   'node_version',
+  /**
+   * ClusterMode.js (PM2 6.0.13): `env_copy._pm2_version = pkg.version`
+   * Injected on every cluster-mode start from installed package.json — not
+   * application config. Fork-mode processes typically lack this key.
+   */
+  '_pm2_version',
   'env',
   'pm2_env',
   STATUS_FIELD,
@@ -183,6 +191,12 @@ export const CANONICAL_COMPARE_FIELDS = Object.freeze([
   'deep_monitoring',
   // Production dumpProcessList extras (PM2 6.0.13 observed)
   'restart_delay',
+  /**
+   * CLI `commander.option('-f --force')` / start already-launched bypass.
+   * May persist onto pm2_env via mergeEnvironmentVariables Object.assign(app).
+   * Not rewritten by God.executeApp — uncertain → COMPARE (fail-closed identity).
+   */
+  'force',
 ]);
 
 /** Values-free classification table for Rule02 / audit evidence. */
@@ -217,11 +231,22 @@ export const PM2_FIELD_CLASSIFICATION = Object.freeze([
   { field: 'env_production|env_development|env_file|updateEnv', class: 'COMPARE', component: 'Common.mergeEnvironment/CLI' },
   { field: 'PM2_HOME|PM2_JSON_PROCESSING|PM2_USAGE', class: 'COMPARE', component: 'uncertain→COMPARE' },
   { field: 'restart_delay', class: 'COMPARE', component: 'Common.prepareAppKeys restart_delay' },
+  {
+    field: 'force',
+    class: 'COMPARE',
+    component:
+      'CLI binaries/CLI.js -f --force; API.js already-launched bypass; may persist via Common.mergeEnvironmentVariables Object.assign(app) — uncertain→COMPARE',
+  },
   { field: 'application_env_INCLUDING_PATH', class: 'COMPARE', component: 'Utility.extend(env_copy, env_copy.env)' },
   { field: 'pm_id|unique_id|created_at|restart_time|unstable_restarts|prev_restart_delay', class: 'REGENERATED_VOLATILE', component: 'God.prepare/executeApp/dumpProcessList' },
   { field: 'axm_*|vizion_running|pm_uptime|pid|monit|exit_code', class: 'REGENERATED_VOLATILE', component: 'God.executeApp runtime' },
   { field: 'pm_*_log_path|pm_pid_path|error_file|out_file|log_file', class: 'REGENERATED_VOLATILE', component: 'God.executeApp first-create rewrite / aliases' },
   { field: 'version|node_version', class: 'REGENERATED_VOLATILE', component: 'readyCb/ProcessContainerFork report' },
+  {
+    field: '_pm2_version',
+    class: 'REGENERATED_VOLATILE',
+    component: 'God/ClusterMode.js env_copy._pm2_version = pkg.version each cluster start',
+  },
   { field: 'status', class: 'REGENERATED_VOLATILE', component: 'gated separately (projection status leaf)' },
   { field: 'process_name_as_key_quirk', class: 'REGENERATED_VOLATILE', component: 'PM2 dump quirk key===name' },
 ]);
@@ -612,12 +637,12 @@ export function compareProcessPm2Semantics(
   if (requireClassified && unclassifiedFields.length > 0) {
     return {
       ok: false,
-      error: 'DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED',
+      error: 'CLASSIFICATION_INCOMPLETE',
       DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
       LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'FAIL',
       UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: [...new Set(unclassifiedFields)].length,
       unclassifiedFields: [...new Set(unclassifiedFields)].sort(),
-      mismatchCategories: ['UNCLASSIFIED_FIELD'],
+      mismatchCategories: ['CLASSIFICATION_INCOMPLETE'],
       FLAT_DUMP_ENV_PROVENANCE_GATE: contextKeys ? 'PASS' : 'FAIL',
     };
   }
@@ -760,3 +785,107 @@ export function buildApplicationEnvKeysContext(entry) {
 
 export const RESURRECT_IGNORED_FIELDS = PROVEN_REGENERATED_OR_VOLATILE;
 export const RESURRECT_TOP_LEVEL_FIELDS = CANONICAL_COMPARE_FIELDS;
+
+/**
+ * Pre-auth gate: every LIVE and DUMP process must be fully classified.
+ * Evidence: field names / process class only — never values.
+ *
+ * @param {Array<Record<string, unknown>>} liveEntries
+ * @param {Array<Record<string, unknown>>} dumpEntries
+ * @returns {{
+ *   ok: boolean,
+ *   error?: string,
+ *   LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: string,
+ *   DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: string,
+ *   LIVE_FLEET_UNCLASSIFIED_FIELD_COUNT: number,
+ *   DUMP_FLEET_UNCLASSIFIED_FIELD_COUNT: number,
+ *   unclassifiedByScope?: Array<{ scope: string, fields: string[] }>,
+ * }}
+ */
+export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntries = []) {
+  /** @type {Array<{ scope: string, fields: string[] }>} */
+  const unclassifiedByScope = [];
+  let liveUnclassified = 0;
+  let dumpUnclassified = 0;
+
+  function classifyOne(entry, scopePrefix, index) {
+    const name = entry?.name || entry?.pm2_env?.name || 'unknown';
+    const pmId = entry?.pm_id ?? entry?.pm2_env?.pm_id ?? null;
+    const scope = `${scopePrefix}:${name}:${pmId == null ? 'null' : pmId}:idx${index}`;
+    const ctx = deriveLiveApplicationEnvKeyContext(entry);
+    // For dump flat entries, use union of all LIVE app-env keys as provenance.
+    const model = buildPm2EffectiveSemanticModel(entry, {
+      applicationEnvKeysContext: ctx.length ? ctx : null,
+    });
+    // Re-scan with requireClassified semantics when flat needs LIVE context
+    const cmp = compareProcessPm2Semantics(entry, entry, {
+      requireClassified: true,
+      applicationEnvKeysContext: ctx.length ? ctx : null,
+    });
+    if (!cmp.ok && cmp.error === 'CLASSIFICATION_INCOMPLETE') {
+      const fields = [...(cmp.unclassifiedFields || model.unclassifiedFields || [])].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length;
+    }
+    if (model.unclassifiedFields?.length) {
+      const fields = [...model.unclassifiedFields].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length;
+    }
+    // Self-compare must pass for fully classified entries
+    if (!cmp.ok && (cmp.mismatchCategories || []).includes('CLASSIFICATION_INCOMPLETE')) {
+      const fields = [...(cmp.unclassifiedFields || [])].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length || 1;
+    }
+    return 0;
+  }
+
+  // Build LIVE context union for DUMP flat provenance
+  const liveCtxUnion = new Set();
+  for (const e of liveEntries) {
+    for (const k of deriveLiveApplicationEnvKeyContext(e)) liveCtxUnion.add(k);
+  }
+  const liveCtxArr = [...liveCtxUnion].sort();
+
+  for (let i = 0; i < liveEntries.length; i++) {
+    liveUnclassified += classifyOne(liveEntries[i], 'LIVE', i);
+  }
+
+  for (let i = 0; i < dumpEntries.length; i++) {
+    const entry = dumpEntries[i];
+    const name = entry?.name || entry?.pm2_env?.name || 'unknown';
+    const scope = `DUMP:${name}:null:idx${i}`;
+    const cmp = compareProcessPm2Semantics(entry, entry, {
+      requireClassified: true,
+      applicationEnvKeysContext: liveCtxArr,
+    });
+    if (!cmp.ok && (cmp.error === 'CLASSIFICATION_INCOMPLETE' ||
+        (cmp.mismatchCategories || []).includes('CLASSIFICATION_INCOMPLETE'))) {
+      const fields = [...(cmp.unclassifiedFields || [])].sort();
+      unclassifiedByScope.push({ scope, fields });
+      dumpUnclassified += fields.length || 1;
+      continue;
+    }
+    const model = buildPm2EffectiveSemanticModel(entry, {
+      applicationEnvKeysContext: liveCtxArr,
+    });
+    if (model.unclassifiedFields?.length) {
+      unclassifiedByScope.push({ scope, fields: [...model.unclassifiedFields].sort() });
+      dumpUnclassified += model.unclassifiedFields.length;
+    }
+  }
+
+  const liveOk = liveUnclassified === 0;
+  const dumpOk = dumpUnclassified === 0;
+  const ok = liveOk && dumpOk;
+  return {
+    ok,
+    error: ok ? undefined : 'FLEET_PM2_FIELD_CLASSIFICATION_INCOMPLETE',
+    LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: liveOk ? 'PASS' : 'FAIL',
+    DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: dumpOk ? 'PASS' : 'FAIL',
+    LIVE_FLEET_UNCLASSIFIED_FIELD_COUNT: liveUnclassified,
+    DUMP_FLEET_UNCLASSIFIED_FIELD_COUNT: dumpUnclassified,
+    unclassifiedByScope: ok ? undefined : unclassifiedByScope,
+  };
+}

@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  *
- * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.6.1).
+ * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.6.2).
  * Never contacts live PM2, DB, Redis, Telegram, or production services.
  */
 
@@ -39,6 +39,7 @@ import {
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_6_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_6_1,
   assertSanitizedPreBaselineProof,
   assertCollectorPersistencePreconditions,
   classifyCollectorDbPrestate,
@@ -62,6 +63,12 @@ import {
   deriveLiveApplicationEnvKeyContext,
   effectiveInstancesValue,
   diffFingerprints,
+  diffLiveFingerprints,
+  diffDumpFingerprints,
+  assertPreEquivalent,
+  assertExpectedLivePostState,
+  assertFleetPm2SemanticModelComplete,
+  captureCollectorDbLiveValues,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 
@@ -1231,7 +1238,9 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T33 restored dump SHA mismatch => FAIL_FORWARD_COMPLETE', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceRestoreShaMismatch: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({
+      code: expect.stringMatching(/^ROLLBACK_DUMP_(SHA|BYTE)_MISMATCH$/),
+    });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
@@ -2046,10 +2055,10 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
   });
 
-  it('T88 new 1.6.1 complete mocked artifact => PASS', async () => {
+  it('T88 new 1.6.2 complete mocked artifact => PASS', async () => {
     const { orch } = buildOrch();
-    expect(TOOL_VERSION).toBe('1.6.1');
-    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST');
+    expect(TOOL_VERSION).toBe('1.6.2');
+    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_FLEET_PROOF_PROJECTED_PERSIST');
     expect(AUTHORIZED_EFFECTS).toEqual([
       'ENGINE_2_TO_1',
       'PROJECTED_DUMP_WRITE_0600',
@@ -2074,6 +2083,15 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const runId = nextRunId('LEGACY16');
     const auth = makeAuth(runId);
     auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_0;
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
+  });
+
+  it('T90d legacy 1.6.1 transaction identity => FAIL', async () => {
+    const runId = nextRunId('LEGACY161');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_1;
     const { orch } = buildOrch({}, { runId, authorization: auth });
     await orch.precheck();
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
@@ -2299,7 +2317,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
   it('ALREADY_PRESENT_EXACT five keys => precheck PASS', () => {
     const world = makeLiveAndDump();
     const liveFp = semanticFingerprint(world.live);
-    const dumpFp = semanticFingerprint(prepareDumpFromLive(world.live));
+    const dumpFp = semanticFingerprint(prepareDumpFromLive(world.live), { source: 'DUMP' });
     const c = classifyCollectorDbPrestate(liveFp, dumpFp);
     expect(c.ok).toBe(true);
     expect(c.state).toBe('ALREADY_PRESENT_EXACT');
@@ -2315,7 +2333,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     const dump = prepareCleanPreFromLive(world.live);
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('ABSENT');
     expect(c.ok).toBe(false);
@@ -2328,7 +2346,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     delete coll.env.DB_PASSWORD;
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('PARTIAL');
     expect(c.ok).toBe(false);
@@ -2340,7 +2358,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     dump.find((e) => e.name === 'telegram-collector').env.DB_HOST = '9.9.9.9';
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('PRESENT_MISMATCHED');
     expect(c.ok).toBe(false);
@@ -2958,7 +2976,7 @@ describe('T2 v1.6.1 final full-semantics audit', () => {
     b.totally_unknown_pm2_field_xyz = '2';
     const cmp = compareDumpEngineResurrectSemantics(a, b);
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
     expect(cmp.unclassifiedFields).toContain('totally_unknown_pm2_field_xyz');
   });
 
@@ -2976,7 +2994,7 @@ describe('T2 v1.6.1 final full-semantics audit', () => {
     b.weird_unknown_cfg = { a: 2 };
     const cmp = compareDumpEngineResurrectSemantics(a, b);
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
   });
 
   it('zero unclassified fields in sanitized production-shape fixture', () => {
@@ -3245,7 +3263,7 @@ describe('T2 v1.6.1 production-shape semantic final correction', () => {
       applicationEnvKeysContext: ['PATH', 'NODE_ENV'],
     });
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
   });
 
   it('custom key present in live app env treated as env and compared', () => {
@@ -3446,5 +3464,96 @@ describe('T2 v1.6.1 production-shape semantic final correction', () => {
     expect(compareProcessPm2Semantics(a, b, { applicationEnvKeysContext: ['PATH', 'unique_id'] }).ok).toBe(
       true,
     );
+  });
+});
+
+describe('T2 v1.6.2 comparator / rollback proof', () => {
+  function dumpFpFromLive(live) {
+    return semanticFingerprint(prepareDumpFromLive(live), { source: 'DUMP' });
+  }
+
+  it('LIVE and DUMP fleet self-diff reflexivity => zero classified diffs', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    expect(diffLiveFingerprints(liveFp, liveFp).classified).toHaveLength(0);
+    expect(diffDumpFingerprints(dumpFp, dumpFp).classified).toHaveLength(0);
+    expect(diffFingerprints(liveFp, liveFp, { source: 'LIVE' }).classified).toHaveLength(0);
+    expect(diffFingerprints(dumpFp, dumpFp, { source: 'DUMP' }).classified).toHaveLength(0);
+  });
+
+  it('DUMP null pm_id engines keyed by dumpArrayIndex — no slot collapse', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const dumpFp = semanticFingerprint(dump, { source: 'DUMP' });
+    expect(dumpFp.engines).toHaveLength(2);
+    expect(dumpFp.engines[0].pm_id).toBeUndefined();
+    expect(dumpFp.engines[1].pm_id).toBeUndefined();
+    expect(dumpFp.engines[0].dumpArrayIndex).not.toBe(dumpFp.engines[1].dumpArrayIndex);
+    expect(dumpFp.engines[0].structuralSlotKey).toBe('titan-engine-worker:0');
+    expect(dumpFp.engines[1].structuralSlotKey).toBe('titan-engine-worker:1');
+
+    const postDumpFp = JSON.parse(JSON.stringify(dumpFp));
+    postDumpFp.engines[1].status = 'stopped';
+    const diff = diffDumpFingerprints(dumpFp, postDumpFp, {
+      dumpExtraArrayIndex: dumpFp.engines[1].dumpArrayIndex,
+    });
+    expect(diff.classified.filter((d) => d.kind === 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED')).toHaveLength(1);
+  });
+
+  it('assertPreEquivalent exact-byte short-circuit ignores dump semantic drift', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytes = dumpToBytes(prepareDumpFromLive(world.live));
+
+    const poisonedPostDump = JSON.parse(JSON.stringify(dumpFp));
+    poisonedPostDump.backends[0].NODE_ENV = 'production';
+
+    const proof = assertPreEquivalent(dumpFp, liveFp, poisonedPostDump, liveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytes,
+      actualDumpBytes: bytes,
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+    });
+    expect(proof.ok).toBe(true);
+    expect(proof.details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT).toBe('YES');
+    expect(proof.details.DUMP_PRE_EQUIVALENT).toBe('YES');
+    expect(proof.details.FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE).toBe('PASS');
+  });
+
+  it('OFFLINE_EXTRA stop-only simulation => PASS via assertExpectedLivePostState', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const sel = selectEngineRetainExtra(liveFp);
+    expect(sel.ok).toBe(true);
+    const snap = captureCollectorDbLiveValues(liveFp);
+    const postLive = deepClone(world.live);
+    postLive.find((e) => e.name === 'titan-engine-worker' && e.pm_id === sel.extra.pm_id).status =
+      'stopped';
+    const postLiveFp = semanticFingerprint(postLive, { source: 'LIVE' });
+    const proof = assertExpectedLivePostState(liveFp, postLiveFp, sel, snap);
+    expect(proof.ok).toBe(true);
+    expect(proof.details.EXTRA_ENGINE_STOP_ONLY).toBe('PASS');
+  });
+
+  it('fleet classification gate => PASS on synthetic fleet', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const gate = assertFleetPm2SemanticModelComplete(world.live, dump);
+    expect(gate.ok).toBe(true);
+    expect(gate.LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE).toBe('PASS');
+    expect(gate.DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE).toBe('PASS');
+  });
+
+  it('legacy 1.6.1 auth transaction => FAIL closed', async () => {
+    const runId = nextRunId('V162LEG');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_1;
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
   });
 });

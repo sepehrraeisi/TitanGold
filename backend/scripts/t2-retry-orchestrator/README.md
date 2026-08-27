@@ -10,7 +10,7 @@ Default CLI is non-mutating. Live adapter (`liveBoundary.mjs`) is selected only 
 
 ## Tool version
 
-**TOOL_VERSION = 1.6.1**  
+**TOOL_VERSION = 1.6.2**
 Authorized transaction: `T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST`  
 Authorized effects: `ENGINE_2_TO_1` · `PROJECTED_DUMP_WRITE_0600`
 

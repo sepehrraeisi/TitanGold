@@ -283,48 +283,66 @@ function attachEnv(target, src) {
 
 /**
  * @param {Array<Record<string, unknown>>} entries
+ * @param {{ source?: 'LIVE'|'DUMP' }} [opts]
  */
-export function semanticFingerprint(entries = []) {
-  const normalized = entries.map(normalizeProcess);
-  const byName = (name) =>
-    normalized
-      .filter((p) => p.name === name)
-      .sort((a, b) => (a.pm_id ?? 0) - (b.pm_id ?? 0));
+export function semanticFingerprint(entries = [], { source = 'LIVE' } = {}) {
+  const normalized = entries.map((entry, dumpArrayIndex) => {
+    const proc = normalizeProcess(entry);
+    proc.dumpArrayIndex = dumpArrayIndex;
+    return proc;
+  });
 
-  const mapFull = (p) =>
+  const sortWithinName = (list) => {
+    if (source === 'DUMP') {
+      return [...list].sort((a, b) => a.dumpArrayIndex - b.dumpArrayIndex);
+    }
+    return [...list].sort((a, b) => (a.pm_id ?? 0) - (b.pm_id ?? 0));
+  };
+
+  const byName = (name) => sortWithinName(normalized.filter((p) => p.name === name));
+
+  const mapFull = (p, ordinalWithinName = null) => {
+    /** @type {Record<string, unknown>} */
+    const mapped = {
+      status: p.status,
+      NODE_ENV: p.NODE_ENV,
+      cwd: p.cwd,
+      script: p.script,
+      exec_mode: p.exec_mode,
+      interpreter: p.interpreter,
+      instances: p.instances,
+      namespace: p.namespace,
+      args: p.args,
+      node_args: p.node_args,
+      autorestart: p.autorestart,
+      watch: p.watch,
+      created_at: p.created_at,
+      restart_time: p.restart_time,
+      env_keys: p.env_keys,
+      env_shape: p.env_shape,
+      has_telegram_bot_token: p.has_telegram_bot_token,
+      has_provider_env: p.has_provider_env,
+      dumpArrayIndex: p.dumpArrayIndex,
+    };
+    if (source === 'DUMP') {
+      const ord =
+        ordinalWithinName != null ? ordinalWithinName : p.dumpArrayIndex;
+      mapped.ordinalWithinName = ord;
+      mapped.structuralSlotKey = `${p.name}:${ord}`;
+    } else {
+      mapped.pm_id = p.pm_id;
+    }
+    return attachEnv(mapped, p);
+  };
+
+  const engines = byName(ENGINE_NAME).map((p, idx) => mapFull(p, idx));
+  const backends = byName(BACKEND_NAME).map((p, idx) => mapFull(p, idx));
+  const processors = byName(PROCESSOR_NAME).map((p, idx) => mapFull(p, idx));
+  const monitors = byName(MONITOR_NAME).map((p, idx) => mapFull(p, idx));
+  const collectors = byName(COLLECTOR_NAME).map((p, idx) =>
     attachEnv(
       {
-        pm_id: p.pm_id,
-        status: p.status,
-        NODE_ENV: p.NODE_ENV,
-        cwd: p.cwd,
-        script: p.script,
-        exec_mode: p.exec_mode,
-        interpreter: p.interpreter,
-        instances: p.instances,
-        namespace: p.namespace,
-        args: p.args,
-        node_args: p.node_args,
-        autorestart: p.autorestart,
-        watch: p.watch,
-        created_at: p.created_at,
-        restart_time: p.restart_time,
-        env_keys: p.env_keys,
-        env_shape: p.env_shape,
-        has_telegram_bot_token: p.has_telegram_bot_token,
-        has_provider_env: p.has_provider_env,
-      },
-      p,
-    );
-
-  const engines = byName(ENGINE_NAME).map(mapFull);
-  const backends = byName(BACKEND_NAME).map(mapFull);
-  const processors = byName(PROCESSOR_NAME).map(mapFull);
-  const monitors = byName(MONITOR_NAME).map(mapFull);
-  const collectors = byName(COLLECTOR_NAME).map((p) =>
-    attachEnv(
-      {
-        ...mapFull(p),
+        ...mapFull(p, idx),
         db_keys_present: Object.fromEntries(
           COLLECTOR_DB_KEYS.map((k) => [k, p.collector_db[k].present]),
         ),
@@ -337,10 +355,17 @@ export function semanticFingerprint(entries = []) {
   const known = new Set([ENGINE_NAME, BACKEND_NAME, PROCESSOR_NAME, COLLECTOR_NAME, MONITOR_NAME]);
   const others = normalized
     .filter((p) => p.name && !known.has(p.name))
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)) || (a.pm_id ?? 0) - (b.pm_id ?? 0))
-    .map((p) => attachEnv({ name: p.name, ...mapFull(p) }, p));
+    .sort(
+      (a, b) =>
+        String(a.name).localeCompare(String(b.name)) ||
+        (source === 'DUMP'
+          ? a.dumpArrayIndex - b.dumpArrayIndex
+          : (a.pm_id ?? 0) - (b.pm_id ?? 0)),
+    )
+    .map((p, idx) => attachEnv({ name: p.name, ...mapFull(p, idx) }, p));
 
   return {
+    source,
     engines,
     backends,
     processors,
@@ -806,8 +831,10 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
     });
     if (!full.ok) {
       for (const cat of full.mismatchCategories || [full.error || 'FULL_PM2_SEMANTIC_DRIFT']) {
+        const isClassificationIncomplete =
+          cat === 'CLASSIFICATION_INCOMPLETE' || full.error === 'CLASSIFICATION_INCOMPLETE';
         diffs.push({
-          kind: 'PROCESS_CONFIG_CHANGED',
+          kind: isClassificationIncomplete ? 'CLASSIFICATION_INCOMPLETE' : 'PROCESS_CONFIG_CHANGED',
           detail: { scope, category: cat },
         });
       }
@@ -825,15 +852,24 @@ function diffProcessPair(pre, post, { scope, allowCollectorDbAppear = false, ski
   return diffs;
 }
 
+function dumpSlotKey(proc) {
+  if (!proc) return null;
+  return proc.structuralSlotKey ?? `${proc.name}:${proc.dumpArrayIndex}`;
+}
+
 /**
- * Diff pre-dump fingerprint vs post-dump fingerprint (secret-safe).
+ * Diff LIVE fingerprints — identity keyed by pm_id (fail-closed on null/missing).
  */
-export function diffFingerprints(pre, post, { extraPmId }) {
+export function diffLiveFingerprints(pre, post, { extraPmId } = {}) {
   const diffs = [];
 
   const preEng = new Map((pre.engines || []).map((e) => [e.pm_id, e]));
   const postEng = new Map((post.engines || []).map((e) => [e.pm_id, e]));
   for (const pmId of new Set([...preEng.keys(), ...postEng.keys()])) {
+    if (pmId == null) {
+      diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { engine_pm_id: null } });
+      continue;
+    }
     const a = preEng.get(pmId);
     const b = postEng.get(pmId);
     if (!a || !b) {
@@ -951,8 +987,155 @@ export function diffFingerprints(pre, post, { extraPmId }) {
     diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { other_names: true } });
   }
 
-  const classified = classifyDiffs(diffs, { extraPmId });
-  return { diffs, classified };
+  const classified = classifyDiffs(diffs, { extraPmId, source: 'LIVE' });
+  return { diffs, classified, source: 'LIVE' };
+}
+
+/**
+ * Diff DUMP fingerprints — identity keyed by dumpArrayIndex / structuralSlotKey; never pm_id.
+ */
+export function diffDumpFingerprints(pre, post, { dumpExtraArrayIndex } = {}) {
+  const diffs = [];
+  const slotKey = (p) => p.dumpArrayIndex;
+
+  const preEng = new Map((pre.engines || []).map((e) => [slotKey(e), e]));
+  const postEng = new Map((post.engines || []).map((e) => [slotKey(e), e]));
+  for (const idx of new Set([...preEng.keys(), ...postEng.keys()])) {
+    const a = preEng.get(idx);
+    const b = postEng.get(idx);
+    if (!a || !b) {
+      diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { engine_dumpArrayIndex: idx } });
+      continue;
+    }
+    if (a.status !== b.status) {
+      diffs.push({
+        kind: 'ENGINE_STATUS',
+        detail: { dumpArrayIndex: idx, structuralSlotKey: dumpSlotKey(a), pre: a.status, post: b.status },
+      });
+    }
+    diffs.push(
+      ...diffProcessPair(a, b, {
+        scope: `engine:dumpIdx${idx}`,
+        skipStatus: true,
+      }),
+    );
+  }
+
+  if (pre.backend_count !== post.backend_count) {
+    diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE' });
+  } else {
+    const preB = new Map((pre.backends || []).map((e) => [slotKey(e), e]));
+    const postB = new Map((post.backends || []).map((e) => [slotKey(e), e]));
+    for (const idx of new Set([...preB.keys(), ...postB.keys()])) {
+      const a = preB.get(idx);
+      const b = postB.get(idx);
+      if (!a || !b) {
+        diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE', detail: { dumpArrayIndex: idx } });
+        continue;
+      }
+      if (a.status !== b.status) {
+        diffs.push({ kind: 'BACKEND_TOPOLOGY_CHANGE', detail: { dumpArrayIndex: idx } });
+      }
+      diffs.push(...diffProcessPair(a, b, { scope: `backend:dumpIdx${idx}`, skipStatus: true }));
+    }
+  }
+
+  if (pre.processor_count !== post.processor_count) {
+    diffs.push({ kind: 'PROCESSOR_TOPOLOGY_CHANGE' });
+  } else {
+    const preP = new Map((pre.processors || []).map((e) => [slotKey(e), e]));
+    const postP = new Map((post.processors || []).map((e) => [slotKey(e), e]));
+    for (const idx of new Set([...preP.keys(), ...postP.keys()])) {
+      const a = preP.get(idx);
+      const b = postP.get(idx);
+      if (!a || !b || a.status !== b.status) {
+        diffs.push({ kind: 'PROCESSOR_TOPOLOGY_CHANGE', detail: { dumpArrayIndex: idx } });
+        continue;
+      }
+      diffs.push(...diffProcessPair(a, b, { scope: `processor:dumpIdx${idx}`, skipStatus: true }));
+    }
+  }
+
+  if (pre.monitor_count !== post.monitor_count) {
+    diffs.push({ kind: 'MONITOR_TOPOLOGY_CHANGE' });
+  } else {
+    const preM = new Map((pre.monitors || []).map((e) => [slotKey(e), e]));
+    const postM = new Map((post.monitors || []).map((e) => [slotKey(e), e]));
+    for (const idx of new Set([...preM.keys(), ...postM.keys()])) {
+      const a = preM.get(idx);
+      const b = postM.get(idx);
+      if (!a || !b || a.status !== b.status) {
+        diffs.push({ kind: 'MONITOR_TOPOLOGY_CHANGE', detail: { dumpArrayIndex: idx } });
+        continue;
+      }
+      diffs.push(...diffProcessPair(a, b, { scope: `monitor:dumpIdx${idx}`, skipStatus: true }));
+    }
+  }
+
+  const preCol = (pre.collectors || [])[0] || null;
+  const postCol = (post.collectors || [])[0] || null;
+  if (
+    !preCol ||
+    !postCol ||
+    preCol.dumpArrayIndex !== postCol.dumpArrayIndex ||
+    preCol.status !== postCol.status
+  ) {
+    diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { collector: true } });
+  } else {
+    diffs.push(
+      ...diffProcessPair(preCol, postCol, {
+        scope: `collector:dumpIdx${preCol.dumpArrayIndex}`,
+        skipStatus: true,
+        allowCollectorDbAppear: true,
+      }),
+    );
+
+    const preKeys = preCol.db_keys_present || {};
+    const postKeys = postCol.db_keys_present || {};
+    const preHadAny = COLLECTOR_DB_KEYS.some((k) => preKeys[k]);
+    const postHasAll = COLLECTOR_DB_KEYS.every((k) => postKeys[k]);
+    const dbAppear =
+      !preHadAny &&
+      postHasAll &&
+      postCol.db_user_matches_expected === true &&
+      preCol.NODE_ENV === postCol.NODE_ENV;
+
+    if (dbAppear) {
+      diffs.push({ kind: 'COLLECTOR_DB_KEYS_APPEAR' });
+    } else if (JSON.stringify(preKeys) !== JSON.stringify(postKeys) || preCol.NODE_ENV !== postCol.NODE_ENV) {
+      diffs.push({ kind: 'UNRELATED_ENV_CHANGE', detail: 'COLLECTOR_DB_UNEXPECTED' });
+    }
+  }
+
+  const preO = new Map((pre.others || []).map((e) => [dumpSlotKey(e), e]));
+  const postO = new Map((post.others || []).map((e) => [dumpSlotKey(e), e]));
+  for (const key of new Set([...preO.keys(), ...postO.keys()])) {
+    const a = preO.get(key);
+    const b = postO.get(key);
+    if (!a || !b || a.status !== b.status) {
+      diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { other: key } });
+      continue;
+    }
+    diffs.push(...diffProcessPair(a, b, { scope: `other:${key}`, skipStatus: true }));
+  }
+
+  if (JSON.stringify(pre.other_names || []) !== JSON.stringify(post.other_names || [])) {
+    diffs.push({ kind: 'UNRELATED_PROCESS_CHANGE', detail: { other_names: true } });
+  }
+
+  const classified = classifyDiffs(diffs, { dumpExtraArrayIndex, source: 'DUMP' });
+  return { diffs, classified, source: 'DUMP' };
+}
+
+/**
+ * Diff pre vs post fingerprint (secret-safe). Dispatches LIVE vs DUMP comparators.
+ */
+export function diffFingerprints(pre, post, opts = {}) {
+  const source = opts.source || pre?.source || post?.source || 'LIVE';
+  if (source === 'DUMP') {
+    return diffDumpFingerprints(pre, post, opts);
+  }
+  return diffLiveFingerprints(pre, post, opts);
 }
 
 /**
@@ -978,7 +1161,7 @@ export function assertExpectedLivePostState(
     return { ok: false, error: 'LIVE_POST_STATE_SELECTION_MISSING' };
   }
 
-  const diff = diffFingerprints(preLiveFp, postLiveFp, { extraPmId });
+  const diff = diffLiveFingerprints(preLiveFp, postLiveFp, { extraPmId });
   const allowedKinds = diff.classified.filter(
     (d) => d.kind === 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED',
   );
@@ -1089,20 +1272,27 @@ export function assertExpectedLivePostState(
   };
 }
 
-function classifyDiffs(diffs, { extraPmId }) {
+function classifyDiffs(diffs, { extraPmId, dumpExtraArrayIndex, source = 'LIVE' } = {}) {
   const out = [];
   for (const d of diffs) {
-    if (
-      d.kind === 'ENGINE_STATUS' &&
-      d.detail?.pre === 'online' &&
-      d.detail?.post === 'stopped' &&
-      d.detail?.pm_id === extraPmId
-    ) {
-      out.push({ kind: 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED' });
-      continue;
+    if (d.kind === 'ENGINE_STATUS') {
+      const isExtraStop =
+        d.detail?.pre === 'online' &&
+        d.detail?.post === 'stopped' &&
+        (source === 'DUMP'
+          ? dumpExtraArrayIndex != null && d.detail?.dumpArrayIndex === dumpExtraArrayIndex
+          : d.detail?.pm_id === extraPmId);
+      if (isExtraStop) {
+        out.push({ kind: 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED' });
+        continue;
+      }
     }
     if (d.kind === 'COLLECTOR_DB_KEYS_APPEAR') {
       out.push({ kind: 'COLLECTOR_DB_KEYS_APPEAR' });
+      continue;
+    }
+    if (d.kind === 'CLASSIFICATION_INCOMPLETE') {
+      out.push({ kind: 'CLASSIFICATION_INCOMPLETE', detail: d.detail });
       continue;
     }
     if (
@@ -1154,8 +1344,26 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
   actualDumpUid,
   expectedDumpGid,
   actualDumpGid,
-}) {
-  if (expectedDumpSha !== actualDumpSha) {
+  expectedDumpBytes,
+  actualDumpBytes,
+  dumpExtraArrayIndex,
+} = {}) {
+  /** @type {Record<string, string>} */
+  const details = {};
+
+  let dumpPhysicalPass = true;
+
+  if (expectedDumpBytes && actualDumpBytes) {
+    if (Buffer.compare(expectedDumpBytes, actualDumpBytes) !== 0) {
+      return {
+        ok: false,
+        error: 'ROLLBACK_DUMP_BYTE_MISMATCH',
+        details: { ROLLBACK_DUMP_EXACT_BYTE_IDENTITY: 'FAIL' },
+      };
+    }
+    details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY = 'PASS';
+    details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT = 'YES';
+  } else if (expectedDumpSha !== actualDumpSha) {
     return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
   }
 
@@ -1164,20 +1372,59 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     actualDumpMode != null &&
     (expectedDumpMode & 0o777) !== (actualDumpMode & 0o777)
   ) {
+    dumpPhysicalPass = false;
     return {
       ok: false,
       error: 'ROLLBACK_DUMP_MODE_MISMATCH',
       details: {
-        expected_mode: expectedDumpMode & 0o777,
-        actual_mode: actualDumpMode & 0o777,
+        ROLLBACK_DUMP_MODE_PRE_EQUIVALENT: 'FAIL',
+        expected_mode: String(expectedDumpMode & 0o777),
+        actual_mode: String(actualDumpMode & 0o777),
       },
     };
   }
+  if (expectedDumpMode != null && actualDumpMode != null) {
+    details.ROLLBACK_DUMP_MODE_PRE_EQUIVALENT = 'PASS';
+  }
+
   if (expectedDumpUid != null && actualDumpUid != null && expectedDumpUid !== actualDumpUid) {
-    return { ok: false, error: 'ROLLBACK_DUMP_UID_MISMATCH' };
+    dumpPhysicalPass = false;
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_UID_MISMATCH',
+      details: { ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
+    };
   }
   if (expectedDumpGid != null && actualDumpGid != null && expectedDumpGid !== actualDumpGid) {
-    return { ok: false, error: 'ROLLBACK_DUMP_GID_MISMATCH' };
+    dumpPhysicalPass = false;
+    return {
+      ok: false,
+      error: 'ROLLBACK_DUMP_GID_MISMATCH',
+      details: { ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT: 'FAIL' },
+    };
+  }
+  if (
+    (expectedDumpUid != null && actualDumpUid != null) ||
+    (expectedDumpGid != null && actualDumpGid != null)
+  ) {
+    details.ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT = 'PASS';
+  }
+
+  const dumpByteIdentical =
+    (expectedDumpBytes &&
+      actualDumpBytes &&
+      Buffer.compare(expectedDumpBytes, actualDumpBytes) === 0) ||
+    (expectedDumpSha != null && expectedDumpSha === actualDumpSha);
+
+  const dumpPreEquivalentShortCircuit = dumpPhysicalPass && dumpByteIdentical;
+  if (dumpPreEquivalentShortCircuit) {
+    details.DUMP_PRE_EQUIVALENT = 'YES';
+    if (!details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT) {
+      details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT = 'YES';
+    }
+    if (!details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY) {
+      details.ROLLBACK_DUMP_EXACT_BYTE_IDENTITY = 'PASS';
+    }
   }
 
   if ((postLiveFp.engine_online_count || 0) !== 2) {
@@ -1196,7 +1443,6 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     return { ok: false, error: 'ROLLBACK_ENGINE_NOT_BOTH_ONLINE' };
   }
 
-  // Full engine config+env equivalence vs PRE (volatile pm_id/pid/timestamps already excluded).
   for (const [preE, postE, label] of [
     [preRetained, postRetained, 'retained'],
     [preExtra, postExtra, 'extra'],
@@ -1224,23 +1470,24 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     }
   }
 
-  // Persisted dump must match PRE dump semantics exactly (no forward allowlist diffs).
-  const dumpDiff = diffFingerprints(preDumpFp, postDumpFp, { extraPmId });
-  if (dumpDiff.classified.length > 0) {
-    return {
-      ok: false,
-      error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
-      details: { kinds: dumpDiff.classified.map((c) => c.kind) },
-    };
+  if (!dumpPreEquivalentShortCircuit) {
+    const dumpDiff = diffDumpFingerprints(preDumpFp, postDumpFp, { dumpExtraArrayIndex });
+    if (dumpDiff.classified.length > 0) {
+      return {
+        ok: false,
+        error: 'ROLLBACK_DUMP_SEMANTIC_DRIFT',
+        details: { kinds: dumpDiff.classified.map((c) => c.kind), ...details },
+      };
+    }
+    details.DUMP_PRE_EQUIVALENT = 'YES';
   }
 
-  // CURRENT LIVE must be semantically PRE-equivalent for ALL process groups.
-  const liveDiff = diffFingerprints(preLiveFp, postLiveFp, { extraPmId });
+  const liveDiff = diffLiveFingerprints(preLiveFp, postLiveFp, { extraPmId });
   if (liveDiff.classified.length > 0) {
     return {
       ok: false,
       error: 'ROLLBACK_LIVE_SEMANTIC_DRIFT',
-      details: { kinds: liveDiff.classified.map((c) => c.kind) },
+      details: { kinds: liveDiff.classified.map((c) => c.kind), FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'FAIL' },
     };
   }
 
@@ -1254,15 +1501,16 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
     return { ok: false, error: 'ROLLBACK_COLLECTOR_LIVE_DB_B_LOST' };
   }
 
-  const postColDump = (postDumpFp.collectors || [])[0];
-  const preColDump = (preDumpFp.collectors || [])[0];
-  if (!postColDump || !preColDump) {
-    return { ok: false, error: 'ROLLBACK_COLLECTOR_DUMP_MISSING' };
-  }
-  // v1.6: PRE dump already has DB_*; rollback must preserve exact dump DB_* vs PRE dump.
-  const dumpDb = compareCollectorDbLiveToPersist(preColDump, postColDump);
-  if (!dumpDb.ok) {
-    return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_NOT_PRESERVED', details: dumpDb.matches };
+  if (!dumpPreEquivalentShortCircuit) {
+    const postColDump = (postDumpFp.collectors || [])[0];
+    const preColDump = (preDumpFp.collectors || [])[0];
+    if (!postColDump || !preColDump) {
+      return { ok: false, error: 'ROLLBACK_COLLECTOR_DUMP_MISSING' };
+    }
+    const dumpDb = compareCollectorDbLiveToPersist(preColDump, postColDump);
+    if (!dumpDb.ok) {
+      return { ok: false, error: 'ROLLBACK_COLLECTOR_DB_NOT_PRESERVED', details: dumpDb.matches };
+    }
   }
 
   if (
@@ -1279,6 +1527,7 @@ export function assertPreEquivalent(preDumpFp, preLiveFp, postDumpFp, postLiveFp
       PRE_EQUIVALENT: 'YES',
       dump_mode: expectedDumpMode != null ? expectedDumpMode & 0o777 : null,
       FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE: 'PASS',
+      ...details,
     },
   };
 }
