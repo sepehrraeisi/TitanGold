@@ -25,7 +25,7 @@ alwaysApply: true
 
 **NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
 
-**PROGRESS_BLOCKER = NONE**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_DRIFT**
 
 **ROADMAP_MAJOR_MILESTONES = M1 Data Hub CLOSED/FROZEN · M2 AI Shared Foundation CLOSED/FROZEN · M3 Agents Shell CLOSED/FROZEN · M4 Telegram/C2 Production Closeout (IN PROGRESS) · M5 Artemis Core Completion (15 stages) · M6 Post-Core Agent Completion · M7 Settings + AI Provider Infrastructure · M8 Multi-AI Council + Memory/Learning · M9 Artemis Autonomous Operations · M10 Artemis Conversational Control Plane (ACCP)**
 
@@ -47,6 +47,118 @@ alwaysApply: true
 **SERVER_DRIFT = NONE**
 
 Future runtime-affecting stage closure must record: **MAIN_GIT_SHA** · **RUNTIME_IMPLEMENTATION_SHA** · **DEPLOY_REQUIRED** · **DEPLOY_STATUS** · **RUNTIME_VERIFIED** · **SERVER_DRIFT** · **SERVED_ARTIFACT_PROVENANCE**. Unresolved required server drift → **PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING**.
+
+### B1 Production Deployment Readiness — fresh read-only audit closeout (20260828)
+
+**B1_PRODUCTION_DEPLOYMENT_READINESS_AUDIT = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY / NO PRODUCTION MUTATION**
+**GOVERNANCE_BRANCH = `chore/c2-b1-production-readiness`**
+**CANONICAL_MAIN_SHA = `61e50ba2a95eaa260588987d33b8ddac679cc706`**
+**B1_SOURCE_MERGE = `a465e6fdbcb9473e210917ebeeb90c21f4458fe7`**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0**
+
+#### B1 source authority
+
+**B1_SOURCE_CANONICAL = YES**
+**B1_SOURCE_DRIFT = NONE**
+Canonical main `61e50ba2…` blobs verified:
+`engineWorkerLeader.js` = `e88a88e3842e987894ad69ada44cd60d14af9435`
+`scheduler.js` = `43006386444915fb3dcbb9c68d0cc9298cb74d3d`
+`pipelineSchedulerRuntime.js` = `1468f6c9cfbfda43a8f810eced04b0c974769517`
+
+Canonical B1 POST SHA256 (deployment verification targets):
+`engineWorkerLeader.js` = `cf7f6f6bfe1ade43febe6a2b25982c1baf40e1b8d0f24f10d1a9fbe7b8f3c123`
+`scheduler.js` = `3daba7941108037996f1c3367c60cd8cadffebd91c929654e97b0febae9ebe40`
+`pipelineSchedulerRuntime.js` = `7462864ccd6311919c0851fbd96d8055db7ef7cdb3780dbd6d88245aead21f25`
+
+#### Production root / target provenance (fresh)
+
+**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PROD_BRANCH = `main`**
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`**
+**PROD_TREE_DIRTY_COUNT = 497**
+
+| Target | HEAD/INDEX/WORKTREE | WORKTREE SHA256 | Provenance |
+|---|---|---|---|
+| `engineWorkerLeader.js` | `314db763…` aligned | `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b` | **CLEAN_KNOWN_PREIMAGE** |
+| `scheduler.js` | `be54a94c…` aligned | `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b` | **CLEAN_KNOWN_PREIMAGE** |
+| `pipelineSchedulerRuntime.js` | `877556b1…` aligned | `9930ca2d6b6220a6def99e540aa66aaa1e4776feaee1b3ab66eece6a6ec8c1f5` | **CLEAN_KNOWN_PREIMAGE** |
+
+All three: staged diff = NO · unstaged diff = NO · mode `664` · uid/gid `1000/1000`.
+
+**CANDIDATE_B_PRODUCTION_DEPLOYED = NO** (all three `PRE_EQUALS_POST = NO`)
+
+#### Engine topology / identity
+
+Fresh PM2 live: **ENGINE_ONLINE_COUNT = 1** (retained online `pm_id **9**` / pid **2937968**`; extra `pm_id **5**` **stopped**).
+**ENGINE_SINGLETON_CURRENT = YES**
+**ENGINE_RUNTIME_IDENTITY = name `titan-engine-worker` · retained pm_id **9** · fork_mode · cwd `/home/ubuntu/webapp/TitanGold/backend` · script `backend/workers/engineWorkerLeader.js`**
+
+#### Engine NODE_ENV gate (BLOCKER)
+
+**LIVE_ENGINE_NODE_ENV = development**
+**CANONICAL_ENGINE_NODE_ENV = production** (`backend/ecosystem.config.json`)
+**DOTENV_NODE_ENV_PRESENT = YES** (value not logged)
+**PM2_LIVE_ENGINE_NODE_ENV_SOURCE = persisted PM2 God env + `.env` merge**
+**ENGINE_RESTART_ENV_EFFECT = UNCHANGED_PROVEN** (exact-ID restart/reload preserves `development`; does **not** canonicalize to `production` without separate bounded normalization or ecosystem recreate)
+**ENGINE_NODE_ENV_DRIFT = YES**
+**ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = YES**
+
+#### Backend topology gate
+
+**CURRENT_BACKEND_INSTANCE_COUNT = 4** (cluster_mode online)
+**CANONICAL_BACKEND_INSTANCE_COUNT = 2** (`backend/ecosystem.config.json`)
+**BACKEND_TOPOLOGY_FOR_B1 = SAFE_TO_DEFER**
+Evidence: Candidate B does not require PM2 instance-count reduction; `pipelineSchedulerRuntime.js` is consumed by engine scheduler and backend observability (`pipelineCapacity` → authenticated route); mixed-runtime risk closed by **controlled cluster reload of all four** backend workers after exact-file deploy; port **5002** continuity preserved; count **4→2** remains independent infrastructure cleanup (historical DEFER).
+
+#### PM2 persistence / resurrect
+
+**ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`**
+**ACTIVE_PM2_DUMP_MODE = 0600**
+**PERSISTED_ENGINE_ONLINE_COUNT_EXPECTED = 1** (1 online + 1 stopped persisted)
+**PERSISTED_BACKEND_INSTANCE_COUNT_EXPECTED = 4**
+**ENGINE_SINGLETON_PERSISTENCE_DURABLE = YES**
+**B1_DEPLOY_PM2_SAVE_REQUIRED = NO** (exact-file deploy + bounded runtime refresh only; global `pm2 save` forbidden unless separately authorized)
+
+#### Runtime refresh scope (design only)
+
+**ENGINE_REFRESH_REQUIRED = YES** · primitive = exact retained `pm_id` restart sequential safety preserved (singleton)
+**BACKEND_REFRESH_REQUIRED = YES** · primitive = controlled `titan-backend` cluster reload (all instances)
+**COLLECTOR_REFRESH_REQUIRED = NO**
+**PROCESSOR_REFRESH_REQUIRED = NO**
+
+#### Pre-B1 health / observability
+
+**PRE_B1_HEALTH = PASS** (`5002/health` = 200 · `5003/health` = 200 · collector `accounts` = 200 · collector `channels` = 200 on port **5003**)
+**TRANSFER_HEARTBEAT = PRESENT** (fresh natural workload observed; not manual stimulation)
+**TELEGRAM_LIFECYCLE_KEY (`pipeline:scheduler:lifecycle:telegram`) = ABSENT**
+**PRE_B1_TELEGRAM_LIFECYCLE = NOT_INITIALIZED_EXPECTED** (Layer A lifecycle absent pre-B1 bytes; transfer heartbeat present from legacy runtime)
+
+#### Deployment / rollback / acceptance (design only — NOT authorized)
+
+**COMMIT_LEVEL_DEPLOY = FORBIDDEN**
+Future authorized unit = **B1_EXACT_THREE_FILE_DEPLOY** + **ENGINE_RUNTIME_REFRESH** + **BACKEND_RUNTIME_REFRESH** (no backend 4→2 in B1 envelope)
+Rollback = exact PRE SHA256 restore per target + same bounded refresh scope + health/P persistence proofs.
+
+#### Section 108 future execution closeout (design)
+
+**MAIN_GIT_SHA = `61e50ba2a95eaa260588987d33b8ddac679cc706`**
+**RUNTIME_IMPLEMENTATION_SHA = PENDING**
+**DEPLOY_REQUIRED = YES** (when/if separately authorized)
+**DEPLOY_STATUS = PENDING**
+**RUNTIME_VERIFIED = NO**
+**SERVER_DRIFT = RUNTIME_ALIGNMENT_PENDING**
+
+#### Readiness decision
+
+**B1_READINESS = BLOCKED_ENGINE_NODE_ENV_DRIFT**
+**B1_READINESS_BLOCKERS = ENGINE_NODE_ENV_DRIFT · ENGINE_RESTART_ENV_EFFECT_UNCHANGED_PROVEN_DEVELOPMENT · ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION**
+**B1_DEPLOY_AUTHORIZED = NO**
+**DO_NOT_ADVANCE_TO_B1 = YES**
+
+Stage interpretation (Core §107): readiness **audit** complete, but readiness **gate** not closed while BLOCKED → **CURRENT_STAGE remains `B1_PRODUCTION_DEPLOYMENT_READINESS`** · **CURRENT_STAGE_PROGRESS = 5/9** · **REMAINING_STAGES = 4**. Do **not** advance to 6/9 until `B1_READINESS = READY_FOR_OWNER_AUTHORIZATION`.
+
+**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS** (blocked on NODE_ENV gate; separate `NODE_ENV_NORMALIZATION` or explicit B1 envelope inclusion required before Owner authorization gate)
 
 ---
 
