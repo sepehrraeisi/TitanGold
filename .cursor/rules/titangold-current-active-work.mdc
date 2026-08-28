@@ -5,6 +5,51 @@ alwaysApply: true
 
 # TitanGold Current Active Work (Rule 02)
 
+## Canonical Project Progress Snapshot (Core Rule §107)
+
+**PROGRESS_SNAPSHOT_VERSION = 1**
+**PROGRESS_SNAPSHOT_BASIS = CORE_RULE_V4_7_REBASELINE**
+**PROGRESS_SNAPSHOT_CANONICAL = YES**
+
+**PROJECT_PROGRESS = 3/10**
+
+**CURRENT_MAJOR_MILESTONE = Telegram/C2 Production Closeout**
+
+**CURRENT_PROGRAM = RESOURCE-STABILIZATION-WP-C-C2 / Telegram-C2 Production Closeout**
+
+**CURRENT_STAGE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+
+**CURRENT_STAGE_PROGRESS = 5/9**
+
+**REMAINING_STAGES = 4**
+
+**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+
+**PROGRESS_BLOCKER = NONE**
+
+**ROADMAP_MAJOR_MILESTONES = M1 Data Hub CLOSED/FROZEN · M2 AI Shared Foundation CLOSED/FROZEN · M3 Agents Shell CLOSED/FROZEN · M4 Telegram/C2 Production Closeout (IN PROGRESS) · M5 Artemis Core Completion (15 stages) · M6 Post-Core Agent Completion · M7 Settings + AI Provider Infrastructure · M8 Multi-AI Council + Memory/Learning · M9 Artemis Autonomous Operations · M10 Artemis Conversational Control Plane (ACCP)**
+
+**C2_REMAINING_STAGE_MAP = B1_PRODUCTION_DEPLOYMENT_READINESS (CURRENT) · B1_PRODUCTION_DEPLOYMENT_AND_RUNTIME_VALIDATION · TELEGRAM_LIVENESS_PRODUCTION_VALIDATION · RESOURCE_STABILIZATION_GATE · C2_052_AND_PRODUCTION_CLOSEOUT**
+
+**C2_052_ROADMAP_STATUS = BLOCKED** (schema READY_TO_APPLY; execution blocked on FAIL_IO_PRESSURE resource gate; separate Owner authorization required)
+
+**AUTOMATED_TRADING_MATURITY = NOT_ASSESSED**
+
+**ARTEMIS_AUTONOMOUS_OPS_MATURITY = NOT_ASSESSED**
+
+**ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
+
+### Runtime alignment closeout (Core Rule §108 — this governance change)
+
+**DEPLOY_REQUIRED = NO**
+**DEPLOY_STATUS = NOT_REQUIRED**
+**RUNTIME_VERIFIED = NOT_APPLICABLE**
+**SERVER_DRIFT = NONE**
+
+Future runtime-affecting stage closure must record: **MAIN_GIT_SHA** · **RUNTIME_IMPLEMENTATION_SHA** · **DEPLOY_REQUIRED** · **DEPLOY_STATUS** · **RUNTIME_VERIFIED** · **SERVER_DRIFT** · **SERVED_ARTIFACT_PROVENANCE**. Unresolved required server drift → **PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING**.
+
+---
+
 Current outcome:
 
 **CURRENT_AUTHORITY_SNAPSHOT = AUTHORITATIVE**
