@@ -1,6 +1,6 @@
 /**
  * Durable T2 retry orchestrator — state machine with journal + central mutation guard.
- * TOOL_VERSION 1.6.1 — equal-PATH live tie-break + symmetric equivalent dump slots (no global pm2 save).
+ * TOOL_VERSION 1.6.2 — LIVE/DUMP split comparators + exact-byte rollback short-circuit (no global pm2 save).
  * Side-effect-aware rollback; PRE_EQUIVALENT required for ROLLED_BACK.
  */
 
@@ -25,9 +25,14 @@ import {
   loadJournal,
 } from './journal.mjs';
 import {
+  assertFleetPm2SemanticModelComplete,
+} from './pm2SemanticModel.mjs';
+import {
+  assertExactDumpPhysicalPreEquivalent,
   assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
+  assertLiveFleetPmIdIntegrity,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
   compareCollectorDbLiveToPersist,
@@ -41,7 +46,16 @@ import {
   resolveDumpEngineIdentities,
 } from './projection.mjs';
 import { assertSanitizedPreBaselineProof } from './sanitizedBaseline.mjs';
-import { createSideEffectLedger, planRollbackActions } from './sideEffectLedger.mjs';
+import {
+  APPLY_STATE,
+  createSideEffectLedger,
+  planRollbackActions,
+  setRollbackApplyState,
+} from './sideEffectLedger.mjs';
+import {
+  toRollbackHealthError,
+  validateRequiredHealth,
+} from './requiredHealth.mjs';
 
 const FORWARD_MUTATING_OPS = Object.freeze([
   'ensureDir',
@@ -365,9 +379,33 @@ export class T2Orchestrator {
       `dump=${dumpShape.shapes.join('+')}`,
     );
 
-    this.liveFp = semanticFingerprint(live);
+    const pmIdIntegrity = assertLiveFleetPmIdIntegrity(live);
+    this._log(`LIVE_FLEET_PM_ID_PRESENT=${pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT}`);
+    this._log(`LIVE_FLEET_PM_ID_NUMERIC=${pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC}`);
+    this._log(`LIVE_FLEET_PM_ID_GLOBAL_UNIQUE=${pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE}`);
+    this._log('PM_ID_USED_FOR_LIVE_PRE_POST_IDENTITY=YES');
+    if (!pmIdIntegrity.ok) {
+      return this._failClosed('LIVE_FLEET_PM_ID_INTEGRITY_FAIL');
+    }
+
+    const fleetClass = assertFleetPm2SemanticModelComplete(live, dumpPack.parsed);
+    if (!fleetClass.ok) {
+      if (fleetClass.unclassifiedByScope) {
+        for (const entry of fleetClass.unclassifiedByScope) {
+          this._log('FLEET_UNCLASSIFIED', entry.scope, `fields=${entry.fields.join(',')}`);
+        }
+      }
+      return this._failClosed('FLEET_PM2_FIELD_CLASSIFICATION_INCOMPLETE');
+    }
+    this._log('LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
+    this._log('DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE=PASS');
+    this._log(`DUMP_APP_ENV_PROVENANCE_SCOPE=${fleetClass.DUMP_APP_ENV_PROVENANCE_SCOPE}`);
+    this._log(`FLEET_GLOBAL_ENV_PROVENANCE=${fleetClass.FLEET_GLOBAL_ENV_PROVENANCE}`);
+
+    this.liveFp = semanticFingerprint(live, { source: 'LIVE' });
     this.preLiveFp = this.liveFp;
-    this.preDumpFp = semanticFingerprint(dumpPack.parsed);
+    this.preDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
+
     this.preDumpSha = dumpPack.sha256;
     if (typeof dumpPack.mode !== 'number' || !Number.isFinite(dumpPack.mode)) {
       return this._failClosed('PRE_DUMP_MODE_MISSING');
@@ -568,7 +606,7 @@ export class T2Orchestrator {
 
   async _revalidateExtraIdentity() {
     const live = await this.commands.listLiveProcesses();
-    const fp = semanticFingerprint(live);
+    const fp = semanticFingerprint(live, { source: 'LIVE' });
     const reselect = selectEngineRetainExtra(fp);
     if (!reselect.ok) {
       throw new T2OrchestratorError(reselect.error || 'STALE_EXTRA_PROCESS');
@@ -624,7 +662,7 @@ export class T2Orchestrator {
 
     // Fresh-read live state — never trust exit code alone for ENGINE_STOP_APPLIED
     const live = await this.commands.listLiveProcesses();
-    const fp = semanticFingerprint(live);
+    const fp = semanticFingerprint(live, { source: 'LIVE' });
     const extra = (fp.engines || []).find((e) => e.pm_id === extraId);
     const stopProven = extra && extra.status === 'stopped';
     if (stopProven) {
@@ -668,7 +706,7 @@ export class T2Orchestrator {
     await this._setState(State.PROJECTION_BUILDING, 'projection_build_begin');
 
     const live = await this.commands.listLiveProcesses();
-    const liveFp = semanticFingerprint(live);
+    const liveFp = semanticFingerprint(live, { source: 'LIVE' });
     const freshDb = captureCollectorDbLiveValues(liveFp);
     if (!freshDb) {
       await this.rollback('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
@@ -808,7 +846,7 @@ export class T2Orchestrator {
     this._requireState([State.PROJECTION_WRITTEN]);
 
     const liveNow = await this.commands.listLiveProcesses();
-    const liveFpNow = semanticFingerprint(liveNow);
+    const liveFpNow = semanticFingerprint(liveNow, { source: 'LIVE' });
     const dumpPack = await this.commands.readDump();
     const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
     if (postMode !== REQUIRED_PROJECTED_DUMP_MODE) {
@@ -845,7 +883,7 @@ export class T2Orchestrator {
       throw new T2OrchestratorError('LIVE_COLLECTOR_DB_REVALIDATE_FAIL');
     }
 
-    const postFp = semanticFingerprint(dumpPack.parsed);
+    const postFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
     const postCol = (postFp.collectors || [])[0];
     const liveProc = { env_keys: [...COLLECTOR_DB_KEYS] };
     Object.defineProperty(liveProc, '_envValues', {
@@ -931,20 +969,65 @@ export class T2Orchestrator {
     return { dbMatches: match.matches };
   }
 
+  /**
+   * Fetch live health surfaces and validate via canonical five-surface helper.
+   * @returns {Promise<ReturnType<typeof validateRequiredHealth> & { error?: string }>}
+   */
+  async _fetchValidateRequiredHealth() {
+    try {
+      const h5002 = await this.commands.healthCheck(5002);
+      const h5003 = await this.commands.healthCheck(5003);
+      const func = await this.commands.collectorFunctionalCheck();
+      return validateRequiredHealth({
+        status5002: h5002?.statusCode,
+        status5003: h5003?.statusCode,
+        collectorHealth: func?.health,
+        accounts: func?.accounts,
+        channels: func?.channels,
+      });
+    } catch {
+      return {
+        ok: false,
+        error: 'HEALTH_READ_FAIL',
+        surfaces: {
+          HEALTH_5002: 'FAIL',
+          HEALTH_5003: 'FAIL',
+          COLLECTOR_HEALTH: 'FAIL',
+          ACCOUNTS: 'FAIL',
+          CHANNELS: 'FAIL',
+        },
+        CURRENT_FULL_REQUIRED_HEALTH: 'FAIL',
+        CURRENT_HEALTH_5002: null,
+        CURRENT_HEALTH_5003: null,
+        CURRENT_COLLECTOR_HEALTH: null,
+        CURRENT_ACCOUNTS: null,
+        CURRENT_CHANNELS: null,
+      };
+    }
+  }
+
   async healthValidate() {
     this._requireState([State.POSTWRITE_VERIFIED]);
-    const h5002 = await this.commands.healthCheck(5002);
-    const h5003 = await this.commands.healthCheck(5003);
-    const func = await this.commands.collectorFunctionalCheck();
-    if (h5002.statusCode !== 200 || h5003.statusCode !== 200) {
-      await this.rollback('HEALTH_FAIL');
-      throw new T2OrchestratorError('HEALTH_FAIL');
+    const health = await this._fetchValidateRequiredHealth();
+    if (!health.ok) {
+      const code =
+        health.error === 'HEALTH_READ_FAIL'
+          ? 'HEALTH_FAIL'
+          : health.error === 'HEALTH_5002_FAIL' || health.error === 'HEALTH_5003_FAIL'
+            ? 'HEALTH_FAIL'
+            : 'COLLECTOR_FUNCTIONAL_FAIL';
+      await this.rollback(code);
+      throw new T2OrchestratorError(code);
     }
-    if (func.accounts !== 200 || func.channels !== 200 || func.health !== 200) {
-      await this.rollback('COLLECTOR_FUNCTIONAL_FAIL');
-      throw new T2OrchestratorError('COLLECTOR_FUNCTIONAL_FAIL');
-    }
-    this._log('HEALTH_PASS', '5002=200', '5003=200', 'accounts=200', 'channels=200');
+    this._log(
+      'HEALTH_PASS',
+      '5002=200',
+      '5003=200',
+      'collector_health=200',
+      'accounts=200',
+      'channels=200',
+      'CURRENT_FULL_REQUIRED_HEALTH=PASS',
+    );
     return true;
   }
 
@@ -1007,34 +1090,72 @@ export class T2Orchestrator {
         const restoreOpts = { mode: this.preDumpMode };
         if (this.preDumpUid != null) restoreOpts.uid = this.preDumpUid;
         if (this.preDumpGid != null) restoreOpts.gid = this.preDumpGid;
-        const restoreResult = await this.guardedCall('restoreDump', () =>
-          this.commands.restoreDump(this.backupBytes, restoreOpts),
-        );
-        if (restoreResult && restoreResult.ok === false) {
+        this.sideEffects.DUMP_RESTORE_ATTEMPTED = true;
+        setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.UNKNOWN);
+        await this._persistSideEffects();
+
+        let restoreCommandError = null;
+        let restoreResult = null;
+        try {
+          restoreResult = await this.guardedCall('restoreDump', () =>
+            this.commands.restoreDump(this.backupBytes, restoreOpts),
+          );
+        } catch (err) {
+          restoreCommandError = err;
+        }
+
+        // ALWAYS fresh-read dump after restore attempt (even on throw).
+        let freshDumpPack = null;
+        let freshDumpReadable = false;
+        try {
+          freshDumpPack = await this.commands.readDump();
+          freshDumpReadable = true;
+        } catch {
+          freshDumpReadable = false;
+        }
+
+        if (freshDumpReadable && freshDumpPack) {
+          const physical = assertExactDumpPhysicalPreEquivalent({
+            expectedBytes: this.backupBytes,
+            actualBytes: freshDumpPack.bytes,
+            expectedSha: this.preDumpSha,
+            actualSha: freshDumpPack.sha256,
+            expectedMode: this.preDumpMode,
+            actualMode:
+              typeof freshDumpPack.mode === 'number' ? freshDumpPack.mode & 0o777 : null,
+            expectedUid: this.preDumpUid,
+            actualUid: typeof freshDumpPack.uid === 'number' ? freshDumpPack.uid : null,
+            expectedGid: this.preDumpGid,
+            actualGid: typeof freshDumpPack.gid === 'number' ? freshDumpPack.gid : null,
+            dumpParsedOk: true,
+          });
+          if (physical.ok) {
+            setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.APPLIED);
+          } else {
+            setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.NOT_APPLIED);
+          }
+        } else {
+          setRollbackApplyState(this.sideEffects, 'DUMP_RESTORE', APPLY_STATE.UNKNOWN);
+        }
+        await this._persistSideEffects();
+
+        // Command failed AND fresh-read did not prove applied → surface command error.
+        // Otherwise continue to provePreEquivalent (physical FAIL → FAIL_FORWARD with dump codes).
+        if (
+          this.sideEffects.DUMP_RESTORE_APPLIED !== true &&
+          restoreCommandError &&
+          !freshDumpReadable
+        ) {
+          throw restoreCommandError;
+        }
+        // If restore returned ok:false and not applied and unreadable — fail closed.
+        if (
+          this.sideEffects.DUMP_RESTORE_APPLIED !== true &&
+          restoreResult &&
+          restoreResult.ok === false &&
+          !freshDumpReadable
+        ) {
           throw new T2OrchestratorError('RESTORE_DUMP_FAILED');
-        }
-        if (
-          restoreResult &&
-          typeof restoreResult.mode === 'number' &&
-          (restoreResult.mode & 0o777) !== (this.preDumpMode & 0o777)
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_MODE_MISMATCH');
-        }
-        if (
-          restoreResult &&
-          this.preDumpUid != null &&
-          typeof restoreResult.uid === 'number' &&
-          restoreResult.uid !== this.preDumpUid
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_UID_MISMATCH');
-        }
-        if (
-          restoreResult &&
-          this.preDumpGid != null &&
-          typeof restoreResult.gid === 'number' &&
-          restoreResult.gid !== this.preDumpGid
-        ) {
-          throw new T2OrchestratorError('ROLLBACK_DUMP_GID_MISMATCH');
         }
       }
 
@@ -1042,12 +1163,62 @@ export class T2Orchestrator {
         if (this.selection?.extra?.pm_id == null) {
           throw new T2OrchestratorError('EXTRA_PM_ID_MISSING');
         }
-        const startResult = await this.guardedCall('startProcessByPmId', () =>
-          this.commands.startProcessByPmId(this.selection.extra.pm_id),
-        );
-        if (!startResult || startResult.exitCode !== 0) {
-          throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
+        const extraPmId = this.selection.extra.pm_id;
+        this.sideEffects.EXTRA_START_ATTEMPTED = true;
+        setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.UNKNOWN);
+        await this._persistSideEffects();
+
+        let startCommandError = null;
+        let startResult = null;
+        try {
+          startResult = await this.guardedCall('startProcessByPmId', () =>
+            this.commands.startProcessByPmId(extraPmId),
+          );
+        } catch (err) {
+          startCommandError = err;
         }
+
+        // ALWAYS fresh listLiveProcesses after start attempt (even on throw). Exit code alone is NOT proof.
+        let freshLive = null;
+        let liveListOk = false;
+        try {
+          freshLive = await this.commands.listLiveProcesses();
+          liveListOk = true;
+        } catch {
+          liveListOk = false;
+        }
+
+        if (liveListOk && Array.isArray(freshLive)) {
+          const extra = freshLive.find(
+            (e) =>
+              (e.pm_id === extraPmId || e.pm2_env?.pm_id === extraPmId) &&
+              (e.name === 'titan-engine-worker' || e.pm2_env?.name === 'titan-engine-worker'),
+          );
+          const online = extra && (extra.status === 'online' || extra.pm2_env?.status === 'online');
+          if (online) {
+            setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.APPLIED);
+          } else {
+            setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.NOT_APPLIED);
+          }
+        } else {
+          setRollbackApplyState(this.sideEffects, 'EXTRA_START', APPLY_STATE.UNKNOWN);
+        }
+        await this._persistSideEffects();
+
+        // No second start attempt.
+        // exitCode alone is NOT application proof; fresh online is.
+        // If not APPLIED: nonzero/throw → fail with START_ROLLBACK_NONZERO;
+        // exit 0 but still stopped → continue to provePreEquivalent (ENGINE_COUNT).
+        if (this.sideEffects.EXTRA_START_APPLIED !== true) {
+          if (startCommandError) throw startCommandError;
+          if (!liveListOk) {
+            throw new T2OrchestratorError('EXTRA_START_NOT_APPLIED');
+          }
+          if (!startResult || startResult.exitCode !== 0) {
+            throw new T2OrchestratorError('START_ROLLBACK_NONZERO');
+          }
+        }
+        // If command threw/nonzero but fresh-read proved APPLIED — continue.
       }
 
       // If no PM2 inverse mutations were needed, still require PRE_EQUIVALENT proof.
@@ -1082,25 +1253,55 @@ export class T2Orchestrator {
     } catch {
       return { ok: false, error: 'ROLLBACK_DUMP_UNREADABLE' };
     }
-    const live = await this.commands.listLiveProcesses();
-    const postDumpFp = semanticFingerprint(dumpPack.parsed);
-    const postLiveFp = semanticFingerprint(live);
 
-    // Collector live functional health during rollback proof
-    try {
-      const h5003 = await this.commands.healthCheck(5003);
-      const func = await this.commands.collectorFunctionalCheck();
-      if (h5003.statusCode !== 200 || func.accounts !== 200 || func.channels !== 200) {
-        return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
-      }
-    } catch {
-      return { ok: false, error: 'ROLLBACK_COLLECTOR_HEALTH_FAIL' };
+    // 1) Physical-first: NO postDumpFp / dump semanticFingerprint on exact-byte success path.
+    const physical = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: this.backupBytes,
+      actualBytes: dumpPack.bytes,
+      expectedSha: this.preDumpSha,
+      actualSha: dumpPack.sha256,
+      expectedMode: this.preDumpMode,
+      actualMode: typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null,
+      expectedUid: this.preDumpUid,
+      actualUid: typeof dumpPack.uid === 'number' ? dumpPack.uid : null,
+      expectedGid: this.preDumpGid,
+      actualGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
+      dumpParsedOk: true,
+    });
+    if (!physical.ok) {
+      return physical;
     }
 
-    return assertPreEquivalent(
+    // 2) Fresh LIVE read
+    const live = await this.commands.listLiveProcesses();
+
+    // 3) LIVE fleet pm_id integrity (presence / numeric / global unique)
+    const pmIdIntegrity = assertLiveFleetPmIdIntegrity(live);
+    if (!pmIdIntegrity.ok) {
+      this._log(
+        'ROLLBACK_LIVE_PM_ID_REVALIDATION=FAIL',
+        `PRESENT=${pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT}`,
+        `NUMERIC=${pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC}`,
+        `UNIQUE=${pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE}`,
+      );
+      return {
+        ok: false,
+        error: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+        details: {
+          LIVE_FLEET_PM_ID_PRESENT: pmIdIntegrity.LIVE_FLEET_PM_ID_PRESENT,
+          LIVE_FLEET_PM_ID_NUMERIC: pmIdIntegrity.LIVE_FLEET_PM_ID_NUMERIC,
+          LIVE_FLEET_PM_ID_GLOBAL_UNIQUE: pmIdIntegrity.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE,
+        },
+      };
+    }
+    this._log('ROLLBACK_LIVE_PM_ID_REVALIDATION=PASS');
+
+    // 4) Full LIVE semantic PRE-equivalence (dump semantic still short-circuited by exact bytes)
+    const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
+    const liveProof = assertPreEquivalent(
       this.preDumpFp,
       this.preLiveFp,
-      postDumpFp,
+      null,
       postLiveFp,
       {
         retainedPmId: this.selection?.retained?.pm_id,
@@ -1113,8 +1314,54 @@ export class T2Orchestrator {
         actualDumpUid: typeof dumpPack.uid === 'number' ? dumpPack.uid : null,
         expectedDumpGid: this.preDumpGid,
         actualDumpGid: typeof dumpPack.gid === 'number' ? dumpPack.gid : null,
+        expectedDumpBytes: this.backupBytes,
+        actualDumpBytes: dumpPack.bytes,
+        dumpParsedOk: true,
       },
     );
+    if (!liveProof.ok) {
+      return liveProof;
+    }
+
+    // 5) Complete five-surface health validation (same helper as forward healthValidate)
+    const health = await this._fetchValidateRequiredHealth();
+    if (!health.ok) {
+      const rollbackError = toRollbackHealthError(health.error);
+      this._log('ROLLBACK_FULL_REQUIRED_HEALTH=FAIL', rollbackError);
+      return {
+        ok: false,
+        error: rollbackError,
+        details: {
+          ...(liveProof.details || {}),
+          CURRENT_FULL_REQUIRED_HEALTH: 'FAIL',
+          surfaces: health.surfaces,
+        },
+      };
+    }
+    this._log(
+      'ROLLBACK_FULL_REQUIRED_HEALTH=PASS',
+      'ROLLBACK_HEALTH_5002_REQUIRED=PASS',
+      'ROLLBACK_HEALTH_5003_REQUIRED=PASS',
+      'ROLLBACK_COLLECTOR_HEALTH_REQUIRED=PASS',
+      'ROLLBACK_ACCOUNTS_REQUIRED=PASS',
+      'ROLLBACK_CHANNELS_REQUIRED=PASS',
+    );
+
+    // 6) PRE_EQUIVALENT only when dump physical + LIVE semantic + full health all PASS
+    return {
+      ...liveProof,
+      ok: true,
+      details: {
+        ...(liveProof.details || {}),
+        CURRENT_FULL_REQUIRED_HEALTH: 'PASS',
+        ROLLBACK_LIVE_PM_ID_REVALIDATION: 'PASS',
+        ROLLBACK_HEALTH_5002_REQUIRED: 'PASS',
+        ROLLBACK_HEALTH_5003_REQUIRED: 'PASS',
+        ROLLBACK_COLLECTOR_HEALTH_REQUIRED: 'PASS',
+        ROLLBACK_ACCOUNTS_REQUIRED: 'PASS',
+        ROLLBACK_CHANNELS_REQUIRED: 'PASS',
+      },
+    };
   }
 
   async resolveUnknownProjectedWriteState() {

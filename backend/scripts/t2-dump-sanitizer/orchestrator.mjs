@@ -328,7 +328,7 @@ export class DumpSanitizer {
     this.preDumpUid = dumpPack.uid;
     this.preDumpGid = dumpPack.gid;
     this.preDumpParsed = dumpPack.parsed;
-    this.preDumpFp = semanticFingerprint(dumpPack.parsed);
+    this.preDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
 
     if (!this.expectedActiveDumpSha) {
       return this._failClosed('EXPECTED_ACTIVE_DUMP_SHA_REQUIRED');
@@ -372,7 +372,7 @@ export class DumpSanitizer {
     } catch {
       return this._failClosed('PM2_JLIST_FAILED');
     }
-    this.preLiveFp = semanticFingerprint(live);
+    this.preLiveFp = semanticFingerprint(live, { source: 'LIVE' });
 
     const fp = this.preLiveFp;
     if ((fp.engine_online_count || 0) !== 2) {
@@ -579,7 +579,7 @@ export class DumpSanitizer {
     this._requireState([State.SANITIZE_WRITTEN]);
 
     const liveNow = await this.commands.listLiveProcesses();
-    const liveFpNow = semanticFingerprint(liveNow);
+    const liveFpNow = semanticFingerprint(liveNow, { source: 'LIVE' });
     const dumpPack = await this.commands.readDump();
     const postMode = typeof dumpPack.mode === 'number' ? dumpPack.mode & 0o777 : null;
 
@@ -626,7 +626,7 @@ export class DumpSanitizer {
       }
     }
 
-    const postCol = (semanticFingerprint(dumpPack.parsed).collectors || [])[0];
+    const postCol = (semanticFingerprint(dumpPack.parsed, { source: 'DUMP' }).collectors || [])[0];
     const liveProc = { env_keys: [...COLLECTOR_DB_KEYS] };
     Object.defineProperty(liveProc, '_envValues', {
       value: liveDbNow,
@@ -761,8 +761,8 @@ export class DumpSanitizer {
   async _provePreEquivalent() {
     const dumpPack = await this.commands.readDump();
     const live = await this.commands.listLiveProcesses();
-    const postDumpFp = semanticFingerprint(dumpPack.parsed);
-    const postLiveFp = semanticFingerprint(live);
+    const postDumpFp = semanticFingerprint(dumpPack.parsed, { source: 'DUMP' });
+    const postLiveFp = semanticFingerprint(live, { source: 'LIVE' });
 
     if (dumpPack.sha256 !== this.preDumpSha) {
       return { ok: false, error: 'ROLLBACK_DUMP_SHA_MISMATCH' };
@@ -778,7 +778,10 @@ export class DumpSanitizer {
       return { ok: false, error: 'ROLLBACK_DUMP_GID_MISMATCH' };
     }
 
-    const dumpDiff = diffFingerprints(this.preDumpFp, postDumpFp, { extraPmId: null });
+    const dumpDiff = diffFingerprints(this.preDumpFp, postDumpFp, {
+      source: 'DUMP',
+      extraPmId: null,
+    });
     if (dumpDiff.classified.length > 0) {
       return {
         ok: false,
@@ -907,7 +910,7 @@ export class DumpSanitizer {
  * @param {ReturnType<typeof semanticFingerprint>} postLiveFp
  */
 export function assertLiveNoMutation(preLiveFp, postLiveFp) {
-  const diff = diffFingerprints(preLiveFp, postLiveFp, { extraPmId: null });
+  const diff = diffFingerprints(preLiveFp, postLiveFp, { source: 'LIVE', extraPmId: null });
   if (diff.classified.length > 0) {
     return {
       ok: false,

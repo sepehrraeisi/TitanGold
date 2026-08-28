@@ -1,5 +1,5 @@
 /**
- * Canonical PM2 6.0.13 *effective* semantic model for T2 v1.6.1.
+ * Canonical PM2 6.0.13 *effective* semantic model for T2 v1.6.2.
  *
  * Compares LIVE↔LIVE, DUMP↔DUMP, and DUMP↔LIVE using source-aware
  * normalization — not raw byte equality across dump/resurrect transforms.
@@ -10,6 +10,8 @@
  * - Common.prepareAppKeys: undefined instances → 1
  * - God.prepare / executeApp: unique_id regenerate; log/pid paths rewrite
  * - Utility.extend merges env onto pm2_env at runtime
+ * - God/ClusterMode.js: env_copy._pm2_version = pkg.version (cluster start)
+ * - CLI `-f --force` / mergeEnvironmentVariables may persist `force` on pm2_env
  *
  * Every persisted field is COMPARE, TRANSFORM_EQUIV, or
  * PROVEN_REGENERATED_OR_VOLATILE. Unclassified → fail closed.
@@ -49,6 +51,12 @@ export const PROVEN_REGENERATED_OR_VOLATILE = Object.freeze([
   'log_file',
   'version',
   'node_version',
+  /**
+   * ClusterMode.js (PM2 6.0.13): `env_copy._pm2_version = pkg.version`
+   * Injected on every cluster-mode start from installed package.json — not
+   * application config. Fork-mode processes typically lack this key.
+   */
+  '_pm2_version',
   'env',
   'pm2_env',
   STATUS_FIELD,
@@ -183,6 +191,12 @@ export const CANONICAL_COMPARE_FIELDS = Object.freeze([
   'deep_monitoring',
   // Production dumpProcessList extras (PM2 6.0.13 observed)
   'restart_delay',
+  /**
+   * CLI `commander.option('-f --force')` / start already-launched bypass.
+   * May persist onto pm2_env via mergeEnvironmentVariables Object.assign(app).
+   * Not rewritten by God.executeApp — uncertain → COMPARE (fail-closed identity).
+   */
+  'force',
 ]);
 
 /** Values-free classification table for Rule02 / audit evidence. */
@@ -217,11 +231,22 @@ export const PM2_FIELD_CLASSIFICATION = Object.freeze([
   { field: 'env_production|env_development|env_file|updateEnv', class: 'COMPARE', component: 'Common.mergeEnvironment/CLI' },
   { field: 'PM2_HOME|PM2_JSON_PROCESSING|PM2_USAGE', class: 'COMPARE', component: 'uncertain→COMPARE' },
   { field: 'restart_delay', class: 'COMPARE', component: 'Common.prepareAppKeys restart_delay' },
+  {
+    field: 'force',
+    class: 'COMPARE',
+    component:
+      'CLI binaries/CLI.js -f --force; API.js already-launched bypass; may persist via Common.mergeEnvironmentVariables Object.assign(app) — uncertain→COMPARE',
+  },
   { field: 'application_env_INCLUDING_PATH', class: 'COMPARE', component: 'Utility.extend(env_copy, env_copy.env)' },
   { field: 'pm_id|unique_id|created_at|restart_time|unstable_restarts|prev_restart_delay', class: 'REGENERATED_VOLATILE', component: 'God.prepare/executeApp/dumpProcessList' },
   { field: 'axm_*|vizion_running|pm_uptime|pid|monit|exit_code', class: 'REGENERATED_VOLATILE', component: 'God.executeApp runtime' },
   { field: 'pm_*_log_path|pm_pid_path|error_file|out_file|log_file', class: 'REGENERATED_VOLATILE', component: 'God.executeApp first-create rewrite / aliases' },
   { field: 'version|node_version', class: 'REGENERATED_VOLATILE', component: 'readyCb/ProcessContainerFork report' },
+  {
+    field: '_pm2_version',
+    class: 'REGENERATED_VOLATILE',
+    component: 'God/ClusterMode.js env_copy._pm2_version = pkg.version each cluster start',
+  },
   { field: 'status', class: 'REGENERATED_VOLATILE', component: 'gated separately (projection status leaf)' },
   { field: 'process_name_as_key_quirk', class: 'REGENERATED_VOLATILE', component: 'PM2 dump quirk key===name' },
 ]);
@@ -612,12 +637,12 @@ export function compareProcessPm2Semantics(
   if (requireClassified && unclassifiedFields.length > 0) {
     return {
       ok: false,
-      error: 'DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED',
+      error: 'CLASSIFICATION_INCOMPLETE',
       DUMP_ENGINE_RESURRECT_SEMANTIC_EQUIVALENCE: 'FAIL',
       LIVE_ENGINE_FULL_PM2_SEMANTIC_EQUIVALENCE: 'FAIL',
       UNCLASSIFIED_PERSISTED_PM2_FIELD_COUNT: [...new Set(unclassifiedFields)].length,
       unclassifiedFields: [...new Set(unclassifiedFields)].sort(),
-      mismatchCategories: ['UNCLASSIFIED_FIELD'],
+      mismatchCategories: ['CLASSIFICATION_INCOMPLETE'],
       FLAT_DUMP_ENV_PROVENANCE_GATE: contextKeys ? 'PASS' : 'FAIL',
     };
   }
@@ -760,3 +785,135 @@ export function buildApplicationEnvKeysContext(entry) {
 
 export const RESURRECT_IGNORED_FIELDS = PROVEN_REGENERATED_OR_VOLATILE;
 export const RESURRECT_TOP_LEVEL_FIELDS = CANONICAL_COMPARE_FIELDS;
+
+/** DUMP flat app-env provenance is scoped to same-name LIVE process class only. */
+export const DUMP_APP_ENV_PROVENANCE_SCOPE = 'PROCESS_NAME_CLASS';
+
+/**
+ * Resolve process name from a LIVE or DUMP entry (never values).
+ * @param {Record<string, unknown>|null|undefined} entry
+ * @returns {string|null}
+ */
+export function entryProcessName(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const name = entry.name || entry.pm2_env?.name;
+  return typeof name === 'string' && name.length > 0 ? name : null;
+}
+
+/**
+ * Build process-name-class application-env key provenance from LIVE entries.
+ * For each exact process name: INTERSECTION of application-env keys across all
+ * LIVE instances with that name. Never unions across unrelated names.
+ *
+ * @param {Array<Record<string, unknown>>} liveEntries
+ * @returns {Record<string, string[]>}
+ */
+export function buildProcessNameClassAppEnvProvenance(liveEntries = []) {
+  /** @type {Map<string, string[][]>} */
+  const groups = new Map();
+  for (const entry of liveEntries) {
+    const name = entryProcessName(entry);
+    if (!name) continue;
+    const keys = deriveLiveApplicationEnvKeyContext(entry);
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(keys);
+  }
+
+  /** @type {Record<string, string[]>} */
+  const out = {};
+  for (const [name, keyLists] of groups) {
+    if (!keyLists.length) {
+      out[name] = [];
+      continue;
+    }
+    let inter = new Set(keyLists[0]);
+    for (let i = 1; i < keyLists.length; i++) {
+      const next = new Set(keyLists[i]);
+      inter = new Set([...inter].filter((k) => next.has(k)));
+    }
+    out[name] = [...inter].sort();
+  }
+  return out;
+}
+
+/**
+ * Pre-auth gate: every LIVE and DUMP process must be fully classified.
+ * DUMP flat app-env provenance is PROCESS_NAME_CLASS intersection only —
+ * fleet-global LIVE env UNION is FORBIDDEN.
+ * Evidence: field names / process class only — never values.
+ *
+ * @param {Array<Record<string, unknown>>} liveEntries
+ * @param {Array<Record<string, unknown>>} dumpEntries
+ */
+export function assertFleetPm2SemanticModelComplete(liveEntries = [], dumpEntries = []) {
+  /** @type {Array<{ scope: string, fields: string[] }>} */
+  const unclassifiedByScope = [];
+  let liveUnclassified = 0;
+  let dumpUnclassified = 0;
+
+  const processProvenance = buildProcessNameClassAppEnvProvenance(liveEntries);
+
+  function classifyWithContext(entry, scope, applicationEnvKeysContext) {
+    const model = buildPm2EffectiveSemanticModel(entry, {
+      applicationEnvKeysContext,
+    });
+    const cmp = compareProcessPm2Semantics(entry, entry, {
+      requireClassified: true,
+      applicationEnvKeysContext,
+    });
+    if (!cmp.ok && cmp.error === 'CLASSIFICATION_INCOMPLETE') {
+      const fields = [...(cmp.unclassifiedFields || model.unclassifiedFields || [])].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length || 1;
+    }
+    if (model.unclassifiedFields?.length) {
+      const fields = [...model.unclassifiedFields].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length;
+    }
+    if (!cmp.ok && (cmp.mismatchCategories || []).includes('CLASSIFICATION_INCOMPLETE')) {
+      const fields = [...(cmp.unclassifiedFields || [])].sort();
+      unclassifiedByScope.push({ scope, fields });
+      return fields.length || 1;
+    }
+    return 0;
+  }
+
+  for (let i = 0; i < liveEntries.length; i++) {
+    const entry = liveEntries[i];
+    const name = entryProcessName(entry) || 'unknown';
+    const pmId = entry?.pm_id ?? entry?.pm2_env?.pm_id ?? null;
+    const scope = `LIVE:${name}:${pmId == null ? 'null' : pmId}:idx${i}`;
+    const ctx = deriveLiveApplicationEnvKeyContext(entry);
+    liveUnclassified += classifyWithContext(entry, scope, ctx.length ? ctx : null);
+  }
+
+  for (let i = 0; i < dumpEntries.length; i++) {
+    const entry = dumpEntries[i];
+    const name = entryProcessName(entry);
+    const scopeName = name || 'unknown';
+    const scope = `DUMP:${scopeName}:null:idx${i}`;
+    // Process-scoped only: no LIVE name class ⇒ null provenance (unknown flat keys UNCLASSIFIED).
+    // Never use fleet-global LIVE env UNION.
+    const applicationEnvKeysContext =
+      name != null && Object.prototype.hasOwnProperty.call(processProvenance, name)
+        ? processProvenance[name]
+        : null;
+    dumpUnclassified += classifyWithContext(entry, scope, applicationEnvKeysContext);
+  }
+
+  const liveOk = liveUnclassified === 0;
+  const dumpOk = dumpUnclassified === 0;
+  const ok = liveOk && dumpOk;
+  return {
+    ok,
+    error: ok ? undefined : 'FLEET_PM2_FIELD_CLASSIFICATION_INCOMPLETE',
+    LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: liveOk ? 'PASS' : 'FAIL',
+    DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE: dumpOk ? 'PASS' : 'FAIL',
+    LIVE_FLEET_UNCLASSIFIED_FIELD_COUNT: liveUnclassified,
+    DUMP_FLEET_UNCLASSIFIED_FIELD_COUNT: dumpUnclassified,
+    DUMP_APP_ENV_PROVENANCE_SCOPE,
+    FLEET_GLOBAL_ENV_PROVENANCE: 'FORBIDDEN',
+    unclassifiedByScope: ok ? undefined : unclassifiedByScope,
+  };
+}

@@ -115,6 +115,12 @@ export async function createExclusiveJournal(opts) {
       PROJECTED_DUMP_WRITE_APPLIED: false,
       DUMP_RESTORE_REQUIRED: null,
       DUMP_RESTORE_DECISION: 'UNDECIDED',
+      DUMP_RESTORE_ATTEMPTED: false,
+      DUMP_RESTORE_APPLIED: false,
+      DUMP_RESTORE_APPLY_STATE: 'NOT_ATTEMPTED',
+      EXTRA_START_ATTEMPTED: false,
+      EXTRA_START_APPLIED: false,
+      EXTRA_START_APPLY_STATE: 'NOT_ATTEMPTED',
       SAVE_ATTEMPTED: false,
       DUMP_SAVE_APPLIED: false,
       DUMP_MODE_HARDEN_ATTEMPTED: false,
@@ -255,6 +261,12 @@ export class TransactionJournal {
   }
 
   async persistSideEffects(ledger) {
+    const normalizeApplyState = (v) => {
+      if (v === 'APPLIED' || v === 'NOT_APPLIED' || v === 'UNKNOWN' || v === 'NOT_ATTEMPTED') {
+        return v;
+      }
+      return 'NOT_ATTEMPTED';
+    };
     this.record.sideEffects = {
       BACKUP_WRITTEN: !!ledger.BACKUP_WRITTEN,
       STOP_ATTEMPTED: !!ledger.STOP_ATTEMPTED,
@@ -267,6 +279,12 @@ export class TransactionJournal {
         typeof ledger.DUMP_RESTORE_DECISION === 'string'
           ? ledger.DUMP_RESTORE_DECISION
           : 'UNDECIDED',
+      DUMP_RESTORE_ATTEMPTED: !!ledger.DUMP_RESTORE_ATTEMPTED,
+      DUMP_RESTORE_APPLIED: !!ledger.DUMP_RESTORE_APPLIED,
+      DUMP_RESTORE_APPLY_STATE: normalizeApplyState(ledger.DUMP_RESTORE_APPLY_STATE),
+      EXTRA_START_ATTEMPTED: !!ledger.EXTRA_START_ATTEMPTED,
+      EXTRA_START_APPLIED: !!ledger.EXTRA_START_APPLIED,
+      EXTRA_START_APPLY_STATE: normalizeApplyState(ledger.EXTRA_START_APPLY_STATE),
       SAVE_ATTEMPTED: !!ledger.SAVE_ATTEMPTED,
       DUMP_SAVE_APPLIED: !!ledger.DUMP_SAVE_APPLIED,
       DUMP_MODE_HARDEN_ATTEMPTED: !!ledger.DUMP_MODE_HARDEN_ATTEMPTED,

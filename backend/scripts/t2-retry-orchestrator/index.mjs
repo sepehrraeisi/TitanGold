@@ -14,6 +14,7 @@ export {
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_6_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_6_1,
   DUMP_ENGINE_MAPPING_MODE,
   LIVE_ENGINE_PAIR_MODE,
   REQUIRED_POST_SAVE_DUMP_MODE,
@@ -40,11 +41,15 @@ export {
   assertExpectedLivePostState,
   assertCollectorPersistencePreconditions,
   assertEntriesEnvShapes,
+  assertExactDumpPhysicalPreEquivalent,
+  assertLiveFleetPmIdIntegrity,
   assertPreEquivalent,
   captureCollectorDbLiveValues,
   classifyCollectorDbPrestate,
   compareCollectorDbLiveToPersist,
   diffFingerprints,
+  diffLiveFingerprints,
+  diffDumpFingerprints,
   diffProcessEnv,
   diffStableConfig,
   extractProcessEnv,
@@ -80,12 +85,16 @@ export {
   PROVEN_REGENERATED_OR_VOLATILE,
   DUMP_PROCESS_LIST_DELETED_FIELDS,
   PM2_DUMP_TRANSFORM_FIELDS,
+  DUMP_APP_ENV_PROVENANCE_SCOPE,
   buildEnginePm2SemanticSignature,
   buildPm2EffectiveSemanticModel,
   buildApplicationEnvKeysContext,
+  buildProcessNameClassAppEnvProvenance,
   deriveLiveApplicationEnvKeyContext,
+  entryProcessName,
   compareEnginePm2Semantics,
   compareProcessPm2Semantics,
+  assertFleetPm2SemanticModelComplete,
   deepStableSerialize,
   deepStructuralEqual,
   resolveRawPm2Entry,
@@ -94,6 +103,11 @@ export {
   effectiveInstancesSemantics,
   PM2_NESTED_ENV_VOLATILE_KEYS,
 } from './pm2SemanticModel.mjs';
+
+export {
+  validateRequiredHealth,
+  toRollbackHealthError,
+} from './requiredHealth.mjs';
 
 export {
   buildProductionDumpShapeFixture,
@@ -115,8 +129,10 @@ export {
 export { createLiveBoundary, createNodeJournalFs } from './liveBoundary.mjs';
 
 export {
+  APPLY_STATE,
   createSideEffectLedger,
   planRollbackActions,
+  setRollbackApplyState,
 } from './sideEffectLedger.mjs';
 
 export {

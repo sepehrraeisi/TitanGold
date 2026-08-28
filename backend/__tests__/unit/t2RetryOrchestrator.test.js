@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  *
- * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.6.1).
+ * Durable T2 retry orchestrator — synthetic/fake-only matrix (TOOL_VERSION 1.6.2).
  * Never contacts live PM2, DB, Redis, Telegram, or production services.
  */
 
@@ -39,6 +39,7 @@ import {
   LEGACY_AUTHORIZED_TRANSACTION_1_4_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_5_0,
   LEGACY_AUTHORIZED_TRANSACTION_1_6_0,
+  LEGACY_AUTHORIZED_TRANSACTION_1_6_1,
   assertSanitizedPreBaselineProof,
   assertCollectorPersistencePreconditions,
   classifyCollectorDbPrestate,
@@ -62,6 +63,20 @@ import {
   deriveLiveApplicationEnvKeyContext,
   effectiveInstancesValue,
   diffFingerprints,
+  diffLiveFingerprints,
+  diffDumpFingerprints,
+  assertPreEquivalent,
+  assertExactDumpPhysicalPreEquivalent,
+  assertExpectedLivePostState,
+  assertLiveFleetPmIdIntegrity,
+  assertFleetPm2SemanticModelComplete,
+  captureCollectorDbLiveValues,
+  DUMP_APP_ENV_PROVENANCE_SCOPE,
+  entryProcessName,
+  buildProcessNameClassAppEnvProvenance,
+  APPLY_STATE,
+  validateRequiredHealth,
+  toRollbackHealthError,
 } from '../../scripts/t2-retry-orchestrator/index.mjs';
 
 
@@ -569,10 +584,26 @@ function createFakeBoundary(world) {
       return { mode: dumpMode, ok: dumpMode === (mode & 0o777) };
     },
     async healthCheck(port) {
+      if (world.forceHealthReadThrow) {
+        throw new Error('HEALTH_READ_THROW');
+      }
+      if (port === 5002 && world.forceHealth5002 != null) {
+        return { statusCode: world.forceHealth5002, port };
+      }
+      if (port === 5003 && world.forceHealth5003 != null) {
+        return { statusCode: world.forceHealth5003, port };
+      }
       return { statusCode: 200, port };
     },
     async collectorFunctionalCheck() {
-      return { accounts: 200, channels: 200, health: 200 };
+      if (world.forceHealthReadThrow) {
+        throw new Error('HEALTH_READ_THROW');
+      }
+      return {
+        accounts: world.forceAccounts != null ? world.forceAccounts : 200,
+        channels: world.forceChannels != null ? world.forceChannels : 200,
+        health: world.forceCollectorHealth != null ? world.forceCollectorHealth : 200,
+      };
     },
     async ensureDir() {
       mutationLog.push('ensureDir');
@@ -693,6 +724,66 @@ function buildOrch(worldOverrides = {}, orchOverrides = {}) {
         pm_exec_path: '/watch.js',
         env: { NODE_ENV: 'development' },
       });
+      return r;
+    };
+  }
+  if (worldOverrides.forceDuplicatePmIdOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      const live = commands.world().liveEntries;
+      const backend = live.find((e) => e.name === 'titan-backend');
+      if (backend) {
+        live.push({
+          ...deepClone(backend),
+          pm_id: backend.pm_id,
+          name: 'titan-backend',
+        });
+      }
+      return r;
+    };
+  }
+  if (worldOverrides.forceMissingPmIdOnRollback) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      const backend = commands.world().liveEntries.find((e) => e.name === 'titan-backend');
+      if (backend) delete backend.pm_id;
+      return r;
+    };
+  }
+  // Health failure flags apply only during rollback proof (after projected write),
+  // so forward path can complete write before rollback health gate fires.
+  if (
+    worldOverrides.forceRollbackHealth5002 != null ||
+    worldOverrides.forceRollbackHealth5003 != null ||
+    worldOverrides.forceRollbackCollectorHealth != null ||
+    worldOverrides.forceRollbackAccounts != null ||
+    worldOverrides.forceRollbackChannels != null ||
+    worldOverrides.forceRollbackHealthReadThrow
+  ) {
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      const r = await origStart(pmId);
+      // Mutate the closed-over fake-boundary world (not ephemeral world() snapshot).
+      if (worldOverrides.forceRollbackHealth5002 != null) {
+        world.forceHealth5002 = worldOverrides.forceRollbackHealth5002;
+      }
+      if (worldOverrides.forceRollbackHealth5003 != null) {
+        world.forceHealth5003 = worldOverrides.forceRollbackHealth5003;
+      }
+      if (worldOverrides.forceRollbackCollectorHealth != null) {
+        world.forceCollectorHealth = worldOverrides.forceRollbackCollectorHealth;
+      }
+      if (worldOverrides.forceRollbackAccounts != null) {
+        world.forceAccounts = worldOverrides.forceRollbackAccounts;
+      }
+      if (worldOverrides.forceRollbackChannels != null) {
+        world.forceChannels = worldOverrides.forceRollbackChannels;
+      }
+      if (worldOverrides.forceRollbackHealthReadThrow) {
+        world.forceHealthReadThrow = true;
+      }
       return r;
     };
   }
@@ -1231,7 +1322,9 @@ describe('T2 retry orchestrator (final audit correction)', () => {
 
   it('T33 restored dump SHA mismatch => FAIL_FORWARD_COMPLETE', async () => {
     const { orch } = buildOrch({ forceBackendDriftOnSave: true, forceRestoreShaMismatch: true });
-    await expect(runToWrite(orch)).rejects.toMatchObject({ code: 'ROLLBACK_DUMP_SHA_MISMATCH' });
+    await expect(runToWrite(orch)).rejects.toMatchObject({
+      code: expect.stringMatching(/^ROLLBACK_DUMP_(SHA|BYTE)_MISMATCH$/),
+    });
     expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
   });
 
@@ -2046,10 +2139,10 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_EFFECTS_NOT_EXACT' });
   });
 
-  it('T88 new 1.6.1 complete mocked artifact => PASS', async () => {
+  it('T88 new 1.6.2 complete mocked artifact => PASS', async () => {
     const { orch } = buildOrch();
-    expect(TOOL_VERSION).toBe('1.6.1');
-    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_EQUIVALENT_DUMP_PROJECTED_PERSIST');
+    expect(TOOL_VERSION).toBe('1.6.2');
+    expect(AUTHORIZED_TRANSACTION).toBe('T2_ENGINE_SINGLETON_FLEET_PROOF_PROJECTED_PERSIST');
     expect(AUTHORIZED_EFFECTS).toEqual([
       'ENGINE_2_TO_1',
       'PROJECTED_DUMP_WRITE_0600',
@@ -2074,6 +2167,15 @@ describe('T2 retry orchestrator (final audit correction)', () => {
     const runId = nextRunId('LEGACY16');
     const auth = makeAuth(runId);
     auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_0;
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
+  });
+
+  it('T90d legacy 1.6.1 transaction identity => FAIL', async () => {
+    const runId = nextRunId('LEGACY161');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_1;
     const { orch } = buildOrch({}, { runId, authorization: auth });
     await orch.precheck();
     await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
@@ -2299,7 +2401,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
   it('ALREADY_PRESENT_EXACT five keys => precheck PASS', () => {
     const world = makeLiveAndDump();
     const liveFp = semanticFingerprint(world.live);
-    const dumpFp = semanticFingerprint(prepareDumpFromLive(world.live));
+    const dumpFp = semanticFingerprint(prepareDumpFromLive(world.live), { source: 'DUMP' });
     const c = classifyCollectorDbPrestate(liveFp, dumpFp);
     expect(c.ok).toBe(true);
     expect(c.state).toBe('ALREADY_PRESENT_EXACT');
@@ -2315,7 +2417,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     const dump = prepareCleanPreFromLive(world.live);
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('ABSENT');
     expect(c.ok).toBe(false);
@@ -2328,7 +2430,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     delete coll.env.DB_PASSWORD;
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('PARTIAL');
     expect(c.ok).toBe(false);
@@ -2340,7 +2442,7 @@ describe('T2 v1.6 ALREADY_PRESENT_EXACT + sanitized-pre gate', () => {
     dump.find((e) => e.name === 'telegram-collector').env.DB_HOST = '9.9.9.9';
     const c = classifyCollectorDbPrestate(
       semanticFingerprint(world.live),
-      semanticFingerprint(dump),
+      semanticFingerprint(dump, { source: 'DUMP' }),
     );
     expect(c.state).toBe('PRESENT_MISMATCHED');
     expect(c.ok).toBe(false);
@@ -2958,7 +3060,7 @@ describe('T2 v1.6.1 final full-semantics audit', () => {
     b.totally_unknown_pm2_field_xyz = '2';
     const cmp = compareDumpEngineResurrectSemantics(a, b);
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
     expect(cmp.unclassifiedFields).toContain('totally_unknown_pm2_field_xyz');
   });
 
@@ -2976,7 +3078,7 @@ describe('T2 v1.6.1 final full-semantics audit', () => {
     b.weird_unknown_cfg = { a: 2 };
     const cmp = compareDumpEngineResurrectSemantics(a, b);
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
   });
 
   it('zero unclassified fields in sanitized production-shape fixture', () => {
@@ -3245,7 +3347,7 @@ describe('T2 v1.6.1 production-shape semantic final correction', () => {
       applicationEnvKeysContext: ['PATH', 'NODE_ENV'],
     });
     expect(cmp.ok).toBe(false);
-    expect(cmp.error).toBe('DUMP_ENGINE_RESURRECT_FIELD_UNCLASSIFIED');
+    expect(cmp.error).toBe('CLASSIFICATION_INCOMPLETE');
   });
 
   it('custom key present in live app env treated as env and compared', () => {
@@ -3446,5 +3548,561 @@ describe('T2 v1.6.1 production-shape semantic final correction', () => {
     expect(compareProcessPm2Semantics(a, b, { applicationEnvKeysContext: ['PATH', 'unique_id'] }).ok).toBe(
       true,
     );
+  });
+});
+
+describe('T2 v1.6.2 comparator / rollback proof', () => {
+  function dumpFpFromLive(live) {
+    return semanticFingerprint(prepareDumpFromLive(live), { source: 'DUMP' });
+  }
+
+  it('LIVE and DUMP fleet self-diff reflexivity => zero classified diffs', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    expect(diffLiveFingerprints(liveFp, liveFp).classified).toHaveLength(0);
+    expect(diffDumpFingerprints(dumpFp, dumpFp).classified).toHaveLength(0);
+    expect(diffFingerprints(liveFp, liveFp, { source: 'LIVE' }).classified).toHaveLength(0);
+    expect(diffFingerprints(dumpFp, dumpFp, { source: 'DUMP' }).classified).toHaveLength(0);
+  });
+
+  it('DUMP null pm_id engines keyed by dumpArrayIndex — no slot collapse', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const dumpFp = semanticFingerprint(dump, { source: 'DUMP' });
+    expect(dumpFp.engines).toHaveLength(2);
+    expect(dumpFp.engines[0].pm_id).toBeUndefined();
+    expect(dumpFp.engines[1].pm_id).toBeUndefined();
+    expect(dumpFp.engines[0].dumpArrayIndex).not.toBe(dumpFp.engines[1].dumpArrayIndex);
+    expect(dumpFp.engines[0].structuralSlotKey).toBe('titan-engine-worker:0');
+    expect(dumpFp.engines[1].structuralSlotKey).toBe('titan-engine-worker:1');
+
+    const postDumpFp = JSON.parse(JSON.stringify(dumpFp));
+    postDumpFp.engines[1].status = 'stopped';
+    const diff = diffDumpFingerprints(dumpFp, postDumpFp, {
+      dumpExtraArrayIndex: dumpFp.engines[1].dumpArrayIndex,
+    });
+    expect(diff.classified.filter((d) => d.kind === 'ENGINE_EXTRA_STATUS_ONLINE_TO_STOPPED')).toHaveLength(1);
+  });
+
+  it('assertPreEquivalent exact-byte short-circuit ignores dump semantic drift', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytes = dumpToBytes(prepareDumpFromLive(world.live));
+    const sha = sha256Buffer(bytes);
+
+    const poisonedPostDump = JSON.parse(JSON.stringify(dumpFp));
+    poisonedPostDump.backends[0].NODE_ENV = 'production';
+
+    const proof = assertPreEquivalent(dumpFp, liveFp, poisonedPostDump, liveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytes,
+      actualDumpBytes: bytes,
+      expectedDumpSha: sha,
+      actualDumpSha: sha,
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+    });
+    expect(proof.ok).toBe(true);
+    expect(proof.details.ROLLBACK_EXACT_BYTE_IDENTITY_SHORT_CIRCUIT).toBe('PASS');
+    expect(proof.details.DUMP_PRE_EQUIVALENT).toBe('PASS');
+    expect(proof.details.FULL_FLEET_PM2_ROLLBACK_PRE_EQUIVALENCE).toBe('PASS');
+  });
+
+  it('OFFLINE_EXTRA stop-only simulation => PASS via assertExpectedLivePostState', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const sel = selectEngineRetainExtra(liveFp);
+    expect(sel.ok).toBe(true);
+    const snap = captureCollectorDbLiveValues(liveFp);
+    const postLive = deepClone(world.live);
+    postLive.find((e) => e.name === 'titan-engine-worker' && e.pm_id === sel.extra.pm_id).status =
+      'stopped';
+    const postLiveFp = semanticFingerprint(postLive, { source: 'LIVE' });
+    const proof = assertExpectedLivePostState(liveFp, postLiveFp, sel, snap);
+    expect(proof.ok).toBe(true);
+    expect(proof.details.EXTRA_ENGINE_STOP_ONLY).toBe('PASS');
+  });
+
+  it('fleet classification gate => PASS on synthetic fleet', () => {
+    const world = makeLiveAndDump();
+    const dump = prepareDumpFromLive(world.live);
+    const gate = assertFleetPm2SemanticModelComplete(world.live, dump);
+    expect(gate.ok).toBe(true);
+    expect(gate.LIVE_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE).toBe('PASS');
+    expect(gate.DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE).toBe('PASS');
+    expect(gate.DUMP_APP_ENV_PROVENANCE_SCOPE).toBe(DUMP_APP_ENV_PROVENANCE_SCOPE);
+    expect(gate.FLEET_GLOBAL_ENV_PROVENANCE).toBe('FORBIDDEN');
+  });
+
+  it('DUMP provenance: collector LIVE FOO must not authorize backend DUMP FOO', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    const collector = live.find((e) => e.name === 'telegram-collector');
+    collector.env = { ...collector.env, FOO: 'collector-only' };
+    // Flat dump shape — unknown top-level keys require process-scoped LIVE provenance.
+    const dump = prepareDumpFromLive(live).map((e) => {
+      const { env, pm_id, ...rest } = e;
+      return { ...rest, ...(env || {}) };
+    });
+    const backendDump = dump.find((e) => e.name === 'titan-backend');
+    backendDump.FOO = 'unauthorized-on-backend';
+    const gate = assertFleetPm2SemanticModelComplete(live, dump);
+    expect(gate.ok).toBe(false);
+    expect(gate.DUMP_FLEET_PM2_FIELD_CLASSIFICATION_COMPLETE).toBe('FAIL');
+    const dumpScopes = (gate.unclassifiedByScope || []).filter((s) =>
+      s.scope.startsWith('DUMP:titan-backend'),
+    );
+    expect(dumpScopes.some((s) => s.fields.includes('FOO'))).toBe(true);
+  });
+
+  it('DUMP provenance: all 4 backend LIVE have CUSTOM_X + dump backend CUSTOM_X => PASS', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    for (const e of live) {
+      if (e.name === 'titan-backend') e.env = { ...e.env, CUSTOM_X: 'shared' };
+    }
+    const dump = prepareDumpFromLive(live).map((e) => {
+      const { env, pm_id, ...rest } = e;
+      return { ...rest, ...(env || {}) };
+    });
+    const gate = assertFleetPm2SemanticModelComplete(live, dump);
+    expect(gate.ok).toBe(true);
+    expect(gate.DUMP_APP_ENV_PROVENANCE_SCOPE).toBe('PROCESS_NAME_CLASS');
+  });
+
+  it('DUMP provenance: only 1 of 4 backend LIVE has CUSTOM_X => dump CUSTOM_X FAIL', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    const backends = live.filter((e) => e.name === 'titan-backend');
+    backends[0].env = { ...backends[0].env, CUSTOM_X: 'only-one' };
+    const dump = prepareDumpFromLive(live).map((e) => {
+      const { env, pm_id, ...rest } = e;
+      return { ...rest, ...(env || {}) };
+    });
+    for (const e of dump) {
+      if (e.name === 'titan-backend') e.CUSTOM_X = 'dump';
+    }
+    const gate = assertFleetPm2SemanticModelComplete(live, dump);
+    expect(gate.ok).toBe(false);
+    expect(
+      (gate.unclassifiedByScope || []).some(
+        (s) => s.scope.startsWith('DUMP:titan-backend') && s.fields.includes('CUSTOM_X'),
+      ),
+    ).toBe(true);
+  });
+
+  it('DUMP provenance: unrelated process name must not grant provenance', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    live.push({
+      name: 'unrelated-helper',
+      pm_id: 99,
+      status: 'online',
+      env: { NODE_ENV: 'development', GRANTED_ONLY_HERE: 'x' },
+    });
+    const dump = prepareDumpFromLive(world.live).map((e) => {
+      const { env, pm_id, ...rest } = e;
+      return { ...rest, ...(env || {}) };
+    });
+    const backend = dump.find((e) => e.name === 'titan-backend');
+    backend.GRANTED_ONLY_HERE = 'leak';
+    const gate = assertFleetPm2SemanticModelComplete(live, dump);
+    expect(gate.ok).toBe(false);
+    expect(entryProcessName(backend)).toBe('titan-backend');
+    const prov = buildProcessNameClassAppEnvProvenance(live);
+    expect(prov['unrelated-helper']).toContain('GRANTED_ONLY_HERE');
+    expect(prov['titan-backend'] || []).not.toContain('GRANTED_ONLY_HERE');
+  });
+
+  it('LIVE pm_id integrity: duplicate backend pm_id => FAIL', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    live.find((e) => e.name === 'titan-backend' && e.pm_id === 2).pm_id = 1;
+    const r = assertLiveFleetPmIdIntegrity(live);
+    expect(r.ok).toBe(false);
+    expect(r.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE).toBe('FAIL');
+  });
+
+  it('LIVE pm_id integrity: duplicate monitor/other pm_id => FAIL', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    live.find((e) => e.name === 'telegram-collector-monitor' && e.pm_id === 14).pm_id = 8;
+    expect(assertLiveFleetPmIdIntegrity(live).ok).toBe(false);
+
+    const live2 = deepClone(world.live);
+    live2.push({ name: 'titan-error-watch', pm_id: 16, status: 'online', env: {} });
+    expect(assertLiveFleetPmIdIntegrity(live2).LIVE_FLEET_PM_ID_GLOBAL_UNIQUE).toBe('FAIL');
+  });
+
+  it('LIVE pm_id integrity: null backend pm_id => FAIL', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    live.find((e) => e.name === 'titan-backend' && e.pm_id === 1).pm_id = null;
+    const r = assertLiveFleetPmIdIntegrity(live);
+    expect(r.ok).toBe(false);
+    expect(r.LIVE_FLEET_PM_ID_PRESENT).toBe('FAIL');
+  });
+
+  it('LIVE pm_id integrity: string nonnumeric => FAIL', () => {
+    const world = makeLiveAndDump();
+    const live = deepClone(world.live);
+    live.find((e) => e.name === 'titan-backend' && e.pm_id === 1).pm_id = 'abc';
+    const r = assertLiveFleetPmIdIntegrity(live);
+    expect(r.ok).toBe(false);
+    expect(r.LIVE_FLEET_PM_ID_NUMERIC).toBe('FAIL');
+  });
+
+  it('LIVE pm_id integrity: unique fleet => PASS', () => {
+    const world = makeLiveAndDump();
+    const r = assertLiveFleetPmIdIntegrity(world.live);
+    expect(r.ok).toBe(true);
+    expect(r.LIVE_FLEET_PM_ID_PRESENT).toBe('PASS');
+    expect(r.LIVE_FLEET_PM_ID_NUMERIC).toBe('PASS');
+    expect(r.LIVE_FLEET_PM_ID_GLOBAL_UNIQUE).toBe('PASS');
+    expect(r.PM_ID_USED_FOR_LIVE_PRE_POST_IDENTITY).toBe('YES');
+  });
+
+  it('diffLiveFingerprints duplicate pm_id => LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const broken = JSON.parse(JSON.stringify(liveFp));
+    broken.backends[1].pm_id = broken.backends[0].pm_id;
+    const diff = diffLiveFingerprints(liveFp, broken);
+    expect(diff.classified.some((c) => c.kind === 'LIVE_PM_ID_IDENTITY_INTEGRITY_FAIL')).toBe(true);
+  });
+
+  it('orchestrator precheck duplicate pm_id => AUTH_CONSUMED=NO', async () => {
+    const { orch, runId } = buildOrch({
+      mutateLive: (live) => {
+        live.find((e) => e.name === 'titan-backend' && e.pm_id === 2).pm_id = 1;
+      },
+    });
+    await expect(orch.precheck()).rejects.toMatchObject({ code: 'LIVE_FLEET_PM_ID_INTEGRITY_FAIL' });
+    expect(orch.authConsumed).toBe(false);
+    expect(orch.sideEffects.BACKUP_WRITTEN).toBe(false);
+    void runId;
+  });
+
+  it('assertExactDumpPhysicalPreExact + broken semantic dump fp still PASS via assertPreEquivalent', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytes = dumpToBytes(prepareDumpFromLive(world.live));
+    const sha = sha256Buffer(bytes);
+    const poisoned = JSON.parse(JSON.stringify(dumpFp));
+    poisoned.engines[0].NODE_ENV = 'production';
+    poisoned.backend_count = 99;
+    const proof = assertPreEquivalent(dumpFp, liveFp, poisoned, liveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytes,
+      actualDumpBytes: bytes,
+      expectedDumpSha: sha,
+      actualDumpSha: sha,
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+    });
+    expect(proof.ok).toBe(true);
+  });
+
+  it('physical: exact bytes but actual mode missing => FAIL', () => {
+    const bytes = Buffer.from('{"ok":true}');
+    const sha = sha256Buffer(bytes);
+    const r = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: bytes,
+      actualBytes: bytes,
+      expectedSha: sha,
+      actualSha: sha,
+      expectedMode: 0o600,
+      actualMode: null,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('ROLLBACK_DUMP_MODE_MISSING');
+  });
+
+  it('physical: exact bytes but actual uid missing while PRE uid known => FAIL', () => {
+    const bytes = Buffer.from('{"ok":true}');
+    const sha = sha256Buffer(bytes);
+    const r = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: bytes,
+      actualBytes: bytes,
+      expectedSha: sha,
+      actualSha: sha,
+      expectedMode: 0o600,
+      actualMode: 0o600,
+      expectedUid: 1000,
+      actualUid: null,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('ROLLBACK_DUMP_UID_MISMATCH');
+  });
+
+  it('physical: bytes exact but SHA mismatch => FAIL', () => {
+    const bytes = Buffer.from('{"ok":true}');
+    const r = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: bytes,
+      actualBytes: bytes,
+      expectedSha: 'aaa',
+      actualSha: 'bbb',
+      expectedMode: 0o600,
+      actualMode: 0o600,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('ROLLBACK_DUMP_SHA_MISMATCH');
+  });
+
+  it('physical: SHA same but bytes differ => FAIL', () => {
+    const a = Buffer.from('{"a":1}');
+    const b = Buffer.from('{"b":2}');
+    // Force same SHA claim while bytes differ — physical must fail on bytes first
+    const r = assertExactDumpPhysicalPreEquivalent({
+      expectedBytes: a,
+      actualBytes: b,
+      expectedSha: 'same',
+      actualSha: 'same',
+      expectedMode: 0o600,
+      actualMode: 0o600,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('ROLLBACK_DUMP_BYTE_MISMATCH');
+  });
+
+  it('physical first: bytes differ but semantic dump equal => FAIL', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytesA = dumpToBytes(prepareDumpFromLive(world.live));
+    const dumpB = prepareDumpFromLive(world.live);
+    dumpB.push({ name: 'noise', status: 'stopped', env: {} });
+    const bytesB = dumpToBytes(dumpB);
+    const proof = assertPreEquivalent(dumpFp, liveFp, dumpFp, liveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytesA,
+      actualDumpBytes: bytesB,
+      expectedDumpSha: sha256Buffer(bytesA),
+      actualDumpSha: sha256Buffer(bytesB),
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+    });
+    expect(proof.ok).toBe(false);
+    expect(proof.error).toBe('ROLLBACK_DUMP_BYTE_MISMATCH');
+  });
+
+  it('exact physical + live PRE => ok', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytes = dumpToBytes(prepareDumpFromLive(world.live));
+    const sha = sha256Buffer(bytes);
+    const proof = assertPreEquivalent(dumpFp, liveFp, null, liveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytes,
+      actualDumpBytes: bytes,
+      expectedDumpSha: sha,
+      actualDumpSha: sha,
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+      expectedDumpUid: 1000,
+      actualDumpUid: 1000,
+      expectedDumpGid: 1000,
+      actualDumpGid: 1000,
+    });
+    expect(proof.ok).toBe(true);
+    expect(proof.details.ROLLBACK_DUMP_OWNER_GROUP_PRE_EQUIVALENT).toBe('PASS');
+  });
+
+  it('exact physical + LIVE drift => FAIL', () => {
+    const world = makeLiveAndDump();
+    const liveFp = semanticFingerprint(world.live, { source: 'LIVE' });
+    const dumpFp = dumpFpFromLive(world.live);
+    const bytes = dumpToBytes(prepareDumpFromLive(world.live));
+    const sha = sha256Buffer(bytes);
+    const driftedLive = deepClone(world.live);
+    driftedLive.find((e) => e.name === 'titan-backend' && e.pm_id === 1).env.BACKEND_SECRET = 'drift';
+    const postLiveFp = semanticFingerprint(driftedLive, { source: 'LIVE' });
+    const proof = assertPreEquivalent(dumpFp, liveFp, null, postLiveFp, {
+      retainedPmId: 5,
+      extraPmId: 9,
+      expectedDumpBytes: bytes,
+      actualDumpBytes: bytes,
+      expectedDumpSha: sha,
+      actualDumpSha: sha,
+      expectedDumpMode: 0o600,
+      actualDumpMode: 0o600,
+    });
+    expect(proof.ok).toBe(false);
+    expect(proof.error).toBe('ROLLBACK_LIVE_SEMANTIC_DRIFT');
+  });
+
+  it('ledger fresh-read: start exit 0 but EXTRA remains stopped => NOT_APPLIED', async () => {
+    const { orch, commands } = buildOrch({
+      forceEngineCountNotRestoredOnRollback: true,
+    });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toBeTruthy();
+    expect(orch.sideEffects.EXTRA_START_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.EXTRA_START_APPLIED).not.toBe(true);
+    expect(orch.sideEffects.EXTRA_START_APPLY_STATE).toBe(APPLY_STATE.NOT_APPLIED);
+    void commands;
+  });
+
+  it('ledger fresh-read: start throws but fresh EXTRA online => APPLIED', async () => {
+    const { orch, commands } = buildOrch({});
+    await runToWrite(orch);
+    const origStart = commands.startProcessByPmId.bind(commands);
+    commands.startProcessByPmId = async (pmId) => {
+      await origStart(pmId);
+      throw new Error('START_THREW_AFTER_EFFECT');
+    };
+    await orch.rollback('test');
+    expect(orch.sideEffects.EXTRA_START_APPLIED).toBe(true);
+    expect(orch.sideEffects.EXTRA_START_APPLY_STATE).toBe(APPLY_STATE.APPLIED);
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+
+  it('ledger fresh-read: restore success but bytes wrong => not APPLIED', async () => {
+    const { orch, commands } = buildOrch({ forceRestoreShaMismatch: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: expect.stringMatching(/^ROLLBACK_DUMP_(SHA|BYTE)_MISMATCH$/),
+    });
+    expect(orch.sideEffects.DUMP_RESTORE_ATTEMPTED).toBe(true);
+    expect(orch.sideEffects.DUMP_RESTORE_APPLIED).toBe(false);
+    expect(orch.sideEffects.DUMP_RESTORE_APPLY_STATE).toBe(APPLY_STATE.NOT_APPLIED);
+    void commands;
+  });
+
+  it('ledger fresh-read: restore throws but fresh dump exact PRE => APPLIED', async () => {
+    const { orch, commands } = buildOrch({});
+    await runToWrite(orch);
+    const origRestore = commands.restoreDump.bind(commands);
+    commands.restoreDump = async (...args) => {
+      const r = await origRestore(...args);
+      throw new Error('RESTORE_THREW_AFTER_WRITE');
+      return r;
+    };
+    await orch.rollback('test');
+    expect(orch.sideEffects.DUMP_RESTORE_APPLIED).toBe(true);
+    expect(orch.sideEffects.DUMP_RESTORE_APPLY_STATE).toBe(APPLY_STATE.APPLIED);
+    expect(orch.state).toBe(State.ROLLED_BACK);
+  });
+});
+
+describe('T2 v1.6.2 legacy auth gate', () => {
+  it('legacy 1.6.1 auth transaction => FAIL closed', async () => {
+    const runId = nextRunId('V162LEG');
+    const auth = makeAuth(runId);
+    auth.authorizedTransaction = LEGACY_AUTHORIZED_TRANSACTION_1_6_1;
+    const { orch } = buildOrch({}, { runId, authorization: auth });
+    await orch.precheck();
+    await expect(orch.backup()).rejects.toMatchObject({ code: 'AUTH_TRANSACTION_MISMATCH' });
+  });
+});
+
+describe('T2 v1.6.2 rollback full-health audit', () => {
+  it('validateRequiredHealth requires all five surfaces = 200', () => {
+    expect(
+      validateRequiredHealth({
+        status5002: 200,
+        status5003: 200,
+        collectorHealth: 200,
+        accounts: 200,
+        channels: 200,
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateRequiredHealth({
+        status5002: 500,
+        status5003: 200,
+        collectorHealth: 200,
+        accounts: 200,
+        channels: 200,
+      }).error,
+    ).toBe('HEALTH_5002_FAIL');
+    expect(toRollbackHealthError('HEALTH_5002_FAIL')).toBe('ROLLBACK_HEALTH_5002_FAIL');
+  });
+
+  it('rollback 5002=500 => FAIL_FORWARD_COMPLETE never ROLLED_BACK', async () => {
+    const { orch } = buildOrch({ forceRollbackHealth5002: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_5002_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback 5003=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackHealth5003: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_5003_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback functional.health=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackCollectorHealth: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_COLLECTOR_HEALTH_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback accounts=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackAccounts: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_ACCOUNTS_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback channels=500 => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackChannels: 500 });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_CHANNELS_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback health read throws => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceRollbackHealthReadThrow: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_HEALTH_READ_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback duplicate LIVE pm_id => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceDuplicatePmIdOnRollback: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('rollback missing LIVE pm_id => FAIL_FORWARD_COMPLETE', async () => {
+    const { orch } = buildOrch({ forceMissingPmIdOnRollback: true });
+    await runToWrite(orch);
+    await expect(orch.rollback('test')).rejects.toMatchObject({
+      code: 'ROLLBACK_LIVE_PM_ID_INTEGRITY_FAIL',
+    });
+    expect(orch.state).toBe(State.FAIL_FORWARD_COMPLETE);
+  });
+
+  it('exact PRE + all five health 200 => ROLLED_BACK', async () => {
+    const { orch } = buildOrch({});
+    await runToWrite(orch);
+    await orch.rollback('test');
+    expect(orch.state).toBe(State.ROLLED_BACK);
   });
 });
