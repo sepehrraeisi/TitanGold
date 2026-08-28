@@ -23,9 +23,9 @@ alwaysApply: true
 
 **REMAINING_STAGES = 4**
 
-**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_OWNER_AUTHORIZATION**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
 
-**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_PENDING_OWNER_AUTHORIZATION**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_V2_PENDING_OWNER_AUTHORIZATION**
 
 **ROADMAP_MAJOR_MILESTONES = M1 Data Hub CLOSED/FROZEN · M2 AI Shared Foundation CLOSED/FROZEN · M3 Agents Shell CLOSED/FROZEN · M4 Telegram/C2 Production Closeout (IN PROGRESS) · M5 Artemis Core Completion (15 stages) · M6 Post-Core Agent Completion · M7 Settings + AI Provider Infrastructure · M8 Multi-AI Council + Memory/Learning · M9 Artemis Autonomous Operations · M10 Artemis Conversational Control Plane (ACCP)**
 
@@ -5320,9 +5320,11 @@ Mechanism: PRE/POST compare sanitized application env keysets via `pm2SemanticMo
 **PM2_SAVE_COUNT = 0**
 **ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** (unchanged)
 **INCIDENT_LIVE_TOPOLOGY = `pm_id 5` online `production` · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=2`**
-**NODE_ENV_NORMALIZATION_AUTHORIZED = NO** (consumed / closed)
-**NODE_ENV_NORMALIZATION_REAUTH_READY = NO**
-**NEXT_GATE = ENGINE_TOPOLOGY_RECOVERY_OWNER_AUTHORIZATION**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO** (V1 consumed / closed; V2 not authorized)
+**NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_TOPOLOGY_RECOVERY_RESULT = RECOVERY_COMPLETE** (`ETR-20260828T192616Z`)
+**INCIDENT_LIVE_TOPOLOGY_POST_ETR = `pm_id 5` stopped · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=1`**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
 
 Evidence: `/home/ubuntu/TITANGOLD_ENN_ENN-20260828T191045Z.txt`
 
@@ -5720,4 +5722,66 @@ env -i HOME=<h> USER=<u> PM2_HOME=/home/ubuntu/.pm2 PATH=<canonical> \
 | `MANUAL_RECOVERY_REQUIRED` | Rollback incomplete or ambiguous; no retry |
 
 **THIS V2 DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
+
+### ENGINE NODE_ENV normalization V2 source fix (COMPLETE / SOURCE+TESTS ONLY / 20260828)
+
+**ENGINE_NODE_ENV_NORMALIZATION_V2_SOURCE_FIX = COMPLETE**
+**CLASSIFICATION = TIER 2 SOURCE+TESTS / NO PRODUCTION MUTATION**
+**GOVERNANCE_BRANCH = `chore/c2-engine-node-env-normalization-readiness`**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DUMP_MUTATION = 0** · **ENV_WRITE = 0**
+
+#### V1 path removal
+
+**V1_STARTORRESTART_FORWARD_PATH = REMOVED**
+**V1_ECOSYSTEM_RESTART_PATH = REMOVED**
+**V1_NAME_BASED_PM2_TARGETING = REMOVED**
+
+#### V2 execution primitive (source only)
+
+**V2_FORWARD_PRIMITIVE = SANITIZED_NUMERIC_PM2_RESTART**
+**PM2_NUMERIC_INSTANCE_IDENTITY_ONLY = YES**
+**SANITIZED_SHELL_ENV_KEYS = HOME · USER · LOGNAME · PM2_HOME · PATH · NODE_ENV**
+**FORBIDDEN_FORWARD_PATTERNS = startOrRestart · ecosystem restart · --only · app name targeting**
+
+#### Gates preserved / added
+
+**EXTRA_ISOLATION_GATE = IMPLEMENTED** (PRE · MID_FORWARD · PRE_DUMP · POST)
+**RETAINED_IDENTITY_BINDING = FRESH_RESOLVE_NUMERIC_PM_ID** (never hardcode · never name-resolve)
+**DUMP_ROW_BINDING = RETAINED_ONLINE_PATH_CONSENSUS_MATCH**
+**DUMP_PROJECTION_SCOPE = NODE_ENV_LEAVES_RETAINED_ROW_ONLY**
+**KEYSET_FINGERPRINT_GATE = PRESERVED**
+**NON_NODE_ENV_SEMANTIC_FINGERPRINT_GATE = PRESERVED**
+**ROLLBACK_CONTRACT = PRESERVED** (numeric restart · conditional dump restore)
+
+#### Source files
+
+- `backend/scripts/engine-node-env-normalization/ennV2Core.mjs` (pure/testable V2 core)
+- `backend/scripts/engine-node-env-normalization/execute-enn.mjs` (V2 executor wiring)
+
+#### Tests
+
+**ENN_V2_UNIT_TESTS = PASS** (`engineNodeEnvNormalizationV2.test.js` · 13/13)
+**T2_ORCHESTRATOR_TESTS = PASS** (`t2RetryOrchestrator.test.js` · 232/232)
+**BACKEND_UNIT_TESTS = 1247/1249 PASS** (2 pre-existing base failures in `dataSourceUrlDuplicate.test.js` — not branch-owned)
+
+Coverage categories:
+- duplicate engine names / topology resolution
+- stopped extra isolation (EXTRA_ISOLATION_GATE)
+- numeric restart only (no startOrRestart / name targeting)
+- dump row PATH binding
+- NODE_ENV-only projection (extra row untouched)
+
+#### Authorization (unchanged)
+
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_EXECUTION_READY = YES** (design + source)
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**DO_NOT_ADVANCE_TO_B1 = YES**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_V2_PENDING_OWNER_AUTHORIZATION**
+
+**THIS SOURCE-FIX TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
 
