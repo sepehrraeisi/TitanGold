@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2R162 terminal COMPLETED; CURRENT_AUTHORITY_SNAPSHOT=AUTHORITATIVE; ENGINE_TOPOLOGY_2_TO_1=COMPLETE; PRODUCTION_MUTATION_CAPABILITY=CLOSED; NEXT_GATE=B1_PRODUCTION_DEPLOYMENT_READINESS; DO NOT EXECUTE B1
+description: TitanGold Rule 02 — NODE_ENV normalization design READY; B1 BLOCKED pending Owner auth; T2R162 COMPLETED; ENGINE_SINGLETON=1; PRODUCTION_MUTATION_CAPABILITY=CLOSED
 alwaysApply: true
 ---
 
@@ -23,9 +23,9 @@ alwaysApply: true
 
 **REMAINING_STAGES = 4**
 
-**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_OWNER_AUTHORIZATION**
 
-**PROGRESS_BLOCKER = ENGINE_NODE_ENV_DRIFT**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_PENDING_OWNER_AUTHORIZATION**
 
 **ROADMAP_MAJOR_MILESTONES = M1 Data Hub CLOSED/FROZEN · M2 AI Shared Foundation CLOSED/FROZEN · M3 Agents Shell CLOSED/FROZEN · M4 Telegram/C2 Production Closeout (IN PROGRESS) · M5 Artemis Core Completion (15 stages) · M6 Post-Core Agent Completion · M7 Settings + AI Provider Infrastructure · M8 Multi-AI Council + Memory/Learning · M9 Artemis Autonomous Operations · M10 Artemis Conversational Control Plane (ACCP)**
 
@@ -207,7 +207,7 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **DO_NOT_ADVANCE_TO_B1 = YES**
 
-**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_OWNER_AUTHORIZATION**
 
 **HISTORICAL_PRECEDENCE_GUARD = YES**
 
@@ -5145,4 +5145,131 @@ SHA256 = `8c926e34a574d159eaa04c719487dfed3cb2932b99e2d944df77cc3e37c7f614`
 bytes = 1151 · mode **0600** · tmp/home equality = **YES**
 
 After terminal: NO further production mutation; NO diagnostic mutation; NO retry; NO persistence execution.
+
+### Engine NODE_ENV normalization readiness / design closeout (COMPLETE / 20260828)
+
+**CLASSIFICATION = TIER 3 READ-ONLY DESIGN / NO PRODUCTION MUTATION**
+**GOVERNANCE_BRANCH = `chore/c2-engine-node-env-normalization-readiness`**
+**CANONICAL_MAIN_SHA = `5d562e3328b031bf30b81e416bebc063a93a867e`**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **PM2_SAVE = 0** · **ENV_WRITE = 0**
+
+#### Fresh production preconditions (rediscovered)
+
+**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PM2_VERSION = 6.0.13**
+**PM2_HOME = `/home/ubuntu/.pm2`**
+**PM2_DAEMON_PID = 1352** (pidfile mode `644` uid/gid `1000/1000`)
+**PM2_STARTUP = systemd `pm2-ubuntu.service` → `pm2 resurrect`**
+**ENGINE_ONLINE_COUNT = 1** (retained online `pm_id **9**` / pid **2937968**; extra `pm_id **5**` stopped)
+**ENGINE_SINGLETON_CURRENT = YES**
+**ENGINE_SCRIPT = `/home/ubuntu/webapp/TitanGold/backend/workers/engineWorkerLeader.js`**
+**ENGINE_CWD = `/home/ubuntu/webapp/TitanGold/backend`**
+**ENGINE_EXEC_MODE = fork_mode**
+**LIVE_ENGINE_NODE_ENV = development**
+**CANONICAL_ENGINE_NODE_ENV = production** (`/home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json` engine `env.NODE_ENV`)
+**STATE_DRIFT = NONE** (premises match task envelope)
+
+#### DOTENV audit (`backend/.env` — contents not logged)
+
+**DOTENV_NODE_ENV_PRESENT = YES**
+**DOTENV_NODE_ENV_VALUE = development**
+**DOTENV_FILE_MODE = 664** · uid/gid **1000/1000**
+**DOTENV_SHA256 = `ef0da5e5e586b729fb43cc3419bd7a01d0c22e6f62871c5903474b2a61e093c2`**
+**DOTENV_NODE_ENV_LINE_COUNT = 1**
+**DOTENV_BACKEND_BLAST_RADIUS = YES** (shared `env_file` for `titan-backend` cluster and `titan-engine-worker`; backend reload/`--update-env` would ingest)
+**DOTENV_COLLECTOR_PROCESSOR_BLAST_RADIUS = NO** (separate ecosystems)
+**DOTENV_ALONE_PERSISTENCE = NO** (dump/resurrect authority separate; `.env` edit without bounded refresh does not change live God env)
+**DOTENV_ALONE_REBOOT_DURABILITY = NO** (resurrect reads dump bytes, not `.env` alone)
+
+#### PM2 dump / persistence audit
+
+**ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** · **SHA_MATCH = YES**
+**ACTIVE_PM2_DUMP_MODE = 0600** · uid/gid **1000/1000**
+**DUMP_ENGINE_ENTRIES = 2** (1 online + 1 stopped)
+**PERSISTED_ENGINE_NODE_ENV = development** (flattened dump leaf **and** nested `env.NODE_ENV`; `env_key_count=95` each)
+**PERSISTED_ENGINE_ENV_FILE = `/home/ubuntu/webapp/TitanGold/backend/.env`**
+**RESURRECTED_ENGINE_NODE_ENV = development** (reason: `pm2 resurrect` replays dump flattened env; ecosystem `env.NODE_ENV=production` is **not** consulted on resurrect; both engine dump rows carry `development`)
+
+#### NODE_ENV provenance chain (engine only)
+
+**NODE_ENV_PROVENANCE_CHAIN =**
+1. `ecosystem.config.json` `apps[titan-engine-worker].env.NODE_ENV` → **production** (canonical intent; applied only on ecosystem start/recreate with `--update-env`)
+2. `ecosystem.config.json` `env_file` → `backend/.env` `NODE_ENV` → **development** (loaded on ecosystem merge; does **not** override ecosystem `env` on fresh isolated start — lab Case A)
+3. **PM2 God in-memory env** (retained online `pm_id 9`) → **development** → **LIVE WINNER**
+4. **Active `dump.pm2` flattened persisted env** (online + stopped engine rows) → **development** → **RESURRECT WINNER**
+5. Parent shell / operator env → **development** possible on any `pm2 … --update-env` if exported (lab Case G — imports unrelated keys)
+6. `engineWorkerLeader.js` `dotenv.config()` → **no override** of existing PM2-injected vars (dotenv default; does not explain PM2 `node env` display)
+7. systemd startup → `pm2 resurrect` → replays dump (**#4**), not ecosystem
+
+**WHY_LIVE_IS_DEVELOPMENT =** Engine has **not** been recreated from canonical ecosystem since historical persist. God env and dump both frozen at `development` (consistent with `.env` + historical merge). Exact-id `restart`/`reload` **without** `--update-env` preserves God env (**prior Rule02 proof + lab Case B**). Ecosystem `production` is **stale relative to live** until bounded `startOrRestart … --update-env` from sanitized shell.
+
+#### Isolated PM2 semantics lab (PM2 6.0.13 · `PM2_HOME=/tmp/titangold-node-env-design-<RUN_ID>` · dummy values only · destroyed after capture)
+
+**PM2_LAB_RESULT =**
+| Case | Operation | NODE_ENV outcome | Other findings |
+|---|---|---|---|
+| A | Fresh start ecosystem `env=production` + `env_file=development` | **production** | Ecosystem `env` wins on fresh start |
+| B | God `development` → `restart` id (no `--update-env`) after ecosystem file → production | **development** | Stale God env preserved |
+| C | `startOrRestart ecosystem --only app --update-env` after stale God `development` | **production** | `pm_id` unchanged (G2) |
+| D | `reload --update-env` | **production** | Same effective refresh class as startOrRestart |
+| E | `save` + `kill` + `resurrect` after production God env | **production** | Reboot durability requires dump bytes match God |
+| F | `env_file` only → `development`; `restart` no `--update-env` | unchanged God | `env_file` alone insufficient |
+| F2 | `restart --update-env` with parent `NODE_ENV` exported | **parent shell wins** | **HIGH RISK**: unrelated parent keys imported |
+| G | Production candidate: `startOrRestart prod-ecosystem --only engine --update-env` from clean shell | **production** (projected) | Requires sanitized operator env; forbids parent `NODE_ENV` export |
+
+#### Candidate method evaluation
+
+| Method | LIVE fix | OTHER_ENV risk | pm_id | Downtime | Dump durable | Reboot durable | Rollback exact | pm2 save | Blast radius |
+|---|---|---|---|---|---|---|---|---|---|
+| A restart `--update-env` only | POSSIBLE | **HIGH** (parent shell import) | NO | ~seconds | NO | NO | YES | NO | engine |
+| B `startOrRestart ecosystem --only engine --update-env` | **YES** | LOW (ecosystem-scoped) | NO | ~seconds | NO alone | NO alone | YES | NO | engine |
+| C `.env` NODE_ENV + refresh | YES | **HIGH** (backend shares `.env`) | NO | ~seconds | NO | NO | YES | NO | engine+backend |
+| D projected dump NODE_ENV only | NO alone | LOW | NO | 0 live | **YES** | **YES** | YES | **NO** | dump engine rows |
+| **E combined B+D** | **YES** | **LOW** | **NO** | ~seconds | **YES** | **YES** | **YES** | **NO** | engine + targeted dump |
+
+**NORMALIZATION_METHOD_SELECTED = METHOD E (COMBINED MINIMAL): `pm2 startOrRestart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only titan-engine-worker --update-env` from sanitized operator shell + surgical projected dump write (T2 `projection.mjs` / `liveBoundary.writeProjectedActiveDump` pattern) updating **only** `NODE_ENV` leaves on retained online engine dump row (and mirrored nested `env.NODE_ENV` if present); **NO** global `pm2 save`**
+
+**LIVE_ENV_CORRECTION = YES**
+**OTHER_ENV_MUTATION_RISK = LOW** (with sanitized shell + ecosystem-scoped refresh + dump projection limited to `NODE_ENV` leaves)
+**ENGINE_PM_ID_CHANGE = NO** (lab G2; retain `pm_id 9`)
+**ENGINE_DOWNTIME = ~single fork restart (seconds)**
+**DUMP_DURABILITY = YES** (projected dump write required POST live proof)
+**REBOOT_DURABILITY = YES** (after projection matches live `production`)
+**ROLLBACK_EXACT = YES** (PRE God env + PRE dump bytes/mode/uid/gid restore)
+**PM2_SAVE_REQUIRED = NO**
+**BLAST_RADIUS = retained `titan-engine-worker` online singleton + targeted engine dump row(s) only**
+
+**NODE_ENV_NORMALIZATION_BEHAVIORAL_RISK = LOW**
+Engine-reachable paths (`engineWorkerLeader.js` → `scheduler.js` → `pipelineSchedulerRuntime.js`, `db.js`, `autopilot.js`, `tradingEngine.js`) branch on `NODE_ENV` only for **`test`** skips or not at all. **No** engine-reachable `development` vs `production` behavior delta proven material. `config/index.js` dev/production profiles are **not** imported by engine worker. Normalization aligns runtime label with canonical ecosystem; does **not** by itself change trading/scheduling/autopilot gates (`ENGINE_MODE`, `AUTOPILOT_ENABLED`, `SCHEDULER_ENABLED`, `TRADING_ENGINE_ENABLED`, `IDLE_MODE_ENABLED` preserved).
+
+#### Other-env preservation contract (future execution)
+
+**NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED = required YES POST**
+Mechanism: PRE/POST compare sanitized application env keysets via `pm2SemanticModel.sanitizeApplicationEnvContainer` + sorted key-set equality + per-key non-secret value hash aggregate (secrets: presence/class only, never values). Explicit invariants: `PATH`, `DB_*`, `REDIS_*`, JWT/session/security keys, `ENGINE_MODE`, `AUTOPILOT_ENABLED`, `SCHEDULER_ENABLED`, `TRADING_ENGINE_ENABLED`, `IDLE_MODE_ENABLED` — key presence and semantic hash match excluding `NODE_ENV`.
+
+#### Future execution envelope `ENGINE_NODE_ENV_NORMALIZATION` (design only — NOT authorized)
+
+**AUTHORIZED_EFFECTS (future, minimum proven set):**
+- `ENGINE_NODE_ENV_DEVELOPMENT_TO_PRODUCTION` (live God env)
+- `REQUIRED_TARGETED_ENGINE_REFRESH` = `pm2 startOrRestart …/backend/ecosystem.config.json --only titan-engine-worker --update-env` from **sanitized shell** (`env -i` minimal `HOME`/`PATH`/`PM2_HOME`/`USER`; **must not** export parent `NODE_ENV`)
+- `REQUIRED_PROJECTED_DUMP_UPDATE` = surgical `NODE_ENV` leaf projection on retained online engine dump entry (mode `0600` atomic write; PRE dump backup)
+
+**EXPLICITLY_EXCLUDED:** B1 three-file deploy · backend 4→2 · backend reload · collector · processor · C2/052 · DB · Redis · JWT/credentials · `.env` write · PATH normalization · global `pm2 save` · stopped `pm_id 5` deletion · unrelated PM2 cleanup
+
+**PRE capture:** live engine identity · singleton count · live `NODE_ENV` · dump `NODE_ENV` leaves · dump SHA/mode/uid/gid · env key-set fingerprint · health 5002/5003 · B1 PRE SHA256 unchanged · backend count 4
+**POST proof:** `LIVE_ENGINE_NODE_ENV=production` · `RESURRECT_EXPECTED_ENGINE_NODE_ENV=production` · `ENGINE_ONLINE_COUNT=1` · `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED=YES` · health PASS · B1 PRE SHA256 unchanged
+**Rollback:** restore PRE God `development` + PRE dump bytes/mode/uid/gid if touched · singleton=1 · health PASS
+
+#### Readiness decision
+
+**NODE_ENV_NORMALIZATION_READINESS = READY_FOR_OWNER_AUTHORIZATION**
+**NODE_ENV_NORMALIZATION_BLOCKERS = NONE** (technical design complete; execution blocked on Owner one-shot authorization only)
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO** (recheck required after future successful normalization)
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_PENDING_OWNER_AUTHORIZATION**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_OWNER_AUTHORIZATION**
+**CURRENT_STAGE = B1_PRODUCTION_DEPLOYMENT_READINESS** · **CURRENT_STAGE_PROGRESS = 5/9** · **REMAINING_STAGES = 4** · **PROJECT_PROGRESS = 3/10**
+
+**THIS TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · isolated_lab_only=/tmp (destroyed)
 
