@@ -5476,3 +5476,248 @@ After `pm2 start <EXTRA_PM_ID_NUMERIC>` ONLY IF forward stop was applied:
 
 **THIS RECOVERY DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
 
+### ETR one-shot execution closeout (CONSUMED / RECOVERY_COMPLETE / 20260828)
+
+**ETR_RUN_ID = ETR-20260828T192616Z**
+**ENGINE_TOPOLOGY_INCIDENT_RECOVERY_RESULT = RECOVERY_COMPLETE**
+**ENGINE_TOPOLOGY_INCIDENT_RECOVERY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**AUTHORIZATION_CONSUMED_AT = `2026-08-28T19:26:16.959Z`**
+**FORWARD_EFFECT = `pm_id 5` online → stopped**
+**ENGINE_STOP_APPLIED = YES**
+**ROLLBACK_START_APPLIED = NO**
+**PM2_SAVE_COUNT = 0**
+**DUMP_MUTATION = 0**
+**POST_ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** (unchanged)
+**POST_ENGINE_ONLINE_COUNT = 1**
+**POST_RETAINED_PM_ID = 9** · **POST_RETAINED_PID = 216418** · **POST_RETAINED_NODE_ENV = development** (unchanged)
+**ENGINE_TOPOLOGY_RECOVERY_AUTHORIZED = NO** (consumed / closed)
+**INCIDENT_LIVE_TOPOLOGY_POST_ETR = `pm_id 5` stopped · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=1`**
+
+Evidence: `/home/ubuntu/TITANGOLD_ETR-20260828T192616Z.txt`
+SHA256 = `10a9a8ac08af10b62bb6c761ae3f4f8a0fa7fb6441f5128b71d16212edfb2857` · mode **0600**
+
+### ENN failure RCA closeout (COMPLETE / READ-ONLY / 20260828)
+
+**ENN_RCA = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY / NO PRODUCTION MUTATION**
+**SUBJECT_RUN = ENN-20260828T191045Z**
+**RECOVERY_RUN = ETR-20260828T192616Z** · **RECOVERY_RESULT = RECOVERY_COMPLETE**
+
+#### Root cause
+
+**ENN_ROOT_CAUSE = UNSAFE_PM2_PRIMITIVE_STARTORRESTART_BY_APP_NAME**
+
+`pm2 startOrRestart <ecosystem.config.json> --only titan-engine-worker --update-env` resolves target by **application name**, not numeric `pm_id`. With two persisted `titan-engine-worker` entries (`pm_id 5` stopped · `pm_id 9` online), PM2 6.0.13 `--only <app>` semantics:
+
+1. **Started** previously stopped `pm_id 5` with ecosystem-merged env (`NODE_ENV=production`, reduced keyset).
+2. **Refreshed** retained `pm_id 9` but altered application env **key-set** (shell keys imported), failing `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED`.
+
+Forward aborted at **`MID_KEYSET_FINGERPRINT_DRIFT`** before projected dump write.
+
+**ENN_CONTRIBUTING_FACTORS:**
+- V1 envelope authorized ecosystem `startOrRestart` despite known duplicate engine entries.
+- Rollback contract restarted only retained `pm_id 9`; did not address extra `pm_id 5` brought online → **`ROLLBACK_PROOF_FAIL`** · `ENGINE_ONLINE_COUNT=2`.
+
+#### Affected scope
+
+| Layer | Impact |
+|---|---|
+| Live PM2 | `pm_id 5` online `production` (regression) · `pm_id 9` online `development` (keyset drift) · `ENGINE_ONLINE_COUNT=2` |
+| Active dump | **unchanged** (`PROJECTED_DUMP_WRITE_APPLIED=NO`) |
+| DB / Redis / JWT / `.env` | **0 mutation** |
+| Backend / collector / processor | **unchanged** (no restart) |
+| B1 source files | **unchanged** |
+| Health | **PASS** throughout |
+
+#### Why `startOrRestart` was unsafe
+
+- Targets **all** PM2 processes matching app name `titan-engine-worker`, not solely retained singleton.
+- Can **start** stopped duplicate entries (proven: `pm_id 5`).
+- Imports ecosystem + `env_file` merge; with sanitized shell still risks env key-set expansion on retained process.
+- **Violates** post-T2 singleton live intent when extra entry exists in PM2 registry.
+
+**SAFE_ALTERNATIVE_CLASS (V2):** numeric `pm_id` only — `pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env` with explicit bounded `NODE_ENV=production` in sanitized shell; **never** `startOrRestart` · **never** name-based targeting · **never** touch `EXTRA_PM_ID`.
+
+#### Recovery result
+
+**ETR-20260828T192616Z = RECOVERY_COMPLETE**
+- `pm2 stop 5` (numeric only) restored `ENGINE_ONLINE_COUNT=1`.
+- Retained `pm_id 9` pid/NODE_ENV preserved.
+- Dump SHA/mode unchanged · `PM2_SAVE_COUNT=0`.
+
+#### Confirmed no unauthorized mutation (ENN window)
+
+**ENN_PRODUCTION_MUTATION_LEDGER:**
+- `PM2_PROCESS_MUTATION = YES` (authorized forward refresh + rollback restart on retained only)
+- `PM2_SAVE_COUNT = 0`
+- `ACTIVE_DUMP_MUTATION = 0`
+- `DB_MUTATION = 0` · `REDIS_MUTATION = 0` · `JWT_LIVE_MUTATION = 0` · `ENV_WRITE = 0`
+- `B1_SOURCE_MUTATION = 0` · `C2_052 = NOT EXECUTED`
+
+**THIS RCA TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · Rule02 governance-only
+
+### ENGINE NODE_ENV normalization V2 envelope (design only — NOT authorized / 20260828)
+
+**CLASSIFICATION = TIER 3 DESIGN-ONLY / NO PRODUCTION MUTATION**
+**SUPERSEDES_FORWARD_PRIMITIVE = V1 `startOrRestart --only titan-engine-worker` (REJECTED / PROVEN_UNSAFE_BY_ENN)**
+**AUTHORIZED_TRANSACTION = ENGINE_NODE_ENV_NORMALIZATION_V2**
+**TARGET_SCOPE = RETAINED_ENGINE_NUMERIC_PM_ID_ONLY**
+**DESIGN_SNAPSHOT_RETAINED_PM_ID = 9** (fresh-resolve required; not hardcoded mutation authority)
+**DESIGN_SNAPSHOT_EXTRA_PM_ID = 5** (must remain **stopped**; **must not** be mutated)
+**ENGINE_NODE_ENV_NORMALIZATION_V2_ENVELOPE = COMPLETE**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_ROLLBACK_CONTRACT = DETERMINISTIC / NUMERIC_PM_ID_ONLY / NO_NAME_RESOLUTION / NO_FALLBACK**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_EXECUTION_READY = YES** (design)
+**NODE_ENV_NORMALIZATION_V1_REAUTH_READY = NO** (superseded by V2 design)
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
+
+#### Authorized effects (forward — minimum)
+
+**AUTHORIZED_EFFECTS:**
+- `RETAINED_PM_ID` live God env: **`NODE_ENV` only** `development` → `production`
+- `REQUIRED_PROJECTED_DUMP_UPDATE` = surgical `NODE_ENV` leaf on **retained online** engine dump row only (atomic mode `0600`; T2 `projection.mjs` / `liveBoundary.writeProjectedActiveDump` pattern)
+
+**NOT authorized:** any change to `EXTRA_PM_ID` status/env · backend reload · B1 · C2/052
+
+#### Forbidden effects
+
+**EXPLICITLY_FORBIDDEN:**
+- `pm2 startOrRestart` (any form)
+- ecosystem start / restart / recreate / `--only <app>`
+- name-based PM2 targeting (`titan-engine-worker`, app name, `--only`)
+- `pm2 stop` / `start` / `restart` / `reload` / `delete` on `EXTRA_PM_ID` or any non-retained process
+- `pm2 save`
+- dump write except approved projected `NODE_ENV` update on retained online row
+- `.env` write · DB · Redis · JWT/session/secret mutation · PATH mutation
+- non-`NODE_ENV` env mutation on retained engine
+- B1 three-file deploy · C2/052
+- improvisation · fallback selection · retry after auth consume
+
+#### PRE checks (before auth consume)
+
+**RECOVERY_PREREQUISITE:** `ETR-20260828T192616Z = RECOVERY_COMPLETE`
+
+**TOPOLOGY (mandatory):**
+- `titan-engine-worker` entries = exactly `2`
+- `RETAINED_PM_ID` = online · `NODE_ENV=development` · pid/restart_time captured
+- `EXTRA_PM_ID` = **stopped** (must not be online)
+- `ENGINE_ONLINE_COUNT = 1`
+- `PM_ID_NUMERIC_INTEGRITY = PASS` · no ambiguity
+
+**EXTRA_ISOLATION_GATE (mandatory at PRE, mid-forward, pre-dump-write, POST):**
+- `EXTRA_PM_ID` status MUST remain `stopped`
+- `EXTRA_PM_ID` pid MUST remain `0` (or equivalent stopped sentinel)
+- IF extra transitions to `online` at any point → **fail-closed** · rollback · `MANUAL_RECOVERY_REQUIRED`
+
+**DUMP (PRE):**
+- `ACTIVE_DUMP_SHA256 = 72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`
+- mode `0600` · uid/gid `1000/1000`
+
+**SEMANTIC FINGERPRINTS (retained only):**
+- `RETAINED_ENV_KEYSET_FINGERPRINT_PRE`
+- `RETAINED_NON_NODE_ENV_SEMANTIC_FINGERPRINT_PRE`
+- `RETAINED_COMPOUND_IDENTITY_PRE` = name · script · cwd · exec_mode · pm_id · pid
+
+**FLEET:** backend online = `4` · processor/collector/monitor unchanged
+**B1 SHA256:** three target files unchanged vs canonical PRE
+**HEALTH:** five surfaces all HTTP `200`
+**SIDE_EFFECT_BUDGET:** `PM2_SAVE_COUNT=0` · `DUMP_WRITE_ATTEMPTED=0`
+
+Any precheck FAIL → **`STOPPED_BEFORE_AUTH_CONSUME`** · no mutation.
+
+#### Execution primitive (numeric only)
+
+Fixed order:
+1. PRE capture + secure backup (`dump.pm2.pre` + `pre-state.json`)
+2. Auth consume
+3. **Live refresh (retained numeric only):**
+
+```text
+env -i HOME=<h> USER=<u> PM2_HOME=/home/ubuntu/.pm2 PATH=<canonical> \
+  NODE_ENV=production \
+  pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env
+```
+
+4. **Mid-step gates** (all required before dump write)
+5. **Projected dump write** — `NODE_ENV` leaves on retained **online** row only → `production`
+6. POST proofs
+
+**Mid-step gates (fail-closed):**
+- `RETAINED_LIVE_NODE_ENV = production`
+- `RETAINED_PM_ID` / pid unchanged (restart permitted; pm_id stable)
+- `RETAINED_RESTART_TIME` may increment by ≤1 (fork restart); pid change allowed only with same pm_id
+- `RETAINED_ENV_KEYSET_FINGERPRINT = PRE` (exact)
+- `RETAINED_NON_NODE_ENV_SEMANTIC_FINGERPRINT = PRE` (exact)
+- `EXTRA_PM_ID` still **stopped**
+- `ENGINE_ONLINE_COUNT = 1`
+- five-surface health PASS
+- `PM2_SAVE_COUNT = 0`
+
+#### Rollback contract (deterministic)
+
+**ROLLBACK_METHOD_COUNT = 1**
+**PM2_NUMERIC_INSTANCE_IDENTITY_ONLY = YES**
+**ROLLBACK_NAME_RESOLUTION = FORBIDDEN**
+**ROLLBACK_IMPROVISATION = FORBIDDEN**
+
+**Rollback entry:** any forward step after auth consume fails mid/post proof.
+
+**Fixed sequence:**
+1. **Dump restore (conditional):** IF `PROJECTED_DUMP_WRITE_APPLIED=YES` → atomic restore `SECURE_ROOT/dump.pm2.pre` → active dump; verify byte-identical to PRE.
+2. **Live restore (mandatory if live refresh applied):**
+
+```text
+env -i HOME=<h> USER=<u> PM2_HOME=/home/ubuntu/.pm2 PATH=<canonical> \
+  NODE_ENV=development \
+  pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env
+```
+
+**Rollback FORBIDDEN:** `startOrRestart` · ecosystem commands · name-based PM2 · `pm2 start/stop` on `EXTRA_PM_ID` · `pm2 save` · any dump edit other than exact PRE restore · improvisation
+
+**Rollback proofs (all required):**
+- `RETAINED_NODE_ENV = development` (PRE)
+- retained keyset + non-NODE_ENV semantic fingerprints = PRE
+- `EXTRA_PM_ID` still **stopped** · unchanged
+- `ENGINE_ONLINE_COUNT = 1`
+- dump SHA/mode = PRE (or restored PRE if dump was written)
+- `PM2_SAVE_COUNT = 0`
+- five-surface health PASS
+
+**Terminal:** all PASS → **`ROLLED_BACK`** · any FAIL → **`MANUAL_RECOVERY_REQUIRED`**
+
+#### POST proofs (forward success)
+
+| Proof | Expected |
+|---|---|
+| `LIVE_ENGINE_NODE_ENV` (retained) | `production` |
+| `PERSISTED_ENGINE_NODE_ENV` (retained online dump row) | `production` |
+| `RESURRECT_EXPECTED_ENGINE_NODE_ENV` | `production` |
+| `RETAINED_PM_ID` | unchanged numeric |
+| `ENGINE_ONLINE_COUNT` | `1` |
+| `EXTRA_PM_ID` | **stopped** (untouched) |
+| `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED` | `YES` |
+| `ACTIVE_DUMP_SHA256` | changed only by approved projection (POST ≠ PRE iff projection applied; content must match expected projected artifact) |
+| `ACTIVE_PM2_DUMP_MODE` | `0600` |
+| `PM2_SAVE_COUNT` | `0` |
+| Five-surface health | PASS |
+| B1 three-file SHA256 | unchanged |
+
+**Terminal success:** **`NORMALIZATION_V2_COMPLETE`**
+
+#### Failure states (canonical)
+
+| State | Meaning |
+|---|---|
+| `STOPPED_BEFORE_AUTH_CONSUME` | PRE/precheck failed; zero mutation |
+| `STOPPED_EXTRA_NOT_STOPPED` | Extra not stopped at PRE; unsafe to proceed |
+| `MID_EXTRA_STARTED` | Extra came online during forward; critical isolation breach |
+| `MID_KEYSET_FINGERPRINT_DRIFT` | Retained env keyset changed beyond `NODE_ENV` |
+| `MID_NON_NODE_ENV_SEMANTIC_DRIFT` | Retained non-NODE_ENV semantics changed |
+| `MID_LIVE_NODE_ENV_NOT_PRODUCTION` | Live refresh did not set production on retained |
+| `PROJECTED_DUMP_WRITE_FAIL` | Dump projection failed or diff too wide |
+| `POST_PROOF_FAIL` | POST validation failed |
+| `ROLLED_BACK` | Rollback proofs all PASS |
+| `MANUAL_RECOVERY_REQUIRED` | Rollback incomplete or ambiguous; no retry |
+
+**THIS V2 DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
+
