@@ -5247,18 +5247,54 @@ Engine-reachable paths (`engineWorkerLeader.js` → `scheduler.js` → `pipeline
 **NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED = required YES POST**
 Mechanism: PRE/POST compare sanitized application env keysets via `pm2SemanticModel.sanitizeApplicationEnvContainer` + sorted key-set equality + per-key non-secret value hash aggregate (secrets: presence/class only, never values). Explicit invariants: `PATH`, `DB_*`, `REDIS_*`, JWT/session/security keys, `ENGINE_MODE`, `AUTOPILOT_ENABLED`, `SCHEDULER_ENABLED`, `TRADING_ENGINE_ENABLED`, `IDLE_MODE_ENABLED` — key presence and semantic hash match excluding `NODE_ENV`.
 
-#### Future execution envelope `ENGINE_NODE_ENV_NORMALIZATION` (design only — NOT authorized)
+#### Execution envelope `ENGINE_NODE_ENV_NORMALIZATION` (design only — NOT authorized)
 
-**AUTHORIZED_EFFECTS (future, minimum proven set):**
+**AUTHORIZED_TRANSACTION = ENGINE_NODE_ENV_NORMALIZATION**
+**ENGINE_NODE_ENV_NORMALIZATION_EXECUTION_ENVELOPE = COMPLETE**
+**ENGINE_NODE_ENV_NORMALIZATION_ROLLBACK_CONTRACT = DETERMINISTIC / SINGLE_PATH / NO_FALLBACK_SELECTION**
+
+**AUTHORIZED_EFFECTS (minimum proven set):**
 - `ENGINE_NODE_ENV_DEVELOPMENT_TO_PRODUCTION` (live God env)
 - `REQUIRED_TARGETED_ENGINE_REFRESH` = `pm2 startOrRestart …/backend/ecosystem.config.json --only titan-engine-worker --update-env` from **sanitized shell** (`env -i` minimal `HOME`/`PATH`/`PM2_HOME`/`USER`; **must not** export parent `NODE_ENV`)
 - `REQUIRED_PROJECTED_DUMP_UPDATE` = surgical `NODE_ENV` leaf projection on retained online engine dump entry (mode `0600` atomic write; PRE dump backup)
 
-**EXPLICITLY_EXCLUDED:** B1 three-file deploy · backend 4→2 · backend reload · collector · processor · C2/052 · DB · Redis · JWT/credentials · `.env` write · PATH normalization · global `pm2 save` · stopped `pm_id 5` deletion · unrelated PM2 cleanup
+**EXPLICITLY_EXCLUDED:** B1 three-file deploy · backend 4→2 · backend reload · collector · processor · C2/052 · DB · Redis · JWT/credentials · `.env` write · PATH normalization · global `pm2 save` · stopped `pm_id 5` deletion · unrelated PM2 cleanup · `pm2 resurrect` · ecosystem `startOrRestart` during rollback · inverse projection · env replay helpers · fallback method selection · improvisation
 
-**PRE capture:** live engine identity · singleton count · live `NODE_ENV` · dump `NODE_ENV` leaves · dump SHA/mode/uid/gid · env key-set fingerprint · health 5002/5003 · B1 PRE SHA256 unchanged · backend count 4
-**POST proof:** `LIVE_ENGINE_NODE_ENV=production` · `RESURRECT_EXPECTED_ENGINE_NODE_ENV=production` · `ENGINE_ONLINE_COUNT=1` · `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED=YES` · health PASS · B1 PRE SHA256 unchanged
-**Rollback:** restore PRE God `development` + PRE dump bytes/mode/uid/gid if touched · singleton=1 · health PASS
+**PRE capture:** live engine `pm_id`/pid · `ENGINE_ONLINE_COUNT` · live `NODE_ENV` · canonical `NODE_ENV` · persisted dump `NODE_ENV` · active dump SHA256/mode/uid/gid · engine env key-set fingerprint · engine non-`NODE_ENV` semantic fingerprint · B1 three-file PRE SHA256 · backend instance count · health 5002/5003
+
+**POST proof:** `LIVE_ENGINE_NODE_ENV=production` · `PERSISTED_ENGINE_NODE_ENV=production` · `RESURRECT_EXPECTED_ENGINE_NODE_ENV=production` · `ENGINE_ONLINE_COUNT=1` · `ENGINE_PM_ID` unchanged · `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED=YES` · health PASS · B1 PRE SHA256 unchanged · `PM2_SAVE_COUNT=0`
+
+##### Rollback contract (deterministic — design only)
+
+**ROLLBACK_AUTHORITY = SECURE_ROOT/dump.pm2.pre (exact PRE bytes/mode/uid/gid) + PRE live fingerprint artifacts**
+**ROLLBACK_METHOD_COUNT = 1**
+**ROLLBACK_IMPROVISATION = FORBIDDEN**
+**ROLLBACK_FALLBACK_SELECTION = FORBIDDEN**
+
+**Single authorized rollback sequence (fixed order; no branch selection at runtime):**
+
+1. **Dump restore (conditional, ledger-driven):** IF `PROJECTED_DUMP_WRITE_APPLIED=YES` THEN atomic restore `SECURE_ROOT/dump.pm2.pre` → `/home/ubuntu/.pm2/dump.pm2` preserving PRE mode/uid/gid; fresh-read verify `ACTIVE_DUMP_SHA256 == ACTIVE_DUMP_SHA256_PRE` (byte-identical). IF `PROJECTED_DUMP_WRITE_APPLIED=NO` THEN skip (no dump mutation occurred).
+2. **Live engine restore (mandatory when forward live refresh applied):** IF `ENGINE_REFRESH_APPLIED=YES` THEN from sanitized shell ONLY:
+   `env -i HOME=… USER=… PM2_HOME=… PATH=… NODE_ENV=development pm2 restart <RETAINED_PM_ID_PRE> --update-env`
+   (**NOT** `startOrRestart` ecosystem · **NOT** ecosystem canonical `production` path · explicit `NODE_ENV=development` in sanitized shell is the sole live-restore primitive). IF `ENGINE_REFRESH_APPLIED=NO` THEN skip.
+
+**Rollback proof (all required; no partial credit):**
+
+| Proof | Requirement |
+|---|---|
+| `LIVE_ENGINE_NODE_ENV` | exactly `LIVE_ENGINE_NODE_ENV_PRE` (`development`) |
+| Persisted dump | exactly PRE state (`ACTIVE_DUMP_SHA256 == ACTIVE_DUMP_SHA256_PRE` when dump was touched; if untouched, unchanged from PRE) |
+| `ENGINE_PM_ID` | unchanged vs `ENGINE_PM_ID_PRE` |
+| `ENGINE_ONLINE_COUNT` | `1` |
+| `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED` | `YES` (POST-rollback fingerprints match PRE) |
+| Required health | PASS (`5002/health` + `5003/health` = 200) |
+
+**Terminal rollback outcomes (only two):**
+
+- **SUCCESS:** every proof above PASS → journal terminal **`ROLLED_BACK`** · `PRODUCTION_MUTATION_CAPABILITY=CLOSED` · `NO_POST_TERMINAL_MUTATION=PASS`
+- **FAILURE:** any proof missing/fail/ambiguous/unproven → journal terminal **`MANUAL_RECOVERY_REQUIRED`** · stop immediately · **no** alternate method · **no** retry · **no** diagnostic `pm2 save` · **no** further PM2/dump mutation
+
+**Forbidden during rollback:** `pm2 save` · `pm2 resurrect` · backend/collector/processor restart · B1/source mutation · PATH/NODE_ENV on non-engine · any dump edit other than exact PRE restore · any live env change other than Step 2 primitive above
 
 #### Readiness decision
 
