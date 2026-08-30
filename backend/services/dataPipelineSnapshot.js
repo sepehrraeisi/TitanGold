@@ -211,13 +211,14 @@ function estimateTotalRecords(row) {
 }
 
 async function loadHealthCards() {
-  const [stats24h, totals] = await Promise.all([
+  const [stats24h, totals, pendingResult] = await Promise.all([
     query(`
       SELECT
         COUNT(*)::int AS total_requests_24h,
         COUNT(*) FILTER (WHERE status IN ('success', 'cached'))::int AS passed_24h,
-        COUNT(*) FILTER (WHERE status IN ('failed', 'timeout'))::int AS failed_24h,
-        0::int AS pending_24h
+        COUNT(*) FILTER (
+          WHERE LOWER(status) IN ('failure', 'failed', 'error')
+        )::int AS failed_24h
       FROM data_hub_logs
       WHERE created_at > NOW() - INTERVAL '24 hours'
     `),
@@ -226,7 +227,16 @@ async function loadHealthCards() {
       FROM pg_class
       WHERE oid = 'collected_data'::regclass
     `),
+    query(`
+      SELECT COUNT(*)::int AS pending_24h
+      FROM collected_data
+      WHERE status = 'pending'
+        AND collected_at > NOW() - INTERVAL '24 hours'
+    `),
   ]);
+  const row = stats24h.rows[0] || {};
+  row.pending_24h = pendingResult.rows[0]?.pending_24h ?? 0;
+  stats24h.rows[0] = row;
   return { stats24h, totals };
 }
 
