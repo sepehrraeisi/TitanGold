@@ -357,11 +357,34 @@ const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 <>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
                         <MetricCard label={t('total_records')} value={activeSnapshot.totalRecords || 0} color="blue" />
-                        <MetricCard
-                            label={t('normalized_percent')}
-                            value={`${(activeSnapshot.normalizedPercent || 0).toFixed(1)}%`}
-                            color="purple"
-                        />
+                        {(() => {
+                            const pct = activeSnapshot.normalizedPercent;
+                            const markedUnavailable =
+                                activeSnapshot.metricsAvailability?.normalizedPercent ===
+                                'unavailable';
+                            const unavailable =
+                                markedUnavailable ||
+                                pct == null ||
+                                !Number.isFinite(pct);
+                            if (unavailable) {
+                                return (
+                                    <MetricCard
+                                        label={t('normalized_percent')}
+                                        value={t('pipeline_normalization_unavailable')}
+                                        color="purple"
+                                        valueState="unavailable"
+                                    />
+                                );
+                            }
+                            return (
+                                <MetricCard
+                                    label={t('normalized_percent')}
+                                    value={`${pct.toFixed(1)}%`}
+                                    color="purple"
+                                    valueState={pct === 0 ? 'zero' : 'loaded'}
+                                />
+                            );
+                        })()}
                         <MetricCard
                             label={t('pipeline_metric_requests')}
                             value={activeSnapshot.totalRequests24h || 0}

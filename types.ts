@@ -4488,7 +4488,12 @@ export interface DataPipelineSnapshot {
   failed24h: number;
   pending24h: number;
   totalRecords: number;
-  normalizedPercent: number;
+  /** Percent 0–100 when available; null when UNAVAILABLE (never silent-zero). */
+  normalizedPercent: number | null;
+  metricsAvailability?: {
+    normalizedPercent: 'available' | 'unavailable';
+  };
+  normalizedPercentUnavailableReason?: string | null;
   transferThroughput?: PipelineTransferThroughput;
   globalTelegramBacklog?: PipelineGlobalTelegramBacklog;
   telegramIngestMetrics?: PipelineTelegramIngestMetrics;

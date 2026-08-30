@@ -522,7 +522,12 @@ export const dataPipelineSnapshotSchema = z.object({
     failed24h: z.number().int().nonnegative(),
     pending24h: z.number().int().nonnegative(),
     totalRecords: z.number().int().nonnegative(),
-    normalizedPercent: z.number(),
+    // null = UNAVAILABLE (never encode unavailable as 0); 0 = REAL_ZERO when available
+    normalizedPercent: z.number().nullable(),
+    metricsAvailability: z.object({
+        normalizedPercent: z.enum(['available', 'unavailable']),
+    }).optional(),
+    normalizedPercentUnavailableReason: z.string().nullable().optional(),
     transferThroughput: pipelineTransferThroughputSchema.optional(),
     globalTelegramBacklog: pipelineGlobalTelegramBacklogSchema.optional(),
     sources: z.array(z.object({
