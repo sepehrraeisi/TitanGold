@@ -17,7 +17,38 @@ import {
 } from './telegramBacklogIntelligence.js';
 import { getOrLoadCached } from './pipelineSnapshotCache.js';
 import { getDuplicateUrlDashboard } from './dataSourceUrlDuplicateService.js';
+import { buildPipelineNormalizationSummary } from './pipelineNormalizationSummary.js';
 import { logger } from './logger.js';
+
+/**
+ * Map canonical 24h normalization summary → health-card percent.
+ * REAL_ZERO: loaded + finite passRate 0 → 0
+ * REAL_VALUE: loaded + finite passRate → passRate * 100
+ * UNAVAILABLE: not loaded / non-finite → null (never silent 0)
+ * @param {object|null|undefined} summary
+ * @returns {{
+ *   normalizedPercent: number|null,
+ *   metricsAvailability: { normalizedPercent: 'available'|'unavailable' },
+ *   normalizedPercentUnavailableReason: string|null
+ * }}
+ */
+export function resolveNormalizedPercentFromSummary(summary) {
+  const loaded = summary?.meta?.loaded === true;
+  const passRate = summary?.passRate;
+  if (loaded && Number.isFinite(passRate)) {
+    return {
+      normalizedPercent: Number((passRate * 100).toFixed(1)),
+      metricsAvailability: { normalizedPercent: 'available' },
+      normalizedPercentUnavailableReason: null,
+    };
+  }
+  return {
+    normalizedPercent: null,
+    metricsAvailability: { normalizedPercent: 'unavailable' },
+    normalizedPercentUnavailableReason:
+      summary?.meta?.unavailableReason || 'not_loaded',
+  };
+}
 
 /** @deprecated import from normalizedDataContract — kept for tests */
 export function normalizeReadModel(normalized) {
@@ -211,13 +242,14 @@ function estimateTotalRecords(row) {
 }
 
 async function loadHealthCards() {
-  const [stats24h, totals] = await Promise.all([
+  const [stats24h, totals, pendingResult] = await Promise.all([
     query(`
       SELECT
         COUNT(*)::int AS total_requests_24h,
         COUNT(*) FILTER (WHERE status IN ('success', 'cached'))::int AS passed_24h,
-        COUNT(*) FILTER (WHERE status IN ('failed', 'timeout'))::int AS failed_24h,
-        0::int AS pending_24h
+        COUNT(*) FILTER (
+          WHERE LOWER(status) IN ('failure', 'failed', 'error')
+        )::int AS failed_24h
       FROM data_hub_logs
       WHERE created_at > NOW() - INTERVAL '24 hours'
     `),
@@ -226,7 +258,16 @@ async function loadHealthCards() {
       FROM pg_class
       WHERE oid = 'collected_data'::regclass
     `),
+    query(`
+      SELECT COUNT(*)::int AS pending_24h
+      FROM collected_data
+      WHERE status = 'pending'
+        AND collected_at > NOW() - INTERVAL '24 hours'
+    `),
   ]);
+  const row = stats24h.rows[0] || {};
+  row.pending_24h = pendingResult.rows[0]?.pending_24h ?? 0;
+  stats24h.rows[0] = row;
   return { stats24h, totals };
 }
 
@@ -353,6 +394,7 @@ async function buildDataPipelineViewUncached({
     summaryRow,
     recentRows,
     duplicateAnalysis,
+    pipelineNormSummary,
   ] = await Promise.all([
     timedSection('health_cards', loadHealthCards),
     timedSection('source_quality_board', loadSourceQualityRows),
@@ -369,13 +411,18 @@ async function buildDataPipelineViewUncached({
     includeDuplicateAnalysis
       ? timedSection('duplicate_analysis', getDuplicateUrlDashboard)
       : Promise.resolve(null),
+    timedSection('pipeline_norm_percent', buildPipelineNormalizationSummary),
   ]);
   const { stats24h, totals } = healthCards;
 
   const s24 = stats24h.rows[0] || {};
   const tot = totals.rows[0] || {};
   const totalRecords = estimateTotalRecords(tot);
-  const normalizedPercent = 0;
+  const {
+    normalizedPercent,
+    metricsAvailability,
+    normalizedPercentUnavailableReason,
+  } = resolveNormalizedPercentFromSummary(pipelineNormSummary);
 
   const collectorEnrichment = await timedSection(
     'collector_enrichment',
@@ -490,6 +537,11 @@ async function buildDataPipelineViewUncached({
     pending24h: parseInt(s24.pending_24h, 10) || 0,
     totalRecords,
     normalizedPercent,
+    metricsAvailability,
+    normalizedPercentUnavailableReason:
+      metricsAvailability.normalizedPercent === 'unavailable'
+        ? normalizedPercentUnavailableReason
+        : undefined,
     transferThroughput: transferThroughput || undefined,
     globalTelegramBacklog: globalTelegramBacklog || undefined,
     sources,
