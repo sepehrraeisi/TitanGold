@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — T2R162 terminal COMPLETED; CURRENT_AUTHORITY_SNAPSHOT=AUTHORITATIVE; ENGINE_TOPOLOGY_2_TO_1=COMPLETE; PRODUCTION_MUTATION_CAPABILITY=CLOSED; NEXT_GATE=B1_PRODUCTION_DEPLOYMENT_READINESS; DO NOT EXECUTE B1
+description: TitanGold Rule 02 — TELEGRAM_LIVENESS_PRODUCTION_VALIDATION=PASS; CURRENT_STAGE=C2_052_AND_PRODUCTION_CLOSEOUT; C2_052_EXECUTION_AUTHORIZED=NO; PRODUCTION_MUTATION_CAPABILITY=CLOSED
 alwaysApply: true
 ---
 
@@ -17,21 +17,24 @@ alwaysApply: true
 
 **CURRENT_PROGRAM = RESOURCE-STABILIZATION-WP-C-C2 / Telegram-C2 Production Closeout**
 
-**CURRENT_STAGE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+**CURRENT_STAGE = C2_052_AND_PRODUCTION_CLOSEOUT**
 
-**CURRENT_STAGE_PROGRESS = 5/9**
+**CURRENT_STAGE_PROGRESS = 9/9**
 
-**REMAINING_STAGES = 4**
+**REMAINING_STAGES = 0** (within the current 9-stage Telegram/C2 closeout map)
 
-**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+**NEXT_GATE = C2_052_OWNER_ONE_SHOT**
 
-**PROGRESS_BLOCKER = ENGINE_NODE_ENV_DRIFT**
+**PROGRESS_BLOCKER = NONE** (Telegram liveness stage CLOSED / PASS; processor backlog is capacity/performance risk not liveness FAIL; C2_052 still separately Owner-gated and **NOT** authorized)
+
+**TELEGRAM_LIVENESS_STAGE = CLOSED**
+**FULL_TELEGRAM_C2_MAJOR_MILESTONE = OPEN** until C2_052 / production closeout decision
 
 **ROADMAP_MAJOR_MILESTONES = M1 Data Hub CLOSED/FROZEN · M2 AI Shared Foundation CLOSED/FROZEN · M3 Agents Shell CLOSED/FROZEN · M4 Telegram/C2 Production Closeout (IN PROGRESS) · M5 Artemis Core Completion (15 stages) · M6 Post-Core Agent Completion · M7 Settings + AI Provider Infrastructure · M8 Multi-AI Council + Memory/Learning · M9 Artemis Autonomous Operations · M10 Artemis Conversational Control Plane (ACCP)**
 
-**C2_REMAINING_STAGE_MAP = B1_PRODUCTION_DEPLOYMENT_READINESS (CURRENT) · B1_PRODUCTION_DEPLOYMENT_AND_RUNTIME_VALIDATION · TELEGRAM_LIVENESS_PRODUCTION_VALIDATION · RESOURCE_STABILIZATION_GATE · C2_052_AND_PRODUCTION_CLOSEOUT**
+**C2_REMAINING_STAGE_MAP = B1_PRODUCTION_DEPLOYMENT_READINESS (COMPLETE) · B1_PRODUCTION_DEPLOYMENT_AND_RUNTIME_VALIDATION (COMPLETE) · TELEGRAM_LIVENESS_PRODUCTION_VALIDATION (PASS / CLOSED) · RESOURCE_STABILIZATION_GATE (INDEX_REPAIR COMPLETE / GATE PASS) · C2_052_AND_PRODUCTION_CLOSEOUT (CURRENT / OWNER-GATED)**
 
-**C2_052_ROADMAP_STATUS = BLOCKED** (schema READY_TO_APPLY; execution blocked on FAIL_IO_PRESSURE resource gate; separate Owner authorization required)
+**C2_052_ROADMAP_STATUS = READY_FOR_SEPARATE_OWNER_AUTH** (schema READY_TO_APPLY; post-index formal resource gate PASS; **C2_052_EXECUTION_AUTHORIZED = NO** until explicit Owner one-shot)
 
 **AUTOMATED_TRADING_MATURITY = NOT_ASSESSED**
 
@@ -47,6 +50,141 @@ alwaysApply: true
 **SERVER_DRIFT = NONE**
 
 Future runtime-affecting stage closure must record: **MAIN_GIT_SHA** · **RUNTIME_IMPLEMENTATION_SHA** · **DEPLOY_REQUIRED** · **DEPLOY_STATUS** · **RUNTIME_VERIFIED** · **SERVER_DRIFT** · **SERVED_ARTIFACT_PROVENANCE**. Unresolved required server drift → **PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING**.
+
+### Telegram liveness production validation — CLOSED / PASS (20260831)
+
+**TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
+**TELEGRAM_LIVENESS_CLOSEOUT_CLASSIFICATION = TIER 3 READ-ONLY / GOVERNANCE ONLY**
+**OBSERVATION_WINDOW = `2026-08-31T07:41:18Z` → `2026-08-31T07:48:04Z`**
+**CYCLE_A = `2026-08-31T07:42:06.235Z`** · selected=239 · inserted=239 · errors=0 · `skipped_run=false` · `TICK_SUCCESS`
+**CYCLE_B = `2026-08-31T07:47:02.913Z`** · selected=451 · inserted=451 · errors=0 · `skipped_run=false` · `TICK_SUCCESS`
+**CYCLE_DELTA_S ≈ 296.7** (configured `intervalMs=300000`)
+**LAYER_A_LIFECYCLE = TICK_SUCCESS** · `runtimeOwner=titan-engine-worker` · pid **246633** matches live singleton `pm_id 9`
+**TRANSFER_HEARTBEAT = FRESH / TWO QUALIFYING CYCLES**
+**COLLECTOR_HEALTH = 200** · accounts **200** · channels **200** · active Telegram auth failure **NO**
+**ENGINE_PID_STABLE = YES** (246633) · **ENGINE_RESTART_TIME_UNCHANGED = YES** (9)
+**COLLECTOR_RESTART_UNCHANGED = YES** (13556) · **PROCESSOR_RESTART_UNCHANGED = YES** (6)
+**INGESTION_ADVANCED = YES** · **TRANSFER_ADVANCED = YES** · **PROCESSOR_OUTPUT_ADVANCED = YES**
+**PROCESSOR_BACKLOG = CAPACITY_PERFORMANCE_RISK / NOT_LIVENESS_FAILURE**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2_052 = NOT EXECUTED**
+**PRODUCTION_MUTATION_DURING_LIVENESS_CLOSEOUT = 0**
+
+**B1_PRODUCTION_ACTIVATED = YES** (Telegram always-on production liveness contract)
+**B1_RUNTIME_VALIDATED = YES** (Telegram liveness contract)
+
+Telegram liveness stage is **closed**.
+The full Telegram/C2 major milestone (**M4**) remains **open** until C2_052 / production closeout decision.
+
+Residual risks (separate; not liveness FAIL): processor backlog · swap pressure · backend `NODE_ENV=development` · duplicate collector-monitor · error-watch pid 0 · MQ fallback · dump SHA vs Rule02 ledger · Git/GitHub overlay drift.
+
+Do **NOT** execute C2_052 from this closeout.
+
+
+### RESOURCE_IO_INDEX_REPAIR execution envelope (DESIGN ONLY / 20260829)
+
+**RESOURCE_IO_INDEX_REPAIR_ENVELOPE = COMPLETE**
+**RESOURCE_IO_INDEX_REPAIR_ENVELOPE_VERSION = 1.0.1**
+**SUPERSEDES_ENVELOPE_VERSION = 1.0.0**
+**AUTHORIZED_TRANSACTION = RESOURCE_IO_INDEX_REPAIR**
+**RESOURCE_IO_INDEX_REPAIR_AUTHORIZED = NO / CONSUMED**
+**EXECUTION_AUTHORIZED = NO / CONSUMED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+
+**RESOURCE_IO_ROOT_CAUSE = PROCESSOR_QUERY_PRESSURE**
+**INDEX_REPAIR_PRECHECK_STATUS = WARNING** (historical precheck; production index now PRESENT/VALID)
+**INDEX_UNIQUE = FORBIDDEN** (precheck TABLESAMPLE showed `raw_message_id` duplicates)
+**idx_processed_telegram_messages_raw_message_id = PRESENT / VALID / READY / LIVE** (275 MB btree)
+
+**EXACT_SQL (authorized effect when Owner one-shot granted for envelope 1.0.1):**
+```sql
+CREATE INDEX CONCURRENTLY idx_processed_telegram_messages_raw_message_id
+ON public.processed_telegram_messages (raw_message_id);
+```
+
+**AUTHORIZED_EFFECTS = CREATE_INDEX_CONCURRENTLY_RAW_MESSAGE_ID_ONLY**
+**FORBIDDEN = VACUUM · ANALYZE · REINDEX · DROP INDEX (auto) · UNIQUE · DML · PM2 · Redis · code · C2/052 · config · kill PG · restart processor/services · maintenance settings mutation**
+
+**PRE (mandatory):** table identity · no equivalent/invalid index · disk ≥5 GiB free · locks acceptable · EXPLAIN/processor throughput baselines · **P5b SEVERE_IO_STARVATION_GUARD** (CPU/iowait/swap-out/dm-0; abort before auth consume if severe)  
+**EXEC:** auth consume → single `CREATE INDEX CONCURRENTLY` → poll `pg_stat_progress_create_index` · record phase changes · detect unexpected long blocking locks · fail-closed on invalid leftover  
+**FAILURE:** never kill PG · never restart processor/services · never change maintenance settings · leave DB unchanged except possible invalid index artifact · separate `DROP INDEX CONCURRENTLY` Owner auth required  
+**POST:** index valid/ready · EXPLAIN before/after (no full `processed_telegram_messages` seq scan on NOT EXISTS path) · processor online · restart counters unchanged · processed timestamps advancing · **formal Resource Gate sampling after completion** (Reject A/B/C unchanged; COMPLETED ≠ gate PASS)  
+**ROLLBACK:** **NO automatic DROP**; invalid leftover requires separate `RESOURCE_IO_INDEX_REPAIR_INVALID_INDEX_DROP` Owner authorization  
+**TERMINAL = COMPLETED | FAILED | MANUAL_RECOVERY_REQUIRED | STOPPED_BEFORE_AUTH_CONSUME**
+
+Current design authority (immutable / DO NOT MODIFY):
+`/home/ubuntu/TITANGOLD_RESOURCE_IO_INDEX_REPAIR_ENVELOPE_v1_0_1_20260829T101739Z.txt`
+SHA256 = `8a6756d3641123d4927597f4d1fcb3155f345fc88960e14e74e1adaecf416325`
+bytes = 13224 · mode **0600**
+
+Historical v1.0.0 (superseded):
+`/home/ubuntu/TITANGOLD_RESOURCE_IO_INDEX_REPAIR_ENVELOPE_20260829T101404Z.txt`
+SHA256 = `5303c5d95c44035b069413c4c6c3ec4997d0511b41e8c735220c4d6a800041c0`
+
+**THIS ENVELOPE DESIGN TASK MUTATION LEDGER:** production=0 · CREATE INDEX=0 · PM2=0 · VACUUM=0 · ANALYZE=0 · DB_DML=0 · kill=0 · Rule02 governance-only
+
+### RESOURCE_IO_INDEX_REPAIR one-shot execution — STOPPED_BEFORE_AUTH_CONSUME (20260829)
+
+**RIOIR_RUN_ID = `RIOIR-20260829T102230Z`**
+**ENVELOPE_VERSION = 1.0.1**
+**OWNER_AUTHORIZATION = OWNER_APPROVED_ONE_SHOT / CAPTURED / UNCONSUMED**
+**AUTHORIZATION_CONSUMED = NO**
+**TERMINAL = STOPPED_BEFORE_AUTH_CONSUME**
+**STOP_REASON = SEVERE_IO_STARVATION_GUARD_P5b**
+**P5B_CODES = A** (swap-out majority AND swap used 86.81% ≥ 70%)
+**DDL_CREATE_INDEX_ATTEMPTED = NO**
+**DDL_CREATE_INDEX_APPLIED = NO**
+**PM2_MUTATION = 0** · **VACUUM = 0** · **ANALYZE = 0** · **DROP_INDEX = 0** · **PG_KILL = 0**
+**RESOURCE_IO_INDEX_REPAIR_AUTHORIZED = NO**
+**EXECUTION_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO**
+**NEXT_GATE = RESOURCE_IO_INDEX_REPAIR_OWNER_REAUTHORIZATION_AFTER_P5B_CLEAR**
+
+Evidence:
+`/home/ubuntu/TITANGOLD_RESOURCE_IO_INDEX_REPAIR_RIOIR-20260829T102230Z.txt`
+SECURE = `/home/ubuntu/TITANGOLD_RIOIR_EXEC_RIOIR-20260829T102230Z`
+
+Do **NOT** retry the historical `RIOIR-20260829T102230Z` authorization. Superseded by COMPLETED run below.
+
+### RESOURCE_IO_INDEX_REPAIR one-shot execution — COMPLETED (20260830)
+
+Owner explicit authorization (verbatim material):
+AUTHORIZED_TRANSACTION=RESOURCE_IO_INDEX_REPAIR · ENVELOPE_VERSION=1.0.1 · RISK_ACCEPTED=YES
+(reason: root cause confirmed; ANALYZE did not change plan; pressure STUCK; index is structural remediation)
+
+**RIOIR_RUN_ID = `RIOIR-20260830T072328Z`**
+**ENVELOPE_VERSION = 1.0.1**
+**OWNER_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**AUTHORIZATION_CONSUMED = YES**
+**AUTHORIZATION_CONSUMED_AT = `2026-08-30T07:24:51.090418+00:00`**
+**TERMINAL = COMPLETED**
+**DDL_CREATE_INDEX_ATTEMPTED = YES**
+**DDL_CREATE_INDEX_APPLIED = YES**
+**INDEX_VALID = YES** · **indisvalid/indisready/indislive = true/true/true**
+**INDEX_SIZE = 275 MB**
+**APPROX_BUILD_WALL_S ≤ 40** (completed before first progress poll; phase log empty)
+**LOCK_ANOMALY = NO**
+**P5B_PRE = CLEAR** (SEVERE_IO_STARVATION=NO · codes=[])
+**POST_EXPLAIN_PASS = YES** (Index Only Scan on `idx_processed_telegram_messages_raw_message_id`; no seq scan on processed_telegram_messages)
+**PROCESSOR_ONLINE = YES** · **RESTART_TIME_UNCHANGED = YES** (pm_id 11 · restart_time 6)
+**MAX_CREATED_AT_ADVANCED = YES** (`2026-08-30 07:24:28` → `2026-08-30 07:35:00`)
+**POST_RESOURCE_GATE_RESULT = PASS** (samples=6 · span_sec=497 · Reject A/B/C = NO)
+**PM2_MUTATION = 0** · **VACUUM = 0** · **ANALYZE = 0** · **DROP_INDEX = 0** · **PG_KILL = 0**
+**RESOURCE_IO_INDEX_REPAIR_AUTHORIZED = NO / CONSUMED**
+**EXECUTION_AUTHORIZED = NO / CONSUMED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**C2_052_CURRENT_SAFETY = RESOURCE_GATE_PASS_POST_INDEX / SEPARATE_OWNER_AUTH_REQUIRED**
+**NEXT_GATE = TELEGRAM_LIVENESS_PRODUCTION_VALIDATION**
+
+Evidence:
+`/home/ubuntu/TITANGOLD_RESOURCE_IO_INDEX_REPAIR_RIOIR-20260830T072328Z.txt`
+SHA256 = `6f0fabaf9bebcb18230c67d193c7870c904b2a804c1670c4643b78dff589cdd5` · mode **0600**
+SECURE = `/home/ubuntu/TITANGOLD_RIOIR_EXEC_RIOIR-20260830T072328Z`
+
+Do **NOT** retry this one-shot. Do **NOT** claim C2 052 authorized. Do **NOT** DROP the index without separate Owner authorization.
 
 ### B1 Production Deployment Readiness — fresh read-only audit closeout (20260828)
 
@@ -86,7 +224,7 @@ Canonical B1 POST SHA256 (deployment verification targets):
 
 All three: staged diff = NO · unstaged diff = NO · mode `664` · uid/gid `1000/1000`.
 
-**CANDIDATE_B_PRODUCTION_DEPLOYED = NO** (all three `PRE_EQUALS_POST = NO`)
+**CANDIDATE_B_PRODUCTION_DEPLOYED = YES** (all three `PRE_EQUALS_POST = YES` post-B1-20260828T204652Z)
 
 #### Engine topology / identity
 
@@ -94,15 +232,15 @@ Fresh PM2 live: **ENGINE_ONLINE_COUNT = 1** (retained online `pm_id **9**` / pid
 **ENGINE_SINGLETON_CURRENT = YES**
 **ENGINE_RUNTIME_IDENTITY = name `titan-engine-worker` · retained pm_id **9** · fork_mode · cwd `/home/ubuntu/webapp/TitanGold/backend` · script `backend/workers/engineWorkerLeader.js`**
 
-#### Engine NODE_ENV gate (BLOCKER)
+#### Engine NODE_ENV gate (CLOSED — ENN V2 COMPLETED 20260828)
 
-**LIVE_ENGINE_NODE_ENV = development**
+**LIVE_ENGINE_NODE_ENV = production**
+**PERSISTED_ENGINE_NODE_ENV = production** (retained online dump row)
 **CANONICAL_ENGINE_NODE_ENV = production** (`backend/ecosystem.config.json`)
-**DOTENV_NODE_ENV_PRESENT = YES** (value not logged)
-**PM2_LIVE_ENGINE_NODE_ENV_SOURCE = persisted PM2 God env + `.env` merge**
-**ENGINE_RESTART_ENV_EFFECT = UNCHANGED_PROVEN** (exact-ID restart/reload preserves `development`; does **not** canonicalize to `production` without separate bounded normalization or ecosystem recreate)
-**ENGINE_NODE_ENV_DRIFT = YES**
-**ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = YES**
+**ENGINE_NODE_ENV_DRIFT = NO**
+**ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = NO / COMPLETED**
+**ENN_V2_RUN_ID = ENN-20260828T200345Z**
+**ENN_V2_RESULT = COMPLETED**
 
 #### Backend topology gate
 
@@ -113,8 +251,10 @@ Evidence: Candidate B does not require PM2 instance-count reduction; `pipelineSc
 
 #### PM2 persistence / resurrect
 
-**ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`**
+**ACTIVE_DUMP_SHA256 = `97023e397c8fa26bb06fdc7e509cb6ce90bf6388a6231f7550243d23f2186d9d`**
+**ACTIVE_DUMP_SHA256_PRE_ENN = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`**
 **ACTIVE_PM2_DUMP_MODE = 0600**
+**PERSISTED_ENGINE_NODE_ENV = production**
 **PERSISTED_ENGINE_ONLINE_COUNT_EXPECTED = 1** (1 online + 1 stopped persisted)
 **PERSISTED_BACKEND_INSTANCE_COUNT_EXPECTED = 4**
 **ENGINE_SINGLETON_PERSISTENCE_DURABLE = YES**
@@ -122,8 +262,9 @@ Evidence: Candidate B does not require PM2 instance-count reduction; `pipelineSc
 
 #### Runtime refresh scope (design only)
 
-**ENGINE_REFRESH_REQUIRED = YES** · primitive = exact retained `pm_id` restart sequential safety preserved (singleton)
-**BACKEND_REFRESH_REQUIRED = YES** · primitive = controlled `titan-backend` cluster reload (all instances)
+**ENGINE_REFRESH_REQUIRED = YES** · primitive = exact retained `pm_id` restart (numeric only; singleton)
+**BACKEND_REFRESH_REQUIRED = YES** · primitive = controlled `titan-backend` cluster reload (all instances) · **MUST run only after engine refresh + engine health PASS**
+**B1_RUNTIME_MUTATION_ORDER = ENGINE_FIRST_BACKEND_LAST**
 **COLLECTOR_REFRESH_REQUIRED = NO**
 **PROCESSOR_REFRESH_REQUIRED = NO**
 
@@ -138,27 +279,162 @@ Evidence: Candidate B does not require PM2 instance-count reduction; `pipelineSc
 
 **COMMIT_LEVEL_DEPLOY = FORBIDDEN**
 Future authorized unit = **B1_EXACT_THREE_FILE_DEPLOY** + **ENGINE_RUNTIME_REFRESH** + **BACKEND_RUNTIME_REFRESH** (no backend 4→2 in B1 envelope)
-Rollback = exact PRE SHA256 restore per target + same bounded refresh scope + health/P persistence proofs.
+**B1_RUNTIME_MUTATION_ORDER = ENGINE_FIRST_BACKEND_LAST** (backend cluster reload is the **final** runtime mutation)
+Rollback = exact PRE SHA256 restore per target + bounded refresh scope per failure phase + health/P persistence proofs.
 
-#### Section 108 future execution closeout (design)
+#### B1 execution envelope (design only — NOT authorized / 20260829 refinement)
 
-**MAIN_GIT_SHA = `61e50ba2a95eaa260588987d33b8ddac679cc706`**
-**RUNTIME_IMPLEMENTATION_SHA = PENDING**
-**DEPLOY_REQUIRED = YES** (when/if separately authorized)
-**DEPLOY_STATUS = PENDING**
-**RUNTIME_VERIFIED = NO**
-**SERVER_DRIFT = RUNTIME_ALIGNMENT_PENDING**
-
-#### Readiness decision
-
-**B1_READINESS = BLOCKED_ENGINE_NODE_ENV_DRIFT**
-**B1_READINESS_BLOCKERS = ENGINE_NODE_ENV_DRIFT · ENGINE_RESTART_ENV_EFFECT_UNCHANGED_PROVEN_DEVELOPMENT · ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_ENVELOPE = COMPLETE**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_ENVELOPE_VERSION = 1.0.1**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_AUTHORIZED = NO**
 **B1_DEPLOY_AUTHORIZED = NO**
-**DO_NOT_ADVANCE_TO_B1 = YES**
+**EXECUTION_AUTHORIZED = NO**
 
-Stage interpretation (Core §107): readiness **audit** complete, but readiness **gate** not closed while BLOCKED → **CURRENT_STAGE remains `B1_PRODUCTION_DEPLOYMENT_READINESS`** · **CURRENT_STAGE_PROGRESS = 5/9** · **REMAINING_STAGES = 4**. Do **not** advance to 6/9 until `B1_READINESS = READY_FOR_OWNER_AUTHORIZATION`.
+**AUTHORIZED_TRANSACTION = B1_EXACT_THREE_FILE_DEPLOY**
 
-**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS** (blocked on NODE_ENV gate; separate `NODE_ENV_NORMALIZATION` or explicit B1 envelope inclusion required before Owner authorization gate)
+**AUTHORIZED_EFFECTS =**
+EXACT_THREE_FILE_REPLACE (`engineWorkerLeader.js` · `scheduler.js` · `pipelineSchedulerRuntime.js`)
++ ENGINE_RUNTIME_REFRESH (retained singleton numeric `pm_id` restart only)
++ BACKEND_RUNTIME_REFRESH (controlled `titan-backend` cluster reload · all **4** current instances · count unchanged)
+
+**BACKEND_RELOAD_IS_FINAL_RUNTIME_MUTATION = YES**
+**ENGINE_FIRST_BACKEND_LAST_ORDER = MANDATORY**
+**BACKEND_UNTOUCHED_ON_ENGINE_FAILURE = YES**
+
+##### Mandatory forward sequence (fixed order — no improvisation)
+
+1. **PRE validation** (topology · health · PRE SHA256 · dump immutability · NODE_ENV · auth gates)
+2. **Secure backup** (per-target `.pre` outside repo · `0700`/`0600`)
+3. **Atomic replacement** of three files (fixed order: engineWorkerLeader → scheduler → pipelineSchedulerRuntime)
+4. **POST SHA verification** of three files (all must match canonical B1 POST SHA256 **before any PM2 mutation**)
+5. **Engine numeric `pm_id` refresh** (`pm2 restart <RETAINED_PM_ID_NUMERIC>` only)
+6. **Engine health validation** (engine online · singleton · retained identity · `NODE_ENV=production` · engine-scoped minimum: `5002/health` = 200 · no module/syntax errors)
+7. **Only then backend cluster reload** (`pm2 reload titan-backend` — **final runtime mutation**)
+8. **Final full POST validation** (three POST SHA256 · five health surfaces · Telegram observability · non-interference · dump unchanged · `PM2_SAVE_COUNT=0`)
+
+**Steps 5–6 failure rule:** if engine refresh **or** engine health validation fails → **rollback before backend reload** · backend must remain **untouched** (no `pm2 reload` · backend in-memory state unchanged · backend restart count unchanged).
+
+**Step 7 gate:** backend reload permitted **only** after steps 1–6 all PASS.
+
+**Step 8:** full POST proof set required for `TERMINAL=COMPLETED`.
+
+##### Rollback phases (deterministic — phase auto-select; no runtime fallback)
+
+**ROLLBACK_METHOD_COUNT = 2**
+
+**Phase A — failure before backend reload (steps 1–6 or earlier post-replace):**
+1. Restore touched targets from secure `.pre` bytes (atomic)
+2. Verify three file SHA256 == PRE table
+3. `pm2 restart <RETAINED_PM_ID_NUMERIC>` (engine only)
+4. Engine-scoped health validation
+5. **Do not** `pm2 reload titan-backend`
+6. Prove backend restart count / pid baseline unchanged vs PRE
+
+**Phase B — failure after backend reload (step 7–8):**
+1. Restore touched targets from secure `.pre` bytes (atomic)
+2. Verify three file SHA256 == PRE table
+3. `pm2 restart <RETAINED_PM_ID_NUMERIC>`
+4. `pm2 reload titan-backend` (all 4 instances)
+5. Final full POST validation per step 8
+
+**ROLLBACK_IMPROVISATION = FORBIDDEN** · **ROLLBACK_FALLBACK_SELECTION = FORBIDDEN**
+
+##### Canonical SHA256 authority (unchanged)
+
+PRE:
+`engineWorkerLeader.js` = `bcf4f24ab20123290a3b602d6fbd9c08d7e6f19193e79775afb4eeb282fb1b9b`
+`scheduler.js` = `a6545ac65d26ef37092a64d6748e04dbbef29a026874fe6279a6a18c1380779b`
+`pipelineSchedulerRuntime.js` = `9930ca2d6b6220a6def99e540aa66aaa1e4776feaee1b3ab66eece6a6ec8c1f5`
+
+POST:
+`engineWorkerLeader.js` = `cf7f6f6bfe1ade43febe6a2b25982c1baf40e1b8d0f24f10d1a9fbe7b8f3c123`
+`scheduler.js` = `3daba7941108037996f1c3367c60cd8cadffebd91c929654e97b0febae9ebe40`
+`pipelineSchedulerRuntime.js` = `7462864ccd6311919c0851fbd96d8055db7ef7cdb3780dbd6d88245aead21f25`
+
+**B1_SOURCE_MERGE = `a465e6fdbcb9473e210917ebeeb90c21f4458fe7`**
+**CANONICAL_MAIN_SHA = `61e50ba2a95eaa260588987d33b8ddac679cc706`**
+**B1_DEPLOY_PM2_SAVE_REQUIRED = NO**
+**PM2_SAVE_COUNT_EXPECTED = 0**
+
+**THIS ENVELOPE DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
+
+### B1 one-shot production execution (COMPLETED / CONSUMED / 20260828)
+
+Owner explicit authorization (verbatim material):
+اجرای one-shot transaction B1_EXACT_THREE_FILE_DEPLOY envelope v1.0.1 — سه فایل canonical · engine numeric restart · backend reload پس از engine PASS · بدون pm2 save · بدون dump write.
+
+**B1_RESULT = COMPLETED**
+**B1_RUN_ID = B1-20260828T204652Z**
+**B1_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**B1_AUTHORIZATION_CONSUMED = YES**
+**AUTHORIZATION_CONSUMED_AT = `2026-08-28T20:46:53.867Z`**
+**B1_RETRY_TOOL_VERSION = N/A** (governed shell executor · envelope v1.0.1)
+**AUTHORIZED_TRANSACTION = B1_EXACT_THREE_FILE_DEPLOY**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_ENVELOPE_VERSION = 1.0.1**
+**CANONICAL_MAIN_SHA = `61e50ba2a95eaa260588987d33b8ddac679cc706`**
+**B1_SOURCE_MERGE = `a465e6fdbcb9473e210917ebeeb90c21f4458fe7`**
+
+Pre-auth (PASS):
+**RETAINED_PM_ID = 9** · **EXTRA_PM_ID = 5** · **ENGINE_ONLINE_COUNT = 1**
+**LIVE_ENGINE_NODE_ENV = production** · **ENGINE_NODE_ENV_DRIFT = NO**
+**ACTIVE_DUMP_SHA256 = `97023e397c8fa26bb06fdc7e509cb6ce90bf6388a6231f7550243d23f2186d9d`** (unchanged POST)
+**ACTIVE_PM2_DUMP_MODE = 0600** · **PM2_SAVE_COUNT = 0**
+**CURRENT_FULL_REQUIRED_HEALTH = PASS** (five surfaces = 200)
+
+Forward path:
+PRECHECK_PASS → BACKUP_VERIFIED → AUTHORIZATION_CONSUMED → THREE_FILE_REPLACE → POST_SHA_PASS → ENGINE_RESTART_PM_ID_9 → ENGINE_HEALTH_PASS → BACKEND_RELOAD → FINAL_POST_PASS → **COMPLETED**
+
+**SIDE_EFFECT_LEDGER:**
+**THREE_FILE_REPLACE_APPLIED = YES**
+**ENGINE_RESTART_ATTEMPTED = YES** · **ENGINE_RESTART_APPLIED = YES** (numeric `pm_id 9` only)
+**BACKEND_RELOAD_ATTEMPTED = YES** · **BACKEND_RELOAD_APPLIED = YES** (`pm2 reload titan-backend` · count **4** unchanged)
+**PM2_SAVE_COUNT = 0** · **DUMP_WRITE = 0** · **DB_MUTATION = 0** · **REDIS_MUTATION = 0** · **JWT_LIVE_MUTATION = 0** · **PATH_MUTATION = 0** · **NODE_ENV_MUTATION = 0** · **.ENV_MUTATION = 0**
+**PROCESSOR/COLLECTOR NON-INTERFERENCE = PASS** (restart counts unchanged)
+
+POST SHA256 (verified):
+`engineWorkerLeader.js` = `cf7f6f6bfe1ade43febe6a2b25982c1baf40e1b8d0f24f10d1a9fbe7b8f3c123`
+`scheduler.js` = `3daba7941108037996f1c3367c60cd8cadffebd91c929654e97b0febae9ebe40`
+`pipelineSchedulerRuntime.js` = `7462864ccd6311919c0851fbd96d8055db7ef7cdb3780dbd6d88245aead21f25`
+
+**CANDIDATE_B_PRODUCTION_DEPLOYED = YES**
+**B1_PRODUCTION_ACTIVATED = PARTIAL** (bytes deployed + runtime refreshed; Telegram liveness production validation **NOT** yet closed)
+**B1_RUNTIME_VALIDATED = PARTIAL**
+**TELEGRAM LIVENESS PRODUCTION VALIDATION = NOT STARTED**
+**RESOURCE STABILIZATION COMPLETE = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+
+**B1_DEPLOY_AUTHORIZED = NO / CONSUMED**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_AUTHORIZED = NO / CONSUMED**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**NO_POST_TERMINAL_MUTATION = PASS**
+
+Evidence:
+`/home/ubuntu/TITANGOLD_B1_B1-20260828T204652Z.txt`
+SHA256 = `e3525d828024f2b006e629518935cd959808b706f4b12cd04fb25e7a91f66d8e` · mode **0600**
+SECURE = `/home/ubuntu/TITANGOLD_B1_EXEC_B1-20260828T204652Z`
+
+Section 108 (B1 three-file runtime):
+**RUNTIME_IMPLEMENTATION_SHA = `a465e6fdbcb9473e210917ebeeb90c21f4458fe7`** (canonical B1 source merge for three targets)
+**PROD_HEAD = `a100f7ba21131c351b561fb66554e90990da8725`** (unchanged · exact-file deploy)
+**DEPLOY_REQUIRED = YES**
+**DEPLOY_STATUS = DEPLOYED**
+**RUNTIME_VERIFIED = YES** (three B1 targets + engine/backend refresh)
+**SERVER_DRIFT = PARTIAL_CANONICAL_B1_THREE_FILE** (PROD_HEAD unchanged; three worktree targets match canonical merge)
+
+**NEXT_GATE = TELEGRAM_LIVENESS_PRODUCTION_VALIDATION**
+
+Do **NOT** retry this one-shot. Do **NOT** claim full C2 closeout or 052 safe.
+
+#### Readiness decision (superseded by B1 execution closeout above)
+
+**B1_READINESS = COMPLETE / DEPLOYED**
+**B1_READINESS_BLOCKERS = NONE**
+**B1_DEPLOY_AUTHORIZED = NO / CONSUMED**
+**DO_NOT_ADVANCE_TO_B1 = NO / B1 DEPLOY CONSUMED**
+
+Stage interpretation (Core §107): B1 exact-three-file deploy **COMPLETE** → **CURRENT_STAGE = `B1_PRODUCTION_DEPLOYMENT_AND_RUNTIME_VALIDATION`** · **CURRENT_STAGE_PROGRESS = 6/9** · **REMAINING_STAGES = 3**.
+
+**NEXT_GATE = TELEGRAM_LIVENESS_PRODUCTION_VALIDATION**
 
 ---
 
@@ -168,7 +444,37 @@ Current outcome:
 
 All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots below are **HISTORICAL EVIDENCE ONLY** and **MUST NOT** override this current snapshot. In particular, any historical occurrence of `T2_REAUTH_READY = YES`, `ENGINE_ONLINE_COUNT = 2`, `ENGINE_TOPOLOGY_2_TO_1 = NOT_COMPLETE / NOT_EXECUTED`, `PRODUCTION_REAUTH_REQUIRED`, or `T2_RETRY_AUTHORIZED = YES` must be interpreted only within its explicitly historical section.
 
-**CURRENT_OUTCOME = PRODUCTION RESOURCE STABILIZATION / T2 V1.6.2 COMPLETED**
+**CURRENT_OUTCOME = TELEGRAM LIVENESS PRODUCTION VALIDATION PASS / STAGE CLOSED / C2_052 SEPARATE OWNER AUTH REQUIRED / PRODUCTION_MUTATION_CAPABILITY CLOSED**
+
+**RIOIR_RESULT = COMPLETED**
+**RIOIR_RUN_ID = RIOIR-20260830T072328Z**
+**RIOIR_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**idx_processed_telegram_messages_raw_message_id = PRESENT / VALID**
+**POST_RESOURCE_GATE_RESULT = PASS**
+**C2_052_CURRENT_SAFETY = RESOURCE_GATE_PASS_POST_INDEX / SEPARATE_OWNER_AUTH_REQUIRED**
+
+**B1_RESULT = COMPLETED**
+**B1_RUN_ID = B1-20260828T204652Z**
+**B1_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**CANDIDATE_B_PRODUCTION_DEPLOYED = YES**
+**B1_PRODUCTION_ACTIVATED = YES** (Telegram always-on production liveness contract)
+**B1_RUNTIME_VALIDATED = YES** (Telegram liveness contract)
+**TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
+
+**ENGINE_NODE_ENV_NORMALIZATION_V2_RESULT = COMPLETED**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_RUN_ID = ENN-20260828T200345Z**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**LIVE_ENGINE_NODE_ENV = production**
+**PERSISTED_ENGINE_NODE_ENV = production**
+**ENGINE_NODE_ENV_DRIFT = NO**
+**ENGINE_NODE_ENV_CORRECTION_REQUIRED_BEFORE_B1_ACTIVATION = NO / COMPLETED**
+
+**B1_EXACT_THREE_FILE_DEPLOYMENT_ENVELOPE = COMPLETE / CONSUMED**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_ENVELOPE_VERSION = 1.0.1**
+**B1_RUNTIME_MUTATION_ORDER = ENGINE_FIRST_BACKEND_LAST**
+**BACKEND_RELOAD_IS_FINAL_RUNTIME_MUTATION = YES**
+**BACKEND_UNTOUCHED_ON_ENGINE_FAILURE = YES** (design invariant; not exercised — forward COMPLETED)
+**B1_READINESS = COMPLETE / DEPLOYED**
 
 **T2_RETRY_V1_6_2_RESULT = COMPLETED**
 **T2_RETRY_V1_6_2_RUN_ID = T2R162-20260828T090821Z**
@@ -179,8 +485,10 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **T2_PROJECTED_DIFF_ACTUAL_COUNT = 1**
 
-**ACTIVE_DUMP_SHA256 = 72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d**
+**ACTIVE_DUMP_SHA256 = `97023e397c8fa26bb06fdc7e509cb6ce90bf6388a6231f7550243d23f2186d9d`**
+**ACTIVE_DUMP_SHA256_PRE_ENN = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`**
 **ACTIVE_PM2_DUMP_MODE = 0600**
+**ENN_PROJECTED_DIFF_ACTUAL_COUNT = 2**
 
 **COLLECTOR_DB_KEYS_PRESERVED_EXACT = 5**
 **COLLECTOR_DB_RUNTIME_PERSISTED = YES_EXACT_LIVE_MATCH**
@@ -192,8 +500,9 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **PM2_SAVE_COUNT = 0**
 
 **PATH_MUTATION = 0**
-**NODE_ENV_MUTATION = 0**
-**DB_MUTATION = 0**
+**NODE_ENV_MUTATION = 1 AUTHORIZED ENN V2 TRANSACTION** (historical ENN only)
+**PRODUCTION_MUTATION = 1 AUTHORIZED B1 TRANSACTION** (three-file replace + engine restart + backend reload)
+**DB_MUTATION = 1 AUTHORIZED RIOIR CREATE INDEX CONCURRENTLY** (raw_message_id btree only)
 **REDIS_MUTATION = 0**
 **JWT_LIVE_MUTATION = 0**
 
@@ -201,19 +510,24 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **T2_REAUTH_READY = NO / COMPLETED**
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
-**B1_DEPLOY_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO / CONSUMED**
+**B1_EXACT_THREE_FILE_DEPLOYMENT_AUTHORIZED = NO / CONSUMED**
+**RESOURCE_IO_INDEX_REPAIR_AUTHORIZED = NO / CONSUMED**
 **C2_052_EXECUTION_AUTHORIZED = NO**
-**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO / CONSUMED**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO / CONSUMED**
 
-**DO_NOT_ADVANCE_TO_B1 = YES**
+**DO_NOT_ADVANCE_TO_B1 = NO / B1 DEPLOY CONSUMED**
 
-**NEXT_GATE = B1_PRODUCTION_DEPLOYMENT_READINESS**
+**NEXT_GATE = C2_052_OWNER_ONE_SHOT**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
 
 **HISTORICAL_PRECEDENCE_GUARD = YES**
 
 **T2R161_FORMAL_PRE_EQUIVALENT = NO** (historical T2R161 only; see historical sections below)
 
-**PRODUCTION_MUTATION = 0** (this reconciliation task)
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
 Current area:
 Telegram ingestion + PostgreSQL telegram_messages access path
@@ -5145,4 +5459,643 @@ SHA256 = `8c926e34a574d159eaa04c719487dfed3cb2932b99e2d944df77cc3e37c7f614`
 bytes = 1151 · mode **0600** · tmp/home equality = **YES**
 
 After terminal: NO further production mutation; NO diagnostic mutation; NO retry; NO persistence execution.
+
+### Engine NODE_ENV normalization readiness / design closeout (COMPLETE / 20260828)
+
+**CLASSIFICATION = TIER 3 READ-ONLY DESIGN / NO PRODUCTION MUTATION**
+**GOVERNANCE_BRANCH = `chore/c2-engine-node-env-normalization-readiness`**
+**CANONICAL_MAIN_SHA = `5d562e3328b031bf30b81e416bebc063a93a867e`**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **PM2_SAVE = 0** · **ENV_WRITE = 0**
+
+#### Fresh production preconditions (rediscovered)
+
+**PROD_ROOT = `/home/ubuntu/webapp/TitanGold`**
+**PM2_VERSION = 6.0.13**
+**PM2_HOME = `/home/ubuntu/.pm2`**
+**PM2_DAEMON_PID = 1352** (pidfile mode `644` uid/gid `1000/1000`)
+**PM2_STARTUP = systemd `pm2-ubuntu.service` → `pm2 resurrect`**
+**ENGINE_ONLINE_COUNT = 1** (retained online `pm_id **9**` / pid **2937968**; extra `pm_id **5**` stopped)
+**ENGINE_SINGLETON_CURRENT = YES**
+**ENGINE_SCRIPT = `/home/ubuntu/webapp/TitanGold/backend/workers/engineWorkerLeader.js`**
+**ENGINE_CWD = `/home/ubuntu/webapp/TitanGold/backend`**
+**ENGINE_EXEC_MODE = fork_mode**
+**LIVE_ENGINE_NODE_ENV = development**
+**CANONICAL_ENGINE_NODE_ENV = production** (`/home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json` engine `env.NODE_ENV`)
+**STATE_DRIFT = NONE** (premises match task envelope)
+
+#### DOTENV audit (`backend/.env` — contents not logged)
+
+**DOTENV_NODE_ENV_PRESENT = YES**
+**DOTENV_NODE_ENV_VALUE = development**
+**DOTENV_FILE_MODE = 664** · uid/gid **1000/1000**
+**DOTENV_SHA256 = `ef0da5e5e586b729fb43cc3419bd7a01d0c22e6f62871c5903474b2a61e093c2`**
+**DOTENV_NODE_ENV_LINE_COUNT = 1**
+**DOTENV_BACKEND_BLAST_RADIUS = YES** (shared `env_file` for `titan-backend` cluster and `titan-engine-worker`; backend reload/`--update-env` would ingest)
+**DOTENV_COLLECTOR_PROCESSOR_BLAST_RADIUS = NO** (separate ecosystems)
+**DOTENV_ALONE_PERSISTENCE = NO** (dump/resurrect authority separate; `.env` edit without bounded refresh does not change live God env)
+**DOTENV_ALONE_REBOOT_DURABILITY = NO** (resurrect reads dump bytes, not `.env` alone)
+
+#### PM2 dump / persistence audit
+
+**ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** · **SHA_MATCH = YES**
+**ACTIVE_PM2_DUMP_MODE = 0600** · uid/gid **1000/1000**
+**DUMP_ENGINE_ENTRIES = 2** (1 online + 1 stopped)
+**PERSISTED_ENGINE_NODE_ENV = development** (flattened dump leaf **and** nested `env.NODE_ENV`; `env_key_count=95` each)
+**PERSISTED_ENGINE_ENV_FILE = `/home/ubuntu/webapp/TitanGold/backend/.env`**
+**RESURRECTED_ENGINE_NODE_ENV = development** (reason: `pm2 resurrect` replays dump flattened env; ecosystem `env.NODE_ENV=production` is **not** consulted on resurrect; both engine dump rows carry `development`)
+
+#### NODE_ENV provenance chain (engine only)
+
+**NODE_ENV_PROVENANCE_CHAIN =**
+1. `ecosystem.config.json` `apps[titan-engine-worker].env.NODE_ENV` → **production** (canonical intent; applied only on ecosystem start/recreate with `--update-env`)
+2. `ecosystem.config.json` `env_file` → `backend/.env` `NODE_ENV` → **development** (loaded on ecosystem merge; does **not** override ecosystem `env` on fresh isolated start — lab Case A)
+3. **PM2 God in-memory env** (retained online `pm_id 9`) → **development** → **LIVE WINNER**
+4. **Active `dump.pm2` flattened persisted env** (online + stopped engine rows) → **development** → **RESURRECT WINNER**
+5. Parent shell / operator env → **development** possible on any `pm2 … --update-env` if exported (lab Case G — imports unrelated keys)
+6. `engineWorkerLeader.js` `dotenv.config()` → **no override** of existing PM2-injected vars (dotenv default; does not explain PM2 `node env` display)
+7. systemd startup → `pm2 resurrect` → replays dump (**#4**), not ecosystem
+
+**WHY_LIVE_IS_DEVELOPMENT =** Engine has **not** been recreated from canonical ecosystem since historical persist. God env and dump both frozen at `development` (consistent with `.env` + historical merge). Exact-id `restart`/`reload` **without** `--update-env` preserves God env (**prior Rule02 proof + lab Case B**). Ecosystem `production` is **stale relative to live** until bounded `startOrRestart … --update-env` from sanitized shell.
+
+#### Isolated PM2 semantics lab (PM2 6.0.13 · `PM2_HOME=/tmp/titangold-node-env-design-<RUN_ID>` · dummy values only · destroyed after capture)
+
+**PM2_LAB_RESULT =**
+| Case | Operation | NODE_ENV outcome | Other findings |
+|---|---|---|---|
+| A | Fresh start ecosystem `env=production` + `env_file=development` | **production** | Ecosystem `env` wins on fresh start |
+| B | God `development` → `restart` id (no `--update-env`) after ecosystem file → production | **development** | Stale God env preserved |
+| C | `startOrRestart ecosystem --only app --update-env` after stale God `development` | **production** | `pm_id` unchanged (G2) |
+| D | `reload --update-env` | **production** | Same effective refresh class as startOrRestart |
+| E | `save` + `kill` + `resurrect` after production God env | **production** | Reboot durability requires dump bytes match God |
+| F | `env_file` only → `development`; `restart` no `--update-env` | unchanged God | `env_file` alone insufficient |
+| F2 | `restart --update-env` with parent `NODE_ENV` exported | **parent shell wins** | **HIGH RISK**: unrelated parent keys imported |
+| G | Production candidate: `startOrRestart prod-ecosystem --only engine --update-env` from clean shell | **production** (projected) | Requires sanitized operator env; forbids parent `NODE_ENV` export |
+
+#### Candidate method evaluation
+
+| Method | LIVE fix | OTHER_ENV risk | pm_id | Downtime | Dump durable | Reboot durable | Rollback exact | pm2 save | Blast radius |
+|---|---|---|---|---|---|---|---|---|---|
+| A restart `--update-env` only | POSSIBLE | **HIGH** (parent shell import) | NO | ~seconds | NO | NO | YES | NO | engine |
+| B `startOrRestart ecosystem --only engine --update-env` | **YES** | LOW (ecosystem-scoped) | NO | ~seconds | NO alone | NO alone | YES | NO | engine |
+| C `.env` NODE_ENV + refresh | YES | **HIGH** (backend shares `.env`) | NO | ~seconds | NO | NO | YES | NO | engine+backend |
+| D projected dump NODE_ENV only | NO alone | LOW | NO | 0 live | **YES** | **YES** | YES | **NO** | dump engine rows |
+| **E combined B+D** | **YES** | **LOW** | **NO** | ~seconds | **YES** | **YES** | **YES** | **NO** | engine + targeted dump |
+
+**NORMALIZATION_METHOD_SELECTED = METHOD E (COMBINED MINIMAL): `pm2 startOrRestart /home/ubuntu/webapp/TitanGold/backend/ecosystem.config.json --only titan-engine-worker --update-env` from sanitized operator shell + surgical projected dump write (T2 `projection.mjs` / `liveBoundary.writeProjectedActiveDump` pattern) updating **only** `NODE_ENV` leaves on retained online engine dump row (and mirrored nested `env.NODE_ENV` if present); **NO** global `pm2 save`**
+
+**LIVE_ENV_CORRECTION = YES**
+**OTHER_ENV_MUTATION_RISK = LOW** (with sanitized shell + ecosystem-scoped refresh + dump projection limited to `NODE_ENV` leaves)
+**ENGINE_PM_ID_CHANGE = NO** (lab G2; retain `pm_id 9`)
+**ENGINE_DOWNTIME = ~single fork restart (seconds)**
+**DUMP_DURABILITY = YES** (projected dump write required POST live proof)
+**REBOOT_DURABILITY = YES** (after projection matches live `production`)
+**ROLLBACK_EXACT = YES** (PRE God env + PRE dump bytes/mode/uid/gid restore)
+**PM2_SAVE_REQUIRED = NO**
+**BLAST_RADIUS = retained `titan-engine-worker` online singleton + targeted engine dump row(s) only**
+
+**NODE_ENV_NORMALIZATION_BEHAVIORAL_RISK = LOW**
+Engine-reachable paths (`engineWorkerLeader.js` → `scheduler.js` → `pipelineSchedulerRuntime.js`, `db.js`, `autopilot.js`, `tradingEngine.js`) branch on `NODE_ENV` only for **`test`** skips or not at all. **No** engine-reachable `development` vs `production` behavior delta proven material. `config/index.js` dev/production profiles are **not** imported by engine worker. Normalization aligns runtime label with canonical ecosystem; does **not** by itself change trading/scheduling/autopilot gates (`ENGINE_MODE`, `AUTOPILOT_ENABLED`, `SCHEDULER_ENABLED`, `TRADING_ENGINE_ENABLED`, `IDLE_MODE_ENABLED` preserved).
+
+#### Other-env preservation contract (future execution)
+
+**NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED = required YES POST**
+Mechanism: PRE/POST compare sanitized application env keysets via `pm2SemanticModel.sanitizeApplicationEnvContainer` + sorted key-set equality + per-key non-secret value hash aggregate (secrets: presence/class only, never values). Explicit invariants: `PATH`, `DB_*`, `REDIS_*`, JWT/session/security keys, `ENGINE_MODE`, `AUTOPILOT_ENABLED`, `SCHEDULER_ENABLED`, `TRADING_ENGINE_ENABLED`, `IDLE_MODE_ENABLED` — key presence and semantic hash match excluding `NODE_ENV`.
+
+#### Execution envelope `ENGINE_NODE_ENV_NORMALIZATION` (design only — NOT authorized)
+
+**AUTHORIZED_TRANSACTION = ENGINE_NODE_ENV_NORMALIZATION**
+**ENGINE_NODE_ENV_NORMALIZATION_EXECUTION_ENVELOPE = COMPLETE**
+**ENGINE_NODE_ENV_NORMALIZATION_ROLLBACK_CONTRACT = DETERMINISTIC / SINGLE_PATH / NO_FALLBACK_SELECTION**
+
+**AUTHORIZED_EFFECTS (minimum proven set):**
+- `ENGINE_NODE_ENV_DEVELOPMENT_TO_PRODUCTION` (live God env)
+- `REQUIRED_TARGETED_ENGINE_REFRESH` = `pm2 startOrRestart …/backend/ecosystem.config.json --only titan-engine-worker --update-env` from **sanitized shell** (`env -i` minimal `HOME`/`PATH`/`PM2_HOME`/`USER`; **must not** export parent `NODE_ENV`)
+- `REQUIRED_PROJECTED_DUMP_UPDATE` = surgical `NODE_ENV` leaf projection on retained online engine dump entry (mode `0600` atomic write; PRE dump backup)
+
+**EXPLICITLY_EXCLUDED:** B1 three-file deploy · backend 4→2 · backend reload · collector · processor · C2/052 · DB · Redis · JWT/credentials · `.env` write · PATH normalization · global `pm2 save` · stopped `pm_id 5` deletion · unrelated PM2 cleanup · `pm2 resurrect` · ecosystem `startOrRestart` during rollback · inverse projection · env replay helpers · fallback method selection · improvisation
+
+**PRE capture:** live engine `pm_id`/pid · `ENGINE_ONLINE_COUNT` · live `NODE_ENV` · canonical `NODE_ENV` · persisted dump `NODE_ENV` · active dump SHA256/mode/uid/gid · engine env key-set fingerprint · engine non-`NODE_ENV` semantic fingerprint · B1 three-file PRE SHA256 · backend instance count · health 5002/5003
+
+**POST proof:** `LIVE_ENGINE_NODE_ENV=production` · `PERSISTED_ENGINE_NODE_ENV=production` · `RESURRECT_EXPECTED_ENGINE_NODE_ENV=production` · `ENGINE_ONLINE_COUNT=1` · `ENGINE_PM_ID` unchanged · `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED=YES` · health PASS · B1 PRE SHA256 unchanged · `PM2_SAVE_COUNT=0`
+
+##### Rollback contract (deterministic — design only)
+
+**ROLLBACK_AUTHORITY = SECURE_ROOT/dump.pm2.pre (exact PRE bytes/mode/uid/gid) + PRE live fingerprint artifacts**
+**ROLLBACK_METHOD_COUNT = 1**
+**ROLLBACK_IMPROVISATION = FORBIDDEN**
+**ROLLBACK_FALLBACK_SELECTION = FORBIDDEN**
+
+**Single authorized rollback sequence (fixed order; no branch selection at runtime):**
+
+1. **Dump restore (conditional, ledger-driven):** IF `PROJECTED_DUMP_WRITE_APPLIED=YES` THEN atomic restore `SECURE_ROOT/dump.pm2.pre` → `/home/ubuntu/.pm2/dump.pm2` preserving PRE mode/uid/gid; fresh-read verify `ACTIVE_DUMP_SHA256 == ACTIVE_DUMP_SHA256_PRE` (byte-identical). IF `PROJECTED_DUMP_WRITE_APPLIED=NO` THEN skip (no dump mutation occurred).
+2. **Live engine restore (mandatory when forward live refresh applied):** IF `ENGINE_REFRESH_APPLIED=YES` THEN from sanitized shell ONLY:
+   `env -i HOME=… USER=… PM2_HOME=… PATH=… NODE_ENV=development pm2 restart <RETAINED_PM_ID_PRE> --update-env`
+   (**NOT** `startOrRestart` ecosystem · **NOT** ecosystem canonical `production` path · explicit `NODE_ENV=development` in sanitized shell is the sole live-restore primitive). IF `ENGINE_REFRESH_APPLIED=NO` THEN skip.
+
+**Rollback proof (all required; no partial credit):**
+
+| Proof | Requirement |
+|---|---|
+| `LIVE_ENGINE_NODE_ENV` | exactly `LIVE_ENGINE_NODE_ENV_PRE` (`development`) |
+| Persisted dump | exactly PRE state (`ACTIVE_DUMP_SHA256 == ACTIVE_DUMP_SHA256_PRE` when dump was touched; if untouched, unchanged from PRE) |
+| `ENGINE_PM_ID` | unchanged vs `ENGINE_PM_ID_PRE` |
+| `ENGINE_ONLINE_COUNT` | `1` |
+| `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED` | `YES` (POST-rollback fingerprints match PRE) |
+| Required health | PASS (`5002/health` + `5003/health` = 200) |
+
+**Terminal rollback outcomes (only two):**
+
+- **SUCCESS:** every proof above PASS → journal terminal **`ROLLED_BACK`** · `PRODUCTION_MUTATION_CAPABILITY=CLOSED` · `NO_POST_TERMINAL_MUTATION=PASS`
+- **FAILURE:** any proof missing/fail/ambiguous/unproven → journal terminal **`MANUAL_RECOVERY_REQUIRED`** · stop immediately · **no** alternate method · **no** retry · **no** diagnostic `pm2 save` · **no** further PM2/dump mutation
+
+**Forbidden during rollback:** `pm2 save` · `pm2 resurrect` · backend/collector/processor restart · B1/source mutation · PATH/NODE_ENV on non-engine · any dump edit other than exact PRE restore · any live env change other than Step 2 primitive above
+
+#### Readiness decision
+
+**NODE_ENV_NORMALIZATION_READINESS = READY_FOR_OWNER_AUTHORIZATION**
+**NODE_ENV_NORMALIZATION_BLOCKERS = NONE** (technical design complete; execution blocked on Owner one-shot authorization only)
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**B1_DEPLOY_AUTHORIZED = NO** (recheck required after future successful normalization)
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_PENDING_OWNER_AUTHORIZATION**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_OWNER_AUTHORIZATION**
+**CURRENT_STAGE = B1_PRODUCTION_DEPLOYMENT_READINESS** · **CURRENT_STAGE_PROGRESS = 5/9** · **REMAINING_STAGES = 4** · **PROJECT_PROGRESS = 3/10**
+
+**THIS TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only rollback-contract hardening
+
+### ENN one-shot execution closeout (CONSUMED / MANUAL_RECOVERY_REQUIRED / 20260828)
+
+**ENN_RUN_ID = ENN-20260828T191045Z**
+**ENGINE_NODE_ENV_NORMALIZATION_RESULT = MANUAL_RECOVERY_REQUIRED**
+**ENGINE_NODE_ENV_NORMALIZATION_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**AUTHORIZATION_CONSUMED_AT = `2026-08-28T19:10:46.633Z`**
+**FORWARD_FAILURE = MID_KEYSET_FINGERPRINT_DRIFT** (`startOrRestart --only` started stopped `pm_id 5` + altered retained env keyset)
+**PROJECTED_DUMP_WRITE_APPLIED = NO**
+**PM2_SAVE_COUNT = 0**
+**ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** (unchanged)
+**INCIDENT_LIVE_TOPOLOGY = `pm_id 5` online `production` · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=2`**
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO** (V1 consumed / closed; V2 not authorized)
+**NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_TOPOLOGY_RECOVERY_RESULT = RECOVERY_COMPLETE** (`ETR-20260828T192616Z`)
+**INCIDENT_LIVE_TOPOLOGY_POST_ETR = `pm_id 5` stopped · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=1`**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
+
+Evidence: `/home/ubuntu/TITANGOLD_ENN_ENN-20260828T191045Z.txt`
+
+### Engine topology incident recovery envelope (design only — NOT authorized / 20260828)
+
+**CLASSIFICATION = TIER 3 DESIGN-ONLY / NO PRODUCTION MUTATION**
+**PARENT_INCIDENT = ENN-20260828T191045Z**
+**AUTHORIZED_TRANSACTION = ENGINE_TOPOLOGY_INCIDENT_RECOVERY**
+**RECOVERY_TARGET = EXTRA_PM_ID online → stopped ONLY**
+**DESIGN_SNAPSHOT_EXTRA_PM_ID = 5** (fresh-resolve required at execution; not hardcoded mutation authority)
+**DESIGN_SNAPSHOT_RETAINED_PM_ID = 9**
+**ENGINE_TOPOLOGY_RECOVERY_EXECUTION_ENVELOPE = COMPLETE**
+**ENGINE_TOPOLOGY_RECOVERY_ROLLBACK_CONTRACT = DETERMINISTIC / NUMERIC_PM_ID_ONLY / NO_NAME_RESOLUTION / NO_FALLBACK**
+**ENGINE_TOPOLOGY_RECOVERY_AUTHORIZED = NO**
+**ENGINE_TOPOLOGY_RECOVERY_EXECUTION_READY = YES** (design)
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+
+#### Authorized effects (forward — unchanged)
+
+**AUTHORIZED_EFFECTS (minimum):**
+- `EXTRA_PM_ID` status: **online → stopped** (live PM2 God state only)
+- `ENGINE_ONLINE_COUNT`: **2 → 1** (observational)
+
+**Single authorized forward primitive (numeric identity only):**
+
+```text
+pm2 stop <EXTRA_PM_ID_NUMERIC>
+```
+
+from **sanitized shell** (`env -i` minimal `HOME`/`USER`/`PM2_HOME`/`PATH`; **must not** export parent `NODE_ENV`).
+
+#### Forbidden effects (unchanged)
+
+**EXPLICITLY_FORBIDDEN:**
+- `pm2 save` / global save
+- any dump write / projection / chmod on active dump
+- `pm2 stop` / `restart` / `reload` / `start` / `delete` by **application name**
+- `pm2 startOrRestart` · ecosystem start/restart/recreate
+- any command resolving target by process **name** instead of numeric `pm_id`
+- restart/reload/stop/start on `RETAINED_PM_ID` (`pm_id 9`)
+- `.env` write · DB · Redis · JWT/session/secret mutation · PATH mutation · NODE_ENV mutation on any process
+- B1 · C2/052 · NODE_ENV normalization retry
+- improvisation · fallback selection · retry after auth consume
+
+#### Prechecks (before auth consume)
+
+**INCIDENT_BINDING:** `PARENT_RUN_ID=ENN-20260828T191045Z` · `PARENT_TERMINAL=MANUAL_RECOVERY_REQUIRED`
+**TOPOLOGY:** exactly 2 `titan-engine-worker` entries · `EXTRA_PM_ID` online · `RETAINED_PM_ID` online · `ENGINE_ONLINE_COUNT=2`
+**DUMP_IMMUTABILITY:** `ACTIVE_DUMP_SHA256=72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d` · mode `0600` · uid/gid `1000/1000`
+**HEALTH:** five surfaces all HTTP 200
+**SIDE_EFFECT_BUDGET:** `PM2_SAVE_COUNT=0` pre · `DUMP_WRITE_ATTEMPTED=0` pre
+
+Any precheck FAIL → `STOPPED_BEFORE_AUTH_CONSUME` · **no mutation**.
+
+#### PRE capture (mandatory — includes rollback authority)
+
+**RETAINED_PRE (numeric + semantic):**
+- `RETAINED_PM_ID` (numeric)
+- `RETAINED_STATUS_PRE` = `online`
+- `RETAINED_NODE_ENV_PRE`
+- `RETAINED_PID_PRE`
+- `RETAINED_RESTART_TIME_PRE` (if available)
+- `RETAINED_COMPOUND_IDENTITY_PRE` = name · script · cwd · exec_mode
+
+**EXTRA_PRE (rollback authority — mandatory):**
+- `EXTRA_PM_ID` (numeric value only — sole rollback target)
+- `EXTRA_STATUS_PRE` = `online`
+- `EXTRA_NODE_ENV_PRE`
+- `EXTRA_PID_PRE` (if available)
+- `EXTRA_RESTART_TIME_PRE` (if available)
+- `EXTRA_COMPOUND_SEMANTIC_IDENTITY_PRE` = name · script · cwd · exec_mode · `created_at` · `restart_time` where available
+
+**DUMP_PRE:** SHA256 · mode · uid/gid (byte identity contract)
+**FLEET_PRE:** backend/processor/collector/monitor identities · non-engine restart counts
+
+**NAME_COLLISION_GATE:** IF more than one online/stopped candidate matches `titan-engine-worker` without unique numeric `EXTRA_PM_ID` resolution → **STOP** · `MANUAL_RECOVERY_REQUIRED` · no mutation.
+
+#### Forward execution strategy (unchanged scope)
+
+Fixed order: PRE capture → secure backup (`dump.pm2.pre` verify) → auth consume → `pm2 stop <EXTRA_PM_ID_NUMERIC>` → fresh LIVE gates → dump byte re-verify → five-surface health → POST proofs.
+
+**Mid-step gates (all required):** `ENGINE_STOP_APPLIED=YES` on exact `EXTRA_PM_ID` · `RETAINED_UNCHANGED` (online · same pid · same `NODE_ENV` · same `restart_time`) · `ENGINE_ONLINE_COUNT=1` · dump byte-identical · `PM2_SAVE_COUNT=0`.
+
+Any mid-step FAIL → rollback (below) · **no retry**.
+
+#### Rollback contract (hardened — numeric `pm_id` only)
+
+**ROLLBACK_METHOD_COUNT = 1**
+**ROLLBACK_IMPROVISATION = FORBIDDEN**
+**ROLLBACK_FALLBACK_SELECTION = FORBIDDEN**
+**ROLLBACK_NAME_RESOLUTION = FORBIDDEN**
+**PM2_NUMERIC_INSTANCE_IDENTITY_ONLY = YES**
+
+**Rollback entry condition:** `ENGINE_STOP_APPLIED=YES` AND any POST proof FAIL OR retained drift detected.
+
+**Single authorized rollback primitive:**
+
+```text
+pm2 start <EXTRA_PM_ID_NUMERIC>
+```
+
+- `<EXTRA_PM_ID_NUMERIC>` MUST equal `EXTRA_PM_ID` captured in PRE (numeric only).
+- from **sanitized shell**; **NO** `--update-env`.
+- **NO** dump restore in this envelope (dump never mutated forward).
+
+**Rollback FORBIDDEN (fail-closed → `MANUAL_RECOVERY_REQUIRED`):**
+- `pm2 start <application_name>`
+- `pm2 restart <application_name>`
+- `pm2 stop <application_name>`
+- `pm2 delete <application_name>`
+- `pm2 startOrRestart` (any form)
+- ecosystem / config-file start or restart
+- any PM2 command whose target resolves by **process name** rather than numeric `pm_id`
+- `pm2 save` · dump write · restart/reload/stop/start on `RETAINED_PM_ID`
+- alternate rollback path · fallback · improvisation · retry
+
+**Ambiguity triggers (immediate `MANUAL_RECOVERY_REQUIRED` — no mutation or stop rollback attempt):**
+- wrong `pm_id` selected
+- missing `EXTRA_PM_ID` / `RETAINED_PM_ID`
+- duplicate `titan-engine-worker` entries with unresolved numeric mapping
+- `EXTRA_COMPOUND_SEMANTIC_IDENTITY` mismatch vs PRE at rollback time
+- process name collision preventing unique numeric target proof
+
+#### Rollback proofs (all required — no partial credit)
+
+After `pm2 start <EXTRA_PM_ID_NUMERIC>` ONLY IF forward stop was applied:
+
+| Proof | Requirement |
+|---|---|
+| `EXTRA_PM_ID` | **online** (exact numeric target) |
+| `EXTRA_NODE_ENV` | == `EXTRA_NODE_ENV_PRE` |
+| `RETAINED_PM_ID` | unchanged vs PRE |
+| `RETAINED_STATUS` | `online` |
+| `RETAINED_PID` | == `RETAINED_PID_PRE` (unchanged) |
+| `RETAINED_NODE_ENV` | == `RETAINED_NODE_ENV_PRE` (unchanged) |
+| `ENGINE_ONLINE_COUNT` | `2` |
+| `ACTIVE_DUMP_SHA256` | == PRE (unchanged) |
+| `ACTIVE_PM2_DUMP_MODE` | == PRE (unchanged) |
+| `PM2_SAVE_COUNT` | `0` |
+| Five-surface health | **PASS** |
+
+**Terminal rollback outcomes (only two):**
+- **SUCCESS:** every proof PASS → **`ROLLED_BACK`** (restores incident pre-recovery live topology)
+- **FAILURE:** any proof missing/fail/ambiguous → **`MANUAL_RECOVERY_REQUIRED`** · stop · **no** fallback · **no** improvisation · **no** retry · **no** diagnostic `pm2 save`
+
+#### POST proofs (forward success)
+
+`EXTRA_PM_ID` **stopped** · `RETAINED_PM_ID` online unchanged · `RETAINED_NODE_ENV` unchanged · `RETAINED_PID` unchanged · `ENGINE_ONLINE_COUNT=1` · dump SHA/mode unchanged · `PM2_SAVE_COUNT=0` · five-surface health PASS → **`RECOVERY_COMPLETE`**
+
+**NOT proven by this envelope:** NODE_ENV normalization · B1 readiness · reboot/resurrect durability (dump intentionally untouched).
+
+**THIS RECOVERY DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
+
+### ETR one-shot execution closeout (CONSUMED / RECOVERY_COMPLETE / 20260828)
+
+**ETR_RUN_ID = ETR-20260828T192616Z**
+**ENGINE_TOPOLOGY_INCIDENT_RECOVERY_RESULT = RECOVERY_COMPLETE**
+**ENGINE_TOPOLOGY_INCIDENT_RECOVERY_AUTHORIZATION = OWNER_APPROVED / ONE_SHOT / CONSUMED**
+**AUTHORIZATION_CONSUMED_AT = `2026-08-28T19:26:16.959Z`**
+**FORWARD_EFFECT = `pm_id 5` online → stopped**
+**ENGINE_STOP_APPLIED = YES**
+**ROLLBACK_START_APPLIED = NO**
+**PM2_SAVE_COUNT = 0**
+**DUMP_MUTATION = 0**
+**POST_ACTIVE_DUMP_SHA256 = `72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`** (unchanged)
+**POST_ENGINE_ONLINE_COUNT = 1**
+**POST_RETAINED_PM_ID = 9** · **POST_RETAINED_PID = 216418** · **POST_RETAINED_NODE_ENV = development** (unchanged)
+**ENGINE_TOPOLOGY_RECOVERY_AUTHORIZED = NO** (consumed / closed)
+**INCIDENT_LIVE_TOPOLOGY_POST_ETR = `pm_id 5` stopped · `pm_id 9` online `development` · `ENGINE_ONLINE_COUNT=1`**
+
+Evidence: `/home/ubuntu/TITANGOLD_ETR-20260828T192616Z.txt`
+SHA256 = `10a9a8ac08af10b62bb6c761ae3f4f8a0fa7fb6441f5128b71d16212edfb2857` · mode **0600**
+
+### ENN failure RCA closeout (COMPLETE / READ-ONLY / 20260828)
+
+**ENN_RCA = COMPLETE**
+**CLASSIFICATION = TIER 3 READ-ONLY / NO PRODUCTION MUTATION**
+**SUBJECT_RUN = ENN-20260828T191045Z**
+**RECOVERY_RUN = ETR-20260828T192616Z** · **RECOVERY_RESULT = RECOVERY_COMPLETE**
+
+#### Root cause
+
+**ENN_ROOT_CAUSE = UNSAFE_PM2_PRIMITIVE_STARTORRESTART_BY_APP_NAME**
+
+`pm2 startOrRestart <ecosystem.config.json> --only titan-engine-worker --update-env` resolves target by **application name**, not numeric `pm_id`. With two persisted `titan-engine-worker` entries (`pm_id 5` stopped · `pm_id 9` online), PM2 6.0.13 `--only <app>` semantics:
+
+1. **Started** previously stopped `pm_id 5` with ecosystem-merged env (`NODE_ENV=production`, reduced keyset).
+2. **Refreshed** retained `pm_id 9` but altered application env **key-set** (shell keys imported), failing `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED`.
+
+Forward aborted at **`MID_KEYSET_FINGERPRINT_DRIFT`** before projected dump write.
+
+**ENN_CONTRIBUTING_FACTORS:**
+- V1 envelope authorized ecosystem `startOrRestart` despite known duplicate engine entries.
+- Rollback contract restarted only retained `pm_id 9`; did not address extra `pm_id 5` brought online → **`ROLLBACK_PROOF_FAIL`** · `ENGINE_ONLINE_COUNT=2`.
+
+#### Affected scope
+
+| Layer | Impact |
+|---|---|
+| Live PM2 | `pm_id 5` online `production` (regression) · `pm_id 9` online `development` (keyset drift) · `ENGINE_ONLINE_COUNT=2` |
+| Active dump | **unchanged** (`PROJECTED_DUMP_WRITE_APPLIED=NO`) |
+| DB / Redis / JWT / `.env` | **0 mutation** |
+| Backend / collector / processor | **unchanged** (no restart) |
+| B1 source files | **unchanged** |
+| Health | **PASS** throughout |
+
+#### Why `startOrRestart` was unsafe
+
+- Targets **all** PM2 processes matching app name `titan-engine-worker`, not solely retained singleton.
+- Can **start** stopped duplicate entries (proven: `pm_id 5`).
+- Imports ecosystem + `env_file` merge; with sanitized shell still risks env key-set expansion on retained process.
+- **Violates** post-T2 singleton live intent when extra entry exists in PM2 registry.
+
+**SAFE_ALTERNATIVE_CLASS (V2):** numeric `pm_id` only — `pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env` with explicit bounded `NODE_ENV=production` in sanitized shell; **never** `startOrRestart` · **never** name-based targeting · **never** touch `EXTRA_PM_ID`.
+
+#### Recovery result
+
+**ETR-20260828T192616Z = RECOVERY_COMPLETE**
+- `pm2 stop 5` (numeric only) restored `ENGINE_ONLINE_COUNT=1`.
+- Retained `pm_id 9` pid/NODE_ENV preserved.
+- Dump SHA/mode unchanged · `PM2_SAVE_COUNT=0`.
+
+#### Confirmed no unauthorized mutation (ENN window)
+
+**ENN_PRODUCTION_MUTATION_LEDGER:**
+- `PM2_PROCESS_MUTATION = YES` (authorized forward refresh + rollback restart on retained only)
+- `PM2_SAVE_COUNT = 0`
+- `ACTIVE_DUMP_MUTATION = 0`
+- `DB_MUTATION = 0` · `REDIS_MUTATION = 0` · `JWT_LIVE_MUTATION = 0` · `ENV_WRITE = 0`
+- `B1_SOURCE_MUTATION = 0` · `C2_052 = NOT EXECUTED`
+
+**THIS RCA TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · Rule02 governance-only
+
+### ENGINE NODE_ENV normalization V2 envelope (design only — NOT authorized / 20260828)
+
+**CLASSIFICATION = TIER 3 DESIGN-ONLY / NO PRODUCTION MUTATION**
+**SUPERSEDES_FORWARD_PRIMITIVE = V1 `startOrRestart --only titan-engine-worker` (REJECTED / PROVEN_UNSAFE_BY_ENN)**
+**AUTHORIZED_TRANSACTION = ENGINE_NODE_ENV_NORMALIZATION_V2**
+**TARGET_SCOPE = RETAINED_ENGINE_NUMERIC_PM_ID_ONLY**
+**DESIGN_SNAPSHOT_RETAINED_PM_ID = 9** (fresh-resolve required; not hardcoded mutation authority)
+**DESIGN_SNAPSHOT_EXTRA_PM_ID = 5** (must remain **stopped**; **must not** be mutated)
+**ENGINE_NODE_ENV_NORMALIZATION_V2_ENVELOPE = COMPLETE**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_ROLLBACK_CONTRACT = DETERMINISTIC / NUMERIC_PM_ID_ONLY / NO_NAME_RESOLUTION / NO_FALLBACK**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_EXECUTION_READY = YES** (design)
+**NODE_ENV_NORMALIZATION_V1_REAUTH_READY = NO** (superseded by V2 design)
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
+
+#### Authorized effects (forward — minimum)
+
+**AUTHORIZED_EFFECTS:**
+- `RETAINED_PM_ID` live God env: **`NODE_ENV` only** `development` → `production`
+- `REQUIRED_PROJECTED_DUMP_UPDATE` = surgical `NODE_ENV` leaf on **retained online** engine dump row only (atomic mode `0600`; T2 `projection.mjs` / `liveBoundary.writeProjectedActiveDump` pattern)
+
+**NOT authorized:** any change to `EXTRA_PM_ID` status/env · backend reload · B1 · C2/052
+
+#### Forbidden effects
+
+**EXPLICITLY_FORBIDDEN:**
+- `pm2 startOrRestart` (any form)
+- ecosystem start / restart / recreate / `--only <app>`
+- name-based PM2 targeting (`titan-engine-worker`, app name, `--only`)
+- `pm2 stop` / `start` / `restart` / `reload` / `delete` on `EXTRA_PM_ID` or any non-retained process
+- `pm2 save`
+- dump write except approved projected `NODE_ENV` update on retained online row
+- `.env` write · DB · Redis · JWT/session/secret mutation · PATH mutation
+- non-`NODE_ENV` env mutation on retained engine
+- B1 three-file deploy · C2/052
+- improvisation · fallback selection · retry after auth consume
+
+#### PRE checks (before auth consume)
+
+**RECOVERY_PREREQUISITE:** `ETR-20260828T192616Z = RECOVERY_COMPLETE`
+
+**TOPOLOGY (mandatory):**
+- `titan-engine-worker` entries = exactly `2`
+- `RETAINED_PM_ID` = online · `NODE_ENV=development` · pid/restart_time captured
+- `EXTRA_PM_ID` = **stopped** (must not be online)
+- `ENGINE_ONLINE_COUNT = 1`
+- `PM_ID_NUMERIC_INTEGRITY = PASS` · no ambiguity
+
+**EXTRA_ISOLATION_GATE (mandatory at PRE, mid-forward, pre-dump-write, POST):**
+- `EXTRA_PM_ID` status MUST remain `stopped`
+- `EXTRA_PM_ID` pid MUST remain `0` (or equivalent stopped sentinel)
+- IF extra transitions to `online` at any point → **fail-closed** · rollback · `MANUAL_RECOVERY_REQUIRED`
+
+**DUMP (PRE):**
+- `ACTIVE_DUMP_SHA256 = 72d3ea60e3df1ca7364291278b790bc069e29fc1d4108cb9c2f1edf515a90a3d`
+- mode `0600` · uid/gid `1000/1000`
+
+**SEMANTIC FINGERPRINTS (retained only):**
+- `RETAINED_ENV_KEYSET_FINGERPRINT_PRE`
+- `RETAINED_NON_NODE_ENV_SEMANTIC_FINGERPRINT_PRE`
+- `RETAINED_COMPOUND_IDENTITY_PRE` = name · script · cwd · exec_mode · pm_id · pid
+
+**FLEET:** backend online = `4` · processor/collector/monitor unchanged
+**B1 SHA256:** three target files unchanged vs canonical PRE
+**HEALTH:** five surfaces all HTTP `200`
+**SIDE_EFFECT_BUDGET:** `PM2_SAVE_COUNT=0` · `DUMP_WRITE_ATTEMPTED=0`
+
+Any precheck FAIL → **`STOPPED_BEFORE_AUTH_CONSUME`** · no mutation.
+
+#### Execution primitive (numeric only)
+
+Fixed order:
+1. PRE capture + secure backup (`dump.pm2.pre` + `pre-state.json`)
+2. Auth consume
+3. **Live refresh (retained numeric only):**
+
+```text
+env -i HOME=<h> USER=<u> PM2_HOME=/home/ubuntu/.pm2 PATH=<canonical> \
+  NODE_ENV=production \
+  pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env
+```
+
+4. **Mid-step gates** (all required before dump write)
+5. **Projected dump write** — `NODE_ENV` leaves on retained **online** row only → `production`
+6. POST proofs
+
+**Mid-step gates (fail-closed):**
+- `RETAINED_LIVE_NODE_ENV = production`
+- `RETAINED_PM_ID` / pid unchanged (restart permitted; pm_id stable)
+- `RETAINED_RESTART_TIME` may increment by ≤1 (fork restart); pid change allowed only with same pm_id
+- `RETAINED_ENV_KEYSET_FINGERPRINT = PRE` (exact)
+- `RETAINED_NON_NODE_ENV_SEMANTIC_FINGERPRINT = PRE` (exact)
+- `EXTRA_PM_ID` still **stopped**
+- `ENGINE_ONLINE_COUNT = 1`
+- five-surface health PASS
+- `PM2_SAVE_COUNT = 0`
+
+#### Rollback contract (deterministic)
+
+**ROLLBACK_METHOD_COUNT = 1**
+**PM2_NUMERIC_INSTANCE_IDENTITY_ONLY = YES**
+**ROLLBACK_NAME_RESOLUTION = FORBIDDEN**
+**ROLLBACK_IMPROVISATION = FORBIDDEN**
+
+**Rollback entry:** any forward step after auth consume fails mid/post proof.
+
+**Fixed sequence:**
+1. **Dump restore (conditional):** IF `PROJECTED_DUMP_WRITE_APPLIED=YES` → atomic restore `SECURE_ROOT/dump.pm2.pre` → active dump; verify byte-identical to PRE.
+2. **Live restore (mandatory if live refresh applied):**
+
+```text
+env -i HOME=<h> USER=<u> PM2_HOME=/home/ubuntu/.pm2 PATH=<canonical> \
+  NODE_ENV=development \
+  pm2 restart <RETAINED_PM_ID_NUMERIC> --update-env
+```
+
+**Rollback FORBIDDEN:** `startOrRestart` · ecosystem commands · name-based PM2 · `pm2 start/stop` on `EXTRA_PM_ID` · `pm2 save` · any dump edit other than exact PRE restore · improvisation
+
+**Rollback proofs (all required):**
+- `RETAINED_NODE_ENV = development` (PRE)
+- retained keyset + non-NODE_ENV semantic fingerprints = PRE
+- `EXTRA_PM_ID` still **stopped** · unchanged
+- `ENGINE_ONLINE_COUNT = 1`
+- dump SHA/mode = PRE (or restored PRE if dump was written)
+- `PM2_SAVE_COUNT = 0`
+- five-surface health PASS
+
+**Terminal:** all PASS → **`ROLLED_BACK`** · any FAIL → **`MANUAL_RECOVERY_REQUIRED`**
+
+#### POST proofs (forward success)
+
+| Proof | Expected |
+|---|---|
+| `LIVE_ENGINE_NODE_ENV` (retained) | `production` |
+| `PERSISTED_ENGINE_NODE_ENV` (retained online dump row) | `production` |
+| `RESURRECT_EXPECTED_ENGINE_NODE_ENV` | `production` |
+| `RETAINED_PM_ID` | unchanged numeric |
+| `ENGINE_ONLINE_COUNT` | `1` |
+| `EXTRA_PM_ID` | **stopped** (untouched) |
+| `NON_NODE_ENV_ENGINE_ENV_SEMANTICS_PRESERVED` | `YES` |
+| `ACTIVE_DUMP_SHA256` | changed only by approved projection (POST ≠ PRE iff projection applied; content must match expected projected artifact) |
+| `ACTIVE_PM2_DUMP_MODE` | `0600` |
+| `PM2_SAVE_COUNT` | `0` |
+| Five-surface health | PASS |
+| B1 three-file SHA256 | unchanged |
+
+**Terminal success:** **`NORMALIZATION_V2_COMPLETE`**
+
+#### Failure states (canonical)
+
+| State | Meaning |
+|---|---|
+| `STOPPED_BEFORE_AUTH_CONSUME` | PRE/precheck failed; zero mutation |
+| `STOPPED_EXTRA_NOT_STOPPED` | Extra not stopped at PRE; unsafe to proceed |
+| `MID_EXTRA_STARTED` | Extra came online during forward; critical isolation breach |
+| `MID_KEYSET_FINGERPRINT_DRIFT` | Retained env keyset changed beyond `NODE_ENV` |
+| `MID_NON_NODE_ENV_SEMANTIC_DRIFT` | Retained non-NODE_ENV semantics changed |
+| `MID_LIVE_NODE_ENV_NOT_PRODUCTION` | Live refresh did not set production on retained |
+| `PROJECTED_DUMP_WRITE_FAIL` | Dump projection failed or diff too wide |
+| `POST_PROOF_FAIL` | POST validation failed |
+| `ROLLED_BACK` | Rollback proofs all PASS |
+| `MANUAL_RECOVERY_REQUIRED` | Rollback incomplete or ambiguous; no retry |
+
+**THIS V2 DESIGN TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
+
+### ENGINE NODE_ENV normalization V2 source fix (COMPLETE / SOURCE+TESTS ONLY / 20260828)
+
+**ENGINE_NODE_ENV_NORMALIZATION_V2_SOURCE_FIX = COMPLETE**
+**CLASSIFICATION = TIER 2 SOURCE+TESTS / NO PRODUCTION MUTATION**
+**GOVERNANCE_BRANCH = `chore/c2-engine-node-env-normalization-readiness`**
+**PRODUCTION_MUTATION = 0** · **PM2_MUTATION = 0** · **DUMP_MUTATION = 0** · **ENV_WRITE = 0**
+
+#### V1 path removal
+
+**V1_STARTORRESTART_FORWARD_PATH = REMOVED**
+**V1_ECOSYSTEM_RESTART_PATH = REMOVED**
+**V1_NAME_BASED_PM2_TARGETING = REMOVED**
+
+#### V2 execution primitive (source only)
+
+**V2_FORWARD_PRIMITIVE = SANITIZED_NUMERIC_PM2_RESTART**
+**PM2_NUMERIC_INSTANCE_IDENTITY_ONLY = YES**
+**SANITIZED_SHELL_ENV_KEYS = HOME · USER · LOGNAME · PM2_HOME · PATH · NODE_ENV**
+**FORBIDDEN_FORWARD_PATTERNS = startOrRestart · ecosystem restart · --only · app name targeting**
+
+#### Gates preserved / added
+
+**EXTRA_ISOLATION_GATE = IMPLEMENTED** (PRE · MID_FORWARD · PRE_DUMP · POST)
+**RETAINED_IDENTITY_BINDING = FRESH_RESOLVE_NUMERIC_PM_ID** (never hardcode · never name-resolve)
+**DUMP_ROW_BINDING = RETAINED_ONLINE_PATH_CONSENSUS_MATCH**
+**DUMP_PROJECTION_SCOPE = NODE_ENV_LEAVES_RETAINED_ROW_ONLY**
+**KEYSET_FINGERPRINT_GATE = PRESERVED**
+**NON_NODE_ENV_SEMANTIC_FINGERPRINT_GATE = PRESERVED**
+**ROLLBACK_CONTRACT = PRESERVED** (numeric restart · conditional dump restore)
+
+#### Source files
+
+- `backend/scripts/engine-node-env-normalization/ennV2Core.mjs` (pure/testable V2 core)
+- `backend/scripts/engine-node-env-normalization/execute-enn.mjs` (V2 executor wiring)
+
+#### Tests
+
+**ENN_V2_UNIT_TESTS = PASS** (`engineNodeEnvNormalizationV2.test.js` · 13/13)
+**T2_ORCHESTRATOR_TESTS = PASS** (`t2RetryOrchestrator.test.js` · 232/232)
+**BACKEND_UNIT_TESTS = 1247/1249 PASS** (2 pre-existing base failures in `dataSourceUrlDuplicate.test.js` — not branch-owned)
+
+Coverage categories:
+- duplicate engine names / topology resolution
+- stopped extra isolation (EXTRA_ISOLATION_GATE)
+- numeric restart only (no startOrRestart / name targeting)
+- dump row PATH binding
+- NODE_ENV-only projection (extra row untouched)
+
+#### Authorization (unchanged)
+
+**ENGINE_NODE_ENV_NORMALIZATION_V2_AUTHORIZED = NO**
+**ENGINE_NODE_ENV_NORMALIZATION_V2_EXECUTION_READY = YES** (design + source)
+**NODE_ENV_NORMALIZATION_AUTHORIZED = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**B1_DEPLOY_AUTHORIZED = NO**
+**C2_052_EXECUTION_AUTHORIZED = NO**
+**DO_NOT_ADVANCE_TO_B1 = YES**
+**NEXT_GATE = ENGINE_NODE_ENV_NORMALIZATION_V2_OWNER_AUTHORIZATION**
+**PROGRESS_BLOCKER = ENGINE_NODE_ENV_NORMALIZATION_V2_PENDING_OWNER_AUTHORIZATION**
+
+**THIS SOURCE-FIX TASK MUTATION LEDGER:** production=0 · PM2=0 · dump=0 · env_write=0 · Rule02 governance-only
 
