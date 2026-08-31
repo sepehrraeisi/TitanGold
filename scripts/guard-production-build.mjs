@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * TitanGold production / release frontend build guard (Core Rule §109).
  *
@@ -270,7 +269,6 @@ export function evaluateGuard(options = {}) {
     (root) => isSameOrInside(outDir, root, io),
   );
 
-  // B always wins — never bypass live nginx output.
   if (liveNginxHit) {
     return refused(
       REFUSAL.LIVE_NGINX_ROOT_OUTPUT_FORBIDDEN,
