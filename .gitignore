@@ -58,3 +58,9 @@ backend/.runtime-provenance.env
 backend/.e2e-login.env
 .e2e-playwright.env
 .e2e-fixture-promotion.json
+
+# Live production-root marker (server-local; never commit)
+.titangold-production-root
+
+# Owner emergency live-build authorization artifact (must never be the default path)
+deploy/EMERGENCY_LIVE_BUILD.authorized

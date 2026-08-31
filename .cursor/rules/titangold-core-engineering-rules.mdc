@@ -9429,3 +9429,121 @@ For owner visibility:
 > when the intended runtime is deployed, verified and truthfully mapped back to
 > the canonical Git state.
 
+---
+
+# 109. Production Build / Artifact Activation Safety
+
+This section is non-negotiable. It refines Section 29 and Section 108 for
+frontend artifacts. It does not authorize a production build, activation,
+nginx reload or C2_052 execution by itself.
+
+The canonical principle is:
+
+> A production frontend artifact may be created only from an isolated clean
+> named commit, written first to a non-live staging directory, verified,
+> backed up against, and activated as a separate explicit operation.
+
+An authorized `npm run build` is not permission to overwrite the live nginx
+root from a dirty production-serving worktree.
+
+## 109.1 Forbidden build origins
+
+1. Building the frontend directly from a production-serving worktree is
+   forbidden.
+2. Building when Vite `outDir` (or equivalent) resolves to the current nginx
+   live root, or writes inside that live root, is forbidden.
+3. A dirty source tree may never be used to create a production / release
+   artifact.
+4. Untracked application source consumed by the frontend dependency graph is
+   forbidden for release builds.
+
+## 109.2 Required production artifact origin
+
+Production artifacts must originate from all of:
+
+- an isolated clean Git worktree
+- a named commit SHA
+- a locked dependency manifest (`package-lock.json` or the canonical lockfile)
+
+Production build output must first be generated into a **non-live**
+staging/release directory. It must not be written into the currently served
+nginx dist during the build phase.
+
+## 109.3 Activation is a separate operation
+
+The currently served dist must have a verified backup **before** activation.
+
+Activation must be a separate explicit operation after artifact verification.
+
+Rollback must exist **before** activation. If a verified backup cannot be
+created, activation must not proceed.
+
+Activation targets only the live dist. It must not mutate application source,
+backend processes, PM2, PostgreSQL or Redis.
+
+## 109.4 Artifact provenance
+
+Every production frontend artifact must record at least:
+
+- source commit
+- branch
+- clean-tree proof
+- package-lock SHA
+- artifact tree SHA
+- build timestamp / run ID
+
+## 109.5 Hard-fail at the build command
+
+`npm run build` or equivalent run against a live production root must **hard
+fail** before Vite writes dist.
+
+The guard must be wired into the normal frontend build lifecycle so it cannot
+be silently skipped by the default `npm run build` path.
+
+The guard must not rely only on an environment variable that anyone can casually
+unset.
+
+No instruction from ChatGPT, Cursor or an operator may bypass these gates
+merely because a build itself was authorized.
+
+A bypass, if ever architecturally required, needs a distinct Owner emergency
+authorization artifact and must not be the default path.
+
+## 109.6 Supported production flow
+
+```text
+CLEAN COMMIT
+  → ISOLATED CLEAN WORKTREE
+  → BUILD INTO NON-LIVE RELEASE DIRECTORY
+  → ARTIFACT MANIFEST
+  → VERIFY
+  → BACKUP CURRENT LIVE DIST
+  → EXPLICIT ACTIVATE
+  → HTTPS SMOKE
+  → ROLLBACK AVAILABLE
+```
+
+The legacy workflow “`npm run build` from `/home/ubuntu/webapp/TitanGold`
+then nginx reload” is a known incident class and is refused by code.
+
+## 109.7 Current live production identity
+
+The current live production source root is:
+
+`/home/ubuntu/webapp/TitanGold`
+
+The current live nginx dist root is:
+
+`/home/ubuntu/webapp/TitanGold/dist`
+
+These identities are declared in-repo (`deploy/production-roots.json`) and may
+additionally be marked on the server by `.titangold-production-root`. Creating
+that marker on production is a separate Owner-gated activation step. Absence
+of the marker does not authorize a live-root build when the configured path
+matches.
+
+## 109.8 Developer-local builds
+
+Normal local/dev builds outside a declared production root, writing to a
+non-live `outDir`, remain allowed. Release/production mode remains fail-closed.
+

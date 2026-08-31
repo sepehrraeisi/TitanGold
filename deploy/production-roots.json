@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "description": "Durable identity of live production source and nginx dist roots. Unioned with builtin hardcoded paths in the build guard. Do not treat absence of a server-local marker as permission to build from these paths.",
+  "productionSourceRoots": [
+    "/home/ubuntu/webapp/TitanGold"
+  ],
+  "liveNginxDistRoots": [
+    "/home/ubuntu/webapp/TitanGold/dist"
+  ],
+  "markerFileName": ".titangold-production-root",
+  "releaseStagingRootDefault": "/home/ubuntu/releases/titangold",
+  "emergencyAuthorizationFile": "deploy/EMERGENCY_LIVE_BUILD.authorized",
+  "futureMarkerActivation": {
+    "authorizedThisTask": false,
+    "step": "Owner-gated, after this source is merged and deployed as tooling only: create server-local file /home/ubuntu/webapp/TitanGold/.titangold-production-root with mode 0644 containing PRODUCTION_ROOT=YES and a dated token. Do not git-add the marker. The in-repo path list already refuses this root even without the marker."
+  }
+}
