@@ -61,9 +61,22 @@ export function requireCanonicalAgentId(value) {
   return resolved.agentId;
 }
 
+/**
+ * Stage 2 identity helper. Validator still requires the canonical key.
+ * Unknown / legacy agent-N identities are left unchanged so validation fail-closes.
+ */
+export function applyCanonicalAgentId(envelope) {
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return envelope;
+  const resolved = resolveArtemisAgentIdentity(envelope.agentId);
+  if (resolved.status !== 'ok') return envelope;
+  if (envelope.agentId === resolved.agentId) return envelope;
+  return { ...envelope, agentId: resolved.agentId };
+}
+
 export default {
   listCanonicalAgentKeys,
   listKnownAliases,
   resolveArtemisAgentIdentity,
   requireCanonicalAgentId,
+  applyCanonicalAgentId,
 };
