@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from '@jest/globals';
 import {
+  applyCanonicalAgentId,
   listCanonicalAgentKeys,
   resolveArtemisAgentIdentity,
   requireCanonicalAgentId,
@@ -38,5 +39,11 @@ describe('Artemis WP-B.1 agent identity', () => {
     const keys = listCanonicalAgentKeys();
     expect(keys).toHaveLength(15);
     expect(keys).toEqual(expect.arrayContaining(['trend', 'arbitrage', 'volume', 'pattern', 'optimization']));
+  });
+
+  it('applyCanonicalAgentId rewrites aliases and leaves unknown/legacy unchanged', () => {
+    expect(applyCanonicalAgentId({ agentId: 'trend_detection' })).toEqual({ agentId: 'trend' });
+    expect(applyCanonicalAgentId({ agentId: 'agent-3' }).agentId).toBe('agent-3');
+    expect(applyCanonicalAgentId({ agentId: 'unknown-agent' }).agentId).toBe('unknown-agent');
   });
 });
