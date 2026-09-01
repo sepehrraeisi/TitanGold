@@ -1,21 +1,30 @@
 /**
- * Artemis WP-B.1 — canonical Agent → Artemis Evidence contract owner.
+ * Artemis Core Stage 2 — canonical Agent → Artemis Evidence contract owner.
+ * WP-B.1 remains the same module. Do not create a parallel schema.
+ *
  * schemaVersion 1.0.0 / contractVersion artemis-evidence-1.0.0
+ * Stage 2 additive enum/policy extensions are backward compatible.
  * Adapter versions are separate and must not bump this contract.
  *
  * Envelopes must contain canonical identity only. Alias normalization happens
- * before validation. Nested objects are allowlisted; secret-key scan is defense in depth.
+ * before validation (see artemisAgentIdentity.applyCanonicalAgentId).
+ * Nested objects are allowlisted; secret-key scan is defense in depth.
  *
  * Identifier null/unavailable semantics (agentRecordId, runId, correlationId, decisionContextId):
  * - omitted or null → not present; allowed; not required
  * - RFC 4122 UUID string → canonical available identifier
  * - "unavailable" → explicit unavailable token
- * - { availability: "unavailable"|"not_applicable"|"blocked", reasonKey? } → structured unavailable
+ * - { availability: <non-available AVAILABILITY>, reasonKey? } → structured unavailable
  * - any other string (foo, run-1, agent-N) → rejected
+ *
+ * Persistence: contract + validation only. ai_decisions remains the Agent-run SoT.
+ * No migration in Stage 2.
  */
 
 export const SCHEMA_VERSION = '1.0.0';
 export const CONTRACT_VERSION = 'artemis-evidence-1.0.0';
+export const FOUNDATION_STAGE = 2;
+export const FOUNDATION_PACKAGE_ID = 'canonical-evidence-foundation';
 export const MAX_EVIDENCE_ITEMS = 32;
 export const MAX_ENVELOPE_UTF8_BYTES = 8 * 1024;
 export const MAX_EVIDENCE_VALUE_CHARS = 256;
@@ -54,6 +63,9 @@ export const AVAILABILITY = Object.freeze({
   UNAVAILABLE: 'unavailable',
   NOT_APPLICABLE: 'not_applicable',
   BLOCKED: 'blocked',
+  NOT_RUN: 'not_run',
+  PROVIDER_UNAVAILABLE: 'provider_unavailable',
+  CONTRACT_ERROR: 'contract_error',
 });
 
 export const FRESHNESS_STATUS = Object.freeze({
@@ -101,6 +113,8 @@ export const DATA_QUALITY_STATUS = Object.freeze({
   OK: 'ok',
   DEGRADED: 'degraded',
   INSUFFICIENT: 'insufficient',
+  INVALID: 'invalid',
+  UNKNOWN: 'unknown',
   UNAVAILABLE: 'unavailable',
 });
 
@@ -188,6 +202,14 @@ export const DIRECTIONAL_CONTRIBUTION = Object.freeze({
   NOT_APPLICABLE: 'not_applicable',
 });
 
+export const EVIDENCE_SEVERITY = Object.freeze({
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  UNAVAILABLE: 'unavailable',
+  NOT_APPLICABLE: 'not_applicable',
+});
+
 export const MARKET_TYPE = Object.freeze({
   SPOT: 'spot',
   FUTURES: 'futures',
@@ -251,6 +273,24 @@ export const ANALYTICAL_AGENT_IDS = Object.freeze([
   'technical', 'trend', 'pattern', 'volume', 'sentiment', 'fundamental', 'market_intelligence',
 ]);
 export const OPPORTUNITY_AGENT_IDS = Object.freeze(['price_prediction', 'timing', 'arbitrage']);
+export const CONTROL_AGENT_IDS = Object.freeze(['risk', 'portfolio', 'optimization']);
+export const FEASIBILITY_AGENT_IDS = Object.freeze(['liquidity']);
+export const EXECUTION_AGENT_IDS = Object.freeze(['order']);
+
+const PREDICTIVE_CONFIDENCE_KINDS = new Set([
+  CONFIDENCE_KIND.MODEL_PROBABILITY,
+  CONFIDENCE_KIND.CALIBRATED,
+]);
+const CONTROL_OR_EXECUTION_ROLES = new Set([
+  AUTHORITY_CLASS.CONTROL_VETO,
+  AUTHORITY_CLASS.CONTROL_SIZING,
+  AUTHORITY_CLASS.EXECUTION_FEASIBILITY,
+  AUTHORITY_CLASS.EXECUTION,
+  AUTHORITY_CLASS.NOT_APPLICABLE,
+]);
+const NON_AVAILABLE_AVAILABILITY = new Set(
+  Object.values(AVAILABILITY).filter((value) => value !== AVAILABILITY.AVAILABLE),
+);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
@@ -306,6 +346,8 @@ const ALLOWED_TOP_LEVEL = new Set([
   'configurationVersion',
   'createdAt',
   'completedAt',
+  'invalidatingConditions',
+  'riskFlags',
 ]);
 
 const ALLOWED_CONCLUSION = new Set(['direction', 'regime', 'signal', 'strength']);
@@ -369,6 +411,7 @@ const ALLOWED_EVIDENCE_ITEM = new Set([
   'limitation',
   'correlationFamily',
   'explanationKey',
+  'severity',
 ]);
 const ALLOWED_OWNERSHIP_SCOPE = new Set(['userId', 'tenantId', 'scopeType']);
 const ALLOWED_UNAVAILABLE_OBJECT = new Set(['availability', 'reasonKey']);
@@ -394,7 +437,7 @@ export function isCanonicalUuid(value) {
 
 export function isUnavailableRepresentation(value) {
   if (value == null) return false;
-  if (value === 'unavailable' || value === 'not_applicable' || value === 'blocked') return true;
+  if (typeof value === 'string' && NON_AVAILABLE_AVAILABILITY.has(value)) return true;
   if (typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value);
   if (!keys.length || keys.some((key) => !ALLOWED_UNAVAILABLE_OBJECT.has(key))) return false;
@@ -573,7 +616,21 @@ function validateConfidenceProvenance(provenance, errors, field = 'confidence.pr
   optionalString(`${field}.methodKey`, provenance.methodKey, errors);
 }
 
-function validateConfidence(confidence, errors) {
+function confidenceMethodPresent(provenance) {
+  if (typeof provenance === 'string' && provenance.trim()) return true;
+  if (
+    provenance
+    && typeof provenance === 'object'
+    && !Array.isArray(provenance)
+    && typeof provenance.methodKey === 'string'
+    && provenance.methodKey.trim()
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function validateConfidence(confidence, errors, envelope = {}) {
   if (confidence == null) {
     errors.push({ field: 'confidence', code: 'confidence_required' });
     return;
@@ -593,6 +650,9 @@ function validateConfidence(confidence, errors) {
   validateSampleWindow(confidence.sampleWindow, errors);
   validateConfidenceProvenance(confidence.provenance, errors);
   if (confidence.availability === 'unavailable') {
+    if (typeof confidence.value === 'number') {
+      errors.push({ field: 'confidence.value', code: 'unavailable_must_not_include_measured_fields' });
+    }
     if (!inEnum(confidence.kind || CONFIDENCE_KIND.UNAVAILABLE, CONFIDENCE_KIND)) {
       errors.push({ field: 'confidence.kind', code: 'invalid_confidence_kind' });
     }
@@ -602,6 +662,12 @@ function validateConfidence(confidence, errors) {
     optionalString('confidence.reasonKey', confidence.reasonKey, errors);
     return;
   }
+  if (NON_AVAILABLE_AVAILABILITY.has(envelope.availability)) {
+    errors.push({ field: 'confidence.availability', code: 'unavailable_must_not_claim_success' });
+  }
+  if (!confidenceMethodPresent(confidence.provenance)) {
+    errors.push({ field: 'confidence.provenance', code: 'confidence_method_required' });
+  }
   if (typeof confidence.value !== 'number' || !Number.isFinite(confidence.value)) {
     errors.push({ field: 'confidence.value', code: 'invalid_confidence_value' });
   }
@@ -610,6 +676,9 @@ function validateConfidence(confidence, errors) {
   }
   if (!inEnum(confidence.kind, CONFIDENCE_KIND) || confidence.kind === CONFIDENCE_KIND.UNAVAILABLE) {
     errors.push({ field: 'confidence.kind', code: 'invalid_confidence_kind' });
+  }
+  if (PREDICTIVE_CONFIDENCE_KINDS.has(confidence.kind) && CONTROL_OR_EXECUTION_ROLES.has(envelope.authorityClass)) {
+    errors.push({ field: 'confidence.kind', code: 'confidence_kind_role_mismatch' });
   }
 }
 
@@ -788,6 +857,9 @@ function validateEvidenceItems(items, field, errors) {
     optionalString(`${prefix}.interpretation`, item.interpretation, errors);
     optionalString(`${prefix}.limitation`, item.limitation, errors);
     optionalString(`${prefix}.explanationKey`, item.explanationKey, errors);
+    if (item.severity != null && !inEnum(item.severity, EVIDENCE_SEVERITY)) {
+      errors.push({ field: `${prefix}.severity`, code: 'invalid_evidence_severity' });
+    }
     if (item.quality != null && !inEnum(item.quality, DATA_QUALITY_STATUS) && !isUnavailableRepresentation(item.quality)) {
       errors.push({ field: `${prefix}.quality`, code: 'invalid_item_quality' });
     }
@@ -969,10 +1041,28 @@ function validateRoleSemantics(envelope, errors) {
   }
 }
 
-export function validateEvidenceEnvelope(envelope) {
+function validateReasonKeyArray(field, value, errors) {
+  if (value == null) return;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
+    errors.push({ field, code: 'invalid_reason_key_array' });
+  }
+}
+
+function assertTimestampOrder(earlierField, laterField, envelope, errors) {
+  const earlier = envelope[earlierField];
+  const later = envelope[laterField];
+  if (!isIsoTimestamp(earlier) || !isIsoTimestamp(later)) return;
+  if (Date.parse(earlier) > Date.parse(later)) {
+    errors.push({ field: earlierField, code: 'impossible_timestamp_order' });
+  }
+}
+
+export function validateEvidenceEnvelope(envelope, options = {}) {
   if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
     return fail('invalid_envelope', 'Envelope must be a plain object');
   }
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+  const rejectExpired = options.rejectExpired === true;
 
   const unknown = Object.keys(envelope).filter((key) => !ALLOWED_TOP_LEVEL.has(key));
   if (unknown.length) {
@@ -1069,12 +1159,31 @@ export function validateEvidenceEnvelope(envelope) {
   assertIsoOptional('expiryTimestamp', envelope.expiryTimestamp, errors);
   assertIsoOptional('createdAt', envelope.createdAt, errors);
   assertIsoOptional('completedAt', envelope.completedAt, errors);
+  assertTimestampOrder('sourceTimestamp', 'analysisTimestamp', envelope, errors);
+  assertTimestampOrder('sourceCandleTimestamp', 'analysisTimestamp', envelope, errors);
+  assertTimestampOrder('createdAt', 'completedAt', envelope, errors);
+
+  validateReasonKeyArray('invalidatingConditions', envelope.invalidatingConditions, errors);
+  validateReasonKeyArray('riskFlags', envelope.riskFlags, errors);
+
+  if (rejectExpired) {
+    if (envelope.freshness && typeof envelope.freshness === 'object' && envelope.freshness.status === FRESHNESS_STATUS.EXPIRED) {
+      errors.push({ field: 'freshness.status', code: 'expired_evidence_rejected' });
+    }
+    if (isIsoTimestamp(envelope.expiryTimestamp) && Date.parse(envelope.expiryTimestamp) < nowMs) {
+      errors.push({ field: 'expiryTimestamp', code: 'expired_evidence_rejected' });
+    }
+  }
+
+  if (NON_AVAILABLE_AVAILABILITY.has(envelope.availability) && hasAnalyticalMarketVote(envelope.conclusion)) {
+    errors.push({ field: 'conclusion', code: 'unavailable_must_not_claim_success' });
+  }
 
   validateFreshness(envelope.freshness, errors);
   validateDataQuality(envelope.dataQuality, errors);
   validateProvenance(envelope.provenance, errors);
   validateConclusion(envelope.conclusion, errors);
-  validateConfidence(envelope.confidence, errors);
+  validateConfidence(envelope.confidence, errors, envelope);
   validateEvidence(envelope.evidence, errors);
   validateRoleSemantics(envelope, errors);
 
@@ -1097,10 +1206,15 @@ export function validateEvidenceEnvelope(envelope) {
 export default {
   SCHEMA_VERSION,
   CONTRACT_VERSION,
+  FOUNDATION_STAGE,
+  FOUNDATION_PACKAGE_ID,
   ADAPTER_VERSIONS,
   CANONICAL_AGENT_IDS,
   ANALYTICAL_AGENT_IDS,
   OPPORTUNITY_AGENT_IDS,
+  CONTROL_AGENT_IDS,
+  FEASIBILITY_AGENT_IDS,
+  EXECUTION_AGENT_IDS,
   validateEvidenceEnvelope,
   utf8ByteLength,
   collectForbiddenSecretKeys,
