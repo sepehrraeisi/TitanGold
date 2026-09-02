@@ -16,6 +16,8 @@ jest.unstable_mockModule('../../database/db.js', () => ({
 
 const { CANONICAL_AGENT_IDS, AGENT_CONTRACT_ROLE } = await import('../../contracts/artemisEvidenceContract.js');
 const {
+  AGENT_FILTER_POLICY,
+  AGENT_FILTER_STATE,
   INGESTION_DISPOSITION,
   INGESTION_REASON,
   MAX_INGEST_BATCH,
@@ -27,6 +29,8 @@ const {
   getValidatedEvidence,
   applyIngestionDisposition,
   assertReadOnlySql,
+  getLastIngestionMetrics,
+  resolveStage4AgentFilter,
   AI_DECISIONS_INGEST_READ_SQL,
 } = await import('../../services/artemisEvidenceIngestionService.js');
 const { projectDecisionRow } = await import('../../services/artemisEvidenceOnReadService.js');
@@ -500,6 +504,9 @@ describe('Artemis Stage 4 read-only evidence ingestion', () => {
     const batch = await ingestEvidenceBatch({ nowMs: NOW, limit: 20 });
     expect(mockQuery).toHaveBeenCalledTimes(1);
     expect(mockQuery.mock.calls[0][1][0]).toBe(20);
+    expect(mockQuery.mock.calls[0][1][4]).toBeNull();
+    expect(batch.filter.state).toBe(AGENT_FILTER_STATE.NONE);
+    expect(batch.filter.requested).toBe(false);
     expect(batch.query.bounded).toBe(true);
     expect(batch.query.nPlusOne).toBe(false);
     expect(batch.counts.total).toBe(5);
@@ -533,6 +540,104 @@ describe('Artemis Stage 4 read-only evidence ingestion', () => {
     const batch = await ingestEvidenceBatch({ nowMs: NOW });
     expect(batch.items[0].disposition).toBe(INGESTION_DISPOSITION.ACCEPTED);
     expect(batch.items[1].disposition).toBe(INGESTION_DISPOSITION.REJECTED_IDENTITY);
+    expect(mockQuery.mock.calls[0][1][4]).toBeNull();
+  });
+
+  async function expectInvalidFilterFailClosed(options, expectedState = AGENT_FILTER_STATE.INVALID) {
+    mockQuery.mockResolvedValue({ rows: [decisionRow('trend', AVAILABLE.trend)] });
+    const batch = await ingestEvidenceBatch({ nowMs: NOW, ...options });
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(batch.items).toEqual([]);
+    expect(batch.counts.total).toBe(0);
+    expect(batch.query.executed).toBe(false);
+    expect(batch.query.bounded).toBe(true);
+    expect(batch.query.maxLimit).toBe(MAX_INGEST_BATCH);
+    expect(batch.filter.policy).toBe(AGENT_FILTER_POLICY);
+    expect(batch.filter.state).toBe(expectedState);
+    expect(batch.filter.requested).toBe(true);
+    expect(batch.filter.queried).toBe(false);
+    expect(getLastIngestionMetrics().queryCount).toBe(0);
+    expect(getLastIngestionMetrics().rowsLoaded).toBe(0);
+    expectZeroSideEffects(batch);
+    return batch;
+  }
+
+  it('invalid agentIds=["totally_unknown_agent"] fail closed without querying', async () => {
+    const batch = await expectInvalidFilterFailClosed({ agentIds: ['totally_unknown_agent'] });
+    expect(batch.filter.rejectedIds).toEqual(['totally_unknown_agent']);
+    expect(batch.filter.reasonKey).toBe(INGESTION_REASON.INVALID_AGENT_FILTER);
+  });
+
+  it('invalid agentId="unknown" fail closed without querying', async () => {
+    const batch = await expectInvalidFilterFailClosed({ agentId: 'unknown' });
+    expect(batch.filter.rejectedIds).toEqual(['unknown']);
+  });
+
+  it('agentIds=[] is EMPTY FILTER, not NO FILTER, and fail closed', async () => {
+    expect(resolveStage4AgentFilter({}).state).toBe(AGENT_FILTER_STATE.NONE);
+    expect(resolveStage4AgentFilter({ agentIds: [] }).state).toBe(AGENT_FILTER_STATE.EMPTY);
+    const batch = await expectInvalidFilterFailClosed({ agentIds: [] }, AGENT_FILTER_STATE.EMPTY);
+    expect(batch.filter.reasonKey).toBe(INGESTION_REASON.EMPTY_AGENT_FILTER);
+  });
+
+  it('valid canonical agent filter queries only that Agent aliases', async () => {
+    mockQuery.mockResolvedValue({ rows: [decisionRow('trend', AVAILABLE.trend)] });
+    const batch = await ingestEvidenceBatch({ nowMs: NOW, agentIds: ['trend'] });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    const agentKeys = mockQuery.mock.calls[0][1][4];
+    expect(agentKeys).toEqual(['trend', 'trend_detection']);
+    expect(agentKeys).not.toBeNull();
+    expect(batch.filter.state).toBe(AGENT_FILTER_STATE.VALID);
+    expect(batch.filter.canonicalIds).toEqual(['trend']);
+    expect(batch.filter.queried).toBe(true);
+    expect(batch.query.executed).toBe(true);
+    expect(batch.items).toHaveLength(1);
+    expect(batch.items[0].agentId).toBe('trend');
+  });
+
+  it('valid legacy alias resolves only to its canonical Agent family', async () => {
+    mockQuery.mockResolvedValue({ rows: [] });
+    const batch = await ingestEvidenceBatch({ nowMs: NOW, agentId: 'trend_detection' });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockQuery.mock.calls[0][1][4]).toEqual(['trend', 'trend_detection']);
+    expect(batch.filter.canonicalIds).toEqual(['trend']);
+    expect(batch.filter.rejectedIds).toEqual([]);
+  });
+
+  it('mixed valid + invalid Agent filter is STRICT fail closed', async () => {
+    const batch = await expectInvalidFilterFailClosed(
+      { agentIds: ['trend', 'totally_unknown_agent'] },
+      AGENT_FILTER_STATE.MIXED,
+    );
+    expect(batch.filter.canonicalIds).toEqual(['trend']);
+    expect(batch.filter.rejectedIds).toEqual(['totally_unknown_agent']);
+    expect(batch.filter.queried).toBe(false);
+    expect(batch.items).toEqual([]);
+  });
+
+  it('ownerUserId + invalid Agent filter does not return unrelated Agent rows', async () => {
+    const batch = await expectInvalidFilterFailClosed({
+      ownerUserId: OWNER_A,
+      agentIds: ['totally_unknown_agent'],
+    });
+    expect(batch.query.ownerScoped).toBe(true);
+    expect(batch.items).toEqual([]);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('no Agent filter requested keeps bounded all-Agent query', async () => {
+    mockQuery.mockResolvedValue({ rows: [decisionRow('pattern', AVAILABLE.pattern)] });
+    const batch = await ingestEvidenceBatch({ nowMs: NOW, limit: 20 });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockQuery.mock.calls[0][1][4]).toBeNull();
+    expect(batch.filter.state).toBe(AGENT_FILTER_STATE.NONE);
+    expect(batch.filter.requested).toBe(false);
+    expect(batch.query.executed).toBe(true);
+    expect(batch.query.bounded).toBe(true);
+    expect(batch.query.limit).toBe(20);
+    expect(batch.query.maxLimit).toBe(50);
+    expect(batch.query.nPlusOne).toBe(false);
+    expect(getLastIngestionMetrics().queryCount).toBe(1);
   });
 
   it('J 15 AGENTS table-driven available coverage', () => {

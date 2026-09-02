@@ -51,6 +51,19 @@ export const INGESTION_REASON = Object.freeze({
   BLOCKED: 'blocked',
   NOT_APPLICABLE: 'not_applicable',
   MOCK_OR_PLACEHOLDER: 'mock_or_placeholder_source',
+  INVALID_AGENT_FILTER: 'invalid_agent_filter',
+  EMPTY_AGENT_FILTER: 'empty_agent_filter',
+});
+
+/** Invalid or mixed Agent filters fail closed. They never broaden to all Agents. */
+export const AGENT_FILTER_POLICY = 'STRICT';
+
+export const AGENT_FILTER_STATE = Object.freeze({
+  NONE: 'none',
+  VALID: 'valid',
+  EMPTY: 'empty',
+  INVALID: 'invalid',
+  MIXED: 'mixed',
 });
 
 export const PERSISTENCE_MODEL = Object.freeze({
@@ -86,6 +99,8 @@ export default {
   INGESTION_WRITER,
   INGESTION_DISPOSITION,
   INGESTION_REASON,
+  AGENT_FILTER_POLICY,
+  AGENT_FILTER_STATE,
   PERSISTENCE_MODEL,
   OWNERSHIP_SCOPE,
   MAX_INGEST_BATCH,

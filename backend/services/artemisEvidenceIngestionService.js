@@ -24,6 +24,8 @@ import {
   validateEvidenceEnvelope,
 } from '../contracts/artemisEvidenceContract.js';
 import {
+  AGENT_FILTER_POLICY,
+  AGENT_FILTER_STATE,
   DEFAULT_INGEST_BATCH,
   INGESTION_CONTRACT_VERSION,
   INGESTION_DISPOSITION,
@@ -74,6 +76,7 @@ SELECT d.id, d.agent_id, d.user_id, d.decision_type, d.confidence,
  ORDER BY d.created_at DESC
  LIMIT $1
 `;
+// $5 NULL means NO FILTER REQUESTED. Invalid/empty/mixed filters must not pass NULL.
 
 let lastIngestionMetrics = {
   queryCount: 0,
@@ -110,6 +113,8 @@ function freezeResult(result) {
   if (result.lineage) Object.freeze(result.lineage);
   if (result.ingestion) Object.freeze(result.ingestion);
   if (result.ownership) Object.freeze(result.ownership);
+  if (result.filter) Object.freeze(result.filter);
+  if (result.query) Object.freeze(result.query);
   return Object.freeze(result);
 }
 
@@ -507,18 +512,98 @@ export function getValidatedEvidence(input = {}, options = {}) {
   return ingestEvidence(input, options);
 }
 
-function aliasesForAgentFilter(agentIds) {
-  if (!agentIds?.length) return null;
-  const wanted = new Set(
-    agentIds
-      .map((value) => resolveArtemisAgentIdentity(value))
-      .filter((item) => item.status === 'ok')
-      .map((item) => item.agentId),
-  );
-  if (!wanted.size) return null;
+function collectRequestedAgentIds(options = {}) {
+  const ids = [];
+  let requested = false;
+
+  if (Array.isArray(options.agentIds)) {
+    requested = true;
+    ids.push(...options.agentIds);
+  } else if (Array.isArray(options.agents)) {
+    requested = true;
+    ids.push(...options.agents);
+  }
+
+  if (options.agentId !== undefined && options.agentId !== null) {
+    requested = true;
+    ids.push(options.agentId);
+  }
+
+  return { requested, ids };
+}
+
+function aliasesForCanonicalAgents(canonicalIds) {
+  const wanted = new Set(canonicalIds);
   return ARTEMIS_AGENT_CATALOG
     .filter((row) => wanted.has(row.key))
     .flatMap((row) => row.aliases);
+}
+
+/**
+ * STRICT Agent filter resolution.
+ * NO FILTER REQUESTED → aliases null (SQL may omit Agent predicate).
+ * VALID FILTER → canonical aliases only.
+ * EMPTY / INVALID / MIXED → fail closed; caller must not query.
+ */
+export function resolveStage4AgentFilter(options = {}) {
+  const { requested, ids } = collectRequestedAgentIds(options);
+  if (!requested) {
+    return {
+      state: AGENT_FILTER_STATE.NONE,
+      queried: false,
+      aliases: null,
+      canonicalIds: [],
+      rejectedIds: [],
+      reasonKey: null,
+    };
+  }
+
+  if (ids.length === 0) {
+    return {
+      state: AGENT_FILTER_STATE.EMPTY,
+      queried: false,
+      aliases: null,
+      canonicalIds: [],
+      rejectedIds: [],
+      reasonKey: INGESTION_REASON.EMPTY_AGENT_FILTER,
+    };
+  }
+
+  const canonicalIds = [];
+  const rejectedIds = [];
+  const seen = new Set();
+
+  for (const value of ids) {
+    const resolved = resolveArtemisAgentIdentity(value);
+    if (resolved.status === 'ok' && resolved.agentId) {
+      if (!seen.has(resolved.agentId)) {
+        seen.add(resolved.agentId);
+        canonicalIds.push(resolved.agentId);
+      }
+    } else {
+      rejectedIds.push(resolved.raw ?? String(value ?? ''));
+    }
+  }
+
+  if (rejectedIds.length > 0) {
+    return {
+      state: canonicalIds.length > 0 ? AGENT_FILTER_STATE.MIXED : AGENT_FILTER_STATE.INVALID,
+      queried: false,
+      aliases: null,
+      canonicalIds,
+      rejectedIds,
+      reasonKey: INGESTION_REASON.INVALID_AGENT_FILTER,
+    };
+  }
+
+  return {
+    state: AGENT_FILTER_STATE.VALID,
+    queried: true,
+    aliases: aliasesForCanonicalAgents(canonicalIds),
+    canonicalIds,
+    rejectedIds: [],
+    reasonKey: null,
+  };
 }
 
 function emptyCounts() {
@@ -552,9 +637,60 @@ function normalizeOwnerUuid(ownerUserId) {
   return text;
 }
 
+function filterDescriptor(filter) {
+  return {
+    policy: AGENT_FILTER_POLICY,
+    state: filter.state,
+    requested: filter.state !== AGENT_FILTER_STATE.NONE,
+    queried: filter.queried === true,
+    canonicalIds: [...filter.canonicalIds],
+    rejectedIds: [...filter.rejectedIds],
+    reasonKey: filter.reasonKey,
+  };
+}
+
+function emptyFailClosedBatch({ nowMs, limit, ownerUserId, filter, started }) {
+  lastIngestionMetrics = {
+    queryCount: 0,
+    rowsLoaded: 0,
+    elapsedMs: Date.now() - started,
+    nPlusOne: false,
+    bounded: true,
+    limit,
+  };
+  return freezeResult({
+    items: [],
+    counts: emptyCounts(),
+    query: {
+      bounded: true,
+      executed: false,
+      limit,
+      maxLimit: MAX_INGEST_BATCH,
+      nPlusOne: false,
+      sqlKind: 'select',
+      ownerScoped: Boolean(ownerUserId),
+      agentFilter: true,
+      agentFilterState: filter.state,
+    },
+    filter: filterDescriptor(filter),
+    canonicalAgentCount: CANONICAL_AGENT_IDS.length,
+    sideEffects: sideEffects(),
+    metrics: getLastIngestionMetrics(),
+    ingestion: {
+      stage: INGESTION_STAGE,
+      writer: INGESTION_WRITER,
+      contractVersion: INGESTION_CONTRACT_VERSION,
+      ingestedAt: nowIso(nowMs),
+    },
+    executionEligible: false,
+    decisionEligible: false,
+  });
+}
+
 /**
  * Bounded batch read from ai_decisions. One SELECT. Per-item disposition.
- * Invalid items do not fail the batch. Never executes Agents.
+ * Invalid Agent filters fail closed without querying.
+ * Invalid persisted items do not fail the rest of the batch. Never executes Agents.
  */
 export async function ingestEvidenceBatch(options = {}) {
   const started = Date.now();
@@ -563,9 +699,15 @@ export async function ingestEvidenceBatch(options = {}) {
   const ownerUserId = normalizeOwnerUuid(options.ownerUserId);
   const since = options.since || options.sinceAt || null;
   const until = options.until || options.untilAt || null;
-  const agentKeys = aliasesForAgentFilter(
-    options.agentIds || options.agents || (options.agentId ? [options.agentId] : null),
-  );
+  const filter = resolveStage4AgentFilter(options);
+
+  if (filter.state === AGENT_FILTER_STATE.EMPTY
+      || filter.state === AGENT_FILTER_STATE.INVALID
+      || filter.state === AGENT_FILTER_STATE.MIXED) {
+    return emptyFailClosedBatch({ nowMs, limit, ownerUserId, filter, started });
+  }
+
+  const agentKeys = filter.state === AGENT_FILTER_STATE.VALID ? filter.aliases : null;
 
   const result = await readOnlyQuery(AI_DECISIONS_INGEST_READ_SQL, [
     limit,
@@ -598,13 +740,16 @@ export async function ingestEvidenceBatch(options = {}) {
     counts,
     query: {
       bounded: true,
+      executed: true,
       limit,
       maxLimit: MAX_INGEST_BATCH,
       nPlusOne: false,
       sqlKind: 'select',
       ownerScoped: Boolean(ownerUserId),
-      agentFilter: Boolean(agentKeys),
+      agentFilter: filter.state === AGENT_FILTER_STATE.VALID,
+      agentFilterState: filter.state,
     },
+    filter: filterDescriptor(filter),
     canonicalAgentCount: CANONICAL_AGENT_IDS.length,
     sideEffects: sideEffects(),
     metrics: getLastIngestionMetrics(),
@@ -626,5 +771,6 @@ export default {
   applyIngestionDisposition,
   assertReadOnlySql,
   getLastIngestionMetrics,
+  resolveStage4AgentFilter,
   AI_DECISIONS_INGEST_READ_SQL,
 };
