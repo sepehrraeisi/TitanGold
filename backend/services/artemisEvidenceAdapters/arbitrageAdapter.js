@@ -87,6 +87,10 @@ export function mapArbitragePersistedRun({ row = {}, output: rawOutput, input: r
       })
     : { ...resolved, scale: CONFIDENCE_SCALE.UNKNOWN };
 
+  if (!analysisTimestamp) {
+    return { ok: false, reason: 'analysis_timestamp_unavailable' };
+  }
+
   const failed = output.error === true || Boolean(output.errorMessage);
   const limitations = [
     'advisory_only',
@@ -102,7 +106,7 @@ export function mapArbitragePersistedRun({ row = {}, output: rawOutput, input: r
       adapterVersion: ADAPTER_VERSIONS.arbitrage,
       runId: row.id || null,
       agentRecordId: row.agent_id || row.agentId || null,
-      analysisTimestamp: analysisTimestamp || new Date().toISOString(),
+      analysisTimestamp,
       createdAt: row.created_at,
       symbol: output.candidates?.[0]?.symbol || input.symbol || input.symbols?.[0] || null,
       timeframe: null,

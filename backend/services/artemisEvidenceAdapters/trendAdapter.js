@@ -117,6 +117,10 @@ export function mapTrendPersistedRun({ row = {}, output: rawOutput, input: rawIn
     nowMs,
   });
 
+  if (!analysisTimestamp) {
+    return { ok: false, reason: 'analysis_timestamp_unavailable' };
+  }
+
   if (output.error || output.errorMessage) {
     return {
       ok: true,
@@ -125,7 +129,7 @@ export function mapTrendPersistedRun({ row = {}, output: rawOutput, input: rawIn
         adapterVersion: ADAPTER_VERSIONS.trend,
         runId: row.id || null,
         agentRecordId: row.agent_id || row.agentId || null,
-        analysisTimestamp: analysisTimestamp || new Date().toISOString(),
+        analysisTimestamp,
         createdAt: row.created_at,
         symbol: output.symbol || input.symbol || null,
         timeframe,
@@ -175,7 +179,7 @@ export function mapTrendPersistedRun({ row = {}, output: rawOutput, input: rawIn
       adapterVersion: ADAPTER_VERSIONS.trend,
       runId: row.id || null,
       agentRecordId: row.agent_id || row.agentId || null,
-      analysisTimestamp: analysisTimestamp || new Date().toISOString(),
+      analysisTimestamp,
       createdAt: row.created_at,
       symbol: output.symbol || input.symbol || null,
       timeframe,

@@ -48,8 +48,7 @@ function catalogReadiness(key) {
   if (key === 'liquidity') return 'BLOCKED';
   if (key === 'order') return 'NOT_EXECUTION_ELIGIBLE';
   if (key === 'optimization') return 'NOT_APPLICABLE';
-  if (key === 'pattern') return 'BLOCKED';
-  return 'ROLE_MAPPED';
+  return 'CONTRACT_MAPPED';
 }
 
 function operationalStatus(inventoryRow, catalogKey) {
@@ -66,7 +65,6 @@ function consumptionEligibility(catalogKey, operational) {
   if (catalogKey === 'liquidity') return 'blocked';
   if (catalogKey === 'order') return 'not_execution_eligible';
   if (catalogKey === 'optimization') return 'not_applicable';
-  if (catalogKey === 'pattern') return 'blocked';
   if (COMPATIBLE_ADAPTER_IDS.includes(catalogKey)) return 'evidence_compatible';
   if (operational === 'unconfigured') return 'not_consumable';
   return 'contract_pending';

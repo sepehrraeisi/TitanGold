@@ -13,10 +13,18 @@ describe('Artemis WP-B.1 agent identity', () => {
   it('resolves stable agent_key and approved aliases', () => {
     expect(resolveArtemisAgentIdentity('trend')).toMatchObject({ status: 'ok', agentId: 'trend' });
     expect(resolveArtemisAgentIdentity('trend_detection')).toMatchObject({ status: 'ok', agentId: 'trend' });
-    expect(resolveArtemisAgentIdentity('market_timing')).toMatchObject({ status: 'ok', agentId: 'timing' });
-    expect(resolveArtemisAgentIdentity('portfolio_management')).toMatchObject({ status: 'ok', agentId: 'portfolio' });
-    expect(resolveArtemisAgentIdentity('arbitrage')).toMatchObject({ status: 'ok', agentId: 'arbitrage' });
+    expect(resolveArtemisAgentIdentity('technical_analysis')).toMatchObject({ status: 'ok', agentId: 'technical' });
+    expect(resolveArtemisAgentIdentity('pattern_recognition')).toMatchObject({ status: 'ok', agentId: 'pattern' });
     expect(resolveArtemisAgentIdentity('volume_analysis')).toMatchObject({ status: 'ok', agentId: 'volume' });
+    expect(resolveArtemisAgentIdentity('sentiment_analysis')).toMatchObject({ status: 'ok', agentId: 'sentiment' });
+    expect(resolveArtemisAgentIdentity('fundamental_analysis')).toMatchObject({ status: 'ok', agentId: 'fundamental' });
+    expect(resolveArtemisAgentIdentity('market_timing')).toMatchObject({ status: 'ok', agentId: 'timing' });
+    expect(resolveArtemisAgentIdentity('risk_management')).toMatchObject({ status: 'ok', agentId: 'risk' });
+    expect(resolveArtemisAgentIdentity('portfolio_allocation')).toMatchObject({ status: 'ok', agentId: 'portfolio' });
+    expect(resolveArtemisAgentIdentity('portfolio_management')).toMatchObject({ status: 'ok', agentId: 'portfolio' });
+    expect(resolveArtemisAgentIdentity('liquidity_analysis')).toMatchObject({ status: 'ok', agentId: 'liquidity' });
+    expect(resolveArtemisAgentIdentity('order_management')).toMatchObject({ status: 'ok', agentId: 'order' });
+    expect(resolveArtemisAgentIdentity('arbitrage')).toMatchObject({ status: 'ok', agentId: 'arbitrage' });
   });
 
   it('never maps legacy agent-N ids onto real Agents', () => {

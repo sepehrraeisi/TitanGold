@@ -30,9 +30,21 @@ export const MAX_ENVELOPE_UTF8_BYTES = 8 * 1024;
 export const MAX_EVIDENCE_VALUE_CHARS = 256;
 
 export const ADAPTER_VERSIONS = Object.freeze({
+  technical: '1.0.0',
   trend: '1.0.0',
-  arbitrage: '1.0.0',
+  pattern: '1.0.0',
   volume: '1.0.0',
+  sentiment: '1.0.0',
+  fundamental: '1.0.0',
+  market_intelligence: '1.0.0',
+  price_prediction: '1.0.0',
+  timing: '1.0.0',
+  arbitrage: '1.0.0',
+  risk: '1.0.0',
+  portfolio: '1.0.0',
+  optimization: '1.0.0',
+  liquidity: '1.0.0',
+  order: '1.0.0',
 });
 
 export const AUTHORITY_CLASS = Object.freeze({

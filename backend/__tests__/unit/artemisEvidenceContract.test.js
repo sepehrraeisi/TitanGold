@@ -646,10 +646,11 @@ describe('Artemis WP-B.1 evidence contract', () => {
     expect(hasError(huge, 'envelope_too_large')).toBe(true);
   });
 
-  it('keeps Optimization not_applicable, Pattern excluded from emitters, and versions unbumped', () => {
+  it('keeps Optimization not_applicable and does not bump shared contract versions', () => {
     expect(AGENT_CONTRACT_ROLE.optimization.authorityClass).toBe(AUTHORITY_CLASS.NOT_APPLICABLE);
     expect(AGENT_CONTRACT_ROLE.pattern.authorityClass).toBe(AUTHORITY_CLASS.ANALYTICAL_EVIDENCE);
     expect(ADAPTER_VERSIONS.trend).toBe('1.0.0');
+    expect(ADAPTER_VERSIONS.pattern).toBe('1.0.0');
     expect(CONTRACT_VERSION).toBe('artemis-evidence-1.0.0');
     expect(SCHEMA_VERSION).toBe('1.0.0');
   });

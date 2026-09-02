@@ -1,0 +1,15 @@
+export { mapTrendPersistedRun } from './trendAdapter.js';
+export { mapArbitragePersistedRun } from './arbitrageAdapter.js';
+export { mapVolumePersistedRun } from './volumeAdapter.js';
+export { mapTechnicalPersistedRun } from './technicalAdapter.js';
+export { mapPatternPersistedRun } from './patternAdapter.js';
+export { mapSentimentPersistedRun } from './sentimentAdapter.js';
+export { mapFundamentalPersistedRun } from './fundamentalAdapter.js';
+export { mapMarketIntelligencePersistedRun } from './marketIntelligenceAdapter.js';
+export { mapPricePredictionPersistedRun } from './pricePredictionAdapter.js';
+export { mapTimingPersistedRun } from './timingAdapter.js';
+export { mapRiskPersistedRun } from './riskAdapter.js';
+export { mapPortfolioPersistedRun } from './portfolioAdapter.js';
+export { mapOptimizationPersistedRun } from './optimizationAdapter.js';
+export { mapLiquidityPersistedRun } from './liquidityAdapter.js';
+export { mapOrderPersistedRun } from './orderAdapter.js';

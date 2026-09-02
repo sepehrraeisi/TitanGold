@@ -9,6 +9,7 @@ jest.unstable_mockModule('../../database/db.js', () => ({
   query: mockQuery,
 }));
 
+const { CANONICAL_AGENT_IDS } = await import('../../contracts/artemisEvidenceContract.js');
 const {
   AI_DECISIONS_EVIDENCE_READ_SQL,
   COMPATIBLE_ADAPTER_IDS,
@@ -29,7 +30,8 @@ describe('Artemis WP-B.1 on-read projection', () => {
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).toMatch(/d\.output_data AS output/);
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).not.toMatch(/SELECT[^\n]*\bd\.input\b/);
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).not.toMatch(/SELECT[^\n]*\bd\.output\b/);
-    expect(COMPATIBLE_ADAPTER_IDS).toEqual(['trend', 'arbitrage', 'volume']);
+    expect(COMPATIBLE_ADAPTER_IDS).toEqual(CANONICAL_AGENT_IDS);
+    expect(COMPATIBLE_ADAPTER_IDS).toHaveLength(15);
 
     mockQuery.mockResolvedValue({ rows: [] });
     const result = await projectRecentEvidence({ limit: 200 });
@@ -72,24 +74,31 @@ describe('Artemis WP-B.1 on-read projection', () => {
     expect(JSON.stringify(projected.product)).not.toMatch(/output_data/);
   });
 
-  it('excludes Pattern and marks Optimization not applicable', () => {
+  it('maps Pattern fail-closed and Optimization not_applicable without dropping compatibility', () => {
     const pattern = projectDecisionRow({
-      id: 'd-pattern',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000p1',
       agent_key: 'pattern',
+      created_at: '2026-08-10T12:00:00.000Z',
       output: { symbol: 'ETH/USDT' },
-    });
-    expect(pattern.ok).toBe(false);
-    expect(pattern.reason).toBe('pattern_excluded_needs_output_correction');
-    expect(pattern.evidenceCompatible).toBe(false);
+    }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
+    expect(pattern.ok).toBe(true);
+    expect(pattern.evidenceCompatible).toBe(true);
+    expect(pattern.evidenceAvailable).toBe(false);
+    expect(pattern.envelope.availability).toBe('unavailable');
+    expect(pattern.envelope.unavailableReason).toBe('mock_or_placeholder_source');
 
     const optimization = projectDecisionRow({
-      id: 'd-opt',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000o1',
       agent_key: 'optimization',
-      output: { score: 1 },
-    });
-    expect(optimization.ok).toBe(false);
-    expect(optimization.reason).toBe('optimization_not_applicable');
-    expect(optimization.evidenceCompatible).toBe(false);
+      created_at: '2026-08-10T12:00:00.000Z',
+      output: { score: 1, recommendation: 'BUY' },
+    }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
+    expect(optimization.ok).toBe(true);
+    expect(optimization.evidenceCompatible).toBe(true);
+    expect(optimization.evidenceAvailable).toBe(false);
+    expect(optimization.envelope.availability).toBe('not_applicable');
+    expect(optimization.envelope.conclusion.direction).toBe('not_applicable');
+    expect(JSON.stringify(optimization.envelope.conclusion)).not.toMatch(/BUY|SELL|EXECUTE/);
   });
 
   it('product projection never copies confidence value or raw evidence items', () => {
