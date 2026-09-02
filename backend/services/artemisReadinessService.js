@@ -31,6 +31,10 @@ import {
   COMPATIBLE_ADAPTER_IDS,
   projectDecisionRow,
 } from './artemisEvidenceOnReadService.js';
+import {
+  INGESTION_CONTRACT_VERSION,
+  INGESTION_WRITER,
+} from '../contracts/artemisEvidenceIngestionContract.js';
 
 const CONTRACT_VERSION = EVIDENCE_CONTRACT_VERSION;
 const SCHEMA_VERSION = EVIDENCE_SCHEMA_VERSION;
@@ -49,6 +53,12 @@ function catalogReadiness(key) {
   if (key === 'order') return 'NOT_EXECUTION_ELIGIBLE';
   if (key === 'optimization') return 'NOT_APPLICABLE';
   return 'CONTRACT_MAPPED';
+}
+
+function catalogIngestionReadiness(key) {
+  if (key === 'liquidity') return 'BLOCKED';
+  if (key === 'optimization') return 'NOT_APPLICABLE';
+  return 'ARTEMIS_CONSUMABLE';
 }
 
 function operationalStatus(inventoryRow, catalogKey) {
@@ -176,6 +186,7 @@ export async function buildArtemisReadiness(opts = {}) {
       group: entry.group,
       authority: entry.key === 'optimization' ? 'not_applicable' : entry.authority,
       readiness,
+      ingestionReadiness: catalogIngestionReadiness(entry.key),
       operational,
       exists: Boolean(invRow),
       operationalNow: operational === 'operational',
@@ -416,7 +427,6 @@ export async function buildArtemisReadiness(opts = {}) {
     : unavailable({ providerConnected: null, count: null, status: 'unavailable' });
 
   const blockers = [
-    { code: 'evidence_not_connected', severity: 'high', labelKey: 'artemis_blocker_evidence_not_connected' },
     { code: 'orchestration_not_active', severity: 'high', labelKey: 'artemis_blocker_orchestration_legacy' },
     { code: 'liquidity_unavailable', severity: 'high', labelKey: 'artemis_blocker_liquidity_unavailable' },
     { code: 'execution_unavailable', severity: 'high', labelKey: 'artemis_blocker_execution_unavailable' },
@@ -433,7 +443,7 @@ export async function buildArtemisReadiness(opts = {}) {
   const pipeline = [
     { id: 'data_foundation', labelKey: 'artemis_pipe_data', ownerKey: 'artemis_owner_data_hub', status: dataHub.status === 'available' ? 'AVAILABLE' : 'UNAVAILABLE', truth: dataHub.truth, nav: { view: 'ai', aiTab: 'data_hub' }, blockerKey: dataHub.status === 'available' ? null : 'artemis_blocker_datahub_unread' },
     { id: 'analytical_agents', labelKey: 'artemis_pipe_analytical', ownerKey: 'artemis_owner_agents', status: 'ROLE_MAPPED', truth: inventoryTruth === 'UNAVAILABLE' ? 'CONFIGURED' : 'DERIVED', nav: { view: 'ai', aiTab: 'agents' }, blockerKey: null },
-    { id: 'evidence_contract', labelKey: 'artemis_pipe_evidence', ownerKey: 'artemis_nav_evidence', status: 'PARTIAL', truth: 'MEASURED', nav: { artemisSection: 'evidence' }, blockerKey: 'artemis_blocker_evidence_not_connected' },
+    { id: 'evidence_contract', labelKey: 'artemis_pipe_evidence', ownerKey: 'artemis_nav_evidence', status: 'ARTEMIS_CONSUMABLE', truth: 'MEASURED', nav: { artemisSection: 'evidence' }, blockerKey: null },
     { id: 'orchestration', labelKey: 'artemis_pipe_orchestration', ownerKey: 'artemis_nav_orchestration', status: 'LEGACY', truth: 'LEGACY', nav: { artemisSection: 'orchestration' }, blockerKey: 'artemis_blocker_orchestration_legacy' },
     { id: 'risk', labelKey: 'artemis_pipe_risk', ownerKey: 'artemis_agent_risk', status: 'PARTIAL', truth: 'CONFIGURED', nav: { view: 'ai', aiTab: 'agents', agentId: 'risk' }, blockerKey: 'artemis_blocker_risk_identity' },
     { id: 'portfolio', labelKey: 'artemis_pipe_portfolio', ownerKey: 'artemis_agent_portfolio', status: 'PARTIAL', truth: 'CONFIGURED', nav: { view: 'ai', aiTab: 'agents', agentId: 'portfolio' }, blockerKey: null },
@@ -451,26 +461,29 @@ export async function buildArtemisReadiness(opts = {}) {
     contract: {
       schemaVersion: SCHEMA_VERSION,
       contractVersion: CONTRACT_VERSION,
-      readiness: 'EVIDENCE_FOUNDATION_IMPLEMENTED',
+      readiness: 'STAGE_4_READONLY_INGESTION',
       implemented: true,
       adaptersRequired: true,
       compatibleAgentCount: COMPATIBLE_ADAPTER_IDS.length,
       catalogAgentCount: ARTEMIS_AGENT_CATALOG.length,
       adapterVersions: ADAPTER_VERSIONS,
-      artemisConsumable: false,
+      artemisConsumable: true,
       decisionEligible: false,
       executionEligible: false,
+      ingestionContractVersion: INGESTION_CONTRACT_VERSION,
       truth: 'MEASURED',
     },
     evidence: {
-      readiness: 'ON_READ_PARTIAL',
-      reasonKey: 'artemis_evidence_foundation_not_artemis_consumable',
+      readiness: 'ARTEMIS_CONSUMABLE',
+      reasonKey: 'artemis_stage4_readonly_ingestion',
       truth: 'MEASURED',
-      artemisConsumable: false,
+      artemisConsumable: true,
       decisionEligible: false,
       executionEligible: false,
       compatibleAgentCount: COMPATIBLE_ADAPTER_IDS.length,
       availableAgentCount: Object.values(availabilityByAgent).filter((row) => row.evidenceAvailable).length,
+      ingestionOwner: INGESTION_WRITER,
+      ingestionContractVersion: INGESTION_CONTRACT_VERSION,
     },
     orchestration: {
       readiness: 'LEGACY',
@@ -520,7 +533,7 @@ export async function buildArtemisReadiness(opts = {}) {
       monitoring: { view: 'settings', settingsTab: 'configuration', settingsSubtab: 'monitoring' },
     },
     limitations: [
-      'artemis_evidence_foundation_not_artemis_consumable',
+      'artemis_stage4_readonly_ingestion_advisory_only',
       'artemis_agent_coordination_not_real',
       'artemis_decision_legacy_advisory_only',
       'artemis_liquidity_not_control_eligible',
