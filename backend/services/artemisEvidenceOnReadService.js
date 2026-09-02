@@ -122,7 +122,7 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
     };
   }
 
-  const validation = validateEvidenceEnvelope(mapped.envelope);
+  const validation = validateEvidenceEnvelope(mapped.envelope, { nowMs });
   if (!validation.ok) {
     return {
       ok: false,
