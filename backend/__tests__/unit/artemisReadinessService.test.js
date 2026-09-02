@@ -93,7 +93,7 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.executionEligible).toBe(false);
     expect(readiness.maturityStage).toBe('LEGACY_ADVISORY');
     expect(readiness.contract.implemented).toBe(true);
-    expect(readiness.contract.compatibleAgentCount).toBe(3);
+    expect(readiness.contract.compatibleAgentCount).toBe(15);
     expect(readiness.contract.artemisConsumable).toBe(false);
     expect(readiness.contract.executionEligible).toBe(false);
     expect(readiness.evidence.readiness).toBe('ON_READ_PARTIAL');
@@ -131,7 +131,12 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.catalog.agents.find((a) => a.key === 'trend').evidenceCompatible).toBe(true);
     expect(readiness.catalog.agents.find((a) => a.key === 'arbitrage').evidenceCompatible).toBe(true);
     expect(readiness.catalog.agents.find((a) => a.key === 'volume').evidenceCompatible).toBe(true);
-    expect(readiness.catalog.agents.find((a) => a.key === 'pattern').readiness).toBe('BLOCKED');
+    expect(readiness.catalog.agents.find((a) => a.key === 'pattern').readiness).toBe('CONTRACT_MAPPED');
+    expect(readiness.catalog.agents.find((a) => a.key === 'pattern').limitationKey).toBe('artemis_pattern_source_provenance_blocked');
+    expect(readiness.catalog.agents.find((a) => a.key === 'technical').readiness).toBe('CONTRACT_MAPPED');
+    expect(readiness.catalog.agents.find((a) => a.key === 'risk').evidenceCompatible).toBe(true);
+    expect(readiness.catalog.agents.find((a) => a.key === 'liquidity').readiness).toBe('BLOCKED');
+    expect(readiness.catalog.agents.find((a) => a.key === 'order').readiness).toBe('NOT_EXECUTION_ELIGIBLE');
     expect(readiness.catalog.agents.find((a) => a.key === 'optimization').readiness).toBe('NOT_APPLICABLE');
     expect(readiness.catalog.agents.find((a) => a.key === 'optimization').authority).toBe('not_applicable');
     expect(readiness.limitations).toContain('artemis_evidence_foundation_not_artemis_consumable');
