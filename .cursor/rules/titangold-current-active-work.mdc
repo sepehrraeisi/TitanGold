@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — M4 Telegram/C2 CLOSED/FROZEN; CURRENT_STAGE=ARTEMIS_CORE_STAGE_1_ENTRY; C2_052=CLOSED/CONSUMED; HUMAN_BROWSER_QA=PASS; PRODUCTION_MUTATION_CAPABILITY=CLOSED
+description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS_CORE_STAGE_1 CLOSED; ARTEMIS_CORE_STAGE_2 CLOSED/DEPLOYED/RUNTIME VERIFIED; CURRENT_STAGE=ARTEMIS_CORE_STAGE_3_ENTRY; PRODUCTION_MUTATION_CAPABILITY=CLOSED
 alwaysApply: true
 ---
 
@@ -17,15 +17,19 @@ alwaysApply: true
 
 **CURRENT_PROGRAM = ARTEMIS_CORE_COMPLETION**
 
-**CURRENT_STAGE = ARTEMIS_CORE_STAGE_1_ENTRY**
+**CURRENT_STAGE = ARTEMIS_CORE_STAGE_3_ENTRY**
 
-**CURRENT_STAGE_PROGRESS = 0/15**
+**CURRENT_STAGE_PROGRESS = 2/15**
 
-**REMAINING_STAGES = 15**
+**REMAINING_STAGES = 13**
 
-**NEXT_GATE = ARTEMIS_CORE_STAGE_1**
+**NEXT_GATE = ARTEMIS_CORE_STAGE_3**
 
 **PROGRESS_BLOCKER = NONE**
+
+**ARTEMIS_CORE_STAGE_1 = CLOSED / DISCOVERY COMPLETE**
+**ARTEMIS_CORE_STAGE_2 = CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED**
+**ARTEMIS_CORE_STAGE_3 = NOT STARTED / ENTRY**
 
 **TELEGRAM_LIVENESS_STAGE = CLOSED**
 **FULL_TELEGRAM_C2_MAJOR_MILESTONE = CLOSED**
@@ -48,21 +52,44 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-No Artemis Core stage is complete. Stage 1 has not started.
+Artemis Core Stage 1 and Stage 2 are closed. Stage 3 has not started.
 
-### Runtime alignment closeout (Core Rule §108 — M4 governance closeout / 20260901)
+### Runtime alignment closeout (Core Rule §108 — Artemis Stage 2 / 20260902)
 
-**MAIN_GIT_SHA = `2e28b5c375cadce6c4f77d3471726bb23c8e1699`**
-**DEPLOY_REQUIRED = NO**
+**MAIN_GIT_SHA = `2091d4dfbc1d215136c52b6d72a79f9adce633dd`**
+**RUNTIME_IMPLEMENTATION_SHA = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
+**DEPLOY_REQUIRED = YES**
+**DEPLOY_STATUS = DEPLOYED**
+**RUNTIME_VERIFIED = YES**
+**SERVER_DRIFT = EXPECTED_TREE_EQUIVALENT**
+
+Reason: production runtime was built from the exact pre-squash authorized feature head `f8d8a8a95519cddfd36e27e042cd526af41152ca`; `origin/main` now contains the same Stage 2 content via squash merge PR **#93** (`2091d4dfbc1d215136c52b6d72a79f9adce633dd`). This is provenance-only SHA divergence, not behavioral/source drift. Canonical Stage 2 blobs on main match the authorized head.
+
+**AS2RV_RUN_ID = `AS2RV-20260901T164223Z`**
+**AS2RV_RESULT = PASS**
+**AS2RV_TESTS = 122/122 PASS**
+**AS2RV_RUNTIME_VECTORS = 10/10 PASS**
+**AS2RV_CURRENT_CONSUMER_REGRESSION = PASS**
+**STAGE_2_IMPLEMENTATION_ORIGINAL_HEAD = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
+**MERGED_PR = #93** (replaced draft PR #92 solely because the GitHub connector could not transition #92 out of draft; no code difference between authorized #92 head and merged #93 head)
+**EVIDENCE = `/home/ubuntu/TITANGOLD_AS2RV-20260901T164223Z.txt`**
+**EVIDENCE_SHA256 = `07be06d28da0bd439e4f26731191814b082ea379600cf1f3c553adc43656ea9e`** · mode **0600**
+
+This Rule 02 governance transaction does **not** deploy, rebuild, restart, or mutate production. Stage 2 runtime activation already completed under consumed one-shot `AS2RV-20260901T164223Z`. Stage 3 implementation is **not** started and **not** authorized by this closeout.
+
+Future runtime-affecting stage closure must record: **MAIN_GIT_SHA** · **RUNTIME_IMPLEMENTATION_SHA** · **DEPLOY_REQUIRED** · **DEPLOY_STATUS** · **RUNTIME_VERIFIED** · **SERVER_DRIFT** · **SERVED_ARTIFACT_PROVENANCE**. Unresolved required server drift → **PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING**.
+
+### Runtime alignment closeout (Core Rule §108 — M4 governance closeout / 20260901) — HISTORICAL
+
+**MAIN_GIT_SHA = `2e28b5c375cadce6c4f77d3471726bb23c8e1699`** (historical M4 closeout baseline)
+**DEPLOY_REQUIRED = NO** (M4 governance-only closeout)
 **DEPLOY_STATUS = NOT_REQUIRED**
 **RUNTIME_VERIFIED = YES**
 **SERVER_DRIFT = NONE**
 **PRODUCTION_RECONCILIATION = CLOSED**
 **HUMAN_BROWSER_QA = PASS**
 
-This governance transaction did **not** deploy, rebuild, restart, or mutate production. Prior verified runtime/reconciliation/Browser-QA evidence remains the runtime authority.
-
-Future runtime-affecting stage closure must record: **MAIN_GIT_SHA** · **RUNTIME_IMPLEMENTATION_SHA** · **DEPLOY_REQUIRED** · **DEPLOY_STATUS** · **RUNTIME_VERIFIED** · **SERVER_DRIFT** · **SERVED_ARTIFACT_PROVENANCE**. Unresolved required server drift → **PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING**.
+This M4 governance transaction did **not** deploy, rebuild, restart, or mutate production. Prior verified runtime/reconciliation/Browser-QA evidence remains the M4 runtime authority. **SUPERSEDED as current snapshot** by Artemis Stage 2 runtime alignment above.
 
 ### Telegram liveness production validation — CLOSED / PASS (20260831)
 
@@ -149,6 +176,37 @@ Historical failed attempt (not current state):
 Do **NOT** retry C2052EX. Do **NOT** treat it as current 052 state.
 
 Do **NOT** retry C2052PS. Do **NOT** execute C2 052 again. Do **NOT** implement Artemis from this closeout.
+
+### Artemis Core Stage 2 — CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED (20260901–20260902)
+
+**ARTEMIS_CORE_STAGE_1 = CLOSED / DISCOVERY COMPLETE**
+**ARTEMIS_CORE_STAGE_2 = CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED**
+**ARTEMIS_CORE_STAGE_3 = NOT STARTED / ENTRY**
+**ARTEMIS_CORE_STAGE_3_IMPLEMENTATION_AUTHORIZED = NO**
+
+**STAGE_2_IMPLEMENTATION_ORIGINAL_HEAD = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
+**MERGED_PR = #93**
+**MERGE_SHA = `2091d4dfbc1d215136c52b6d72a79f9adce633dd`**
+**CANONICAL_MAIN_SHA = `2091d4dfbc1d215136c52b6d72a79f9adce633dd`**
+
+PR **#93** replaced draft PR **#92** solely because the GitHub connector could not transition #92 out of draft. No code difference existed between the authorized #92 head and merged #93 head.
+
+**AS2RV_RUN_ID = `AS2RV-20260901T164223Z`**
+**AS2RV_RESULT = PASS**
+**AS2RV_TESTS = 122/122 PASS**
+**AS2RV_RUNTIME_VECTORS = 10/10 PASS**
+**AS2RV_CURRENT_CONSUMER_REGRESSION = PASS**
+**DEPLOY_STATUS = DEPLOYED**
+**RUNTIME_VERIFIED = YES**
+**MAIN_GIT_SHA = `2091d4dfbc1d215136c52b6d72a79f9adce633dd`**
+**RUNTIME_IMPLEMENTATION_SHA = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
+**SERVER_DRIFT = EXPECTED_TREE_EQUIVALENT**
+
+Evidence:
+`/home/ubuntu/TITANGOLD_AS2RV-20260901T164223Z.txt`
+SHA256 = `07be06d28da0bd439e4f26731191814b082ea379600cf1f3c553adc43656ea9e` · mode **0600**
+
+This Rule 02 governance closeout records Stage 2 as closed and hands off to Stage 3 entry. It does **not** start Stage 3. It does **not** deploy, restart, or mutate DB/Redis/PM2/nginx/frontend/backend.
 
 ### RESOURCE_IO_INDEX_REPAIR execution envelope (DESIGN ONLY / 20260829)
 
@@ -513,7 +571,7 @@ Current outcome:
 
 All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots below are **HISTORICAL EVIDENCE ONLY** and **MUST NOT** override this current snapshot. In particular, any historical occurrence of `T2_REAUTH_READY = YES`, `ENGINE_ONLINE_COUNT = 2`, `ENGINE_TOPOLOGY_2_TO_1 = NOT_COMPLETE / NOT_EXECUTED`, `PRODUCTION_REAUTH_REQUIRED`, `T2_RETRY_AUTHORIZED = YES`, `C2_052 = NOT EXECUTED`, `C2_052_OWNER_ONE_SHOT`, `FULL_TELEGRAM_C2_MAJOR_MILESTONE = OPEN`, `C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO`, `READY_FOR_SEPARATE_OWNER_AUTH`, `Human Browser QA pending`, or `M4 IN PROGRESS` must be interpreted only within its explicitly historical section.
 
-**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / M5 ARTEMIS CORE STAGE 1 ENTRY / PRODUCTION_MUTATION_CAPABILITY CLOSED**
+**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / ARTEMIS CORE STAGE 1 CLOSED / ARTEMIS CORE STAGE 2 CLOSED IMPLEMENTED DEPLOYED RUNTIME VERIFIED / STAGE 3 ENTRY NOT STARTED / PRODUCTION_MUTATION_CAPABILITY CLOSED**
 
 **RIOIR_RESULT = COMPLETED**
 **RIOIR_RUN_ID = RIOIR-20260830T072328Z**
@@ -526,7 +584,24 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **M4_TELEGRAM_C2_PRODUCTION_CLOSEOUT = CLOSED**
 **HUMAN_BROWSER_QA = PASS**
 **PRODUCTION_RECONCILIATION = CLOSED**
-**SERVER_DRIFT = NONE**
+**SERVER_DRIFT = EXPECTED_TREE_EQUIVALENT** (current Artemis Stage 2 provenance: squash-main SHA vs pre-squash runtime head; M4 historical `SERVER_DRIFT = NONE` remains in the 20260901 M4 block)
+
+**ARTEMIS_CORE_STAGE_1 = CLOSED / DISCOVERY COMPLETE**
+**ARTEMIS_CORE_STAGE_2 = CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED**
+**ARTEMIS_CORE_STAGE_3 = NOT STARTED / ENTRY**
+**ARTEMIS_CORE_STAGE_3_IMPLEMENTATION_AUTHORIZED = NO**
+**AS2RV_RUN_ID = `AS2RV-20260901T164223Z`**
+**AS2RV_RESULT = PASS**
+**AS2RV_TESTS = 122/122 PASS**
+**AS2RV_RUNTIME_VECTORS = 10/10 PASS**
+**AS2RV_CURRENT_CONSUMER_REGRESSION = PASS**
+**MAIN_GIT_SHA = `2091d4dfbc1d215136c52b6d72a79f9adce633dd`**
+**RUNTIME_IMPLEMENTATION_SHA = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
+**DEPLOY_REQUIRED = YES**
+**DEPLOY_STATUS = DEPLOYED**
+**RUNTIME_VERIFIED = YES**
+**MERGED_PR = #93**
+**STAGE_2_IMPLEMENTATION_ORIGINAL_HEAD = `f8d8a8a95519cddfd36e27e042cd526af41152ca`**
 
 **B1_RESULT = COMPLETED**
 **B1_RUN_ID = B1-20260828T204652Z**
@@ -576,7 +651,7 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **PATH_MUTATION = 0**
 **NODE_ENV_MUTATION = 1 AUTHORIZED ENN V2 TRANSACTION** (historical ENN only)
-**PRODUCTION_MUTATION = 1 AUTHORIZED B1 TRANSACTION** (three-file replace + engine restart + backend reload) **+ 1 AUTHORIZED C2_052 TRANSACTION** (`C2052PS-20260901T143521Z`)
+**PRODUCTION_MUTATION = 1 AUTHORIZED B1 TRANSACTION** (three-file replace + engine restart + backend reload) **+ 1 AUTHORIZED C2_052 TRANSACTION** (`C2052PS-20260901T143521Z`) **+ 1 AUTHORIZED AS2RV STAGE 2 RUNTIME ACTIVATION** (`AS2RV-20260901T164223Z`; historical/consumed — this governance closeout mutates Rule 02 only)
 **DB_MUTATION = 1 AUTHORIZED RIOIR CREATE INDEX CONCURRENTLY** (raw_message_id btree only) **+ 1 AUTHORIZED C2_052 CREATE INDEX CONCURRENTLY** (`idx_telegram_messages_channel_message_id` btree only)
 **REDIS_MUTATION = 0**
 **JWT_LIVE_MUTATION = 0**
@@ -594,12 +669,13 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **DO_NOT_ADVANCE_TO_B1 = NO / B1 DEPLOY CONSUMED**
 
-**NEXT_GATE = ARTEMIS_CORE_STAGE_1**
+**NEXT_GATE = ARTEMIS_CORE_STAGE_3**
 **C2_052_EXECUTION_AUTHORIZED = NO / CONSUMED**
 **TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
 **TELEGRAM_LIVENESS_STAGE = CLOSED**
 **FULL_TELEGRAM_C2_MAJOR_MILESTONE = CLOSED**
 **HUMAN_BROWSER_QA = PASS**
+**ARTEMIS_CORE_STAGE_3_IMPLEMENTATION_AUTHORIZED = NO**
 
 **HISTORICAL_PRECEDENCE_GUARD = YES**
 
@@ -608,13 +684,13 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
 Current area:
-Artemis Core Completion (Stage 1 entry — not started)
+Artemis Core Completion (Stage 3 entry — not started)
 
 Current program slice:
 ARTEMIS_CORE_COMPLETION
 
 Risk context:
-Tier 3 (governance handoff only; no Artemis implementation authorized)
+Tier 3 (governance closeout only; Stage 1 and Stage 2 closed; Stage 3 implementation not authorized)
 
 ## Durable provenance
 
@@ -3309,8 +3385,8 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 ## Next Owner gate
 
 **PRIMARY ROADMAP = Artemis Core Completion (15 stages) → Post-Core Agents → Settings/AI Provider → Council/Memory → Autonomous Ops → ACCP**
-**NEXT_GATE = ARTEMIS_CORE_STAGE_1**
-**ARTEMIS IMPLEMENTATION AUTHORIZED = NO** (Stage 1 not started; this governance closeout does not authorize Artemis source/runtime work)
+**NEXT_GATE = ARTEMIS_CORE_STAGE_3**
+**ARTEMIS IMPLEMENTATION AUTHORIZED = NO** (Stage 1 and Stage 2 closed; Stage 3 not started; this governance closeout does not authorize Stage 3 source/runtime work)
 
 Historical T2/B1/C2 Owner-gate subsections below remain **HISTORICAL EVIDENCE ONLY**.
 
