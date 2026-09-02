@@ -40,6 +40,10 @@ export function buildBaseEnvelope({
   agentRecordId = null,
   analysisTimestamp,
   createdAt = null,
+  completedAt = null,
+  sourceTimestamp = null,
+  sourceCandleTimestamp = null,
+  expiryTimestamp = null,
   symbol = null,
   timeframe = null,
   provider = null,
@@ -50,12 +54,20 @@ export function buildBaseEnvelope({
   lifecycleStatus = LIFECYCLE_STATUS.COMPLETED,
   limitations = [],
   executionClass = EXECUTION_CLASS.ADVISORY_ONLY,
+  recommendedNextActionClass = undefined,
   freshness,
   dataQuality,
   confidence,
   conclusion = undefined,
   evidence = undefined,
+  opportunity = undefined,
+  control = undefined,
+  allocation = undefined,
+  feasibility = undefined,
   provenance,
+  modelAlgorithmVersion = undefined,
+  configurationVersion = undefined,
+  codeImplementationVersion = undefined,
 }) {
   const role = AGENT_CONTRACT_ROLE[agentId];
   const envelope = {
@@ -84,7 +96,23 @@ export function buildBaseEnvelope({
     confidence,
     provenance,
   };
+  const sourceIso = asIsoOrNull(sourceTimestamp);
+  const candleIso = asIsoOrNull(sourceCandleTimestamp);
+  const expiryIso = asIsoOrNull(expiryTimestamp);
+  const completedIso = asIsoOrNull(completedAt);
+  if (sourceIso) envelope.sourceTimestamp = sourceIso;
+  if (candleIso) envelope.sourceCandleTimestamp = candleIso;
+  if (expiryIso) envelope.expiryTimestamp = expiryIso;
+  if (completedIso) envelope.completedAt = completedIso;
+  if (recommendedNextActionClass) envelope.recommendedNextActionClass = recommendedNextActionClass;
+  if (modelAlgorithmVersion) envelope.modelAlgorithmVersion = modelAlgorithmVersion;
+  if (configurationVersion) envelope.configurationVersion = configurationVersion;
+  if (codeImplementationVersion) envelope.codeImplementationVersion = codeImplementationVersion;
   if (conclusion) envelope.conclusion = conclusion;
   if (evidence) envelope.evidence = evidence;
+  if (opportunity) envelope.opportunity = opportunity;
+  if (control) envelope.control = control;
+  if (allocation) envelope.allocation = allocation;
+  if (feasibility) envelope.feasibility = feasibility;
   return envelope;
 }

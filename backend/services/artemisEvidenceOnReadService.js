@@ -4,20 +4,50 @@
  */
 
 import { query } from '../database/db.js';
-import { ADAPTER_VERSIONS, validateEvidenceEnvelope } from '../contracts/artemisEvidenceContract.js';
+import {
+  ADAPTER_VERSIONS,
+  CANONICAL_AGENT_IDS,
+  validateEvidenceEnvelope,
+} from '../contracts/artemisEvidenceContract.js';
 import { resolveArtemisAgentIdentity } from './artemisAgentIdentity.js';
 import { projectEvidenceForProduct } from './artemisEvidenceProductProjection.js';
-import { mapTrendPersistedRun } from './artemisEvidenceAdapters/trendAdapter.js';
-import { mapArbitragePersistedRun } from './artemisEvidenceAdapters/arbitrageAdapter.js';
-import { mapVolumePersistedRun } from './artemisEvidenceAdapters/volumeAdapter.js';
+import {
+  mapArbitragePersistedRun,
+  mapFundamentalPersistedRun,
+  mapLiquidityPersistedRun,
+  mapMarketIntelligencePersistedRun,
+  mapOptimizationPersistedRun,
+  mapOrderPersistedRun,
+  mapPatternPersistedRun,
+  mapPortfolioPersistedRun,
+  mapPricePredictionPersistedRun,
+  mapRiskPersistedRun,
+  mapSentimentPersistedRun,
+  mapTechnicalPersistedRun,
+  mapTimingPersistedRun,
+  mapTrendPersistedRun,
+  mapVolumePersistedRun,
+} from './artemisEvidenceAdapters/index.js';
 import { parseJsonObject } from './artemisEvidenceAdapters/support.js';
 
-export const COMPATIBLE_ADAPTER_IDS = Object.freeze(['trend', 'arbitrage', 'volume']);
+export const COMPATIBLE_ADAPTER_IDS = CANONICAL_AGENT_IDS;
 
 const ADAPTERS = Object.freeze({
+  technical: mapTechnicalPersistedRun,
   trend: mapTrendPersistedRun,
-  arbitrage: mapArbitragePersistedRun,
+  pattern: mapPatternPersistedRun,
   volume: mapVolumePersistedRun,
+  sentiment: mapSentimentPersistedRun,
+  fundamental: mapFundamentalPersistedRun,
+  market_intelligence: mapMarketIntelligencePersistedRun,
+  price_prediction: mapPricePredictionPersistedRun,
+  timing: mapTimingPersistedRun,
+  arbitrage: mapArbitragePersistedRun,
+  risk: mapRiskPersistedRun,
+  portfolio: mapPortfolioPersistedRun,
+  optimization: mapOptimizationPersistedRun,
+  liquidity: mapLiquidityPersistedRun,
+  order: mapOrderPersistedRun,
 });
 
 export const AI_DECISIONS_EVIDENCE_READ_SQL = `
@@ -60,22 +90,11 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
     };
   }
 
-  if (identity.agentId === 'pattern') {
-    return {
-      ok: false,
-      reason: 'pattern_excluded_needs_output_correction',
-      agentId: 'pattern',
-      evidenceCompatible: false,
-      evidenceAvailable: false,
-      elapsedMs: Date.now() - started,
-    };
-  }
-
   const adapter = ADAPTERS[identity.agentId];
   if (!adapter) {
     return {
       ok: false,
-      reason: identity.agentId === 'optimization' ? 'optimization_not_applicable' : 'no_wp_b1_adapter',
+      reason: 'no_stage3_adapter',
       agentId: identity.agentId,
       evidenceCompatible: false,
       evidenceAvailable: false,
