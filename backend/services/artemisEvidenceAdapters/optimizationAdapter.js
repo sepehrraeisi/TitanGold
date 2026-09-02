@@ -1,6 +1,8 @@
 /**
  * Read-only Optimization → Artemis not_applicable adapter.
- * Stage 2 authority remains NOT_APPLICABLE. Backtest BUY/SELL is not mapped.
+ * Registry owner (`services/agents/optimization.js`) is a real backtester, not sizing authority.
+ * Stage 3 class C: normalize native backtest output to Stage 2 NOT_APPLICABLE.
+ * Do not map BUY/SELL into control/sizing/direction. Authority mapping unchanged.
  */
 
 import {

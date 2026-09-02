@@ -31,8 +31,17 @@ export function agentInput(rawInput, row = {}) {
 }
 
 export function analysisTime(output, row) {
-  return asIsoOrNull(output.timestamp || output._meta?.timestamp || output.meta?.timestamp)
-    || asIsoOrNull(row.created_at);
+  return asIsoOrNull(output?.timestamp || output?._meta?.timestamp || output?.meta?.timestamp)
+    || asIsoOrNull(row?.created_at);
+}
+
+export function rejectUndatedEnvelope(reason = 'analysis_timestamp_unavailable') {
+  return {
+    ok: false,
+    reason,
+    evidenceCompatible: true,
+    evidenceAvailable: false,
+  };
 }
 
 export function outputTimeframe(output, input) {
@@ -101,7 +110,10 @@ export function failClosedEnvelope({
   limitations = [],
   extra = {},
 }) {
-  const analysisTimestamp = analysisTime(output, row) || new Date().toISOString();
+  const analysisTimestamp = analysisTime(output, row);
+  if (!analysisTimestamp) {
+    return rejectUndatedEnvelope(reason || 'analysis_timestamp_unavailable');
+  }
   const timeframe = outputTimeframe(output, input);
   const candleTimestamp = asIsoOrNull(
     output.last_candle_timestamp || output.sourceCandleTimestamp || output.meta?.last_candle_timestamp,
@@ -162,7 +174,7 @@ export function failClosedEnvelope({
 }
 
 export function contextFreshness({ output, input, row, agentId, nowMs, sourceTimestamp, sourceCandleTimestamp }) {
-  const analysisTimestamp = analysisTime(output, row) || new Date().toISOString();
+  const analysisTimestamp = analysisTime(output, row);
   const timeframe = outputTimeframe(output, input);
   const candle = sourceCandleTimestamp
     || asIsoOrNull(output.last_candle_timestamp || output.sourceCandleTimestamp);
@@ -226,6 +238,20 @@ export function availableEnvelope({
     sourceTimestamp,
     sourceCandleTimestamp,
   });
+  if (!ctx.analysisTimestamp) {
+    return failClosedEnvelope({
+      agentId,
+      row,
+      output,
+      input,
+      nowMs,
+      reason: 'analysis_timestamp_unavailable',
+      correlationFamily,
+      executionClass,
+      limitations,
+      extra,
+    });
+  }
   const keys = [...limitations];
   if (ctx.freshness.status === 'unknown') keys.push(ctx.freshness.reasonKey || 'freshness_unknown');
   return {
@@ -235,7 +261,7 @@ export function availableEnvelope({
       adapterVersion: ADAPTER_VERSIONS[agentId],
       runId: row.id || null,
       agentRecordId: row.agent_id || row.agentId || null,
-      analysisTimestamp: ctx.analysisTimestamp || new Date().toISOString(),
+      analysisTimestamp: ctx.analysisTimestamp,
       createdAt: row.created_at,
       sourceTimestamp: ctx.sourceTimestamp,
       sourceCandleTimestamp: ctx.sourceCandleTimestamp,

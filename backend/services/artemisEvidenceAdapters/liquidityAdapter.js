@@ -1,6 +1,8 @@
 /**
  * Read-only Liquidity → Artemis feasibility adapter.
- * Registry owner is an MVP stub. Do not fabricate spread/depth from confidence 0.55.
+ * Registry owner (`services/agents/liquidity.js`) is an MVP mock stub; HTTP run is 501.
+ * Stage 3 class D: semantically repair fake-success stub output to canonical blocked.
+ * Do not fabricate spread/depth/order-book/feasibility data. Authority mapping unchanged.
  */
 
 import {

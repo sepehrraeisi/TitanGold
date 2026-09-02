@@ -244,6 +244,8 @@ describe('Artemis Stage 3 agent contract compatibility', () => {
     expect(envelope.agentRole).toBe(EXPECTED_AUTHORITY[agentId]);
     expect(envelope.provenance.writer).toMatch(new RegExp(`${agentId}|adapter|agent_output`, 'i'));
     expect(envelope.provenance.adapterVersion).toBe('1.0.0');
+    expect(envelope.analysisTimestamp).toBe(TS);
+    expect(envelope.analysisTimestamp).not.toBe(new Date(NOW).toISOString());
     expect(envelope.freshness).toBeTruthy();
     expect(envelope.dataQuality).toBeTruthy();
     expect(envelope.confidence).toBeTruthy();
@@ -391,6 +393,90 @@ describe('Artemis Stage 3 agent contract compatibility', () => {
     expect(envelope.conclusion.direction).toBe('not_applicable');
     expect(envelope.recommendedNextActionClass).toBe('not_applicable');
     expect(JSON.stringify(envelope.conclusion || {})).not.toMatch(/BUY|SELL|EXECUTE|LIVE/);
+  });
+
+  it('does not fabricate observation time when no defensible timestamp exists', () => {
+    const observationIso = new Date(NOW).toISOString();
+    for (const agentId of CANONICAL_AGENT_IDS) {
+      const mapped = MAPPERS[agentId]({
+        nowMs: NOW,
+        row: { id: runId(`${agentId}nts`.slice(0, 12)) },
+        output: { signal: 'bullish', confidence: 0.99, recommendation: 'BUY' },
+        input: { symbol: 'BTC/USDT', timeframe: '1h' },
+      });
+      expect(mapped.ok).toBe(false);
+      expect(mapped.envelope).toBeUndefined();
+      const blob = JSON.stringify(mapped);
+      expect(blob).not.toContain(observationIso);
+      expect(blob).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    }
+  });
+
+  it('does not fabricate observation time from a malformed timestamp', () => {
+    const observationIso = new Date(NOW).toISOString();
+    const mapped = map('technical', {
+      timestamp: 'not-a-timestamp',
+      last_candle_timestamp: 'also-bad',
+      signal: 'bullish',
+      confidence: 0.8,
+      _meta: { timestamp: 'garbage', dataProvider: 'mexc' },
+    }, {
+      row: {
+        id: runId('badts0000001'),
+        agent_id: runId('badagent0001'),
+        created_at: 'not-iso',
+      },
+    });
+    expect(mapped.ok).toBe(false);
+    expect(mapped.reason).toBe('analysis_timestamp_unavailable');
+    expect(mapped.envelope).toBeUndefined();
+    expect(JSON.stringify(mapped)).not.toContain(observationIso);
+    expect(JSON.stringify(mapped)).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+  });
+
+  it('preserves a genuine persisted created_at as analysisTimestamp', () => {
+    const envelope = expectValid(map('risk', {
+      analysis: { overall_risk_level: 'MODERATE', overall_risk_score: 41 },
+    }, { suffix: 'createdonly01' }));
+    expect(envelope.analysisTimestamp).toBe(TS);
+    expect(envelope.freshness.status).toBe('unknown');
+    expect(envelope.freshness.reasonKey).toBe('missing_proven_source_timestamp');
+  });
+
+  it('preserves an explicit Agent output timestamp over observation time', () => {
+    const envelope = expectValid(map('trend', AVAILABLE.trend, { suffix: 'keepagentts1' }));
+    expect(envelope.analysisTimestamp).toBe(TS);
+    expect(envelope.freshness.analysisTimestamp).toBe(TS);
+    expect(envelope.freshness.sourceCandleTimestamp).toBe(CANDLE);
+  });
+
+  it('keeps Liquidity non-directional, non-executable and free of fabricated book fields', () => {
+    const envelope = expectValid(map('liquidity', AVAILABLE.liquidity, { suffix: 'liqclassd001' }));
+    expect(envelope.authorityClass).toBe('execution_feasibility');
+    expect(envelope.availability).toBe('blocked');
+    expect(envelope.executionClass).toBe('none');
+    expect(envelope.conclusion.direction).toBe('not_applicable');
+    expect(envelope.feasibility.spread).toBeUndefined();
+    expect(envelope.feasibility.depth).toBeUndefined();
+    expect(envelope.feasibility.maxFeasibleSize).toBeUndefined();
+    expect(envelope.feasibility.bookTimestamp).toBeUndefined();
+    expect(envelope.confidence.value).toBeFalsy();
+  });
+
+  it('keeps Optimization not_applicable without promoting backtest BUY/SELL to sizing authority', () => {
+    const envelope = expectValid(map('optimization', {
+      timestamp: TS,
+      recommendation: 'SELL',
+      score: 88,
+      best_parameters: { fastPeriod: 8 },
+    }, { suffix: 'optclassc001' }));
+    expect(envelope.authorityClass).toBe('not_applicable');
+    expect(envelope.availability).toBe('not_applicable');
+    expect(envelope.executionClass).toBe('not_applicable');
+    expect(envelope.allocation).toBeUndefined();
+    expect(envelope.control).toBeUndefined();
+    expect(envelope.conclusion.direction).toBe('not_applicable');
+    expect(JSON.stringify(envelope)).not.toMatch(/"BUY"|"SELL"/);
   });
 
   it('does not treat trend strength, risk score or liquidity stub confidence as predictive confidence', () => {

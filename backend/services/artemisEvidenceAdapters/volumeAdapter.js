@@ -110,6 +110,10 @@ export function mapVolumePersistedRun({ row = {}, output: rawOutput, input: rawI
       })
     : { ...resolved, scale: CONFIDENCE_SCALE.UNKNOWN };
 
+  if (!analysisTimestamp) {
+    return { ok: false, reason: 'analysis_timestamp_unavailable' };
+  }
+
   if (mock || !hasCore) {
     return {
       ok: true,
@@ -118,7 +122,7 @@ export function mapVolumePersistedRun({ row = {}, output: rawOutput, input: rawI
         adapterVersion: ADAPTER_VERSIONS.volume,
         runId: row.id || null,
         agentRecordId: row.agent_id || row.agentId || null,
-        analysisTimestamp: analysisTimestamp || new Date().toISOString(),
+        analysisTimestamp,
         createdAt: row.created_at,
         symbol: output.symbol || input.symbol || null,
         timeframe,
@@ -152,7 +156,7 @@ export function mapVolumePersistedRun({ row = {}, output: rawOutput, input: rawI
       adapterVersion: ADAPTER_VERSIONS.volume,
       runId: row.id || null,
       agentRecordId: row.agent_id || row.agentId || null,
-      analysisTimestamp: analysisTimestamp || new Date().toISOString(),
+      analysisTimestamp,
       createdAt: row.created_at,
       symbol: output.symbol || input.symbol || null,
       timeframe,
