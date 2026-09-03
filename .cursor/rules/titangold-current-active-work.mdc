@@ -103,9 +103,11 @@ Artemis Core Stage 1 through Stage 6 are closed. Stage 7 has not started.
 
 This Rule 02 governance transaction does **not** deploy, rebuild, restart, or mutate production. It does **not** start Stage 6. It does **not** authorize Stage 6 implementation.
 
-There is **no canonical real Artemis evidence orchestrator in production yet**.
+**SUPERSEDED 20260902 by Stage 6 closeout below:** the Stage 5 discovery-era claim that no canonical Artemis evidence orchestrator exists in production is historical only. Stage 6 `EvidenceOrchestrationSet` is now implemented/deployed/runtime-verified at `8d093131b320afc8f75ba4d0cae5c5e5865c2725` (AS6RV). The following legacy inventory remains historical Stage 5 truth for the pre-Stage-6 production path.
 
-Current live legacy owner:
+Historical Stage 5 discovery claim (do not use as current Stage 6 authority): there was **no** canonical real Artemis evidence orchestrator in production **at Stage 5 closeout time**.
+
+Current live legacy owner (still non-canonical for Stage 6; contained advisory):
 
 - `backend/services/artemisOrchestrator.js`
 - `backend/routes/artemis.js`
@@ -263,6 +265,11 @@ Reason: production `titan-backend` runtime was activated from the exact authoriz
 **EVIDENCE_IMPLEMENTATION_SHA256 = `09190a52f89c1cd4a2386550f787a90c11ecb2e3db6b5b5739c0a4d460f08212`** · mode **0600**
 **EVIDENCE_RUNTIME = `/home/ubuntu/TITANGOLD_AS6RV-20260902T220859Z.txt`**
 **EVIDENCE_RUNTIME_SHA256 = `dad3f5bb61ba3e9e0d525250ee855fb95dde49849cc9454eabd06813f09fda82`** · mode **0600**
+**EVIDENCE_CLOSEOUT = `/home/ubuntu/TITANGOLD_M5_ARTEMIS_STAGE6_GOVERNANCE_CLOSEOUT_20260902T221814Z.txt`**
+**EVIDENCE_CLOSEOUT_SHA256 = `ea874a5b1e3d6865fb28b14207cd4ec03d1cce39c930e896c4815b4822dbc5f8`** · mode **0600**
+**GOVERNANCE_BRANCH = `chore/artemis-stage6-closeout-stage7-handoff`**
+**LEDGER_UPDATE_STATUS = RECORDED_IN_RULE02_AND_CLOSEOUT_PACKET**
+**SEPARATE_STAGE6_LEDGER_FILE = NONE** (Rule 02 Progress Snapshot + Stage 6 closeout section is the canonical Stage 6 ledger owner)
 
 Side-effect ledger (AS6RV observation window):
 
