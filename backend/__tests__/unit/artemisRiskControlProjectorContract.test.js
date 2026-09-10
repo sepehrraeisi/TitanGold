@@ -206,6 +206,25 @@ describe('artemisRiskControlProjectorContract — Stage 7.3.2.a', () => {
     expect(result.artifact.riskEvidenceRef.outcome).toBe(RISK_GATE_OUTCOME.UNAVAILABLE);
   });
 
+  it('10b PASS + unavailable freshness cannot produce PASS', () => {
+    const result = projectRiskEvidenceRef(baseInput({
+      riskEvidence: baseEvidence({
+        outcome: 'PASS',
+        freshness: FRESHNESS_STATUS.UNAVAILABLE,
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.riskEvidenceRef.outcome).not.toBe(RISK_GATE_OUTCOME.PASS);
+    expect(result.artifact.riskEvidenceRef.outcome).toBe(RISK_GATE_OUTCOME.UNAVAILABLE);
+    expect(result.artifact.riskEvidenceRef.freshness).toBe(FRESHNESS_STATUS.UNAVAILABLE);
+    expect(result.artifact.riskEvidenceRef.reasonKey).toBe('stale_risk_cannot_pass');
+    expect(result.artifact.controlOutcome).toBe(CONTROL_OUTCOME.INSUFFICIENT_CONTROL_EVIDENCE);
+    expect(result.artifact.projectionNotes).toContain('freshness_blocked_pass');
+    expect(result.artifact.decisionEligible).toBe(false);
+    expect(result.artifact.executionEligible).toBe(false);
+    expect(result.artifact.approvedForExecution).toBe(false);
+  });
+
   it('11 malformed Risk envelope', () => {
     const missingFreshness = projectRiskEvidenceRef(baseInput({
       riskEvidence: baseEvidence({ freshness: undefined }),
@@ -265,6 +284,32 @@ describe('artemisRiskControlProjectorContract — Stage 7.3.2.a', () => {
     expect(result.artifact.riskEvidenceRef.limit).toBeUndefined();
     expect(result.artifact.riskEvidenceRef.max).toBe(9);
     expect(result.artifact.riskEvidenceRef.recommended).toBe(3);
+  });
+
+  it('14b LIMIT + invalid negative limit fails closed', () => {
+    const result = projectRiskEvidenceRef(baseInput({
+      riskEvidence: baseEvidence({
+        outcome: 'LIMIT',
+        limit: -1,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('14c LIMIT + non-finite NaN limit fails closed', () => {
+    const result = projectRiskEvidenceRef(baseInput({
+      riskEvidence: baseEvidence({
+        outcome: 'LIMIT',
+        limit: Number.NaN,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
+    expect(result.artifact).toBeUndefined();
   });
 
   it('15 forbidden direction key', () => {
@@ -341,6 +386,42 @@ describe('artemisRiskControlProjectorContract — Stage 7.3.2.a', () => {
     expect(result.artifact.lineage.sourceContractVersion).toBe('artemis-evidence-1.0.0');
     expect(result.artifact.lineage.projectorContractVersion).toBe(RISK_PROJECTOR_CONTRACT_VERSION);
     expect(result.artifact.lineage.policyVersion).toBe(RISK_PROJECTOR_POLICY_VERSION);
+  });
+
+  it('19b lineage decisionId mismatch fails closed', () => {
+    const mismatchedDecisionId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const result = projectRiskEvidenceRef(baseInput({
+      decisionId: DECISION_ID,
+      lineage: {
+        decisionId: mismatchedDecisionId,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'risk',
+        runId: RUN_ID,
+        sourceEvidenceId: SOURCE_EVIDENCE_ID,
+        sourceContractVersion: 'artemis-evidence-1.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_decision_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('19c lineage decisionContextId mismatch fails closed', () => {
+    const mismatchedContextId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const result = projectRiskEvidenceRef(baseInput({
+      decisionContextId: CONTEXT_ID,
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: mismatchedContextId,
+        agentId: 'risk',
+        runId: RUN_ID,
+        sourceEvidenceId: SOURCE_EVIDENCE_ID,
+        sourceContractVersion: 'artemis-evidence-1.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_context_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
   });
 
   it('20 provenance preservation', () => {
