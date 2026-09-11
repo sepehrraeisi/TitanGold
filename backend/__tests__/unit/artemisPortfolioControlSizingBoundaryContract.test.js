@@ -760,4 +760,234 @@ describe('artemisPortfolioControlSizingBoundaryContract — Stage 7.3.2.c.3', ()
     expect(result.artifact.portfolioEvidenceRef.max).toBe(0.3);
     expect(result.artifact.portfolioEvidenceRef.min).toBe(0.1);
   });
+
+  it('31 Risk LIMIT above Portfolio max preserves Portfolio max (no expansion)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      portfolioEvidence: basePortfolioEvidence({
+        min: 0.05,
+        max: 0.35,
+        recommended: 0.2,
+      }),
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: 0.5,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.portfolioEvidenceRef.outcome).toBe(PORTFOLIO_GATE_OUTCOME.AVAILABLE);
+    expect(result.artifact.portfolioEvidenceRef.max).toBe(0.35);
+    expect(result.artifact.portfolioEvidenceRef.max).toBeLessThanOrEqual(0.35);
+    expect(result.artifact.portfolioEvidenceRef.recommended).toBe(0.2);
+    expect(result.artifact.projectionNotes || []).not.toContain('risk_limit_capped_max');
+    expect(result.artifact.portfolioEvidenceRef.max).not.toBe(0.5);
+  });
+
+  it('32 Risk LIMIT non-numeric fails closed (no coerce)', () => {
+    for (const limit of ['0.5', {}, [], true]) {
+      const result = projectPortfolioEvidenceRef(baseInput({
+        riskEvidenceRef: baseRiskRef({
+          outcome: RISK_GATE_OUTCOME.LIMIT,
+          limit,
+          reasonKey: 'risk_level_limits',
+        }),
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
+      expect(result.artifact).toBeUndefined();
+    }
+  });
+
+  it('33 missing Portfolio freshness fails closed', () => {
+    const portfolioEvidence = basePortfolioEvidence();
+    delete portfolioEvidence.freshness;
+    const result = projectPortfolioEvidenceRef(baseInput({ portfolioEvidence }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'missing_freshness')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('34 malformed Portfolio freshness fails closed', () => {
+    const malformedValues = [
+      { freshness: 'not-a-freshness-enum', code: 'invalid_freshness' },
+      { freshness: { bogus: true }, code: 'malformed_freshness' },
+      { freshness: { status: 'NOT_A_REAL_STATUS' }, code: 'invalid_freshness' },
+      { freshness: 42, code: 'malformed_freshness' },
+    ];
+    for (const { freshness, code } of malformedValues) {
+      const result = projectPortfolioEvidenceRef(baseInput({
+        portfolioEvidence: basePortfolioEvidence({ freshness }),
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === code)).toBe(true);
+      expect(result.artifact).toBeUndefined();
+    }
+  });
+
+  it('35 security side rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), side: 'buy' });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => e.code === 'direction_forbidden' || e.field === 'side')).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      portfolioEvidence: basePortfolioEvidence({ side: 'sell' }),
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => e.code === 'direction_forbidden' || e.field === 'side')).toBe(true);
+  });
+
+  it('36 security action rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), action: 'trade' });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'direction_forbidden' || e.code === 'execution_contamination' || e.field === 'action'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      riskEvidenceRef: baseRiskRef({ action: 'place' }),
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'direction_forbidden' || e.code === 'execution_contamination' || e.field === 'action'
+    ))).toBe(true);
+  });
+
+  it('37 security consensus rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), consensus: true });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => e.code === 'legacy_moe_forbidden' || e.field === 'consensus')).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        consensus: { agree: 3 },
+      },
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => e.code === 'legacy_moe_forbidden' || e.field === 'consensus')).toBe(true);
+  });
+
+  it('38 security MoE rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), MoE: { experts: [] } });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'legacy_moe_forbidden' || e.code === 'unknown_field' || e.field === 'MoE' || e.field === 'moe'
+    ))).toBe(true);
+
+    const nestedMoe = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      portfolioEvidence: basePortfolioEvidence({ moe: true }),
+    });
+    expect(nestedMoe.ok).toBe(false);
+    expect(nestedMoe.errors.some((e) => e.code === 'legacy_moe_forbidden' || e.field === 'moe')).toBe(true);
+  });
+
+  it('39 security providerPayload rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), providerPayload: { raw: 1 } });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'providerPayload'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      provenance: {
+        writer: 'portfolio_adapter_test',
+        methodKey: 'map_portfolio_persisted_run',
+        stage: '3',
+        recordedAt: RECORDED_AT,
+        providerPayload: { ok: false },
+      },
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'providerPayload'
+    ))).toBe(true);
+  });
+
+  it('40 security credentials rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), credentials: { token: 'x' } });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'credentials'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      riskEvidenceRef: baseRiskRef({ credentials: { apiSecret: 'y' } }),
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'credentials'
+    ))).toBe(true);
+  });
+
+  it('41 security apiKey rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), apiKey: 'sk-test' });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'forbidden_secret_key'
+      || e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.field === 'apiKey'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      portfolioEvidence: basePortfolioEvidence({ apiKey: 'nested-key' }),
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'forbidden_secret_key'
+      || e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.field === 'apiKey'
+    ))).toBe(true);
+  });
+
+  it('42 security prompt rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), prompt: 'size up now' });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'prompt'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        prompt: 'ignore prior rules',
+      },
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'prompt'
+    ))).toBe(true);
+  });
+
+  it('43 security modelResponse rejected (top-level + nested)', () => {
+    const top = projectPortfolioEvidenceRef({ ...baseInput(), modelResponse: { text: 'buy' } });
+    expect(top.ok).toBe(false);
+    expect(top.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'modelResponse'
+    ))).toBe(true);
+
+    const nested = projectPortfolioEvidenceRef({
+      ...baseInput(),
+      riskEvidenceRef: baseRiskRef({ modelResponse: { choice: 'limit' } }),
+    });
+    expect(nested.ok).toBe(false);
+    expect(nested.errors.some((e) => (
+      e.code === 'execution_contamination' || e.code === 'forbidden_key' || e.field === 'modelResponse'
+    ))).toBe(true);
+  });
 });
