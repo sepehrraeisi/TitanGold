@@ -115,6 +115,7 @@ Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. St
 **DEPLOY = NO**
 
 **EVIDENCE_HUMAN_QA = `/home/ubuntu/TITANGOLD_M5_ARTEMIS_STAGE7_3_2_C3_HUMAN_QA_PASS_20260911T202419Z.txt`**
+**EVIDENCE_HUMAN_QA_SHA256 = `97375b6695385186e9ff54d174d851c4a1b1d22d9da923f2c571bcb1ef60deef`** · mode **0600**
 
 Architecture boundary (frozen for C.3):
 
