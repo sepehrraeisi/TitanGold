@@ -444,6 +444,34 @@ describe('artemisLiquidityExecutionFeasibilityBoundaryContract — C.4', () => {
     expect(result.errors.some((e) => e.code === 'proposed_size_mismatch')).toBe(true);
   });
 
+  it('marketScope mismatch → fail-closed (no silent prefer / no FEASIBLE)', () => {
+    const input = baseInput({
+      identity: {
+        venue: 'mexc',
+        symbol: 'BTCUSDT',
+        marketScope: 'futures',
+        side: LIQUIDITY_SIDE.BID,
+        proposedSize: 1000,
+      },
+    });
+    expect(input.liquidityEvidence.marketScope).toBe('spot');
+    expect(input.identity.marketScope).toBe('futures');
+
+    const validation = validateLiquidityFeasibilityInput(input);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((e) => (
+      e.field === 'identity.marketScope' && e.code === 'market_scope_mismatch'
+    ))).toBe(true);
+
+    const projected = projectLiquidityEvidenceRef(input);
+    expect(projected.ok).toBe(false);
+    expect(projected.code).toBe('INVALID_INPUT');
+    expect(projected.artifact).toBeUndefined();
+    expect(projected.liquidityEvidenceRef).toBeUndefined();
+    expect(JSON.stringify(projected)).not.toContain(`"outcome":"${LIQUIDITY_GATE_OUTCOME.FEASIBLE}"`);
+    expect(projected).not.toHaveProperty('sideEffects');
+  });
+
   it('26. decisionId mismatch → fail-closed', () => {
     const result = validateLiquidityFeasibilityInput(baseInput({
       lineage: {
@@ -585,6 +613,25 @@ describe('artemisLiquidityExecutionFeasibilityBoundaryContract — C.4', () => {
       const result = validateLiquidityFeasibilityInput(baseInput(poison));
       expect(result.ok).toBe(false);
     }
+  });
+
+  it('weightedVote contamination → fail-closed (no silent filter / no FEASIBLE)', () => {
+    const input = baseInput({ weightedVote: { liquidity: 1, risk: 1 } });
+    const validation = validateLiquidityFeasibilityInput(input);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((e) => (
+      e.code === 'legacy_moe_forbidden' && String(e.field || '').includes('weightedVote')
+    ))).toBe(true);
+
+    const projected = projectLiquidityEvidenceRef(input);
+    expect(projected.ok).toBe(false);
+    expect(projected.code).toBe('INVALID_INPUT');
+    expect(projected.artifact).toBeUndefined();
+    expect(projected.liquidityEvidenceRef).toBeUndefined();
+    expect(JSON.stringify(projected)).not.toContain(`"outcome":"${LIQUIDITY_GATE_OUTCOME.FEASIBLE}"`);
+    // Contamination must remain visible as a rejection — not silently dropped before validation.
+    expect(Object.prototype.hasOwnProperty.call(input, 'weightedVote')).toBe(true);
+    expect(projected).not.toHaveProperty('sideEffects');
   });
 
   it('36. providerPayload / credentials / apiKey / prompt / modelResponse → fail-closed', () => {
