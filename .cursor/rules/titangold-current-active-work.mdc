@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–6 CLOSED; Stage 7.3.2.c.3 Portfolio CONTROL_SIZING CLOSED (IMPLEMENTED/MERGED/AUDIT PASS/HUMAN_QA PASS); CURRENT_STAGE=ARTEMIS_CORE_STAGE_7_3_2_C_4 ENTRY NOT AUTHORIZED; PRODUCTION_MUTATION_CAPABILITY=CLOSED; LIVE/LLM NOT AUTHORIZED
+description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–6 CLOSED; C.3 Portfolio CONTROL_SIZING CLOSED; CURRENT_STAGE=ARTEMIS_CORE_STAGE_7_3_2_C_4; SLICE=LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY AUTHORIZED; PRODUCTION_MUTATION_CAPABILITY=CLOSED; LIVE/LLM NOT AUTHORIZED
 alwaysApply: true
 ---
 
@@ -25,7 +25,7 @@ alwaysApply: true
 
 **REMAINING_STAGES = 9**
 
-**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_4**
+**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_5**
 
 **PROGRESS_BLOCKER = NONE**
 
@@ -37,21 +37,26 @@ alwaysApply: true
 **ARTEMIS_CORE_STAGE_6 = CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED**
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STARTED = YES / CLOSED**
-**ARTEMIS_CORE_STAGE_7 = IN_PROGRESS / 7.3.2.c.3 CLOSED / 7.3.2.c.4 ENTRY**
-**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = NO**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**ARTEMIS_CORE_STAGE_7 = IN_PROGRESS / 7.3.2.c.3 CLOSED / 7.3.2.c.4 ACTIVE**
+**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = YES**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
 **STAGE_7_STARTED = YES**
 **STAGE_6_STATUS = CLOSED**
 **STAGE_7_STATUS = IN_PROGRESS**
 **STAGE_7_3_2_C_3_STATUS = CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**
 **STAGE_7_3_2_C_3_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = NO**
+**STAGE_7_3_2_C_4_STATUS = AUTHORIZED / NOT_STARTED**
+**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**STAGE_7_3_2_C_5_STATUS = NOT_STARTED / NOT AUTHORIZED**
+**STAGE_7_3_2_C_5_IMPLEMENTATION_AUTHORIZED = NO**
 **ARTEMIS_DECISION_LAYER = NOT_IMPLEMENTED**
 **EXECUTION_CHAIN = NOT_IMPLEMENTED**
 **LIVE_TRADING = DISABLED**
 **LIVE_EXECUTION = NOT AUTHORIZED**
 **MODEL_PROVIDER = NOT AUTHORIZED**
+**LLM = NOT AUTHORIZED**
+**REAL_PROVIDER_REQUESTS = NOT AUTHORIZED**
+**EXECUTION_ENABLED = NO**
 **AUTOMATED_TRADING_ENABLED = NO**
 **LIVE_TRADING_ENABLED = NO**
 
@@ -76,7 +81,7 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. Stage 7.3.2.c.3 Portfolio `CONTROL_SIZING` is **CLOSED**. Stage 7.3.2.c.4 is the next gate but is **NOT AUTHORIZED** by this governance transaction. This does **not** authorize Live trading, real execution, Liquidity/Order/Runtime activation, LLM/provider access, or deployment.
+Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. Stage 7.3.2.c.3 Portfolio `CONTROL_SIZING` is **CLOSED**. The only currently authorized Stage 7 implementation slice is `ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY`. This does **not** authorize Live trading, real execution, Order/Runtime activation, LLM/provider access, deployment, or Stage 7.3.2.c.5.
 
 ### Artemis Core Stage 7.3.2.c.3 — CLOSED / PORTFOLIO CONTROL_SIZING COMPLETE (20260911)
 
@@ -123,22 +128,94 @@ Architecture boundary (frozen for C.3):
 Stage 7 Control Chain portfolioEvidenceRef
  ← C.3 Portfolio CONTROL_SIZING projector (library-only)
  ← validated Portfolio evidence + Risk evidenceRef
- → future Liquidity / Runtime / Order (NOT authorized / NOT implemented here)
+ → C.4 Liquidity EXECUTION_FEASIBILITY (authorized separately; library-only)
+ → future Runtime / Order (NOT authorized / NOT implemented here)
 ```
 
 - Consumes Portfolio SoT surfaces; does **not** invent direction/thesis.
 - Risk REJECT / UNAVAILABLE fail closed (no usable sizing).
 - Risk LIMIT caps Portfolio max; never expands Portfolio max; LIMIT < min fails closed.
 - Freshness / account-state / lineage / provenance / contamination fail closed.
-- Does **not** authorize Liquidity, Runtime, Order, execution, Live, LLM, or provider.
+- C.3 closeout itself did **not** authorize Liquidity, Runtime, Order, execution, Live, LLM, or provider.
 
-**STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = NO**
-**C4_AUTHORIZATION = NO**
+Historical C.3-closeout fields `STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED` and `C4_AUTHORIZATION = NO` are **SUPERSEDED** by the Active Work Package below.
 
-This Rule 02 governance transaction does **not** authorize Stage 7.3.2.c.4. It does **not** deploy, restart, or mutate production. It does **not** enable Live trading, provider/LLM access, Liquidity/Order/Runtime activation, ACCP, Autonomous Ops, Multi-AI Council, or Cognitive Kernel expansion.
+Historical authorization text for C.3 (`AUTHORIZED / NOT_STARTED`) remains **SUPERSEDED** by the C.3 closeout above.
 
-Historical authorization text for C.3 (`AUTHORIZED / NOT_STARTED`) is **SUPERSEDED** by this closeout.
+### Active Work Package — Stage 7.3.2.c.4 Liquidity EXECUTION_FEASIBILITY Boundary (AUTHORIZED / NOT STARTED)
+
+**AUTHORIZED_SLICE = ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
+**OFFICIAL_NAME = LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
+**RISK_TIER = Tier 3**
+**IMPLEMENTATION_AUTHORIZED = YES** (this exact slice only)
+**STAGE_7_3_2_C_4_STATUS = AUTHORIZED / NOT_STARTED**
+**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**C4_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**LIVE_EXECUTION = NOT AUTHORIZED**
+**LIVE_TRADING = DISABLED**
+**MODEL_PROVIDER = NOT AUTHORIZED**
+**LLM = NOT AUTHORIZED**
+**REAL_PROVIDER_REQUESTS = NOT AUTHORIZED**
+**EXECUTION_ENABLED = NO**
+**DEPLOY = NO**
+**HUMAN_QA_MILESTONE = STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY_COMPLETE**
+**NEXT_APPROVED_TRANSITION = ARTEMIS_CORE_STAGE_7_3_2_C_5** (define/authorize C.5 only after this slice is complete, audited, regression-tested, and Human-QA approved; C.5 itself is **not** authorized here)
+**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_5**
+**C5_AUTHORIZATION = NO**
+**STAGE_7_3_2_C_5_STATUS = NOT_STARTED / NOT AUTHORIZED**
+**STAGE_7_3_2_C_5_IMPLEMENTATION_AUTHORIZED = NO**
+
+**CURRENT_USER_SYSTEM_OUTCOME:**
+Create the canonical Artemis Liquidity `EXECUTION_FEASIBILITY` boundary needed to consume validated Liquidity evidence inside the Stage 7 Control Chain (`liquidityEvidenceRef` → `liquidityGate`), while preserving existing Liquidity Sources of Truth and keeping execution disabled.
+
+**PRIMARY SCOPE (library-only):**
+1. Discover and reuse canonical Liquidity owners / evidence adapters already present in the repository; do **not** create a parallel Source of Truth
+2. Define/implement only the minimum Liquidity evidence → Control Chain boundary for execution-feasibility projection into `liquidityEvidenceRef` / `liquidityGate`
+3. Reuse `backend/contracts/artemisControlChainContract.js`
+4. Preserve `EXECUTION_FEASIBILITY` semantics; Liquidity remains non-directional and non-executing
+5. Where a truthful owner and truthful data exist, validate/represent: venue · symbol · side · proposedSize · bookTimestamp · spread · expectedSlippage · marketImpact · maxFeasibleSize · expiry · limitations
+6. May consume Portfolio sizing as proposed-size input; must **not** change or increase Portfolio max
+7. If truthful order-book / metrics owner is absent: fail closed as BLOCKED / UNAVAILABLE / equivalent — never fabricate metrics
+
+**AUTHORIZED IMPLEMENTATION MAY INCLUDE ONLY:**
+Liquidity evidence projector/boundary contract · required validation · library-only Control Chain integration · unit/contract tests · fail-closed negative-path tests · lineage/provenance validation · deterministic behavior verification
+
+**LIQUIDITY MAY:** report execution feasibility / infeasibility; bound proposed size by maxFeasibleSize when truthful; fail closed on missing/stale/malformed/unavailable/blocked evidence; consume Portfolio proposed-size input without expanding Portfolio max
+
+**LIQUIDITY MUST NOT:** invent BUY/SELL/LONG/SHORT; create a trading thesis; override Risk; change Risk semantics; change/increase Portfolio max; authorize execution; place/cancel/modify orders; create execution intent; mutate wallet; change runtime mode; clear Emergency Stop; access provider transactional transport; create a second Source of Truth; use LLM/provider/network calls; fabricate depth/spread/slippage/impact/maxFeasibleSize; activate Liquidity Agent beyond existing stub; wire artemisOrchestrator / POST /api/v1/artemis/decision / tradingEngine / artemisExecutionGate
+
+**HARD SECURITY / AUTHORITY FLAGS (entire slice):**
+`executionEligible=false` · `approvedForExecution=false` · `decisionEligible=false` · `liveTradingEnabled=false` · `providerConnected=false` · `llmCallCount=0` · `networkRequestCount=0` · no order/financial/wallet/runtime activation
+
+**FAIL-CLOSED (minimum):** missing/malformed/stale/expired/unavailable/blocked Liquidity evidence · insufficient depth · excessive spread · excessive expected slippage · excessive market impact · proposedSize > maxFeasibleSize · venue/symbol/side/size mismatch · decisionId mismatch · decisionContextId mismatch · Agent/run lineage mismatch · provenance/provider spoof · fabricated metrics · unknown provider capability · unknown venue state · direction/execution/order/wallet contamination · legacy MoE / ModelAssistedContribution contamination · unknown fields · authority escalation · no silent unavailable→FEASIBLE
+
+**STRICT OUT-OF-SCOPE / ABSOLUTELY FORBIDDEN:**
+Risk override / Risk semantics change · Portfolio max change · direction/thesis · BUY/SELL/LONG/SHORT authority · Order creation/cancellation/modification · execution intent · wallet action · `tradingEngine.js` · `artemisExecutionGate.js` · `artemisOrchestrator.js` · `POST /api/v1/artemis/decision` · Runtime activation · Emergency Stop changes · Live trading · provider credentials · real private provider requests · LLM calls · external network calls · DB mutation · Redis mutation · schema migration · deployment · frontend changes · Liquidity agent activation beyond existing stub · reopening/changing Stage 7.2 · changing Risk 7.3.2.a/b/c.1/c.2 · changing C.3 Portfolio · C.5 implementation
+
+**PROTECTED SURFACES:**
+Rule 02 except this governance transaction · Core Rules · Stage 7.2 · 7.3.1 Control Chain · 7.3.2.a · 7.3.2.b · C.1 · C.2 · C.3 Portfolio · Risk · Runtime · Order · tradingEngine · artemisExecutionGate · artemisOrchestrator · POST /api/v1/artemis/decision
+
+**ACCEPTANCE CRITERIA:**
+1. Canonical Liquidity Source of Truth identified and reused (no parallel SoT)
+2. Liquidity evidence projectable into Control Chain `liquidityEvidenceRef` / `liquidityGate`
+3. `EXECUTION_FEASIBILITY` semantics explicit and bounded
+4. Missing/unavailable/stale/expired/malformed/blocked Liquidity data fails closed
+5. proposedSize > maxFeasibleSize fails closed when both are truthful
+6. Insufficient depth / excessive spread/slippage/impact fail closed when thresholds are canonically defined
+7. Portfolio proposed-size may be consumed; Portfolio max cannot be increased
+8. Direction and execution authority cannot enter Liquidity control output
+9. Lineage and provenance remain canonical and cannot be spoofed
+10. Unknown/forbidden fields rejected
+11. No LLM/provider/network/database/Redis/order/financial side effects
+12. Existing Stage 7.3.1 + Risk 7.3.2.a/b/c.1/c.2 + C.3 regression remains green
+13. Dedicated negative-path tests cover authority escalation and fail-closed behavior
+14. Implementation remains library-only; no runtime activation
+15. Absent truthful order-book owner → BLOCKED/UNAVAILABLE, never fabricated feasibility
+
+**STOP CONDITIONS (report; do not expand):** new DB migration · new Redis authority · new credential/provider · real provider access · LLM access · runtime safety semantics change · Order/Runtime integration required · ambiguous Liquidity Source of Truth · Liquidity direction authority discovered · closed Stage 7.2 / Risk / C.3 surfaces must change · fail-closed cannot be preserved · conflict with Core Rules v4.7 · truthful metrics require unauthorized network/provider calls
+
+This Rule 02 governance transaction authorizes **only** the exact C.4 library/contract slice above. It does **not** start C.4 implementation by itself beyond authorization. It does **not** authorize C.5. It does **not** deploy, restart, or mutate production. It does **not** enable Live trading, provider/LLM access, Order/Runtime activation, ACCP, Autonomous Ops, or Multi-AI Council.
 
 ### Artemis Core Stage 5 — CLOSED / ORCHESTRATION DISCOVERY COMPLETE (20260902)
 
@@ -1154,7 +1231,7 @@ Current outcome:
 
 All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots below are **HISTORICAL EVIDENCE ONLY** and **MUST NOT** override this current snapshot. In particular, any historical occurrence of `T2_REAUTH_READY = YES`, `ENGINE_ONLINE_COUNT = 2`, `ENGINE_TOPOLOGY_2_TO_1 = NOT_COMPLETE / NOT_EXECUTED`, `PRODUCTION_REAUTH_REQUIRED`, `T2_RETRY_AUTHORIZED = YES`, `C2_052 = NOT EXECUTED`, `C2_052_OWNER_ONE_SHOT`, `FULL_TELEGRAM_C2_MAJOR_MILESTONE = OPEN`, `C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO`, `READY_FOR_SEPARATE_OWNER_AUTH`, `Human Browser QA pending`, or `M4 IN PROGRESS` must be interpreted only within its explicitly historical section.
 
-**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / ARTEMIS CORE STAGE 1–6 CLOSED / STAGE 7 IN_PROGRESS / STAGE_7_3_2_C_3 PORTFOLIO CONTROL_SIZING CLOSED IMPLEMENTED MERGED AUDIT PASS HUMAN_QA PASS / STAGE_7_3_2_C_4 ENTRY NOT AUTHORIZED / PRODUCTION_MUTATION_CAPABILITY CLOSED / LIVE_EXECUTION NOT AUTHORIZED / MODEL_PROVIDER NOT AUTHORIZED**
+**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / ARTEMIS CORE STAGE 1–6 CLOSED / STAGE 7 IN_PROGRESS / STAGE_7_3_2_C_3 PORTFOLIO CONTROL_SIZING CLOSED IMPLEMENTED MERGED AUDIT PASS HUMAN_QA PASS / STAGE_7_3_2_C_4 LIQUIDITY EXECUTION_FEASIBILITY AUTHORIZED NOT_STARTED / STAGE_7_3_2_C_5 NOT AUTHORIZED / PRODUCTION_MUTATION_CAPABILITY CLOSED / LIVE_EXECUTION NOT AUTHORIZED / MODEL_PROVIDER NOT AUTHORIZED**
 
 **RIOIR_RESULT = COMPLETED**
 **RIOIR_RUN_ID = RIOIR-20260830T072328Z**
@@ -1177,17 +1254,21 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **ARTEMIS_CORE_STAGE_6 = CLOSED / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED**
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STARTED = YES / CLOSED**
-**ARTEMIS_CORE_STAGE_7 = IN_PROGRESS / 7.3.2.c.3 CLOSED / 7.3.2.c.4 ENTRY**
-**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = NO**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**ARTEMIS_CORE_STAGE_7 = IN_PROGRESS / 7.3.2.c.3 CLOSED / 7.3.2.c.4 ACTIVE**
+**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = YES**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
 **STAGE_7_STARTED = YES**
 **STAGE_6_STATUS = CLOSED**
 **STAGE_7_STATUS = IN_PROGRESS**
 **STAGE_7_3_2_C_3_STATUS = CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**
 **STAGE_7_3_2_C_3_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = NO**
+**STAGE_7_3_2_C_4_STATUS = AUTHORIZED / NOT_STARTED**
+**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**STAGE_7_3_2_C_5_STATUS = NOT_STARTED / NOT AUTHORIZED**
+**STAGE_7_3_2_C_5_IMPLEMENTATION_AUTHORIZED = NO**
 **HUMAN_QA_C3 = PASS**
+**C4_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**C5_AUTHORIZATION = NO**
 **ARTEMIS_DECISION_LAYER = NOT_IMPLEMENTED**
 **EXECUTION_CHAIN = NOT_IMPLEMENTED**
 **LIVE_TRADING = DISABLED**
@@ -1292,7 +1373,7 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **DO_NOT_ADVANCE_TO_B1 = NO / B1 DEPLOY CONSUMED**
 
-**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_4**
+**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_5**
 **C2_052_EXECUTION_AUTHORIZED = NO / CONSUMED**
 **TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
 **TELEGRAM_LIVENESS_STAGE = CLOSED**
@@ -1300,17 +1381,20 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **HUMAN_BROWSER_QA = PASS**
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STARTED = YES / CLOSED**
-**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = NO**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = YES**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
 **STAGE_7_STARTED = YES**
 **STAGE_6_STATUS = CLOSED**
 **STAGE_7_STATUS = IN_PROGRESS**
 **STAGE_7_3_2_C_3_STATUS = CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**
 **STAGE_7_3_2_C_3_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = NO**
+**STAGE_7_3_2_C_4_STATUS = AUTHORIZED / NOT_STARTED**
+**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**STAGE_7_3_2_C_5_STATUS = NOT_STARTED / NOT AUTHORIZED**
+**STAGE_7_3_2_C_5_IMPLEMENTATION_AUTHORIZED = NO**
 **HUMAN_QA_C3 = PASS**
-**C4_AUTHORIZATION = NO**
+**C4_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**C5_AUTHORIZATION = NO**
 **ARTEMIS_DECISION_LAYER = NOT_IMPLEMENTED**
 **EXECUTION_CHAIN = NOT_IMPLEMENTED**
 **LIVE_TRADING = DISABLED**
@@ -1326,13 +1410,13 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
 Current area:
-Artemis Core Completion — Stage 7.3.2.c.3 Portfolio CONTROL_SIZING CLOSED; Stage 7.3.2.c.4 ENTRY NOT AUTHORIZED
+Artemis Core Completion — Stage 7.3.2.c.3 Portfolio CONTROL_SIZING CLOSED; Stage 7.3.2.c.4 Liquidity EXECUTION_FEASIBILITY AUTHORIZED / NOT_STARTED
 
 Current program slice:
-ARTEMIS_CORE_COMPLETION / ARTEMIS_CORE_STAGE_7_3_2_C_4 (entry only; implementation not authorized)
+ARTEMIS_CORE_COMPLETION / ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY (exact slice only)
 
 Risk context:
-Tier 3 governance closeout only for Stage 7.3.2.c.3 (CLOSED); Stage 7.3.2.c.4 entry not authorized; Production Mutation Capability CLOSED; Live/LLM/provider/deployment not authorized
+Tier 3; C.4 library/contract Liquidity EXECUTION_FEASIBILITY boundary authorized; Production Mutation Capability CLOSED; Live/LLM/provider/deployment/C.5 not authorized
 
 ## Durable provenance
 
@@ -4027,21 +4111,24 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 ## Next Owner gate
 
 **PRIMARY ROADMAP = Artemis Core Completion (15 stages) → Post-Core Agents → Settings/AI Provider → Council/Memory → Autonomous Ops → ACCP**
-**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_4**
-**ARTEMIS IMPLEMENTATION AUTHORIZED = NO**
+**NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_5**
+**ARTEMIS IMPLEMENTATION AUTHORIZED = YES — EXACT SLICE ONLY**
 **STAGE_6_STARTED = YES / CLOSED**
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STATUS = CLOSED**
 **STAGE_7_STARTED = YES**
-**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = NO**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = YES**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = ARTEMIS_CORE_STAGE_7_3_2_C_4_LIQUIDITY_EXECUTION_FEASIBILITY_BOUNDARY**
 **STAGE_7_STATUS = IN_PROGRESS**
 **STAGE_7_3_2_C_3_STATUS = CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**
 **STAGE_7_3_2_C_3_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **HUMAN_QA_C3 = PASS**
-**STAGE_7_3_2_C_4_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = NO**
-**C4_AUTHORIZATION = NO**
+**STAGE_7_3_2_C_4_STATUS = AUTHORIZED / NOT_STARTED**
+**STAGE_7_3_2_C_4_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**C4_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**STAGE_7_3_2_C_5_STATUS = NOT_STARTED / NOT AUTHORIZED**
+**STAGE_7_3_2_C_5_IMPLEMENTATION_AUTHORIZED = NO**
+**C5_AUTHORIZATION = NO**
 **ARTEMIS_DECISION_LAYER = NOT_IMPLEMENTED**
 **EXECUTION_CHAIN = NOT_IMPLEMENTED**
 **LIVE_TRADING = DISABLED**
@@ -4051,7 +4138,7 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **LIVE_TRADING_ENABLED = NO**
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
-C.3 is formally closed by Owner Human-QA PASS. C.4 remains **not** authorized by this Rule 02 update. Liquidity / Runtime / Order execution remain unauthorized.
+C.3 is formally closed by Owner Human-QA PASS. C.4 is **authorized** for the exact Liquidity `EXECUTION_FEASIBILITY` library/contract slice only. C.5 remains **not** authorized. Liquidity runtime activation / Order / Runtime / Live / LLM / provider remain unauthorized.
 
 Historical T2/B1/C2 Owner-gate subsections below remain **HISTORICAL EVIDENCE ONLY**.
 
