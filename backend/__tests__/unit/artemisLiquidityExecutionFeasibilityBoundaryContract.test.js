@@ -682,6 +682,54 @@ describe('artemisLiquidityExecutionFeasibilityBoundaryContract — C.4', () => {
     expect(result.artifact.liquidityEvidenceRef.outcome).not.toBe(LIQUIDITY_GATE_OUTCOME.FEASIBLE);
   });
 
+  it('missing freshness → fail-closed (no FEASIBLE / no fabrication)', () => {
+    const evidence = baseLiquidityEvidence();
+    delete evidence.freshness;
+    const result = projectLiquidityEvidenceRef(baseInput({ liquidityEvidence: evidence }));
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_INPUT');
+    expect(result.errors.some((e) => (
+      e.field === 'liquidityEvidence.freshness' && e.code === 'missing_freshness'
+    ))).toBe(true);
+    expect(result.artifact).toBeUndefined();
+    expect(result.liquidityEvidenceRef).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(LIQUIDITY_GATE_OUTCOME.FEASIBLE);
+    expect(JSON.stringify(result)).not.toMatch(/"freshness"\s*:\s*"(fresh|stale|expired|unknown|unavailable)"/);
+    expect(result).not.toHaveProperty('sideEffects');
+  });
+
+  it('malformed freshness → fail-closed (no normalization / no FEASIBLE)', () => {
+    const malformedForms = [
+      {},
+      { status: FRESHNESS_STATUS.FRESH, extra: true },
+      42,
+      true,
+      ['fresh'],
+    ];
+    for (const freshness of malformedForms) {
+      const result = projectLiquidityEvidenceRef(baseInput({
+        liquidityEvidence: baseLiquidityEvidence({ freshness }),
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe('INVALID_INPUT');
+      expect(result.errors.some((e) => (
+        e.field === 'liquidityEvidence.freshness' && e.code === 'malformed_freshness'
+      ))).toBe(true);
+      expect(result.artifact).toBeUndefined();
+      expect(result.liquidityEvidenceRef).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain(`"outcome":"${LIQUIDITY_GATE_OUTCOME.FEASIBLE}"`);
+      // Must not silently reinterpret malformed input as a canonical freshness status.
+      expect(result.errors.some((e) => e.code === 'missing_freshness')).toBe(false);
+      expect(result).not.toHaveProperty('sideEffects');
+    }
+
+    const validation = validateLiquidityFeasibilityInput(baseInput({
+      liquidityEvidence: baseLiquidityEvidence({ freshness: { status: FRESHNESS_STATUS.FRESH, extra: 1 } }),
+    }));
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((e) => e.code === 'malformed_freshness')).toBe(true);
+  });
+
   it('exports policy/version constants for audit', () => {
     expect(LIQUIDITY_FEASIBILITY_POLICY_VERSION).toContain('c4');
     expect(LIQUIDITY_FEASIBILITY_METHOD_KEY).toBe('project_liquidity_evidence_ref_fail_closed');
