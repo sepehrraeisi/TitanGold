@@ -154,6 +154,57 @@ describe('artemisPortfolioControlSizingBoundaryContract — Stage 7.3.2.c.3', ()
     expect(result.artifact.projectionNotes).toContain('risk_limit_capped_max');
   });
 
+  it('3A Risk LIMIT below Portfolio min fails closed (no usable contradictory bounds)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      portfolioEvidence: basePortfolioEvidence({
+        min: 0.3,
+        max: 0.5,
+        recommended: 0.4,
+      }),
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: 0.2,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.portfolioEvidenceRef.outcome).toBe(PORTFOLIO_GATE_OUTCOME.UNAVAILABLE);
+    expect(result.artifact.portfolioEvidenceRef.reasonKey).toBe('risk_limit_makes_bounds_contradictory');
+    expect(result.artifact.portfolioEvidenceRef.min).toBeUndefined();
+    expect(result.artifact.portfolioEvidenceRef.max).toBeUndefined();
+    expect(result.artifact.portfolioEvidenceRef.recommended).toBeUndefined();
+    expect(result.artifact.projectionNotes).toContain('risk_limit_contradictory_bounds');
+    expect(result.artifact.controlOutcome).toBe(CONTROL_OUTCOME.INSUFFICIENT_CONTROL_EVIDENCE);
+    // Must never emit usable contradictory artifact min=0.30 max=0.20 recommended=0.20
+    const ref = result.artifact.portfolioEvidenceRef;
+    expect(ref.min === 0.3 && ref.max === 0.2 && ref.recommended === 0.2).toBe(false);
+  });
+
+  it('3B Risk LIMIT equal to Portfolio min yields valid bounded result', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      portfolioEvidence: basePortfolioEvidence({
+        min: 0.3,
+        max: 0.5,
+        recommended: 0.4,
+      }),
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: 0.3,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.portfolioEvidenceRef.outcome).toBe(PORTFOLIO_GATE_OUTCOME.AVAILABLE);
+    expect(result.artifact.portfolioEvidenceRef.min).toBe(0.3);
+    expect(result.artifact.portfolioEvidenceRef.max).toBe(0.3);
+    expect(result.artifact.portfolioEvidenceRef.recommended).toBe(0.3);
+    expect(result.artifact.portfolioEvidenceRef.recommended)
+      .toBeLessThanOrEqual(result.artifact.portfolioEvidenceRef.max);
+    expect(result.artifact.portfolioEvidenceRef.min)
+      .toBeLessThanOrEqual(result.artifact.portfolioEvidenceRef.max);
+    expect(result.artifact.projectionNotes).toContain('risk_limit_capped_max');
+  });
+
   it('4 Risk REJECT blocks sizing', () => {
     const result = projectPortfolioEvidenceRef(baseInput({
       riskEvidenceRef: baseRiskRef({
@@ -342,6 +393,35 @@ describe('artemisPortfolioControlSizingBoundaryContract — Stage 7.3.2.c.3', ()
     }));
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.code === 'lineage_context_mismatch')).toBe(true);
+  });
+
+  it('21A lineage.agentId mismatch fails closed (no silent normalize)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'risk',
+        runId: RUN_ID,
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_agent_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21B lineage.runId mismatch fails closed (no silent normalize)', () => {
+    const OTHER_RUN = '33333333-3333-4333-8333-333333333333';
+    const result = projectPortfolioEvidenceRef(baseInput({
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: OTHER_RUN,
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_run_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
   });
 
   it('22 provenance mismatch', () => {

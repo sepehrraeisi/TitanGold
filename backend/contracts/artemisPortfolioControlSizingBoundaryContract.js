@@ -479,7 +479,11 @@ function validateRiskEvidenceRefShape(ref, errors) {
   return { outcome };
 }
 
-function validateCallerLineage(lineage, errors, decisionId, decisionContextId) {
+function validateCallerLineage(lineage, errors, {
+  decisionId,
+  decisionContextId,
+  portfolioEvidence,
+} = {}) {
   if (lineage == null) return;
   if (!assertAllowlist(lineage, ALLOWED_LINEAGE, 'lineage', errors)) return;
   if (lineage.decisionId != null && !isCanonicalUuid(lineage.decisionId)) {
@@ -526,6 +530,27 @@ function validateCallerLineage(lineage, errors, decisionId, decisionContextId) {
   }
   if (decisionContextId && lineage.decisionContextId && lineage.decisionContextId !== decisionContextId) {
     errors.push({ field: 'lineage.decisionContextId', code: 'lineage_context_mismatch' });
+  }
+
+  // Fail closed on spoofed Portfolio identity in caller lineage.
+  // Do not silently normalize mismatched agentId / runId.
+  const evidenceAgentId = portfolioEvidence?.agentId;
+  if (
+    lineage.agentId != null
+    && typeof lineage.agentId === 'string'
+    && evidenceAgentId != null
+    && lineage.agentId !== evidenceAgentId
+  ) {
+    errors.push({ field: 'lineage.agentId', code: 'lineage_agent_mismatch' });
+  }
+  const evidenceRunId = portfolioEvidence?.runId;
+  if (
+    lineage.runId != null
+    && typeof lineage.runId === 'string'
+    && evidenceRunId != null
+    && lineage.runId !== evidenceRunId
+  ) {
+    errors.push({ field: 'lineage.runId', code: 'lineage_run_mismatch' });
   }
 }
 
@@ -622,7 +647,11 @@ export function validatePortfolioSizingInput(input) {
     validateRiskEvidenceRefShape(input.riskEvidenceRef, errors);
   }
 
-  validateCallerLineage(input.lineage, errors, input.decisionId, input.decisionContextId);
+  validateCallerLineage(input.lineage, errors, {
+    decisionId: input.decisionId,
+    decisionContextId: input.decisionContextId,
+    portfolioEvidence: input.portfolioEvidence,
+  });
   validateCallerProvenance(input.provenance, errors);
 
   const recordedAt = input.provenance?.recordedAt ?? input.recordedAt;
@@ -641,6 +670,8 @@ export function validatePortfolioSizingInput(input) {
 }
 
 function buildLineage(input, evidence) {
+  // Canonical Portfolio identity is derived only from validated evidence.
+  // Caller lineage agentId/runId are never preferred over evidence (spoof fail-closed above).
   const lineage = {
     projectorContractVersion: PORTFOLIO_SIZING_CONTRACT_VERSION,
     policyVersion: PORTFOLIO_SIZING_POLICY_VERSION,
@@ -655,8 +686,8 @@ function buildLineage(input, evidence) {
   if (input.decisionContextId != null) lineage.decisionContextId = input.decisionContextId;
   if (input.lineage?.decisionId != null) lineage.decisionId = input.lineage.decisionId;
   if (input.lineage?.decisionContextId != null) lineage.decisionContextId = input.lineage.decisionContextId;
+  // Only fill runId from caller lineage when evidence itself has no runId.
   if (input.lineage?.runId != null && lineage.runId == null) lineage.runId = input.lineage.runId;
-  if (input.lineage?.agentId != null) lineage.agentId = input.lineage.agentId;
   if (Array.isArray(input.lineage?.contributingAgentRunIds)) {
     lineage.contributingAgentRunIds = [...input.lineage.contributingAgentRunIds];
   }
