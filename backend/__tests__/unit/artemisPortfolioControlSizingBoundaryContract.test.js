@@ -83,6 +83,8 @@ function baseInput(overrides = {}) {
     decisionContextId: CONTEXT_ID,
     sourceEvidenceId: SOURCE_EVIDENCE_ID,
     sourceContractVersion: 'artemis-evidence-1.0.0',
+    // Canonical SoT for orchestration identity (lineage must match when present).
+    orchestrationSetIds: ['orch-set-1'],
     lineage: {
       decisionId: DECISION_ID,
       decisionContextId: CONTEXT_ID,
@@ -421,6 +423,135 @@ describe('artemisPortfolioControlSizingBoundaryContract — Stage 7.3.2.c.3', ()
     }));
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.code === 'lineage_run_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21C sourceEvidenceId mismatch fails closed (no silent prefer)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      sourceEvidenceId: SOURCE_EVIDENCE_ID,
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        contributingAgentRunIds: [RUN_ID],
+        orchestrationSetIds: ['orch-set-1'],
+        sourceEvidenceId: 'spoofed-portfolio-source-evidence',
+        sourceContractVersion: 'artemis-evidence-1.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_source_evidence_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21D sourceContractVersion mismatch fails closed (no silent prefer)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      sourceContractVersion: 'artemis-evidence-1.0.0',
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        contributingAgentRunIds: [RUN_ID],
+        orchestrationSetIds: ['orch-set-1'],
+        sourceEvidenceId: SOURCE_EVIDENCE_ID,
+        sourceContractVersion: 'spoofed-contract-9.9.9',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_source_contract_version_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21E contributingAgentRunIds with Risk/unrelated run fails closed (no silent filter)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        contributingAgentRunIds: [RUN_ID, RISK_RUN_ID],
+        orchestrationSetIds: ['orch-set-1'],
+        sourceEvidenceId: SOURCE_EVIDENCE_ID,
+        sourceContractVersion: 'artemis-evidence-1.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_contributing_agent_run_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21F orchestrationSetIds spoof fails closed (no silent filter)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      orchestrationSetIds: ['orch-set-1'],
+      lineage: {
+        decisionId: DECISION_ID,
+        decisionContextId: CONTEXT_ID,
+        agentId: 'portfolio',
+        runId: RUN_ID,
+        contributingAgentRunIds: [RUN_ID],
+        orchestrationSetIds: ['spoofed-moe-orch-set'],
+        sourceEvidenceId: SOURCE_EVIDENCE_ID,
+        sourceContractVersion: 'artemis-evidence-1.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'lineage_orchestration_set_mismatch')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21G Portfolio AVAILABLE + freshness UNAVAILABLE fails closed (no usable sizing)', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      portfolioEvidence: basePortfolioEvidence({
+        outcome: 'AVAILABLE',
+        freshness: FRESHNESS_STATUS.UNAVAILABLE,
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.portfolioEvidenceRef.outcome).toBe(PORTFOLIO_GATE_OUTCOME.UNAVAILABLE);
+    expect(result.artifact.portfolioEvidenceRef.min).toBeUndefined();
+    expect(result.artifact.portfolioEvidenceRef.max).toBeUndefined();
+    expect(result.artifact.portfolioEvidenceRef.recommended).toBeUndefined();
+    expect(result.artifact.projectionNotes).toContain('freshness_blocked_available');
+  });
+
+  it('21H Risk LIMIT negative fails closed', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: -0.1,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21I Risk LIMIT NaN fails closed', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: Number.NaN,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
+    expect(result.artifact).toBeUndefined();
+  });
+
+  it('21J Risk LIMIT Infinity fails closed', () => {
+    const result = projectPortfolioEvidenceRef(baseInput({
+      riskEvidenceRef: baseRiskRef({
+        outcome: RISK_GATE_OUTCOME.LIMIT,
+        limit: Number.POSITIVE_INFINITY,
+        reasonKey: 'risk_level_limits',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_limit')).toBe(true);
     expect(result.artifact).toBeUndefined();
   });
 

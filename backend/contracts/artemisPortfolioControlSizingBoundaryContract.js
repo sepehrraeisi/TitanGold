@@ -139,6 +139,7 @@ const ALLOWED_INPUT_TOP = Object.freeze([
   'recordedAt',
   'sourceContractVersion',
   'sourceEvidenceId',
+  'orchestrationSetIds',
 ]);
 
 const ALLOWED_LINEAGE = Object.freeze([
@@ -479,10 +480,19 @@ function validateRiskEvidenceRefShape(ref, errors) {
   return { outcome };
 }
 
+function sameStringArray(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
 function validateCallerLineage(lineage, errors, {
   decisionId,
   decisionContextId,
   portfolioEvidence,
+  sourceEvidenceId,
+  sourceContractVersion,
+  orchestrationSetIds,
+  riskEvidenceRef: _riskEvidenceRef,
 } = {}) {
   if (lineage == null) return;
   if (!assertAllowlist(lineage, ALLOWED_LINEAGE, 'lineage', errors)) return;
@@ -551,6 +561,67 @@ function validateCallerLineage(lineage, errors, {
     && lineage.runId !== evidenceRunId
   ) {
     errors.push({ field: 'lineage.runId', code: 'lineage_run_mismatch' });
+  }
+
+  // sourceEvidenceId: both present → must be identical (no silent prefer).
+  if (
+    sourceEvidenceId != null
+    && typeof sourceEvidenceId === 'string'
+    && lineage.sourceEvidenceId != null
+    && typeof lineage.sourceEvidenceId === 'string'
+    && sourceEvidenceId !== lineage.sourceEvidenceId
+  ) {
+    errors.push({ field: 'lineage.sourceEvidenceId', code: 'lineage_source_evidence_mismatch' });
+  }
+
+  // sourceContractVersion: both present → must be identical (no silent prefer).
+  if (
+    sourceContractVersion != null
+    && typeof sourceContractVersion === 'string'
+    && lineage.sourceContractVersion != null
+    && typeof lineage.sourceContractVersion === 'string'
+    && sourceContractVersion !== lineage.sourceContractVersion
+  ) {
+    errors.push({
+      field: 'lineage.sourceContractVersion',
+      code: 'lineage_source_contract_version_mismatch',
+    });
+  }
+
+  // contributingAgentRunIds: every entry must be authorized by Portfolio evidence.runId.
+  // Do not silently filter unauthorized (e.g. Risk) run IDs — reject the whole input.
+  // riskEvidenceRef.runId is never an authorized Portfolio contributor (authorized set is Portfolio-only).
+  if (Array.isArray(lineage.contributingAgentRunIds)) {
+    const authorized = new Set();
+    if (typeof evidenceRunId === 'string' && isCanonicalUuid(evidenceRunId)) {
+      authorized.add(evidenceRunId);
+    }
+    for (let index = 0; index < lineage.contributingAgentRunIds.length; index += 1) {
+      const id = lineage.contributingAgentRunIds[index];
+      if (typeof id !== 'string' || !isCanonicalUuid(id)) continue; // invalid_uuid already recorded
+      if (!authorized.has(id)) {
+        errors.push({
+          field: `lineage.contributingAgentRunIds[${index}]`,
+          code: 'lineage_contributing_agent_run_mismatch',
+        });
+      }
+    }
+  }
+
+  // orchestrationSetIds: must match canonical top-level orchestrationSetIds when present.
+  // Lineage-only orchestration identities cannot be validated against Portfolio evidence → fail closed.
+  if (Array.isArray(lineage.orchestrationSetIds)) {
+    if (!Array.isArray(orchestrationSetIds)) {
+      errors.push({
+        field: 'lineage.orchestrationSetIds',
+        code: 'lineage_orchestration_set_mismatch',
+      });
+    } else if (!sameStringArray(lineage.orchestrationSetIds, orchestrationSetIds)) {
+      errors.push({
+        field: 'lineage.orchestrationSetIds',
+        code: 'lineage_orchestration_set_mismatch',
+      });
+    }
   }
 }
 
@@ -635,6 +706,18 @@ export function validatePortfolioSizingInput(input) {
   assertString('sourceContractVersion', input.sourceContractVersion, errors);
   assertString('sourceEvidenceId', input.sourceEvidenceId, errors);
 
+  if (input.orchestrationSetIds != null) {
+    if (!Array.isArray(input.orchestrationSetIds)) {
+      errors.push({ field: 'orchestrationSetIds', code: 'invalid_array' });
+    } else {
+      input.orchestrationSetIds.forEach((id, index) => {
+        if (typeof id !== 'string' || !id.trim()) {
+          errors.push({ field: `orchestrationSetIds[${index}]`, code: 'invalid_string' });
+        }
+      });
+    }
+  }
+
   if (!input.portfolioEvidence) {
     errors.push({ field: 'portfolioEvidence', code: 'required' });
   } else {
@@ -651,6 +734,10 @@ export function validatePortfolioSizingInput(input) {
     decisionId: input.decisionId,
     decisionContextId: input.decisionContextId,
     portfolioEvidence: input.portfolioEvidence,
+    sourceEvidenceId: input.sourceEvidenceId,
+    sourceContractVersion: input.sourceContractVersion,
+    orchestrationSetIds: input.orchestrationSetIds,
+    riskEvidenceRef: input.riskEvidenceRef,
   });
   validateCallerProvenance(input.provenance, errors);
 
@@ -670,8 +757,8 @@ export function validatePortfolioSizingInput(input) {
 }
 
 function buildLineage(input, evidence) {
-  // Canonical Portfolio identity is derived only from validated evidence.
-  // Caller lineage agentId/runId are never preferred over evidence (spoof fail-closed above).
+  // Canonical Portfolio identity is derived only from validated evidence / top-level SoT.
+  // Caller lineage is never copied wholesale; mismatches already fail closed above.
   const lineage = {
     projectorContractVersion: PORTFOLIO_SIZING_CONTRACT_VERSION,
     policyVersion: PORTFOLIO_SIZING_POLICY_VERSION,
@@ -686,14 +773,21 @@ function buildLineage(input, evidence) {
   if (input.decisionContextId != null) lineage.decisionContextId = input.decisionContextId;
   if (input.lineage?.decisionId != null) lineage.decisionId = input.lineage.decisionId;
   if (input.lineage?.decisionContextId != null) lineage.decisionContextId = input.lineage.decisionContextId;
-  // Only fill runId from caller lineage when evidence itself has no runId.
+  // Only fill runId from caller lineage when evidence itself has no runId (and validated).
   if (input.lineage?.runId != null && lineage.runId == null) lineage.runId = input.lineage.runId;
+
+  // contributingAgentRunIds: only after fail-closed authorization against evidence.runId.
   if (Array.isArray(input.lineage?.contributingAgentRunIds)) {
     lineage.contributingAgentRunIds = [...input.lineage.contributingAgentRunIds];
   }
-  if (Array.isArray(input.lineage?.orchestrationSetIds)) {
-    lineage.orchestrationSetIds = [...input.lineage.orchestrationSetIds];
+
+  // orchestrationSetIds: rebuild from validated top-level canonical SoT only.
+  if (Array.isArray(input.orchestrationSetIds)) {
+    lineage.orchestrationSetIds = [...input.orchestrationSetIds];
   }
+
+  // sourceEvidenceId / sourceContractVersion: prefer top-level only when lineage absent
+  // (when both present they were required identical by validation).
   const sourceEvidenceId = input.sourceEvidenceId ?? input.lineage?.sourceEvidenceId;
   if (sourceEvidenceId != null) lineage.sourceEvidenceId = sourceEvidenceId;
   const sourceContractVersion = input.sourceContractVersion ?? input.lineage?.sourceContractVersion;
