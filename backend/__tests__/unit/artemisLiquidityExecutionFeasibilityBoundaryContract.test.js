@@ -307,6 +307,22 @@ describe('artemisLiquidityExecutionFeasibilityBoundaryContract — C.4', () => {
     expect(result.artifact.measuredMetrics).toBeNull();
   });
 
+  it('missing proposedSize → BLOCKED / missing_required_liquidity_metric (no fabrication / no FEASIBLE)', () => {
+    const evidence = baseLiquidityEvidence();
+    delete evidence.proposedSize;
+    expect(Object.prototype.hasOwnProperty.call(evidence, 'proposedSize')).toBe(false);
+
+    const result = projectLiquidityEvidenceRef(baseInput({ liquidityEvidence: evidence }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.liquidityEvidenceRef.outcome).toBe(LIQUIDITY_GATE_OUTCOME.BLOCKED);
+    expect(result.artifact.liquidityEvidenceRef.outcome).not.toBe(LIQUIDITY_GATE_OUTCOME.FEASIBLE);
+    expect(result.artifact.liquidityEvidenceRef.reasonKey).toBe('missing_required_liquidity_metric');
+    expect(result.artifact.measuredMetrics).toBeNull();
+    expect(result.artifact.liquidityEvidenceRef.proposedSize).toBeUndefined();
+    expect(JSON.stringify(result.artifact)).not.toContain('"proposedSize":');
+    expect(result.artifact.sideEffects).toEqual(ZERO_LIQUIDITY_FEASIBILITY_SIDE_EFFECTS);
+  });
+
   it('15. missing/unknown venue state → BLOCKED', () => {
     const missing = projectLiquidityEvidenceRef(baseInput({
       liquidityEvidence: baseLiquidityEvidence({ venueState: undefined }),
@@ -588,6 +604,32 @@ describe('artemisLiquidityExecutionFeasibilityBoundaryContract — C.4', () => {
       identity: undefined,
     }));
     expect(buySide.ok).toBe(false);
+  });
+
+  it('action contamination → fail-closed (no silent filter / no FEASIBLE)', () => {
+    const input = baseInput({ action: 'BUY' });
+    const validation = validateLiquidityFeasibilityInput(input);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((e) => (
+      String(e.field || '').includes('action')
+      && (
+        e.code === 'direction_forbidden'
+        || e.code === 'execution_contamination'
+        || e.code === 'execution_authority_forbidden'
+        || e.code === 'unknown_field'
+      )
+    ))).toBe(true);
+
+    const projected = projectLiquidityEvidenceRef(input);
+    expect(projected.ok).toBe(false);
+    expect(projected.code).toBe('INVALID_INPUT');
+    expect(projected.artifact).toBeUndefined();
+    expect(projected.liquidityEvidenceRef).toBeUndefined();
+    expect(JSON.stringify(projected)).not.toContain(`"outcome":"${LIQUIDITY_GATE_OUTCOME.FEASIBLE}"`);
+    // Contamination must remain visible as a rejection — not silently dropped before validation.
+    expect(Object.prototype.hasOwnProperty.call(input, 'action')).toBe(true);
+    expect(input.action).toBe('BUY');
+    expect(projected).not.toHaveProperty('sideEffects');
   });
 
   it('34. order/execution/wallet contamination → fail-closed', () => {
