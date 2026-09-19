@@ -92,7 +92,7 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. Stage 7.3.2.c.3 Portfolio `CONTROL_SIZING` is **CLOSED**. Stage 7.3.2.c.4 Liquidity `EXECUTION_FEASIBILITY` is **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**. The only currently authorized Stage 7 implementation slice is `ARTEMIS_CORE_STAGE_7_3_2_C_5_RUNTIME_CAPABILITY_BOUNDARY` (`RUNTIME_CAPABILITY_BOUNDARY`, authority `RUNTIME_SAFETY`, Tier 3, library-only). `NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_6` — C.6 itself is **not** authorized. This does **not** authorize Live trading, real execution, Order Management, runtime mutation, Emergency Stop clearing, LLM/provider access, network calls, or deployment.
+Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. Stage 7.3.2.c.3 Portfolio `CONTROL_SIZING`, Stage 7.3.2.c.4 Liquidity `EXECUTION_FEASIBILITY`, and Stage 7.3.2.c.5 Runtime `RUNTIME_CAPABILITY_BOUNDARY` are **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**. No Stage 7 implementation slice is currently authorized. `NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_6` only — C.6 itself is **not** authorized. This does **not** authorize Live trading, real execution, Order Management, runtime mutation, Emergency Stop clearing, LLM/provider access, network calls, or deployment.
 
 ### Artemis Core Stage 7.3.2.c.3 — CLOSED / PORTFOLIO CONTROL_SIZING COMPLETE (20260911)
 
