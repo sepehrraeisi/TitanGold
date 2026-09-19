@@ -314,6 +314,108 @@ describe('Stage 7.3.2.c.5 Runtime Capability boundary', () => {
       .toBe(true);
   });
 
+  it('rejects lineage contributingAgentRunIds mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      contributingAgentRunIds: [RUN_ID],
+      lineage: {
+        ...baseInput().lineage,
+        contributingAgentRunIds: ['22222222-2222-4222-8222-222222222222'],
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'lineage_contributing_agent_run_mismatch')).toBe(true);
+    expect(result.errors.every((e) => e.code !== 'fabricated_clear')).toBe(true);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(ZERO_RUNTIME_CAPABILITY_SIDE_EFFECTS.dbWriteCount).toBe(0);
+  });
+
+  it('rejects lineage orchestrationSetIds mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      orchestrationSetIds: [ORCH_ID],
+      lineage: {
+        ...baseInput().lineage,
+        orchestrationSetIds: ['44444444-4444-4444-8444-444444444444'],
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'lineage_orchestration_set_mismatch')).toBe(true);
+  });
+
+  it('rejects lineage sourceContractVersion mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      sourceContractVersion: SOURCE_CONTRACT_VERSION,
+      lineage: {
+        ...baseInput().lineage,
+        sourceContractVersion: 'artemis-evidence-spoofed-0.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'lineage_source_contract_version_mismatch')).toBe(true);
+  });
+
+  it('rejects lineage evidenceContractVersion mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      lineage: {
+        ...baseInput().lineage,
+        evidenceContractVersion: 'artemis-evidence-spoofed-0.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'lineage_evidence_contract_version_mismatch')).toBe(true);
+  });
+
+  it('rejects lineage projectorContractVersion mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      lineage: {
+        ...baseInput().lineage,
+        projectorContractVersion: 'artemis-runtime-capability-spoofed-0.0.0',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'lineage_projector_contract_version_mismatch')).toBe(true);
+  });
+
+  it('rejects fabricated CLEAR without attested required SoT evidence', () => {
+    const missingEvidence = projectRuntimeSnapshot(baseInput({
+      runtimeEvidence: {},
+    }));
+    expect(missingEvidence.ok).toBe(false);
+    expect(missingEvidence.artifact).toBeUndefined();
+    expect(missingEvidence.errors.some((e) => e.code === 'missing_field')).toBe(true);
+    expect(JSON.stringify(missingEvidence)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+
+    const unattestedSsot = projectRuntimeSnapshot(baseInput({
+      runtimeEvidence: {
+        killSwitchActive: false,
+        requestedRuntimeMode: REQUESTED_RUNTIME_MODE.ADVISORY,
+        effectiveRuntimeMode: EFFECTIVE_RUNTIME_MODE.ADVISORY,
+        capabilityState: CAPABILITY_STATE.GRANTED,
+      },
+    }));
+    expect(unattestedSsot.ok).toBe(false);
+    expect(unattestedSsot.artifact).toBeUndefined();
+    expect(unattestedSsot.errors.some((e) => e.code === 'missing_field'
+      || e.code === 'invalid_ssot_owner')).toBe(true);
+    expect(JSON.stringify(unattestedSsot)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+
+    const injectedClearPreview = projectRuntimeSnapshot({
+      ...baseInput(),
+      runtimeGatePreview: { outcome: RUNTIME_GATE_OUTCOME.CLEAR },
+    });
+    expect(injectedClearPreview.ok).toBe(false);
+    expect(injectedClearPreview.artifact).toBeUndefined();
+    expect(injectedClearPreview.errors.some((e) => e.code === 'unknown_field'
+      && String(e.field).includes('runtimeGatePreview'))).toBe(true);
+    expect(JSON.stringify(injectedClearPreview)).not.toMatch(
+      /"runtimeSnapshot"\s*:\s*\{[^}]*"ssotAvailable"\s*:\s*true/,
+    );
+  });
+
   it('rejects provenance spoof (writer/method mismatch)', () => {
     const result = projectRuntimeSnapshot(baseInput({
       provenance: {
@@ -377,6 +479,95 @@ describe('Stage 7.3.2.c.5 Runtime Capability boundary', () => {
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.code === 'vote_contamination'
       || e.code === 'forbidden_key')).toBe(true);
+  });
+
+  it('rejects orderId contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      orderId: 'ord-fabricated-1',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+  });
+
+  it('rejects action contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      action: 'BUY',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'execution_authority_forbidden'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+  });
+
+  it('rejects side contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      side: 'BUY',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_authority_forbidden'
+      || e.code === 'unknown_field'
+      || e.code === 'forbidden_key')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+  });
+
+  it('rejects votes contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      votes: 5,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'vote_contamination'
+      || e.code === 'forbidden_key')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+  });
+
+  it('rejects majority contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      majority: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'vote_contamination'
+      || e.code === 'forbidden_key')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+  });
+
+  it('rejects weightedVote contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      weightedVote: { agentA: 0.6, agentB: 0.4 },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'vote_contamination'
+      || e.code === 'forbidden_key')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+  });
+
+  it('rejects consensus contamination', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      consensus: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'vote_contamination'
+      || e.code === 'forbidden_key')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
   });
 
   it('rejects MoE / ModelAssistedContribution', () => {
