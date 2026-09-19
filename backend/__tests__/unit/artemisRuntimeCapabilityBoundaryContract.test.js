@@ -461,6 +461,121 @@ describe('Stage 7.3.2.c.5 Runtime Capability boundary', () => {
       || e.code === 'execution_authority_forbidden')).toBe(true);
   });
 
+  it('dedicated BUY contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      BUY: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'direction_forbidden'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated SELL contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      SELL: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'direction_forbidden'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated LONG contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      LONG: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'direction_forbidden'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated SHORT contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      SHORT: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'direction_forbidden'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated direction contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      direction: 'BUY',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'direction_forbidden'
+      || e.code === 'execution_authority_forbidden'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated executionIntent contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      executionIntent: { place: true },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated walletAction contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      walletAction: { withdraw: true },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
   it('rejects order/execution/wallet contamination', () => {
     const result = projectRuntimeSnapshot({
       ...baseInput(),
@@ -588,6 +703,40 @@ describe('Stage 7.3.2.c.5 Runtime Capability boundary', () => {
       || e.code === 'forbidden_key')).toBe(true);
   });
 
+  it('dedicated MoE contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      MoE: { votes: 3 },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'legacy_moe_forbidden'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated ModelAssistedContribution contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      ModelAssistedContribution: { text: 'x' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'model_assisted_forbidden'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
   it('rejects providerPayload/credentials/apiKey/prompt/modelResponse', () => {
     for (const key of ['providerPayload', 'credentials', 'apiKey', 'prompt', 'modelResponse']) {
       const result = projectRuntimeSnapshot({
@@ -599,6 +748,181 @@ describe('Stage 7.3.2.c.5 Runtime Capability boundary', () => {
         || e.code === 'execution_contamination'
         || e.code === 'forbidden_secret_key')).toBe(true);
     }
+  });
+
+  it('dedicated providerPayload contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      providerPayload: 'secret-or-payload',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated credentials contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      credentials: 'secret-or-payload',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated apiKey contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      apiKey: 'secret-or-payload',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'forbidden_secret_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated prompt contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      prompt: 'secret-or-payload',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated modelResponse contamination rejects fail-closed without CLEAR or execution authority', () => {
+    const result = projectRuntimeSnapshot({
+      ...baseInput(),
+      modelResponse: 'secret-or-payload',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'execution_contamination'
+      || e.code === 'forbidden_key'
+      || e.code === 'unknown_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated provenance stage mismatch rejects fail-closed with provenance_mismatch', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      provenance: {
+        writer: RUNTIME_CAPABILITY_WRITER,
+        methodKey: RUNTIME_CAPABILITY_METHOD_KEY,
+        stage: 'spoofed_wrong_stage',
+        recordedAt: RECORDED_AT,
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.code === 'provenance_mismatch'
+      && String(e.field).includes('stage'))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated missing ssotAvailable rejects fail-closed without CLEAR or fabricated runtime snapshot', () => {
+    const evidence = clearEvidence();
+    delete evidence.ssotAvailable;
+    const result = projectRuntimeSnapshot(baseInput({ runtimeEvidence: evidence }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.field === 'runtimeEvidence.ssotAvailable'
+      && e.code === 'missing_field')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(JSON.stringify(result)).not.toMatch(/"runtimeSnapshot"\s*:\s*\{/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated missing ssotOwner rejects fail-closed without CLEAR or fabricated runtime snapshot', () => {
+    const evidence = clearEvidence();
+    delete evidence.ssotOwner;
+    const result = projectRuntimeSnapshot(baseInput({ runtimeEvidence: evidence }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.field === 'runtimeEvidence.ssotOwner'
+      && (e.code === 'missing_field' || e.code === 'invalid_ssot_owner'))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(JSON.stringify(result)).not.toMatch(/"runtimeSnapshot"\s*:\s*\{/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated missing killSwitchActive rejects fail-closed without CLEAR or fabricated runtime snapshot', () => {
+    const evidence = clearEvidence();
+    delete evidence.killSwitchActive;
+    const result = projectRuntimeSnapshot(baseInput({ runtimeEvidence: evidence }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.field === 'runtimeEvidence.killSwitchActive'
+      && (e.code === 'missing_field' || e.code === 'invalid_kill_switch'))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(JSON.stringify(result)).not.toMatch(/"runtimeSnapshot"\s*:\s*\{/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
+  });
+
+  it('dedicated malformed requested/effective runtime mode rejects fail-closed without CLEAR or fabricated runtime snapshot', () => {
+    const result = projectRuntimeSnapshot(baseInput({
+      runtimeEvidence: clearEvidence({
+        requestedRuntimeMode: 'bogus-requested-mode',
+        effectiveRuntimeMode: 'bogus-effective-mode',
+      }),
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.artifact).toBeUndefined();
+    expect(result.errors.some((e) => e.field === 'runtimeEvidence.requestedRuntimeMode'
+      && e.code === 'invalid_runtime_mode')).toBe(true);
+    expect(result.errors.some((e) => e.field === 'runtimeEvidence.effectiveRuntimeMode'
+      && e.code === 'invalid_runtime_mode')).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/"outcome"\s*:\s*"CLEAR"/);
+    expect(JSON.stringify(result)).not.toMatch(/"runtimeSnapshot"\s*:\s*\{/);
+    expect(REQUIRED_HARD_FLAGS.executionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.approvedForExecution).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.decisionEligible).toBe(false);
+    expect(REQUIRED_HARD_FLAGS.liveTradingEnabled).toBe(false);
   });
 
   it('does not require workerAcknowledgement for CLEAR', () => {
