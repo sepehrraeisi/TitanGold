@@ -4,7 +4,6 @@
 import { describe, expect, it } from '@jest/globals';
 
 import {
-  AUTHORITY_CLASS,
   CONFIRMATION_STATUS,
   REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION,
   EXECUTION_INTENT_OPERATION,
@@ -15,6 +14,7 @@ import {
   classifyProviderOutcome,
   validateExecutionIntentArtifact,
 } from '../../contracts/artemisOrderManagementExecutionBoundaryContract.js';
+import { AUTHORITY_CLASS } from '../../contracts/artemisEvidenceContract.js';
 
 const UUID_1 = '11111111-1111-4111-8111-111111111111';
 const UUID_2 = '22222222-2222-4222-8222-222222222222';
