@@ -4,6 +4,7 @@
 import { describe, expect, it } from '@jest/globals';
 
 import {
+  AUTHORITY_CLASS,
   CONFIRMATION_STATUS,
   REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION,
   EXECUTION_INTENT_OPERATION,
@@ -83,7 +84,7 @@ function fixture(overrides = {}) {
     controlOutcome: 'CONTROL_PASS_BOUNDED',
     riskEvidenceRef: {
       agentId: 'risk',
-      authorityClass: 'CONTROL_VETO',
+      authorityClass: AUTHORITY_CLASS.CONTROL_VETO,
       outcome: 'PASS',
       reasonKey: 'risk_pass',
       runId: UUID_1,
@@ -91,7 +92,7 @@ function fixture(overrides = {}) {
     },
     portfolioEvidenceRef: {
       agentId: 'portfolio',
-      authorityClass: 'CONTROL_SIZING',
+      authorityClass: AUTHORITY_CLASS.CONTROL_SIZING,
       outcome: 'AVAILABLE',
       reasonKey: 'portfolio_available',
       runId: UUID_2,
@@ -99,7 +100,7 @@ function fixture(overrides = {}) {
     },
     liquidityEvidenceRef: {
       agentId: 'liquidity',
-      authorityClass: 'EXECUTION_FEASIBILITY',
+      authorityClass: AUTHORITY_CLASS.EXECUTION_FEASIBILITY,
       outcome: 'FEASIBLE',
       reasonKey: 'liquidity_feasible',
       runId: UUID_3,
