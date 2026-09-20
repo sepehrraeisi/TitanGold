@@ -19,9 +19,9 @@ alwaysApply: true
 
 **CURRENT_MODULE = ARTEMIS_CORE_COMPLETION**
 
-**CURRENT_STAGE = ARTEMIS_CORE_STAGE_7_3_2_C_5**
+**CURRENT_STAGE = ARTEMIS_CORE_STAGE_7_3_2_C_6**
 
-**CURRENT_STAGE_PROGRESS = 6/15**
+**CURRENT_STAGE_PROGRESS = 7/15**
 
 **REMAINING_STAGES = 9**
 
@@ -53,10 +53,19 @@ alwaysApply: true
 **C5_AUTHORIZATION = NO / CONSUMED**
 **AUTHORITY_CLASS = RUNTIME_SAFETY**
 **RISK_TIER = Tier 3**
-**STAGE_7_3_2_C_6_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_6_IMPLEMENTATION_AUTHORIZED = NO**
-**C6_AUTHORIZATION = NO**
-**ORDER_MANAGEMENT = NOT AUTHORIZED**
+**STAGE_7_3_2_C_6_OFFICIAL_NAME = ORDER_MANAGEMENT_EXECUTION_BOUNDARY**
+**STAGE_7_3_2_C_6_STATUS = AUTHORIZED / NOT STARTED**
+**STAGE_7_3_2_C_6_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**C6_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**ORDER_MANAGEMENT = AUTHORIZED — EXACT C.6 SLICE ONLY**
+**C6_AUTHORITY_CLASS = EXECUTION**
+**C6_RISK_TIER = Tier 4**
+**C6_HUMAN_QA_MILESTONE = STAGE_7_3_2_C_6_ORDER_MANAGEMENT_BOUNDARY_COMPLETE**
+**C6_PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**C6_LIVE_EXECUTION = NOT AUTHORIZED**
+**C6_REAL_PROVIDER_REQUESTS = NOT AUTHORIZED**
+**C6_LLM = NOT AUTHORIZED**
+**C6_DEPLOY = NO**
 **RUNTIME_MUTATION = NO**
 **EMERGENCY_STOP_CLEAR = NO**
 **ARTEMIS_DECISION_LAYER = NOT_IMPLEMENTED**
@@ -92,7 +101,7 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. Stage 7.3.2.c.3 Portfolio `CONTROL_SIZING`, Stage 7.3.2.c.4 Liquidity `EXECUTION_FEASIBILITY`, and Stage 7.3.2.c.5 Runtime `RUNTIME_CAPABILITY_BOUNDARY` are **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS**. No Stage 7 implementation slice is currently authorized. `NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_6` only — C.6 itself is **not** authorized. This does **not** authorize Live trading, real execution, Order Management, runtime mutation, Emergency Stop clearing, LLM/provider access, network calls, or deployment.
+Artemis Core Stage 1 through Stage 6 are closed. Stage 7 remains in progress. C.3 Portfolio, C.4 Liquidity, and C.5 Runtime are closed. C.6 is now explicitly authorized for the exact ORDER_MANAGEMENT_EXECUTION_BOUNDARY library/contract slice only. This authorization does not authorize Live trading, real financial execution, real provider requests, runtime mutation, Emergency Stop clearing, LLM/provider activation, or deployment.
 
 ### Artemis Core Stage 7.3.2.c.3 — CLOSED / PORTFOLIO CONTROL_SIZING COMPLETE (20260911)
 
@@ -277,10 +286,20 @@ Canonical Runtime SoT identity
 - C.2 Risk Control Runtime Boundary is not duplicated or modified; C.1–C.4 semantics remain unchanged.
 
 **NEXT_GATE = ARTEMIS_CORE_STAGE_7_3_2_C_6**
-**C6_AUTHORIZATION = NO**
-**STAGE_7_3_2_C_6_STATUS = NOT_STARTED / NOT AUTHORIZED**
-**STAGE_7_3_2_C_6_IMPLEMENTATION_AUTHORIZED = NO**
-**ORDER_MANAGEMENT = NOT AUTHORIZED**
+**C6_AUTHORIZATION = YES — EXACT SLICE ONLY**
+**STAGE_7_3_2_C_6_STATUS = AUTHORIZED / NOT STARTED**
+**STAGE_7_3_2_C_6_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**ORDER_MANAGEMENT = AUTHORIZED — EXACT C.6 SLICE ONLY**
+**C6_OFFICIAL_NAME = ORDER_MANAGEMENT_EXECUTION_BOUNDARY**
+**C6_AUTHORITY_CLASS = EXECUTION**
+**C6_RISK_TIER = Tier 4**
+**C6_HUMAN_QA_MILESTONE = STAGE_7_3_2_C_6_ORDER_MANAGEMENT_BOUNDARY_COMPLETE**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**LIVE_EXECUTION = NOT AUTHORIZED**
+**REAL_PROVIDER_REQUESTS = NOT AUTHORIZED**
+**LLM = NOT AUTHORIZED**
+**NETWORK = NOT AUTHORIZED**
+**DEPLOY = NO**
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 **LIVE_EXECUTION = NOT AUTHORIZED**
 **MODEL_PROVIDER = NOT AUTHORIZED**
@@ -291,6 +310,29 @@ Canonical Runtime SoT identity
 **DEPLOY = NO**
 
 Historical C.5 authorization fields are superseded by this closeout. This governance transaction closes C.5 only; it does not authorize C.6, Order Management, execution, Live trading, provider/LLM access, runtime mutation, deployment, or any production mutation.
+
+### Artemis Core Stage 7.3.2.c.6 — AUTHORIZED / ORDER MANAGEMENT EXECUTION BOUNDARY
+
+**AUTHORIZED_SLICE = ARTEMIS_CORE_STAGE_7_3_2_C_6_ORDER_MANAGEMENT_EXECUTION_BOUNDARY**
+**SCOPE = library/contract boundary + deterministic tests; reuse existing Order/Exchange/Provider surfaces; no new parallel SoT**
+**AUTHORITY = EXECUTION mechanics only; no decision/thesis/Risk/Portfolio/Liquidity/Runtime authority**
+
+**ALLOWED:** Canonical Execution Intent validation; consume closed C.1–C.5 outputs without duplication; validate lineage/provenance, expiry, operation limits, confirmation, provider capability evidence and idempotency; define order lifecycle/reconciliation boundary; deterministic fake/paper/dry-run tests; classify and contain legacy order paths.
+
+**MUST NOT:** Send/cancel/modify real financial orders or real provider requests; activate Live trading, wallet/transfer/withdrawal, runtime mutation or Emergency Stop clearing; change C.1–C.5/Control Chain; create BUY/SELL thesis; bypass gates; activate LLM/network/DB/Redis/deploy; create parallel provider/exchange SoT.
+
+**ACCEPTANCE:** Execution Intent has canonical identity, lineage, provenance, expiry, idempotency key, operation limits, confirmation and audit owner; missing/invalid upstream gates or controls fail closed; duplicate intent cannot dispatch twice; unknown provider outcome cannot trigger blind retry; provider response/reconciliation remains traceable; legacy paths cannot bypass C.6; zero real side effects; C.1–C.5/Control Chain regressions green; Human QA required before closeout.
+
+**STOP CONDITIONS:** scope drift; any real provider/network/financial mutation; unauthorized change to C.1–C.5/Control Chain; missing field ownership; unsafe idempotency/retry semantics; unproven legacy bypass containment.
+
+**PROTECTED_SURFACES:** Core Rules, Rule 02, Control Chain, C.1–C.5, runtimeExecutionStateService mutation paths, orchestrator, executionGate, tradingEngine, provider credentials/config, production runtime.
+
+**C6_IMPLEMENTATION_STATUS = AUTHORIZED / NOT_STARTED**
+**C6_HUMAN_QA = REQUIRED / PENDING**
+**C6_CODE_CHANGES = NOT_STARTED**
+**C6_DEPLOY = NO**
+**C6_EXECUTION_ENABLED = NO**
+**C6_LIVE_TRADING_ENABLED = NO**
 
 ### Artemis Core Stage 5 — CLOSED / ORCHESTRATION DISCOVERY COMPLETE (20260902)
 
