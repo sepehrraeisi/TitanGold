@@ -109,6 +109,8 @@ function fixture(overrides = {}) {
     runtimeGate: {
       outcome: 'CLEAR',
       authorityClass: 'titangold_runtime_safety_ssot',
+      requestedRuntimeMode: 'paper',
+      effectiveRuntimeMode: 'paper',
       capabilityState: 'granted',
       killSwitchActive: false,
       ssotAvailable: true,
