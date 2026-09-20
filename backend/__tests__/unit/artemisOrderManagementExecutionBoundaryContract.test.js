@@ -182,6 +182,35 @@ describe('Artemis C.6 Execution Intent Boundary', () => {
     expect(result.status).toBe(EXECUTION_INTENT_STATUS.DUPLICATE);
   });
 
+  it('fails closed when deterministic evaluation time is missing', () => {
+    const input = fixture();
+    delete input.now;
+    const result = validateExecutionIntent(input);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'required_deterministic_timestamp')).toBe(true);
+  });
+
+  it('fails closed when runtime mode is live', () => {
+    const result = validateExecutionIntent(fixture({
+      runtimeGate: {
+        requestedRuntimeMode: 'live',
+        effectiveRuntimeMode: 'paper',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_runtime_mode')).toBe(true);
+  });
+
+  it('fails closed when runtime mode is malformed', () => {
+    const result = validateExecutionIntent(fixture({
+      runtimeGate: {
+        requestedRuntimeMode: 'not_a_runtime_mode',
+      },
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === 'invalid_runtime_mode')).toBe(true);
+  });
+
   it('never retries an unknown provider outcome', () => {
     const result = classifyProviderOutcome('timeout');
     expect(result.retryable).toBe(false);
