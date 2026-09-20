@@ -15,7 +15,9 @@ import {
   utf8ByteLength,
 } from './artemisEvidenceContract.js';
 import {
+  AUTHORITY_CLASS,
   CAPABILITY_STATE,
+  CONTROL_CHAIN_CONTRACT_VERSION,
   CONTROL_OUTCOME,
   LIQUIDITY_GATE_OUTCOME,
   PORTFOLIO_GATE_OUTCOME,
@@ -154,6 +156,8 @@ export const ZERO_SIDE_EFFECTS = Object.freeze({
   runtimeMutationCount: 0,
 });
 
+export const REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION = CONTROL_CHAIN_CONTRACT_VERSION;
+
 export const C6_LIMITATIONS = Object.freeze([
   'stage7_3_2_c6_execution_boundary_only',
   'library_only',
@@ -250,6 +254,13 @@ function validateTimestamp(value, field, errors, { required = false } = {}) {
     return;
   }
   if (!isIsoTimestamp(value)) errors.push({ field, code: 'invalid_timestamp' });
+}
+
+function expectedAuthorityForAgent(agentId) {
+  if (agentId === 'risk') return AUTHORITY_CLASS.CONTROL_VETO;
+  if (agentId === 'portfolio') return AUTHORITY_CLASS.CONTROL_SIZING;
+  if (agentId === 'liquidity') return AUTHORITY_CLASS.EXECUTION_FEASIBILITY;
+  return null;
 }
 
 function validateUpstreamGate(ref, field, expectedAgentId, allowedOutcomes, errors) {
@@ -350,6 +361,9 @@ function validateExecutionIntentShape(intent, errors) {
 
   if (!assertAllowlist(intent.lineage, ALLOWED_LINEAGE_FIELDS, 'executionIntent.lineage', errors)) return;
   assertString(intent.lineage.controlChainContractVersion, 'executionIntent.lineage.controlChainContractVersion', errors, { required: true, max: 128 });
+  if (intent.lineage.controlChainContractVersion !== CONTROL_CHAIN_CONTRACT_VERSION) {
+    errors.push({ field: 'executionIntent.lineage.controlChainContractVersion', code: 'unsupported_control_chain_contract_version' });
+  }
   for (const key of ['riskRunId', 'portfolioRunId', 'liquidityRunId', 'runtimeRunId']) {
     validateUuid(intent.lineage[key], `executionIntent.lineage.${key}`, errors, { required: true });
   }
@@ -373,6 +387,11 @@ function validateExecutionIntentShape(intent, errors) {
   }
 }
 
+const ALLOWED_RUNTIME_GATE_FIELDS = Object.freeze([
+  'authorityClass', 'outcome', 'killSwitchActive', 'requestedRuntimeMode',
+  'effectiveRuntimeMode', 'capabilityState', 'ssotAvailable', 'ssotOwner', 'reasonKey',
+]);
+
 function validateUpstreamGates(input, errors) {
   validateUpstreamGate(input.riskEvidenceRef, 'riskEvidenceRef', 'risk', new Set(Object.values(RISK_GATE_OUTCOME)), errors);
   validateUpstreamGate(input.portfolioEvidenceRef, 'portfolioEvidenceRef', 'portfolio', new Set(Object.values(PORTFOLIO_GATE_OUTCOME)), errors);
@@ -381,14 +400,21 @@ function validateUpstreamGates(input, errors) {
   if (!input.runtimeGate || typeof input.runtimeGate !== 'object') {
     errors.push({ field: 'runtimeGate', code: 'required_object' });
   } else {
+    assertAllowlist(input.runtimeGate, ALLOWED_RUNTIME_GATE_FIELDS, 'runtimeGate', errors);
     assertString(input.runtimeGate.outcome, 'runtimeGate.outcome', errors, { required: true, max: 64 });
     if (!Object.values(RUNTIME_GATE_OUTCOME).includes(input.runtimeGate.outcome)) {
       errors.push({ field: 'runtimeGate.outcome', code: 'invalid_outcome' });
     }
     assertString(input.runtimeGate.authorityClass, 'runtimeGate.authorityClass', errors, { required: true, max: 128 });
-    if (input.runtimeGate.outcome === RUNTIME_GATE_OUTCOME.CLEAR && input.runtimeGate.authorityClass !== 'titangold_runtime_safety_ssot') {
+    if (input.runtimeGate.authorityClass !== 'titangold_runtime_safety_ssot') {
       errors.push({ field: 'runtimeGate.authorityClass', code: 'invalid_runtime_authority' });
     }
+  }
+
+  if (input.runtimeGate.outcome === RUNTIME_GATE_OUTCOME.CLEAR) {
+    if (input.runtimeGate.killSwitchActive !== false) errors.push({ field: 'runtimeGate.killSwitchActive', code: 'clear_requires_false_kill_switch' });
+    if (input.runtimeGate.capabilityState !== CAPABILITY_STATE.GRANTED) errors.push({ field: 'runtimeGate.capabilityState', code: 'clear_requires_granted_capability' });
+    if (input.runtimeGate.ssotAvailable !== true) errors.push({ field: 'runtimeGate.ssotAvailable', code: 'clear_requires_available_ssot' });
   }
 
   if (input.controlOutcome != null && !Object.values(CONTROL_OUTCOME).includes(input.controlOutcome)) {
@@ -402,6 +428,15 @@ function checkUpstreamSafety(input, errors) {
   if (input.controlOutcome !== CONTROL_OUTCOME.CONTROL_PASS_BOUNDED) {
     reasons.push('control_chain_not_control_pass_bounded');
   }
+
+  if (input.riskEvidenceRef.authorityClass !== AUTHORITY_CLASS.CONTROL_VETO) reasons.push('risk_authority_invalid');
+  if (input.portfolioEvidenceRef.authorityClass !== AUTHORITY_CLASS.CONTROL_SIZING) reasons.push('portfolio_authority_invalid');
+  if (input.liquidityEvidenceRef.authorityClass !== AUTHORITY_CLASS.EXECUTION_FEASIBILITY) reasons.push('liquidity_authority_invalid');
+
+  if (input.executionIntent.lineage.riskRunId !== input.riskEvidenceRef.runId) reasons.push('risk_lineage_mismatch');
+  if (input.executionIntent.lineage.portfolioRunId !== input.portfolioEvidenceRef.runId) reasons.push('portfolio_lineage_mismatch');
+  if (input.executionIntent.lineage.liquidityRunId !== input.liquidityEvidenceRef.runId) reasons.push('liquidity_lineage_mismatch');
+  if (input.executionIntent.lineage.runtimeRunId && input.runtimeGate.runId && input.executionIntent.lineage.runtimeRunId !== input.runtimeGate.runId) reasons.push('runtime_lineage_mismatch');
 
   if (input.riskEvidenceRef.outcome !== RISK_GATE_OUTCOME.PASS
     && input.riskEvidenceRef.outcome !== RISK_GATE_OUTCOME.LIMIT) {
