@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–7 CLOSED (C.1–C.6); Stage 8 IN_PROGRESS; C8.1 Shadow Decision Recording CLOSED/HUMAN_QA PASS; NEXT_GATE=STAGE8_POST_C8_1_DISCOVERY_HANDOFF NOT_AUTHORIZED; PRODUCTION_MUTATION_CAPABILITY=CLOSED; SHADOW_RUNTIME/B10/LIVE/LLM NOT AUTHORIZED
+description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–7 CLOSED (C.1–C.6); Stage 8 IN_PROGRESS; C8.1 CLOSED; S8-MC-CONTRACT IMPLEMENTED/AUDIT PASS (library-only); NEXT_GATE=STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF NOT_AUTHORIZED; PRODUCTION_MUTATION_CAPABILITY=CLOSED; NETWORK/B10/SHADOW_RUNTIME/LIVE/LLM NOT AUTHORIZED
 alwaysApply: true
 ---
 
@@ -25,7 +25,7 @@ alwaysApply: true
 
 **REMAINING_STAGES = 8**
 
-**NEXT_GATE = STAGE8_POST_C8_1_DISCOVERY_HANDOFF**
+**NEXT_GATE = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF**
 **NEXT_GATE_STATUS = NOT_AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
 
@@ -65,16 +65,16 @@ alwaysApply: true
 **C6_MERGED_PR = #108**
 **NO_STAGE_7_3_2_C_7 = YES**
 **STAGE_7_3_2_C_7 = NOT_DEFINED / NOT CREATED**
-**ARTEMIS_CORE_STAGE_8 = IN_PROGRESS / C8_1 CLOSED / NO NEXT SLICE AUTHORIZED**
+**ARTEMIS_CORE_STAGE_8 = IN_PROGRESS / C8_1 CLOSED / S8-MC-CONTRACT IMPLEMENTED**
 **ARTEMIS_CORE_STAGE_8_OFFICIAL_NAME = Shadow Decision Mode**
 **STAGE_8_OFFICIAL_NAME = Shadow Decision Mode**
 **STAGE8_IMPLEMENTATION_AUTHORIZED = YES — EXACT GOVERNANCE SCOPE ONLY**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE — NO ACTIVE IMPLEMENTATION SLICE**
-**STAGE_8_STARTED = YES / C8_1 COMPLETE**
-**STAGE_8_STATUS = IN_PROGRESS / C8_1 CLOSED**
+**STAGE_8_STARTED = YES / C8_1 COMPLETE / S8-MC-CONTRACT COMPLETE**
+**STAGE_8_STATUS = IN_PROGRESS / C8_1 CLOSED / S8-MC-CONTRACT IMPLEMENTED**
 **STAGE8_AUTHORIZATION = YES — EXACT GOVERNANCE SCOPE ONLY**
 **STAGE8_RISK_TIER = Tier 3**
-**AUTHORITY_CLASS = SHADOW_DECISION_RECORDING**
+**AUTHORITY_CLASS = MARKET_CONTEXT**
 **RISK_TIER = Tier 3**
 **C8_1_OFFICIAL_NAME = SHADOW_DECISION_RECORDING_BOUNDARY**
 **C8_1_STATUS = CLOSED / IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS**
@@ -90,12 +90,31 @@ alwaysApply: true
 **C8_1_REGRESSION = 13 suites / 472 tests PASS**
 **NO_C8_2 = YES**
 **C8_2 = NOT_DEFINED / NOT CREATED / NOT AUTHORIZED**
+**S8_MC_CONTRACT_SLICE_ID = S8-MC-CONTRACT**
+**S8_MC_CONTRACT_OFFICIAL_NAME = ARTEMIS_MARKET_CONTEXT_CONTRACT_BOUNDARY**
+**S8_MC_CONTRACT_AUTHORIZED_SLICE = ARTEMIS_CORE_STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY**
+**S8_MC_CONTRACT_AUTHORITY_CLASS = MARKET_CONTEXT**
+**S8_MC_CONTRACT_RISK_TIER = Tier 3**
+**S8_MC_CONTRACT_STATUS = IMPLEMENTED / AUDIT PASS**
+**S8_MC_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**S8_MC_CONTRACT_IMPLEMENTATION = COMPLETE**
+**S8_MC_CONTRACT_AUDIT = PASS**
+**S8_MC_CONTRACT_SCOPE = Library-only canonical Market Context contract + validation + dedicated tests. No network/provider/MEXC/CCXT/market-proxy/DB/Redis/runtime/worker/scheduler/LLM/orders/wallet/Live/Paper/outcome/B10/C8.1 mutation.**
+**S8_MC_CONTRACT_CONTRACT_OWNER = `backend/contracts/artemisMarketContextContract.js`**
+**S8_MC_CONTRACT_TEST_OWNER = `backend/__tests__/unit/artemisMarketContextContract.test.js`**
+**S8_MC_CONTRACT_TESTS = 48/48 PASS**
+**S8_MC_CONTRACT_REGRESSION = 15 suites / 613 tests PASS**
+**S8_MC_CONTRACT_HUMAN_QA_MILESTONE = STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY_COMPLETE**
+**S8_MC_CONTRACT_HUMAN_QA = PENDING_OWNER**
 **B10_STATUS = PREREQUISITE_IDENTIFIED / LIVE_MIGRATION_NOT_AUTHORIZED / ACTIVATION_NOT_AUTHORIZED**
 **B10_ACTIVATED = NO**
 **B10_RUNTIME_WRITES = NO**
 **B10_MIGRATION_EXECUTED = NO**
-**MARKET_CONTEXT_AUTHORIZATION = DEFERRED — REQUIRES SEPARATELY IDENTIFIED CANONICAL SOURCE**
+**MARKET_CONTEXT_AUTHORIZATION = LIBRARY_CONTRACT_ONLY — NETWORK_NOT_AUTHORIZED / PROVIDER_NOT_AUTHORIZED**
 **MARKET_CONTEXT_SOT = MISSING**
+**NEW_SOT_OWNER_REQUIRED = YES**
+**MARKET_CONTEXT_NETWORK = NO**
+**MARKET_CONTEXT_PROVIDER = NO**
 **OBSERVED_OUTCOME_STATUS = DEFERRED — DESIGN/DISCOVERY ONLY / NO OUTCOME SoT INVENTED**
 **OUTCOME_SOT = MISSING**
 **OBSERVED_OUTCOME = DEFERRED**
@@ -148,7 +167,7 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-Artemis Core Stage 1 through Stage 7 are closed. Stage 7 Control Chain slices C.1–C.6 are closed. C.6 Order Management Execution Boundary is **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS** at main `6b1274d75c16dd913e21fa781f277e29f1f5f13c` (PR #108) and remains library-only / non-executing. No `STAGE_7_3_2_C_7` exists or is authorized. Stage 8 Shadow Decision Mode remains under program governance (`STAGE8_AUTHORIZATION = YES — EXACT GOVERNANCE SCOPE ONLY`). Slice **C8.1 Shadow Decision Recording Boundary** is **CLOSED / IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS** at head `074d9687b4f183ca8e58ccc066c13219a2f95665` (`C8_1_AUTHORIZATION = NO / CONSUMED`). No `C8_2` exists or is authorized. `NEXT_GATE = STAGE8_POST_C8_1_DISCOVERY_HANDOFF` with `NEXT_GATE_STATUS = NOT_AUTHORIZED` (discovery/governance handoff only). This does **not** authorize Shadow runtime/worker/scheduler, Live, Paper trading, real orders, provider transactional transport, wallet/financial mutation, Emergency Stop clearing, runtime mutation, LLM/network calls, B10 live migration/activation, market-context SoT, outcome evaluation, or deployment.
+Artemis Core Stage 1 through Stage 7 are closed. Stage 7 Control Chain slices C.1–C.6 are closed. C.6 Order Management Execution Boundary is **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS** at main `6b1274d75c16dd913e21fa781f277e29f1f5f13c` (PR #108) and remains library-only / non-executing. No `STAGE_7_3_2_C_7` exists or is authorized. Stage 8 Shadow Decision Mode remains under program governance (`STAGE8_AUTHORIZATION = YES — EXACT GOVERNANCE SCOPE ONLY`). Slice **C8.1 Shadow Decision Recording Boundary** is **CLOSED / IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS** at head `074d9687b4f183ca8e58ccc066c13219a2f95665` (`C8_1_AUTHORIZATION = NO / CONSUMED`). No `C8_2` exists or is authorized. Exact slice **S8-MC-CONTRACT / ARTEMIS_MARKET_CONTEXT_CONTRACT_BOUNDARY** is **IMPLEMENTED / AUDIT PASS** (`MARKET_CONTEXT` / Tier 3; library-only; `S8_MC_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED`). `NEXT_GATE = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF` with `NEXT_GATE_STATUS = NOT_AUTHORIZED`. This does **not** authorize Shadow runtime/worker/scheduler, Live, Paper trading, real orders, provider transactional transport, wallet/financial mutation, Emergency Stop clearing, runtime mutation, LLM/network calls, B10 live migration/activation, market-network access, outcome evaluation, or deployment.
 
 ### Artemis Core Stage 7.3.2.c.3 — CLOSED / PORTFOLIO CONTROL_SIZING COMPLETE (20260911)
 
@@ -416,29 +435,33 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — Artemis Core Stage 8 Shadow Decision Mode (GOVERNANCE INTACT / C8.1 CLOSED)
+### Active Work Package — Artemis Core Stage 8 Shadow Decision Mode (GOVERNANCE INTACT / C8.1 CLOSED / S8-MC-CONTRACT IMPLEMENTED)
 
-**AUTHORIZED_SLICE = ARTEMIS_CORE_STAGE_8_SHADOW_DECISION_MODE**
-**OFFICIAL_NAME = Shadow Decision Mode**
+**AUTHORIZED_SLICE = NONE — NO ACTIVE IMPLEMENTATION SLICE**
+**PRIOR_SLICE = ARTEMIS_CORE_STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY**
+**SLICE_ID = S8-MC-CONTRACT**
+**OFFICIAL_NAME = ARTEMIS_MARKET_CONTEXT_CONTRACT_BOUNDARY**
 **STAGE_8_OFFICIAL_NAME = Shadow Decision Mode**
 **RISK_TIER = Tier 3**
-**AUTHORITY_CLASS = SHADOW_DECISION_RECORDING**
-**IMPLEMENTATION_AUTHORIZED = YES** (exact governance scope only)
+**AUTHORITY_CLASS = MARKET_CONTEXT**
+**IMPLEMENTATION_AUTHORIZED = NO / CONSUMED** (S8-MC-CONTRACT library-only slice complete)
 **STAGE8_IMPLEMENTATION_AUTHORIZED = YES — EXACT GOVERNANCE SCOPE ONLY**
 **STAGE8_AUTHORIZATION = YES — EXACT GOVERNANCE SCOPE ONLY**
-**STAGE_8_STATUS = IN_PROGRESS / C8_1 CLOSED**
-**STAGE_8_STARTED = YES / C8_1 COMPLETE**
-**ARTEMIS_CORE_STAGE_8 = IN_PROGRESS / C8_1 CLOSED / NO NEXT SLICE AUTHORIZED**
+**STAGE_8_STATUS = IN_PROGRESS / C8_1 CLOSED / S8-MC-CONTRACT IMPLEMENTED**
+**STAGE_8_STARTED = YES / C8_1 COMPLETE / S8-MC-CONTRACT COMPLETE**
+**ARTEMIS_CORE_STAGE_8 = IN_PROGRESS / C8_1 CLOSED / S8-MC-CONTRACT IMPLEMENTED**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE — NO ACTIVE IMPLEMENTATION SLICE**
 **C8_1_STATUS = CLOSED / IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS**
 **C8_1_AUTHORIZATION = NO / CONSUMED**
+**S8_MC_CONTRACT_STATUS = IMPLEMENTED / AUDIT PASS**
+**S8_MC_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **NO_C8_2 = YES**
 **C8_2 = NOT_DEFINED / NOT CREATED / NOT AUTHORIZED**
 **NO_STAGE_7_3_2_C_7 = YES**
 **STAGE_7_3_2_C_7 = NOT_DEFINED / NOT CREATED**
-**HUMAN_QA_MILESTONE = STAGE_8_SHADOW_DECISION_MODE_COMPLETE** (Owner-defined later)
-**NEXT_APPROVED_TRANSITION = STAGE8_POST_C8_1_DISCOVERY_HANDOFF**
-**NEXT_GATE = STAGE8_POST_C8_1_DISCOVERY_HANDOFF**
+**HUMAN_QA_MILESTONE = STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY_COMPLETE**
+**NEXT_APPROVED_TRANSITION = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF**
+**NEXT_GATE = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF**
 **NEXT_GATE_STATUS = NOT_AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
 
@@ -463,86 +486,98 @@ Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 **B10_ACTIVATED = NO**
 **B10_RUNTIME_WRITES = NO**
 **B10_MIGRATION_EXECUTED = NO**
-**MARKET_CONTEXT_AUTHORIZATION = DEFERRED — REQUIRES SEPARATELY IDENTIFIED CANONICAL SOURCE**
+**MARKET_CONTEXT_AUTHORIZATION = LIBRARY_CONTRACT_ONLY — NETWORK_NOT_AUTHORIZED / PROVIDER_NOT_AUTHORIZED**
 **MARKET_CONTEXT_SOT = MISSING**
+**NEW_SOT_OWNER_REQUIRED = YES**
+**MARKET_CONTEXT_NETWORK = NO**
+**MARKET_CONTEXT_PROVIDER = NO**
 **OBSERVED_OUTCOME_STATUS = DEFERRED — DESIGN/DISCOVERY ONLY / NO OUTCOME SoT INVENTED**
 **OUTCOME_SOT = MISSING**
 **OBSERVED_OUTCOME = DEFERRED**
 **OUTCOME_EVALUATION = DEFERRED**
 
-**CURRENT_USER_SYSTEM_OUTCOME:**
-Authorize the canonical Artemis Core Stage 8 Shadow Decision Mode governance boundary so TitanGold may later discover and implement a Shadow Decision Recording Boundary that records timestamped Artemis decisions against real market context while remaining operationally isolated from order placement, Live trading, and financial mutation.
+This Active Work Package records S8-MC-CONTRACT as **IMPLEMENTED / AUDIT PASS / CONSUMED**. Stage 8 program governance remains intact. It does **not** authorize Market Network, B10, Shadow Runtime, Outcome, C8.2, C.7, Live/Paper, LLM/provider, or deployment. `NEXT_GATE = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF` remains `NOT_AUTHORIZED`.
 
-**PRIMARY SCOPE (governance-authorized; Stage 8 code NOT started here):**
-1. Timestamped Artemis decisions
-2. Real market context as required by Core Stage 8 — **only** through a separately identified/authorized canonical market-context source (no arbitrary external network access merely because “real market context” is required)
-3. Record evidence, exclusions, conflicts, and control outcomes
-4. Preserve complete decision lineage
-5. Preserve the distinction between: decision made · evidence observed · control outcome · future observed outcome
-6. Shadow must remain operationally isolated from order placement
-7. Reuse existing Decision Context, Evidence, Control Chain, and Decision contracts — do **not** create parallel Sources of Truth
-8. B10 persistence may be identified as a prerequisite/readiness item; **LIVE DB migration or activation is NOT authorized** by this governance change
-9. Observed-outcome comparison may be designed/discovered as a later dependency; do **not** invent an outcome SoT or implement evaluation infrastructure under this authorization alone
-10. No simulated success may ever be represented as realized performance
+Historical Active Work Package fields that once said `S8_MC_CONTRACT_STATUS = AUTHORIZED / IMPLEMENTATION_IN_PROGRESS` and `SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S8-MC-CONTRACT` are **SUPERSEDED** by the S8-MC-CONTRACT implementation closeout below.
 
-**AUTHORIZED IMPLEMENTATION MAY LATER INCLUDE ONLY (after a separately authorized Stage 8 slice and within this exact program scope; C8.1 is CLOSED / CONSUMED; no C8.2 authorized):**
-Shadow Decision Recording Boundary · reuse of existing canonical Decision Context / Evidence / Control Chain / Decision owners · lineage/provenance preservation · fail-closed isolation from order/Live/provider transactional paths · dedicated tests · regression · Human QA at Owner milestone
+### Artemis Core Stage 8 — S8-MC-CONTRACT CLOSED / MARKET CONTEXT CONTRACT BOUNDARY COMPLETE
 
-**HARD SAFETY BOUNDARIES — Stage 8 MUST NOT:**
-- place/cancel/modify orders
-- create executable order instructions
-- transfer/withdraw funds
-- mutate wallets
-- enable Live
-- clear Emergency Stop
-- mutate runtime mode
-- bypass Risk / Portfolio / Liquidity / Runtime / C.6 Execution Intent
-- call transactional providers
-- claim provider execution
-- use `system_logs` as Shadow SoT
-- turn legacy `artemisOrchestrator` into canonical Shadow infrastructure
-- activate `tradingEngine`
-- activate `artemisExecutionGate` for real execution
-- activate `POST /api/v1/artemis/decision` as a Shadow execution path
-- activate scheduler/worker automatically
-- perform DB/Redis writes unless separately authorized by a later explicit governance gate
-- perform LLM/network calls merely because Stage 8 is authorized
-- deploy
-- create `STAGE_7_3_2_C_7`
-- reopen or modify C.1–C.6
+**AUTHORIZED_SLICE = ARTEMIS_CORE_STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY**
+**S8_MC_CONTRACT_OFFICIAL_NAME = ARTEMIS_MARKET_CONTEXT_CONTRACT_BOUNDARY**
+**S8_MC_CONTRACT_STATUS = IMPLEMENTED / AUDIT PASS**
+**S8_MC_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**S8_MC_CONTRACT_IMPLEMENTATION = COMPLETE**
+**S8_MC_CONTRACT_AUDIT = PASS**
+**S8_MC_CONTRACT_HUMAN_QA = PENDING_OWNER**
+**S8_MC_CONTRACT_SCOPE = Market Context Contract Boundary — library-only, deterministic validation/composition artifact; NOT a Market Context SoT.**
+**HUMAN_QA_MILESTONE = STAGE_8_MARKET_CONTEXT_CONTRACT_BOUNDARY_COMPLETE**
 
-**HARD SECURITY / AUTHORITY FLAGS (entire Stage 8 slice until separately authorized otherwise):**
-`executionEligible=false` · `approvedForExecution=false` · `decisionEligible=false` · `liveTradingEnabled=false` · `paperTradingEnabled=false` · `providerConnected=false` · `llmCallCount=0` · `networkRequestCount=0` · `dbWriteCount=0` · `redisWriteCount=0` · `orderOperationCount=0` · `financialExecutionCount=0` · `runtimeMutationCount=0` · `emergencyStopClearCount=0` · `shadowRuntimeActive=false` · `b10LiveMigration=false`
+**CONTRACT_OWNER = `backend/contracts/artemisMarketContextContract.js`**
+**TEST_OWNER = `backend/__tests__/unit/artemisMarketContextContract.test.js`**
+**AUTHORITY_CLASS = MARKET_CONTEXT**
+**RISK_TIER = Tier 3**
+**S8_MC_CONTRACT_TESTS = 48/48 PASS**
+**S8_MC_CONTRACT_REGRESSION = 15 suites / 613 tests PASS**
+**DEPLOY_REQUIRED = NO**
+**DEPLOY_STATUS = NOT_REQUIRED**
+**RUNTIME_VERIFIED = NOT_APPLICABLE_LIBRARY_ONLY**
+**SERVER_DRIFT = NONE** (no production mutation)
 
-**PROTECTED SURFACES:**
-Core Rules · Rule 01 · Rule 02 except this governance transaction · C.1 · C.2 · C.3 · C.4 · C.5 · C.6 · Control Chain · `runtimeExecutionStateService` mutation paths · `artemisExecutionGate` · `artemisOrchestrator` · `tradingEngine` · provider credentials/configuration · production PM2/nginx/runtime configuration
+**S8_MC_CONTRACT_SIDE_EFFECT_STATUS = ZERO** (DB/Redis/provider/LLM/network/order/financial/runtime mutation = 0)
+**PROTECTED_SURFACES = UNCHANGED** (Core Rules / Control Chain / C.1–C.6 / C8.1 / Decision / Decision Context / Evidence / Evidence Orchestration / B10 / runtimeExecutionStateService mutation paths / orchestrator / executionGate / tradingEngine / market-proxy / MEXC/CCXT / provider configuration / production runtime / Data Hub)
 
-**ACCEPTANCE CRITERIA (later Stage 8 implementation; not claimed complete by this governance transaction):**
-1. Canonical SoT identified for every persisted Shadow artifact
-2. Canonical market-context source identified and separately authorized
-3. B10 persistence status explicitly resolved before any activation
-4. Shadow isolation from order placement proven
-5. C.1–C.6 semantics preserved unchanged
-6. No order/provider/wallet/Live side effects
-7. Lineage/provenance preserved
-8. No simulated-as-realized performance claims
-9. Dedicated tests + full regression
-10. Human QA at Owner-defined milestone
+**MARKET_CONTEXT_SOT_STATUS = MISSING**
+**NEW_SOT_OWNER_REQUIRED = YES**
+**MARKET_CONTEXT_OWNERSHIP_ROLE = VALIDATION_BOUNDARY**
 
-**STOP CONDITIONS (report; do not expand):**
-- ambiguous SoT
-- arbitrary market-data source
-- attempt to activate B10 without separate authorization
-- attempt to activate Shadow worker/runtime
-- attempt to send any order
-- attempt to enable Live
-- attempt to modify C.1–C.6
-- attempt to use legacy execution paths as canonical Shadow infrastructure
-- conflict with Core Rules v4.7
+Architecture boundary (frozen for S8-MC-CONTRACT):
 
-This Rule 02 governance transaction authorizes **only** the exact Stage 8 Shadow Decision Mode governance scope above and closes C.6. It does **not** start Stage 8 application implementation by itself beyond authorization. It does **not** authorize C.7. It does **not** deploy, restart, mutate production, activate Shadow runtime/worker, enable Live/Paper, call LLM/providers, migrate/activate B10, or mutate runtime/Emergency Stop.
+```text
+Attested Market Identity + Observation envelope (no fetch)
+ → S8-MC-CONTRACT Market Context Contract (library-only)
+ → validated in-memory MARKET_CONTEXT artifact + toMarketContextRef()
+ → future Market Context SoT owner / network access / Shadow runtime
+   (NOT authorized / NOT implemented here)
+```
 
-Historical Stage 8 Active Work Package fields that once said `STAGE_8_STATUS = AUTHORIZED / NOT_STARTED`, `STAGE_8_STARTED = NO`, `NEXT_GATE = STAGE8_TECHNICAL_DISCOVERY`, and `SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = ARTEMIS_CORE_STAGE_8_SHADOW_DECISION_MODE` without a closed C8.1 record are **SUPERSEDED** by the C8.1 closeout below for the C8.1 slice only. Stage 8 program governance authorization remains intact. No C8.2 is invented or authorized.
+- Library-only; deterministic; validation boundary only.
+- Separates MARKET IDENTITY ≠ OBSERVATION ≠ EXECUTION ≠ OUTCOME.
+- Does **not** fetch data, select provider, or invent Market Context SoT.
+- Hard-false execution flags; zero side-effect counters.
+- C8.1 remains immutable; external `toMarketContextRef` only.
+- Closeout does **not** authorize Market Network, B10, Shadow Runtime, Outcome, C8.2, Live, Paper, LLM, orders, wallet, runtime mutation, Emergency Stop clearing, or deployment.
+
+**NO_C8_2 = YES**
+**C8_2 = NOT_DEFINED / NOT CREATED / NOT AUTHORIZED**
+**NEXT_GATE = STAGE8_POST_S8_MC_CONTRACT_DISCOVERY_HANDOFF**
+**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE_ONLY = YES**
+
+**SHADOW_RUNTIME = NO**
+**SHADOW_WORKER = NO**
+**SHADOW_SCHEDULER = NO**
+**B10_ACTIVATED = NO**
+**B10_RUNTIME_WRITES = NO**
+**B10_MIGRATION_EXECUTED = NO**
+**MARKET_CONTEXT_AUTHORIZATION = LIBRARY_CONTRACT_ONLY**
+**MARKET_CONTEXT_SOT = MISSING**
+**OUTCOME_SOT = MISSING**
+**OBSERVED_OUTCOME = DEFERRED**
+**OUTCOME_EVALUATION = DEFERRED**
+**NETWORK = NO**
+**LLM = NO**
+**PROVIDER_TRANSACTION = NO**
+**ORDERS = NO**
+**WALLET = NO**
+**FINANCIAL_EXECUTION = NO**
+**LIVE = NO**
+**PAPER = NO**
+**RUNTIME_MUTATION = NO**
+**EMERGENCY_STOP_CLEAR = NO**
+**PRODUCTION_MUTATION_CAPABILITY = CLOSED**
+**DEPLOY = NO**
+
+This Rule 02 governance transaction closes S8-MC-CONTRACT implementation/audit only. Stage 8 program governance authorization remains intact. It does **not** invent or authorize C8.2. It does **not** authorize Market Network, Shadow Runtime, B10, outcome evaluation, scheduler/worker, or any new implementation slice.
 
 ### Artemis Core Stage 8.1 — CLOSED / SHADOW DECISION RECORDING BOUNDARY COMPLETE
 
