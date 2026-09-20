@@ -11,6 +11,7 @@
 
 import {
   AUTHORITY_CLASS,
+  FRESHNESS_STATUS,
   isCanonicalUuid,
   isIsoTimestamp,
   utf8ByteLength,
@@ -25,6 +26,14 @@ import {
   RISK_GATE_OUTCOME,
   RUNTIME_GATE_OUTCOME,
 } from './artemisControlChainContract.js';
+
+/** Canonical C.3/C.4 unsafe freshness — usable control outcomes must fail closed. */
+const UNSAFE_USABLE_FRESHNESS = new Set([
+  FRESHNESS_STATUS.STALE,
+  FRESHNESS_STATUS.EXPIRED,
+  FRESHNESS_STATUS.UNKNOWN,
+  FRESHNESS_STATUS.UNAVAILABLE,
+]);
 
 export const EXECUTION_INTENT_STAGE = '7.3.2.c.6';
 export const EXECUTION_INTENT_SCHEMA_VERSION = '1.0.0';
@@ -277,7 +286,13 @@ function validateUpstreamGate(ref, field, expectedAgentId, allowedOutcomes, erro
   }
   assertString(ref.reasonKey, `${field}.reasonKey`, errors, { required: true, max: 256 });
   assertString(ref.runId, `${field}.runId`, errors, { required: true, max: 128 });
-  if (ref.freshness != null && typeof ref.freshness !== 'string') {
+  if (ref.runId != null && !isCanonicalUuid(ref.runId)) {
+    errors.push({ field: `${field}.runId`, code: 'invalid_uuid' });
+  }
+  if (ref.freshness == null) {
+    errors.push({ field: `${field}.freshness`, code: 'missing_freshness' });
+  } else if (typeof ref.freshness !== 'string'
+    || !Object.values(FRESHNESS_STATUS).includes(ref.freshness)) {
     errors.push({ field: `${field}.freshness`, code: 'invalid_freshness' });
   }
 }
@@ -386,11 +401,18 @@ function validateExecutionIntentShape(intent, errors) {
   if (intent.provenance.stage !== EXECUTION_INTENT_STAGE) {
     errors.push({ field: 'executionIntent.provenance.stage', code: 'invalid_stage' });
   }
+  if (intent.provenance.writer !== EXECUTION_INTENT_WRITER) {
+    errors.push({ field: 'executionIntent.provenance.writer', code: 'invalid_writer' });
+  }
+  if (intent.provenance.methodKey !== EXECUTION_INTENT_METHOD_KEY) {
+    errors.push({ field: 'executionIntent.provenance.methodKey', code: 'invalid_method_key' });
+  }
 }
 
 const ALLOWED_RUNTIME_GATE_FIELDS = Object.freeze([
   'authorityClass', 'outcome', 'killSwitchActive', 'requestedRuntimeMode',
   'effectiveRuntimeMode', 'capabilityState', 'ssotAvailable', 'ssotOwner', 'reasonKey',
+  'runId',
 ]);
 
 const ALLOWED_RUNTIME_MODES = new Set(['advisory', 'demo', 'dry_run', 'shadow', 'paper']);
@@ -417,9 +439,10 @@ function validateUpstreamGates(input, errors) {
     if (input.runtimeGate.authorityClass !== 'titangold_runtime_safety_ssot') {
       errors.push({ field: 'runtimeGate.authorityClass', code: 'invalid_runtime_authority' });
     }
+    validateUuid(input.runtimeGate.runId, 'runtimeGate.runId', errors, { required: true });
   }
 
-  if (input.runtimeGate.outcome === RUNTIME_GATE_OUTCOME.CLEAR) {
+  if (input.runtimeGate?.outcome === RUNTIME_GATE_OUTCOME.CLEAR) {
     if (input.runtimeGate.killSwitchActive !== false) errors.push({ field: 'runtimeGate.killSwitchActive', code: 'clear_requires_false_kill_switch' });
     if (input.runtimeGate.capabilityState !== CAPABILITY_STATE.GRANTED) errors.push({ field: 'runtimeGate.capabilityState', code: 'clear_requires_granted_capability' });
     if (input.runtimeGate.ssotAvailable !== true) errors.push({ field: 'runtimeGate.ssotAvailable', code: 'clear_requires_available_ssot' });
@@ -444,7 +467,7 @@ function checkUpstreamSafety(input, errors) {
   if (input.executionIntent.lineage.riskRunId !== input.riskEvidenceRef.runId) reasons.push('risk_lineage_mismatch');
   if (input.executionIntent.lineage.portfolioRunId !== input.portfolioEvidenceRef.runId) reasons.push('portfolio_lineage_mismatch');
   if (input.executionIntent.lineage.liquidityRunId !== input.liquidityEvidenceRef.runId) reasons.push('liquidity_lineage_mismatch');
-  if (input.executionIntent.lineage.runtimeRunId && input.runtimeGate.runId && input.executionIntent.lineage.runtimeRunId !== input.runtimeGate.runId) reasons.push('runtime_lineage_mismatch');
+  if (input.executionIntent.lineage.runtimeRunId !== input.runtimeGate.runId) reasons.push('runtime_lineage_mismatch');
 
   if (input.riskEvidenceRef.outcome !== RISK_GATE_OUTCOME.PASS
     && input.riskEvidenceRef.outcome !== RISK_GATE_OUTCOME.LIMIT) {
@@ -461,6 +484,22 @@ function checkUpstreamSafety(input, errors) {
 
   if (input.runtimeGate.outcome !== RUNTIME_GATE_OUTCOME.CLEAR) {
     reasons.push('runtime_not_clear');
+  }
+
+  // C.1–C.5 freshness contract: usable outcomes cannot carry unsafe freshness.
+  if ((input.riskEvidenceRef.outcome === RISK_GATE_OUTCOME.PASS
+      || input.riskEvidenceRef.outcome === RISK_GATE_OUTCOME.LIMIT)
+    && UNSAFE_USABLE_FRESHNESS.has(input.riskEvidenceRef.freshness)) {
+    reasons.push('risk_freshness_unsafe');
+  }
+  if (input.portfolioEvidenceRef.outcome === PORTFOLIO_GATE_OUTCOME.AVAILABLE
+    && UNSAFE_USABLE_FRESHNESS.has(input.portfolioEvidenceRef.freshness)) {
+    reasons.push('portfolio_freshness_unsafe');
+  }
+  // Control Chain: FEASIBLE requires FRESH exactly.
+  if (input.liquidityEvidenceRef.outcome === LIQUIDITY_GATE_OUTCOME.FEASIBLE
+    && input.liquidityEvidenceRef.freshness !== FRESHNESS_STATUS.FRESH) {
+    reasons.push('liquidity_freshness_not_fresh');
   }
 
   if (!ALLOWED_RUNTIME_MODES.has(input.runtimeGate.requestedRuntimeMode)
@@ -511,6 +550,35 @@ function checkExpiry(intent, now) {
   return { expired: false };
 }
 
+/**
+ * Provider capability time-validity vs deterministic now (C.6 audit ownership).
+ * Mirrors Control Chain expiry-vs-evaluation-time fail-closed pattern without a
+ * parallel maxAge Source of Truth: observation must not be future and must not
+ * predate intent creation. Non-available capability remains blocked upstream.
+ */
+function checkProviderCapabilityTimeValidity(intent, now) {
+  if (intent.providerCapability?.capability !== PROVIDER_CAPABILITY.AVAILABLE) {
+    return { ok: true };
+  }
+  const observedAt = intent.providerCapability?.observedAt;
+  if (typeof observedAt !== 'string' || !isIsoTimestamp(observedAt)) {
+    return { ok: false, code: 'invalid_provider_capability_observed_at' };
+  }
+  const nowMs = Date.parse(now);
+  const observedMs = Date.parse(observedAt);
+  const createdMs = Date.parse(intent.createdAt);
+  if (![nowMs, observedMs, createdMs].every(Number.isFinite)) {
+    return { ok: false, code: 'invalid_provider_capability_time' };
+  }
+  if (observedMs > nowMs) {
+    return { ok: false, code: 'provider_capability_observed_in_future' };
+  }
+  if (observedMs < createdMs) {
+    return { ok: false, code: 'provider_capability_stale' };
+  }
+  return { ok: true };
+}
+
 export function validateExecutionIntent(input = {}) {
   const errors = [];
   if (!assertPlainObject(input, 'input', errors)) return fail('invalid_input', errors);
@@ -540,6 +608,17 @@ export function validateExecutionIntent(input = {}) {
       sideEffects: { ...ZERO_SIDE_EFFECTS },
       ...REQUIRED_HARD_FALSE_FLAGS,
     };
+  }
+
+  const capabilityTime = checkProviderCapabilityTimeValidity(input.executionIntent, input.now);
+  if (!capabilityTime.ok) {
+    return fail('provider_capability_time_invalid', [{
+      field: 'executionIntent.providerCapability.observedAt',
+      code: capabilityTime.code,
+    }], {
+      sideEffects: { ...ZERO_SIDE_EFFECTS },
+      ...REQUIRED_HARD_FALSE_FLAGS,
+    });
   }
 
   checkIntentLimits(input.executionIntent, errors);
@@ -630,6 +709,8 @@ export default {
   EXECUTION_INTENT_SCHEMA_VERSION,
   EXECUTION_INTENT_CONTRACT_VERSION,
   EXECUTION_INTENT_POLICY_VERSION,
+  EXECUTION_INTENT_WRITER,
+  EXECUTION_INTENT_METHOD_KEY,
   EXECUTION_INTENT_STATUS,
   EXECUTION_INTENT_OPERATION,
   ORDER_TYPE,

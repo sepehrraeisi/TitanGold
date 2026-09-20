@@ -6,20 +6,23 @@ import { describe, expect, it } from '@jest/globals';
 import {
   CONFIRMATION_STATUS,
   REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION,
+  EXECUTION_INTENT_METHOD_KEY,
   EXECUTION_INTENT_OPERATION,
   EXECUTION_INTENT_STATUS,
+  EXECUTION_INTENT_WRITER,
   ORDER_TYPE,
   PROVIDER_CAPABILITY,
   validateExecutionIntent,
   classifyProviderOutcome,
   validateExecutionIntentArtifact,
 } from '../../contracts/artemisOrderManagementExecutionBoundaryContract.js';
-import { AUTHORITY_CLASS } from '../../contracts/artemisEvidenceContract.js';
+import { AUTHORITY_CLASS, FRESHNESS_STATUS } from '../../contracts/artemisEvidenceContract.js';
 
 const UUID_1 = '11111111-1111-4111-8111-111111111111';
 const UUID_2 = '22222222-2222-4222-8222-222222222222';
 const UUID_3 = '33333333-3333-4333-8333-333333333333';
 const UUID_4 = '44444444-4444-4444-8444-444444444444';
+const UUID_5 = '55555555-5555-4555-8555-555555555555';
 
 function fixture(overrides = {}) {
   const intent = {
@@ -62,8 +65,8 @@ function fixture(overrides = {}) {
       sourceEvidenceIds: ['risk-1', 'portfolio-1', 'liquidity-1', 'runtime-1'],
     },
     provenance: {
-      writer: 'test',
-      methodKey: 'test_fixture',
+      writer: EXECUTION_INTENT_WRITER,
+      methodKey: EXECUTION_INTENT_METHOD_KEY,
       stage: '7.3.2.c.6',
       source: 'unit-test',
       recordedAt: '2026-09-20T06:01:00.000Z',
@@ -76,7 +79,7 @@ function fixture(overrides = {}) {
     outcome: 'PASS',
     reasonKey: 'risk_pass',
     runId: UUID_1,
-    freshness: 'FRESH',
+    freshness: FRESHNESS_STATUS.FRESH,
   };
   const portfolioEvidenceRef = {
     agentId: 'portfolio',
@@ -84,7 +87,7 @@ function fixture(overrides = {}) {
     outcome: 'AVAILABLE',
     reasonKey: 'portfolio_available',
     runId: UUID_2,
-    freshness: 'FRESH',
+    freshness: FRESHNESS_STATUS.FRESH,
   };
   const liquidityEvidenceRef = {
     agentId: 'liquidity',
@@ -92,7 +95,7 @@ function fixture(overrides = {}) {
     outcome: 'FEASIBLE',
     reasonKey: 'liquidity_feasible',
     runId: UUID_3,
-    freshness: 'FRESH',
+    freshness: FRESHNESS_STATUS.FRESH,
   };
   const runtimeGate = {
     outcome: 'CLEAR',
@@ -103,6 +106,7 @@ function fixture(overrides = {}) {
     killSwitchActive: false,
     ssotAvailable: true,
     ssotOwner: 'runtimeExecutionStateService',
+    runId: UUID_4,
   };
 
   return {
@@ -121,7 +125,7 @@ function fixture(overrides = {}) {
     portfolioEvidenceRef: { ...portfolioEvidenceRef, ...(overrides.portfolioEvidenceRef || {}) },
     liquidityEvidenceRef: { ...liquidityEvidenceRef, ...(overrides.liquidityEvidenceRef || {}) },
     runtimeGate: { ...runtimeGate, ...(overrides.runtimeGate || {}) },
-    now: '2026-09-20T06:10:00.000Z',
+    now: overrides.now ?? '2026-09-20T06:10:00.000Z',
     seenIdempotencyKeys: overrides.seenIdempotencyKeys || [],
   };
 }
@@ -226,5 +230,135 @@ describe('Artemis C.6 Execution Intent Boundary', () => {
       sideEffects: { providerRequestCount: 0, financialExecutionCount: 0 },
     });
     expect(result.ok).toBe(false);
+  });
+
+  describe('deep-audit remediation — runtime lineage', () => {
+    it('requires runtimeGate.runId and matches lineage.runtimeRunId (positive)', () => {
+      const result = validateExecutionIntent(fixture({
+        runtimeGate: { runId: UUID_4 },
+        intent: { lineage: { runtimeRunId: UUID_4 } },
+      }));
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.ACCEPTED);
+    });
+
+    it('fails closed when runtimeGate.runId is missing', () => {
+      const input = fixture();
+      delete input.runtimeGate.runId;
+      const result = validateExecutionIntent(input);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.field === 'runtimeGate.runId' && e.code === 'required')).toBe(true);
+    });
+
+    it('blocks when lineage.runtimeRunId mismatches runtimeGate.runId', () => {
+      const result = validateExecutionIntent(fixture({
+        runtimeGate: { runId: UUID_4 },
+        intent: { lineage: { runtimeRunId: UUID_5 } },
+      }));
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
+      expect(result.blockedReasons).toContain('runtime_lineage_mismatch');
+    });
+  });
+
+  describe('deep-audit remediation — upstream freshness', () => {
+    it('accepts FRESH upstream evidence (positive)', () => {
+      const result = validateExecutionIntent(fixture({
+        riskEvidenceRef: { freshness: FRESHNESS_STATUS.FRESH },
+        portfolioEvidenceRef: { freshness: FRESHNESS_STATUS.FRESH },
+        liquidityEvidenceRef: { freshness: FRESHNESS_STATUS.FRESH },
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.ACCEPTED);
+    });
+
+    it('fails closed on non-enum freshness', () => {
+      const result = validateExecutionIntent(fixture({
+        riskEvidenceRef: { freshness: 'FRESH' },
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'invalid_freshness')).toBe(true);
+    });
+
+    it('blocks when risk usable outcome carries stale freshness', () => {
+      const result = validateExecutionIntent(fixture({
+        riskEvidenceRef: { freshness: FRESHNESS_STATUS.STALE },
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
+      expect(result.blockedReasons).toContain('risk_freshness_unsafe');
+    });
+
+    it('blocks when portfolio AVAILABLE carries unknown freshness', () => {
+      const result = validateExecutionIntent(fixture({
+        portfolioEvidenceRef: { freshness: FRESHNESS_STATUS.UNKNOWN },
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
+      expect(result.blockedReasons).toContain('portfolio_freshness_unsafe');
+    });
+
+    it('blocks when liquidity FEASIBLE is not exactly FRESH', () => {
+      const result = validateExecutionIntent(fixture({
+        liquidityEvidenceRef: { freshness: FRESHNESS_STATUS.AGED },
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
+      expect(result.blockedReasons).toContain('liquidity_freshness_not_fresh');
+    });
+  });
+
+  describe('deep-audit remediation — providerCapability observedAt', () => {
+    it('accepts observedAt within [createdAt, now] (positive)', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: { providerCapability: { observedAt: '2026-09-20T06:05:00.000Z' } },
+        now: '2026-09-20T06:10:00.000Z',
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.ACCEPTED);
+    });
+
+    it('fails closed when observedAt is in the future vs now', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: { providerCapability: { observedAt: '2026-09-20T06:30:00.000Z' } },
+        now: '2026-09-20T06:10:00.000Z',
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'provider_capability_observed_in_future')).toBe(true);
+    });
+
+    it('fails closed when observedAt predates intent createdAt (stale)', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: { providerCapability: { observedAt: '2026-09-20T05:00:00.000Z' } },
+        now: '2026-09-20T06:10:00.000Z',
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'provider_capability_stale')).toBe(true);
+    });
+  });
+
+  describe('deep-audit remediation — provenance ownership', () => {
+    it('accepts canonical writer/methodKey (positive)', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: {
+          provenance: {
+            writer: EXECUTION_INTENT_WRITER,
+            methodKey: EXECUTION_INTENT_METHOD_KEY,
+          },
+        },
+      }));
+      expect(result.status).toBe(EXECUTION_INTENT_STATUS.ACCEPTED);
+    });
+
+    it('fails closed on forged provenance writer', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: { provenance: { writer: 'spoofed-writer' } },
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'invalid_writer')).toBe(true);
+    });
+
+    it('fails closed on forged provenance methodKey', () => {
+      const result = validateExecutionIntent(fixture({
+        intent: { provenance: { methodKey: 'spoofed_method' } },
+      }));
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.code === 'invalid_method_key')).toBe(true);
+    });
   });
 });
