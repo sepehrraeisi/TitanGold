@@ -110,6 +110,7 @@ function fixture(overrides = {}) {
       capabilityState: 'granted',
     },
     now: '2026-09-20T06:10:00.000Z',
+    seenIdempotencyKeys: overrides.seenIdempotencyKeys || [],
   };
 }
 
@@ -154,7 +155,8 @@ describe('Artemis C.6 Execution Intent Boundary', () => {
     const result = validateExecutionIntent(fixture({
       intent: { providerCapability: { capability: 'unknown' } },
     }));
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
   });
 
   it('fails closed on expired intent', () => {
