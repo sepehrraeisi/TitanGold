@@ -291,7 +291,9 @@ function validateExecutionIntentShape(intent, errors) {
     errors.push({ field: 'executionIntent.operation.side', code: 'invalid_side' });
   }
   assertString(intent.operation.symbol, 'executionIntent.operation.symbol', errors, { required: true, max: 64 });
-  assertPositiveNumber(intent.operation.quantity, 'executionIntent.operation.quantity', errors, { required: true });
+  if (needsOrderShape) {
+    assertPositiveNumber(intent.operation.quantity, 'executionIntent.operation.quantity', errors, { required: true });
+  }
   if (intent.operation.price != null) assertPositiveNumber(intent.operation.price, 'executionIntent.operation.price', errors);
   if (intent.operation.stopPrice != null) assertPositiveNumber(intent.operation.stopPrice, 'executionIntent.operation.stopPrice', errors);
   assertString(intent.operation.providerId, 'executionIntent.operation.providerId', errors, { required: true, max: 128 });
@@ -304,15 +306,15 @@ function validateExecutionIntentShape(intent, errors) {
     errors.push({ field: 'executionIntent.operation.clientOrderId', code: 'required_for_modify' });
   }
 
-  if (intent.operation.orderType === ORDER_TYPE.LIMIT
+  if (needsOrderShape && (intent.operation.orderType === ORDER_TYPE.LIMIT
     || intent.operation.orderType === ORDER_TYPE.STOP_LOSS_LIMIT
-    || intent.operation.orderType === ORDER_TYPE.TAKE_PROFIT_LIMIT) {
+    || intent.operation.orderType === ORDER_TYPE.TAKE_PROFIT_LIMIT)) {
     assertPositiveNumber(intent.operation.price, 'executionIntent.operation.price', errors, { required: true });
   }
-  if (intent.operation.orderType === ORDER_TYPE.STOP_LOSS
+  if (needsOrderShape && (intent.operation.orderType === ORDER_TYPE.STOP_LOSS
     || intent.operation.orderType === ORDER_TYPE.STOP_LOSS_LIMIT
     || intent.operation.orderType === ORDER_TYPE.TAKE_PROFIT
-    || intent.operation.orderType === ORDER_TYPE.TAKE_PROFIT_LIMIT) {
+    || intent.operation.orderType === ORDER_TYPE.TAKE_PROFIT_LIMIT)) {
     assertPositiveNumber(intent.operation.stopPrice, 'executionIntent.operation.stopPrice', errors, { required: true });
   }
 
@@ -427,7 +429,7 @@ function checkUpstreamSafety(input, errors) {
     reasons.push('runtime_capability_not_granted');
   }
 
-  if (input.providerCapability?.capability !== PROVIDER_CAPABILITY.AVAILABLE) {
+  if (input.executionIntent.providerCapability?.capability !== PROVIDER_CAPABILITY.AVAILABLE) {
     reasons.push('provider_capability_not_available');
   }
 
