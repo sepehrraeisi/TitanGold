@@ -70,6 +70,41 @@ function fixture(overrides = {}) {
     },
   };
 
+  const riskEvidenceRef = {
+    agentId: 'risk',
+    authorityClass: AUTHORITY_CLASS.CONTROL_VETO,
+    outcome: 'PASS',
+    reasonKey: 'risk_pass',
+    runId: UUID_1,
+    freshness: 'FRESH',
+  };
+  const portfolioEvidenceRef = {
+    agentId: 'portfolio',
+    authorityClass: AUTHORITY_CLASS.CONTROL_SIZING,
+    outcome: 'AVAILABLE',
+    reasonKey: 'portfolio_available',
+    runId: UUID_2,
+    freshness: 'FRESH',
+  };
+  const liquidityEvidenceRef = {
+    agentId: 'liquidity',
+    authorityClass: AUTHORITY_CLASS.EXECUTION_FEASIBILITY,
+    outcome: 'FEASIBLE',
+    reasonKey: 'liquidity_feasible',
+    runId: UUID_3,
+    freshness: 'FRESH',
+  };
+  const runtimeGate = {
+    outcome: 'CLEAR',
+    authorityClass: 'titangold_runtime_safety_ssot',
+    requestedRuntimeMode: 'paper',
+    effectiveRuntimeMode: 'paper',
+    capabilityState: 'granted',
+    killSwitchActive: false,
+    ssotAvailable: true,
+    ssotOwner: 'runtimeExecutionStateService',
+  };
+
   return {
     executionIntent: {
       ...intent,
@@ -81,41 +116,11 @@ function fixture(overrides = {}) {
       lineage: { ...intent.lineage, ...(overrides.intent?.lineage || {}) },
       provenance: { ...intent.provenance, ...(overrides.intent?.provenance || {}) },
     },
-    controlOutcome: 'CONTROL_PASS_BOUNDED',
-    riskEvidenceRef: {
-      agentId: 'risk',
-      authorityClass: AUTHORITY_CLASS.CONTROL_VETO,
-      outcome: 'PASS',
-      reasonKey: 'risk_pass',
-      runId: UUID_1,
-      freshness: 'FRESH',
-    },
-    portfolioEvidenceRef: {
-      agentId: 'portfolio',
-      authorityClass: AUTHORITY_CLASS.CONTROL_SIZING,
-      outcome: 'AVAILABLE',
-      reasonKey: 'portfolio_available',
-      runId: UUID_2,
-      freshness: 'FRESH',
-    },
-    liquidityEvidenceRef: {
-      agentId: 'liquidity',
-      authorityClass: AUTHORITY_CLASS.EXECUTION_FEASIBILITY,
-      outcome: 'FEASIBLE',
-      reasonKey: 'liquidity_feasible',
-      runId: UUID_3,
-      freshness: 'FRESH',
-    },
-    runtimeGate: {
-      outcome: 'CLEAR',
-      authorityClass: 'titangold_runtime_safety_ssot',
-      requestedRuntimeMode: 'paper',
-      effectiveRuntimeMode: 'paper',
-      capabilityState: 'granted',
-      killSwitchActive: false,
-      ssotAvailable: true,
-      ssotOwner: 'runtimeExecutionStateService',
-    },
+    controlOutcome: overrides.controlOutcome ?? 'CONTROL_PASS_BOUNDED',
+    riskEvidenceRef: { ...riskEvidenceRef, ...(overrides.riskEvidenceRef || {}) },
+    portfolioEvidenceRef: { ...portfolioEvidenceRef, ...(overrides.portfolioEvidenceRef || {}) },
+    liquidityEvidenceRef: { ...liquidityEvidenceRef, ...(overrides.liquidityEvidenceRef || {}) },
+    runtimeGate: { ...runtimeGate, ...(overrides.runtimeGate || {}) },
     now: '2026-09-20T06:10:00.000Z',
     seenIdempotencyKeys: overrides.seenIdempotencyKeys || [],
   };
@@ -139,13 +144,7 @@ describe('Artemis C.6 Execution Intent Boundary', () => {
     ['liquidity infeasible', { liquidityEvidenceRef: { outcome: 'INFEASIBLE' } }],
     ['runtime blocked', { runtimeGate: { outcome: 'RUNTIME_BLOCKED' } }],
   ])('blocks when upstream gate is unsafe: %s', (_name, patch) => {
-    const base = fixture();
-    const merged = { ...base, ...patch };
-    if (patch.riskEvidenceRef) merged.riskEvidenceRef = { ...base.riskEvidenceRef, ...patch.riskEvidenceRef };
-    if (patch.portfolioEvidenceRef) merged.portfolioEvidenceRef = { ...base.portfolioEvidenceRef, ...patch.portfolioEvidenceRef };
-    if (patch.liquidityEvidenceRef) merged.liquidityEvidenceRef = { ...base.liquidityEvidenceRef, ...patch.liquidityEvidenceRef };
-    if (patch.runtimeGate) merged.runtimeGate = { ...base.runtimeGate, ...patch.runtimeGate };
-    const result = validateExecutionIntent(merged);
+    const result = validateExecutionIntent(fixture(patch));
     expect(result.ok).toBe(true);
     expect(result.status).toBe(EXECUTION_INTENT_STATUS.BLOCKED);
   });
