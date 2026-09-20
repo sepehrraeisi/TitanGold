@@ -393,6 +393,8 @@ const ALLOWED_RUNTIME_GATE_FIELDS = Object.freeze([
   'effectiveRuntimeMode', 'capabilityState', 'ssotAvailable', 'ssotOwner', 'reasonKey',
 ]);
 
+const ALLOWED_RUNTIME_MODES = new Set(['advisory', 'demo', 'dry_run', 'shadow', 'paper']);
+
 function validateUpstreamGates(input, errors) {
   validateUpstreamGate(input.riskEvidenceRef, 'riskEvidenceRef', 'risk', new Set(Object.values(RISK_GATE_OUTCOME)), errors);
   validateUpstreamGate(input.portfolioEvidenceRef, 'portfolioEvidenceRef', 'portfolio', new Set(Object.values(PORTFOLIO_GATE_OUTCOME)), errors);
@@ -407,6 +409,11 @@ function validateUpstreamGates(input, errors) {
       errors.push({ field: 'runtimeGate.outcome', code: 'invalid_outcome' });
     }
     assertString(input.runtimeGate.authorityClass, 'runtimeGate.authorityClass', errors, { required: true, max: 128 });
+    for (const field of ['requestedRuntimeMode', 'effectiveRuntimeMode']) {
+      if (input.runtimeGate[field] == null || !ALLOWED_RUNTIME_MODES.has(input.runtimeGate[field])) {
+        errors.push({ field: `runtimeGate.${field}`, code: 'invalid_runtime_mode' });
+      }
+    }
     if (input.runtimeGate.authorityClass !== 'titangold_runtime_safety_ssot') {
       errors.push({ field: 'runtimeGate.authorityClass', code: 'invalid_runtime_authority' });
     }
@@ -454,6 +461,15 @@ function checkUpstreamSafety(input, errors) {
 
   if (input.runtimeGate.outcome !== RUNTIME_GATE_OUTCOME.CLEAR) {
     reasons.push('runtime_not_clear');
+  }
+
+  if (!ALLOWED_RUNTIME_MODES.has(input.runtimeGate.requestedRuntimeMode)
+    || !ALLOWED_RUNTIME_MODES.has(input.runtimeGate.effectiveRuntimeMode)) {
+    reasons.push('runtime_mode_invalid');
+  }
+  if (input.runtimeGate.requestedRuntimeMode === 'live'
+    || input.runtimeGate.effectiveRuntimeMode === 'live') {
+    reasons.push('live_runtime_mode_rejected');
   }
 
   if (input.runtimeGate.authorityClass !== 'titangold_runtime_safety_ssot') {
@@ -510,7 +526,11 @@ export function validateExecutionIntent(input = {}) {
     return fail('validation_failed', errors);
   }
 
-  const expiry = checkExpiry(input.executionIntent, input.now ?? new Date().toISOString());
+  if (typeof input.now !== 'string' || !isIsoTimestamp(input.now)) {
+    return fail('validation_failed', [{ field: 'now', code: 'required_deterministic_timestamp' }]);
+  }
+
+  const expiry = checkExpiry(input.executionIntent, input.now);
   if (expiry.expired) {
     return {
       ok: false,
