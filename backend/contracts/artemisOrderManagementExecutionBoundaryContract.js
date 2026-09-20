@@ -10,12 +10,13 @@
  */
 
 import {
+  AUTHORITY_CLASS,
   isCanonicalUuid,
   isIsoTimestamp,
   utf8ByteLength,
 } from './artemisEvidenceContract.js';
+
 import {
-  AUTHORITY_CLASS,
   CAPABILITY_STATE,
   CONTROL_CHAIN_CONTRACT_VERSION,
   CONTROL_OUTCOME,
