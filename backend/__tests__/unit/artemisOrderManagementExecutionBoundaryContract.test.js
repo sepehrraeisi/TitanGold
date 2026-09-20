@@ -5,6 +5,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   CONFIRMATION_STATUS,
+  REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION,
   EXECUTION_INTENT_OPERATION,
   EXECUTION_INTENT_STATUS,
   ORDER_TYPE,
@@ -52,7 +53,7 @@ function fixture(overrides = {}) {
       observedAt: '2026-09-20T06:01:00.000Z',
     },
     lineage: {
-      controlChainContractVersion: 'test-control-chain',
+      controlChainContractVersion: REQUIRED_CONTROL_CHAIN_CONTRACT_VERSION,
       riskRunId: UUID_1,
       portfolioRunId: UUID_2,
       liquidityRunId: UUID_3,
@@ -108,6 +109,9 @@ function fixture(overrides = {}) {
       outcome: 'CLEAR',
       authorityClass: 'titangold_runtime_safety_ssot',
       capabilityState: 'granted',
+      killSwitchActive: false,
+      ssotAvailable: true,
+      ssotOwner: 'runtimeExecutionStateService',
     },
     now: '2026-09-20T06:10:00.000Z',
     seenIdempotencyKeys: overrides.seenIdempotencyKeys || [],
