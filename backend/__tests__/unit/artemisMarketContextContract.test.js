@@ -378,7 +378,7 @@ describe('artemisMarketContextContract — S8-MC-CONTRACT', () => {
     expect(ohlcv.ok).toBe(false);
   });
 
-  it('26. C8.1 reference compatibility without modifying C8.1', () => {
+  it('26. C8.1 reference compatibility (S8-C81-MC-REF may consume ref semantics)', () => {
     const result = buildMarketContext(baseInput());
     expect(result.ok).toBe(true);
     expect(result.artifact.compatibility.c81ReferenceCompatible).toBe(true);
@@ -391,10 +391,13 @@ describe('artemisMarketContextContract — S8-MC-CONTRACT', () => {
     expect(ref.ref.marketContextId).toBe(result.artifact.marketContextId);
     expect(ref.ref.contractVersion).toBe(MARKET_CONTEXT_CONTRACT_VERSION);
 
+    // C8.1 may validate optional marketContextRef using mirrored S8-MC semantics,
+    // but must not import this contract (circular dependency; SoT ownership unchanged).
     const c81Source = readFileSync(C81_PATH, 'utf8');
     expect(c81Source).toContain('SHADOW_DECISION_RECORDING');
-    expect(c81Source).not.toContain('artemisMarketContextContract');
-    expect(c81Source).not.toContain(MARKET_CONTEXT_CONTRACT_VERSION);
+    expect(c81Source).toContain('marketContextRef');
+    expect(c81Source).not.toMatch(/from ['"]\.\/artemisMarketContextContract\.js['"]/);
+    expect(c81Source).toContain(MARKET_CONTEXT_CONTRACT_VERSION);
   });
 
   it('27. Decision Context identity compatibility', () => {

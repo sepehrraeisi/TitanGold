@@ -5,10 +5,14 @@
  * SHADOW Decision Recording Artifact from canonical Decision, Decision Context,
  * EvidenceOrchestrationSet, and ControlChainArtifact references.
  *
+ * S8-C81-MC-REF: optionally accepts a validated marketContextRef (reference only)
+ * projected from the canonical Market Context contract / SoT ownership. Does not
+ * fetch, persist, or mutate Market Context observations.
+ *
  * Does NOT:
  *   - persist (B10), write DB/Redis, or activate Shadow runtime
  *   - fetch market data / call exchanges / market proxies / providers / LLM
- *   - invent market-context or observed-outcome Sources of Truth
+ *   - invent a new market-context or observed-outcome Source of Truth
  *   - authorize execution or mutate Decision maturity-stage enum
  *   - wire routes, workers, schedulers, orchestrator, tradingEngine, executionGate
  *   - modify C1–C6 / Control Chain / Decision / Context / Evidence contracts
@@ -28,7 +32,9 @@ import {
   REQUESTED_RUNTIME_MODE,
 } from './artemisDecisionContextContract.js';
 import {
+  AVAILABILITY,
   CONTRACT_VERSION as EVIDENCE_CONTRACT_VERSION,
+  FRESHNESS_STATUS,
   MARKET_TYPE,
   collectForbiddenSecretKeys,
   isCanonicalUuid,
@@ -46,6 +52,17 @@ import {
   FORBIDDEN_EXECUTION_AUTHORITY_VALUES,
   validateControlChainArtifact,
 } from './artemisControlChainContract.js';
+
+/**
+ * S8-MC reference semantics mirrored locally to avoid a circular import with
+ * the Market Context validation contract (which already depends on this C8.1 module).
+ * Must stay aligned with MARKET_CONTEXT_CONTRACT_VERSION / USABLE_FRESHNESS there.
+ */
+const MARKET_CONTEXT_CONTRACT_VERSION = 'artemis-market-context-1.0.0';
+const USABLE_FRESHNESS = Object.freeze([
+  FRESHNESS_STATUS.FRESH,
+  FRESHNESS_STATUS.AGED,
+]);
 
 export const SHADOW_RECORDING_STAGE = 'ARTEMIS_CORE_STAGE_8_1';
 export const SHADOW_RECORDING_SCHEMA_VERSION = '1.0.0';
@@ -88,7 +105,9 @@ export const SHADOW_RECORDING_LIMITATIONS = Object.freeze([
   'stage8_1_shadow_decision_recording_only',
   'library_only',
   'in_memory_only',
-  'market_context_not_available_no_canonical_sot',
+  'market_context_ref_optional_validated_only',
+  'market_context_ref_does_not_grant_execution',
+  'does_not_fetch_or_mutate_market_context_sot',
   'observed_outcome_not_available_no_canonical_sot',
   'persistence_not_enabled',
   'shadow_runtime_not_activated',
@@ -106,6 +125,7 @@ const ALLOWED_INPUT_TOP = Object.freeze([
   'decisionContext',
   'evidenceOrchestrationSet',
   'controlChainArtifact',
+  'marketContextRef',
   'recordedAt',
   'lineage',
   'provenance',
@@ -132,6 +152,7 @@ const ALLOWED_ARTIFACT_TOP = Object.freeze([
   'decisionContextRef',
   'evidenceOrchestrationRef',
   'controlChainRef',
+  'marketContextRef',
   'lineage',
   'provenance',
   'limitations',
@@ -195,16 +216,33 @@ const ALLOWED_LINEAGE = Object.freeze([
   'orchestrationId',
   'orchestrationSetIds',
   'controlChainArtifactId',
+  'marketContextId',
   'decisionContractVersion',
   'decisionContextContractVersion',
   'evidenceContractVersion',
   'orchestrationContractVersion',
   'controlChainContractVersion',
+  'marketContextContractVersion',
   'shadowRecordingContractVersion',
   'contributingAgentRunIds',
   'contributingRunIds',
   'excludedRunIds',
 ]);
+
+/** Canonical S8-MC reference allowlist (mirrors Market Context contract ref projection). */
+export const ALLOWED_MARKET_CONTEXT_REF = Object.freeze([
+  'marketContextId',
+  'contractVersion',
+  'venue',
+  'marketType',
+  'symbol',
+  'timeframe',
+  'freshnessStatus',
+  'sourceTimestamp',
+  'availability',
+]);
+
+const USABLE_FRESHNESS_SET = new Set(USABLE_FRESHNESS);
 
 const ALLOWED_PROVENANCE = Object.freeze([
   'writer',
@@ -590,6 +628,116 @@ function validateCallerProvenance(callerProvenance, recordedAt, errors) {
 }
 
 /**
+ * Optional marketContextRef validation (S8-C81-MC-REF).
+ * Absent ref → no error. Present ref → fail-closed allowlist + Decision Context
+ * marketScope cross-check + usable freshness / availability.
+ * Returns normalized ref object or null.
+ */
+function validateOptionalMarketContextRef(ref, decisionContext, errors) {
+  if (ref == null) return null;
+
+  if (typeof ref !== 'object' || Array.isArray(ref)) {
+    errors.push({ field: 'marketContextRef', code: 'malformed_market_context_ref' });
+    return null;
+  }
+
+  if (!assertAllowlist(ref, ALLOWED_MARKET_CONTEXT_REF, 'marketContextRef', errors)) {
+    return null;
+  }
+
+  for (const key of MARKET_CONTAMINATION_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(ref, key)) {
+      errors.push({ field: `marketContextRef.${key}`, code: 'market_contamination' });
+    }
+  }
+  for (const key of OUTCOME_CONTAMINATION_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(ref, key)) {
+      errors.push({ field: `marketContextRef.${key}`, code: 'outcome_contamination' });
+    }
+  }
+
+  if (!isCanonicalUuid(ref.marketContextId)) {
+    errors.push({ field: 'marketContextRef.marketContextId', code: 'invalid_market_context_id' });
+  }
+
+  if (ref.contractVersion !== MARKET_CONTEXT_CONTRACT_VERSION) {
+    errors.push({
+      field: 'marketContextRef.contractVersion',
+      code: 'invalid_contract_version',
+      expected: MARKET_CONTEXT_CONTRACT_VERSION,
+    });
+  }
+
+  assertString('marketContextRef.venue', ref.venue, errors, { required: true });
+  assertString('marketContextRef.symbol', ref.symbol, errors, { required: true });
+  assertString('marketContextRef.timeframe', ref.timeframe, errors, { required: true });
+
+  if (ref.marketType == null || ref.marketType === '') {
+    errors.push({ field: 'marketContextRef.marketType', code: 'required_market_type' });
+  } else if (!Object.values(MARKET_TYPE).includes(ref.marketType)) {
+    errors.push({ field: 'marketContextRef.marketType', code: 'invalid_market_type' });
+  }
+
+  if (ref.freshnessStatus == null || ref.freshnessStatus === '') {
+    errors.push({ field: 'marketContextRef.freshnessStatus', code: 'required_freshness' });
+  } else if (!USABLE_FRESHNESS_SET.has(ref.freshnessStatus)) {
+    errors.push({
+      field: 'marketContextRef.freshnessStatus',
+      code: 'unusable_freshness',
+      allowed: [...USABLE_FRESHNESS],
+    });
+  }
+
+  if (ref.availability == null || ref.availability === '') {
+    errors.push({ field: 'marketContextRef.availability', code: 'required_availability' });
+  } else if (ref.availability !== AVAILABILITY.AVAILABLE) {
+    errors.push({
+      field: 'marketContextRef.availability',
+      code: 'availability_mismatch',
+      expected: AVAILABILITY.AVAILABLE,
+    });
+  }
+
+  if (!isIsoTimestamp(ref.sourceTimestamp)) {
+    errors.push({ field: 'marketContextRef.sourceTimestamp', code: 'invalid_iso_timestamp' });
+  }
+
+  const scope = decisionContext?.marketScope;
+  if (scope && typeof scope === 'object' && !Array.isArray(scope)) {
+    if (ref.venue != null && scope.venue != null && ref.venue !== scope.venue) {
+      errors.push({ field: 'marketContextRef.venue', code: 'venue_mismatch' });
+    }
+    if (ref.marketType != null && scope.marketType != null && ref.marketType !== scope.marketType) {
+      errors.push({ field: 'marketContextRef.marketType', code: 'market_type_mismatch' });
+    }
+    if (ref.symbol != null && scope.symbol != null && ref.symbol !== scope.symbol) {
+      errors.push({ field: 'marketContextRef.symbol', code: 'symbol_mismatch' });
+    }
+  }
+  if (ref.timeframe != null
+    && decisionContext?.timeframe != null
+    && ref.timeframe !== decisionContext.timeframe) {
+    errors.push({ field: 'marketContextRef.timeframe', code: 'timeframe_mismatch' });
+  }
+
+  if (errors.some((e) => String(e.field || '').startsWith('marketContextRef'))) {
+    return null;
+  }
+
+  return {
+    marketContextId: ref.marketContextId,
+    contractVersion: ref.contractVersion,
+    venue: ref.venue,
+    marketType: ref.marketType,
+    symbol: ref.symbol,
+    timeframe: ref.timeframe,
+    freshnessStatus: ref.freshnessStatus,
+    sourceTimestamp: ref.sourceTimestamp,
+    availability: ref.availability,
+  };
+}
+
+/**
  * Build and validate an in-memory Shadow Decision Recording Artifact.
  * Deterministic: identical inputs + recordedAt → identical artifact identity/body.
  *
@@ -693,6 +841,18 @@ export function buildShadowDecisionRecording(input = {}) {
     }
   }
 
+  const marketContextRefErrorsBefore = errors.length;
+  const normalizedMarketContextRef = validateOptionalMarketContextRef(
+    input.marketContextRef,
+    decisionContext,
+    errors,
+  );
+  // If ref was provided but failed, ensure we do not proceed with a partial ref.
+  if (input.marketContextRef != null && normalizedMarketContextRef == null
+    && errors.length === marketContextRefErrorsBefore) {
+    errors.push({ field: 'marketContextRef', code: 'malformed_market_context_ref' });
+  }
+
   if (errors.length) {
     return fail('validation_failed', 'Shadow Decision Recording input failed validation', { errors });
   }
@@ -733,6 +893,10 @@ export function buildShadowDecisionRecording(input = {}) {
     contributingRunIds,
     excludedRunIds,
   };
+  if (normalizedMarketContextRef != null) {
+    derivedLineage.marketContextId = normalizedMarketContextRef.marketContextId;
+    derivedLineage.marketContextContractVersion = MARKET_CONTEXT_CONTRACT_VERSION;
+  }
 
   validateCallerLineage(input.lineage, derivedLineage, errors);
   const provenanceExtras = validateCallerProvenance(input.provenance, input.recordedAt, errors);
@@ -742,14 +906,18 @@ export function buildShadowDecisionRecording(input = {}) {
     return fail('validation_failed', 'Shadow Decision Recording lineage/provenance failed', { errors });
   }
 
-  const shadowRecordingArtifactId = hashToUuid([
+  const identityParts = [
     SHADOW_RECORDING_CONTRACT_VERSION,
     decision.decisionId,
     decisionContext.contextId,
     evidenceSet.orchestrationId,
     controlChain.controlChainArtifactId,
     input.recordedAt,
-  ]);
+  ];
+  if (normalizedMarketContextRef != null) {
+    identityParts.push(normalizedMarketContextRef.marketContextId);
+  }
+  const shadowRecordingArtifactId = hashToUuid(identityParts);
 
   const decisionRef = {
     decisionId: decision.decisionId,
@@ -816,6 +984,9 @@ export function buildShadowDecisionRecording(input = {}) {
     sideEffects: { ...ZERO_SHADOW_RECORDING_SIDE_EFFECTS },
     ...REQUIRED_HARD_FLAGS,
   };
+  if (normalizedMarketContextRef != null) {
+    artifact.marketContextRef = { ...normalizedMarketContextRef };
+  }
   if (implementationVersion != null) artifact.implementationVersion = implementationVersion;
 
   const finalErrors = [];
@@ -831,6 +1002,14 @@ export function buildShadowDecisionRecording(input = {}) {
   );
   assertAllowlist(artifact.evidenceOrchestrationRef, ALLOWED_EOS_REF, 'evidenceOrchestrationRef', finalErrors);
   assertAllowlist(artifact.controlChainRef, ALLOWED_CONTROL_REF, 'controlChainRef', finalErrors);
+  if (artifact.marketContextRef != null) {
+    assertAllowlist(
+      artifact.marketContextRef,
+      ALLOWED_MARKET_CONTEXT_REF,
+      'marketContextRef',
+      finalErrors,
+    );
+  }
   assertAllowlist(artifact.lineage, ALLOWED_LINEAGE, 'lineage', finalErrors);
   assertAllowlist(artifact.provenance, ALLOWED_PROVENANCE, 'provenance', finalErrors);
 
@@ -871,6 +1050,7 @@ export default {
   ZERO_SHADOW_RECORDING_SIDE_EFFECTS,
   REQUIRED_HARD_FLAGS,
   SHADOW_RECORDING_LIMITATIONS,
+  ALLOWED_MARKET_CONTEXT_REF,
   buildShadowDecisionRecording,
   validateShadowDecisionRecording,
 };

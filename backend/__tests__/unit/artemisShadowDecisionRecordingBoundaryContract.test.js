@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   AUTHORITY_CLASS,
+  AVAILABILITY,
   CONTRACT_VERSION as EVIDENCE_CONTRACT_VERSION,
   FRESHNESS_STATUS,
   MARKET_TYPE,
@@ -51,6 +52,7 @@ import {
   buildShadowDecisionRecording,
   validateShadowDecisionRecording,
 } from '../../contracts/artemisShadowDecisionRecordingBoundaryContract.js';
+import { MARKET_CONTEXT_CONTRACT_VERSION } from '../../contracts/artemisMarketContextContract.js';
 
 const DECISION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CONTEXT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -291,7 +293,7 @@ describe('artemisShadowDecisionRecordingBoundaryContract — Stage 8.1', () => {
     expect(result.artifact.evidenceOrchestrationRef.conflictCount).toBe(0);
     expect(result.artifact.controlChainRef.controlChainArtifactId).toBeTruthy();
     expect(result.artifact.limitations).toEqual(expect.arrayContaining([
-      'market_context_not_available_no_canonical_sot',
+      'market_context_ref_optional_validated_only',
       'observed_outcome_not_available_no_canonical_sot',
       'persistence_not_enabled',
       'shadow_runtime_not_activated',
@@ -805,5 +807,294 @@ describe('artemisShadowDecisionRecordingBoundaryContract — Stage 8.1', () => {
     }));
     expect(result.ok).toBe(true);
     expect(result.artifact.provenance.note).toBe('unit');
+  });
+});
+
+describe('artemisShadowDecisionRecordingBoundaryContract — S8-C81-MC-REF', () => {
+  const MC_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  function validMarketContextRef(overrides = {}) {
+    return {
+      marketContextId: MC_ID,
+      contractVersion: MARKET_CONTEXT_CONTRACT_VERSION,
+      venue: 'mexc',
+      marketType: MARKET_TYPE.SPOT,
+      symbol: 'BTC/USDT',
+      timeframe: '1h',
+      freshnessStatus: FRESHNESS_STATUS.FRESH,
+      sourceTimestamp: RECORDED_AT,
+      availability: AVAILABILITY.AVAILABLE,
+      ...overrides,
+    };
+  }
+
+  function expectReject(input, fieldSubstring, code) {
+    const result = buildShadowDecisionRecording(input);
+    expect(result.ok).toBe(false);
+    const hit = (result.errors || []).some(
+      (e) => String(e.field || '').includes(fieldSubstring)
+        && (code == null || e.code === code),
+    );
+    expect(hit).toBe(true);
+    return result;
+  }
+
+  it('1. accepts a valid marketContextRef', () => {
+    const result = buildShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.marketContextRef).toEqual(validMarketContextRef());
+    expect(result.artifact.lineage.marketContextId).toBe(MC_ID);
+    expect(result.artifact.lineage.marketContextContractVersion)
+      .toBe(MARKET_CONTEXT_CONTRACT_VERSION);
+    for (const [key, value] of Object.entries(REQUIRED_HARD_FLAGS)) {
+      expect(result.artifact[key]).toBe(value);
+    }
+    expect(result.artifact.sideEffects).toEqual(ZERO_SHADOW_RECORDING_SIDE_EFFECTS);
+  });
+
+  it('2. accepts omitted marketContextRef (existing C8.1 behavior)', () => {
+    const result = buildShadowDecisionRecording(baseInput());
+    expect(result.ok).toBe(true);
+    expect(result.artifact.marketContextRef).toBeUndefined();
+    expect(result.artifact.lineage.marketContextId).toBeUndefined();
+  });
+
+  it('3. rejects malformed marketContextRef', () => {
+    expectReject(baseInput({ marketContextRef: 'not-an-object' }), 'marketContextRef');
+    expectReject(baseInput({ marketContextRef: ['array'] }), 'marketContextRef');
+  });
+
+  it('4. rejects unknown fields on marketContextRef', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ extraField: true }) }),
+      'marketContextRef.extraField',
+      'unknown_field',
+    );
+  });
+
+  it('5. rejects invalid contractVersion', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ contractVersion: 'wrong' }) }),
+      'marketContextRef.contractVersion',
+      'invalid_contract_version',
+    );
+  });
+
+  it('6. rejects invalid marketContextId', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ marketContextId: 'not-uuid' }) }),
+      'marketContextRef.marketContextId',
+      'invalid_market_context_id',
+    );
+  });
+
+  it('7. rejects venue mismatch', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ venue: 'binance' }) }),
+      'marketContextRef.venue',
+      'venue_mismatch',
+    );
+  });
+
+  it('8. rejects marketType mismatch', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ marketType: MARKET_TYPE.FUTURES }) }),
+      'marketContextRef.marketType',
+      'market_type_mismatch',
+    );
+  });
+
+  it('9. rejects symbol mismatch', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ symbol: 'ETH/USDT' }) }),
+      'marketContextRef.symbol',
+      'symbol_mismatch',
+    );
+  });
+
+  it('10. rejects timeframe mismatch', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ timeframe: '4h' }) }),
+      'marketContextRef.timeframe',
+      'timeframe_mismatch',
+    );
+  });
+
+  it('11. rejects unusable freshness', () => {
+    expectReject(
+      baseInput({
+        marketContextRef: validMarketContextRef({ freshnessStatus: FRESHNESS_STATUS.STALE }),
+      }),
+      'marketContextRef.freshnessStatus',
+      'unusable_freshness',
+    );
+  });
+
+  it('12. rejects availability mismatch', () => {
+    expectReject(
+      baseInput({
+        marketContextRef: validMarketContextRef({ availability: AVAILABILITY.UNAVAILABLE }),
+      }),
+      'marketContextRef.availability',
+      'availability_mismatch',
+    );
+  });
+
+  it('13. rejects provenance mismatch (spoofed writer)', () => {
+    expectReject(
+      baseInput({
+        marketContextRef: validMarketContextRef(),
+        provenance: {
+          writer: 'spoofed',
+          methodKey: SHADOW_RECORDING_METHOD_KEY,
+          stage: SHADOW_RECORDING_STAGE,
+          recordedAt: RECORDED_AT,
+          policyVersion: SHADOW_RECORDING_POLICY_VERSION,
+        },
+      }),
+      'provenance.writer',
+      'provenance_writer_spoof',
+    );
+  });
+
+  it('14. rejects lineage mismatch for marketContextId', () => {
+    expectReject(
+      baseInput({
+        marketContextRef: validMarketContextRef(),
+        lineage: {
+          marketContextId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        },
+      }),
+      'lineage.marketContextId',
+      'lineage_mismatch',
+    );
+  });
+
+  it('15. rejects raw market payload on input', () => {
+    expectReject(
+      baseInput({ marketSnapshot: { price: 1 } }),
+      'marketSnapshot',
+    );
+  });
+
+  it('16. rejects OHLCV contamination on marketContextRef', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ ohlcv: [[1, 2, 3]] }) }),
+      'marketContextRef.ohlcv',
+    );
+  });
+
+  it('17. rejects ticker contamination', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ ticker: { last: 1 } }) }),
+      'marketContextRef.ticker',
+    );
+  });
+
+  it('18. rejects orderbook contamination', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ orderBook: { bids: [] } }) }),
+      'marketContextRef.orderBook',
+    );
+  });
+
+  it('19. rejects provider/network payload fields', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ providerPayload: {} }) }),
+      'marketContextRef.providerPayload',
+    );
+  });
+
+  it('20. rejects execution/order/wallet contamination', () => {
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ orderId: 'x' }) }),
+      'orderId',
+    );
+    expectReject(
+      baseInput({ marketContextRef: validMarketContextRef({ walletAction: 'withdraw' }) }),
+      'walletAction',
+    );
+  });
+
+  it('21. preserves deterministic artifact identity for omitted ref', () => {
+    const a = buildShadowDecisionRecording(baseInput());
+    const b = buildShadowDecisionRecording(baseInput());
+    expect(a.ok && b.ok).toBe(true);
+    expect(a.artifact.shadowRecordingArtifactId).toBe(b.artifact.shadowRecordingArtifactId);
+  });
+
+  it('21b. deterministic identity differs when marketContextRef present', () => {
+    const without = buildShadowDecisionRecording(baseInput());
+    const withRef = buildShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+    }));
+    expect(without.ok && withRef.ok).toBe(true);
+    expect(withRef.artifact.shadowRecordingArtifactId)
+      .not.toBe(without.artifact.shadowRecordingArtifactId);
+    const withRefAgain = buildShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+    }));
+    expect(withRefAgain.artifact.shadowRecordingArtifactId)
+      .toBe(withRef.artifact.shadowRecordingArtifactId);
+  });
+
+  it('22. zero side-effect counters preserved with marketContextRef', () => {
+    const result = buildShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.sideEffects).toEqual(ZERO_SHADOW_RECORDING_SIDE_EFFECTS);
+    expect(result.artifact.sideEffects).toEqual(ZERO_SHADOW_RECORDING_SIDE_EFFECTS);
+  });
+
+  it('23. hard-false authority flags preserved with marketContextRef', () => {
+    const result = buildShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+      decisionEligible: false,
+      executionEligible: false,
+      approvedForExecution: false,
+      liveTradingEnabled: false,
+      providerConnected: false,
+      shadowRuntimeActivated: false,
+      persistenceEnabled: false,
+      b10WriteAttempted: false,
+    }));
+    expect(result.ok).toBe(true);
+    for (const [key, value] of Object.entries(REQUIRED_HARD_FLAGS)) {
+      expect(result.artifact[key]).toBe(value);
+    }
+  });
+
+  it('24–27. rejects hard-flag elevation when marketContextRef present', () => {
+    expectReject(
+      baseInput({
+        marketContextRef: validMarketContextRef(),
+        executionEligible: true,
+      }),
+      'executionEligible',
+      'hard_flag_must_be_false',
+    );
+  });
+
+  it('side-effect audit: no IO imports in C8.1 contract source', () => {
+    const src = readFileSync(CONTRACT_PATH, 'utf8');
+    expect(src).not.toMatch(/from ['"]pg['"]|require\(['"]pg['"]\)/);
+    expect(src).not.toMatch(/from ['"](?:ioredis|redis)['"]|require\(['"](?:ioredis|redis)['"]\)/);
+    expect(src).not.toMatch(/from ['"](?:axios|ccxt|node-fetch)['"]/);
+    expect(src).not.toMatch(/createPool|createClient|\bnet\.|\bhttp\./);
+    // No circular import of MC contract; S8-MC ref semantics are mirrored locally.
+    expect(src).not.toMatch(/from ['"]\.\/artemisMarketContextContract\.js['"]/);
+    expect(src).toMatch(/marketContextRef/);
+    expect(src).toMatch(/artemis-market-context-1\.0\.0/);
+  });
+
+  it('validateShadowDecisionRecording alias accepts optional marketContextRef', () => {
+    const result = validateShadowDecisionRecording(baseInput({
+      marketContextRef: validMarketContextRef(),
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.artifact.marketContextRef.marketContextId).toBe(MC_ID);
   });
 });
