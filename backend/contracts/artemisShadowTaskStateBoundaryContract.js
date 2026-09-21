@@ -7,10 +7,12 @@
  *
  * Composable now: CREATED, READY
  * Terminal artifact validation: FAILED, CANCELLED
- * Future structural validation only (never activation): RUNNING, SUCCEEDED
+ * RUNNING / SUCCEEDED: structural via validateFutureTaskStateArtifact, or
+ *   composed only through composeActivatedShadowTaskState (activation boundary).
+ * Artifact hard flags (including taskStateActivated) remain false always.
  *
  * Does NOT:
- *   - activate Shadow runtime / worker / scheduler / Task State
+ *   - activate Shadow worker / scheduler / global Shadow runtime
  *   - persist (B10), write DB/Redis, network, provider, LLM, orders, wallet
  *   - invent Decision / Evidence / Market Context / Recording SoT
  *   - mutate C1–C6 / Control Chain / Decision / Context / Evidence /
@@ -69,11 +71,18 @@ export const COMPOSABLE_SHADOW_TASK_STATUSES = Object.freeze([
   SHADOW_TASK_STATUS.CANCELLED,
 ]);
 
-/** Future statuses: structural validation only — never runtime activation. */
-export const FUTURE_VALIDATION_ONLY_STATUSES = Object.freeze([
+/**
+ * Statuses that may be composed only by composeActivatedShadowTaskState
+ * (S8-SHADOW-TASK-STATE-ACTIVATION). Structural validation remains available
+ * via validateFutureTaskStateArtifact without activation.
+ */
+export const ACTIVATABLE_SHADOW_TASK_STATUSES = Object.freeze([
   SHADOW_TASK_STATUS.RUNNING,
   SHADOW_TASK_STATUS.SUCCEEDED,
 ]);
+
+/** @deprecated Prefer ACTIVATABLE_SHADOW_TASK_STATUSES; kept for existing tests. */
+export const FUTURE_VALIDATION_ONLY_STATUSES = ACTIVATABLE_SHADOW_TASK_STATUSES;
 
 export const TERMINAL_SHADOW_TASK_STATUSES = Object.freeze([
   SHADOW_TASK_STATUS.SUCCEEDED,
@@ -118,9 +127,9 @@ export const SHADOW_TASK_STATE_LIMITATIONS = Object.freeze([
   'contract_only',
   'in_memory_only',
   'deterministic_non_executing',
-  'composable_created_ready_only',
-  'running_validation_only_never_activated',
-  'succeeded_validation_only_never_execution',
+  'composable_created_ready_failed_cancelled',
+  'running_succeeded_via_activation_boundary_only',
+  'artifact_task_state_activated_always_false',
   'no_automatic_state_progression',
   'no_worker_scheduler_queue_lease_lock',
   'does_not_create_parallel_sot',
@@ -613,6 +622,73 @@ export function buildShadowTaskState(input = {}) {
 }
 
 /**
+ * Compose RUNNING / SUCCEEDED Shadow Task State artifacts for the
+ * S8-SHADOW-TASK-STATE-ACTIVATION boundary only.
+ *
+ * Artifact hard flags (including taskStateActivated) remain false.
+ * taskStateActivated=true belongs only on the activation *result* envelope.
+ *
+ * Identity: caller must supply taskId matching deriveTaskId from the same
+ * identity inputs as the READY artifact (same recordedAt / attempt / refs).
+ */
+export function composeActivatedShadowTaskState(input = {}) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail('invalid_input', 'Shadow task state input must be a plain object', {
+      errors: [{ field: 'input', code: 'required_object' }],
+    });
+  }
+
+  const errors = [];
+
+  if (Object.prototype.hasOwnProperty.call(input, 'runId')) {
+    errors.push({ field: 'runId', code: 'forbidden_run_id' });
+  }
+
+  const forbidden = collectForbiddenKeys(input);
+  forbidden.forEach((key) => errors.push({ field: key, code: 'forbidden_key' }));
+  const secretKeys = collectForbiddenSecretKeys(input);
+  secretKeys.forEach((key) => errors.push({ field: key, code: 'forbidden_secret_key' }));
+
+  if (!assertAllowlist(input, ALLOWED_INPUT_TOP, 'input', errors)) {
+    return fail('unknown_field', 'Unknown Shadow task state input fields', { errors });
+  }
+
+  validateHardFlagsOnInput(input, errors);
+
+  if (Object.prototype.hasOwnProperty.call(input, 'taskStateActivated')
+    && input.taskStateActivated === true) {
+    return fail('task_state_activation_forbidden', 'taskStateActivated must remain false on artifacts', {
+      errors: [{ field: 'taskStateActivated', code: 'task_state_activation_forbidden' }],
+    });
+  }
+
+  const status = input.status;
+  if (!ACTIVATABLE_SHADOW_TASK_STATUSES.includes(status)) {
+    return fail('not_activatable_status', 'composeActivatedShadowTaskState accepts only RUNNING or SUCCEEDED', {
+      errors: [{ field: 'status', code: 'not_activatable_status' }],
+    });
+  }
+
+  if (input.taskId == null) {
+    return fail('missing_task_id', 'Activated composition requires canonical taskId from READY Task State', {
+      errors: [{ field: 'taskId', code: 'missing_task_id' }],
+    });
+  }
+
+  const result = composeArtifact(input, status, errors, {
+    activation: false,
+    activatedComposition: true,
+  });
+  if (!result.ok) return result;
+  return {
+    ...result,
+    runtimeActivation: false,
+    taskStateActivated: false,
+    activatedComposition: true,
+  };
+}
+
+/**
  * Structural validation of future RUNNING / SUCCEEDED artifacts.
  * Never activates Task State or Shadow runtime.
  */
@@ -771,7 +847,11 @@ export function validateShadowTaskState(input = {}) {
   return buildShadowTaskState(input);
 }
 
-function composeArtifact(input, status, errors, { activation = false, futureValidationOnly = false } = {}) {
+function composeArtifact(input, status, errors, {
+  activation = false,
+  futureValidationOnly = false,
+  activatedComposition = false,
+} = {}) {
   if (input.taskType == null) {
     errors.push({ field: 'taskType', code: 'missing_task_type' });
   } else if (input.taskType !== SHADOW_TASK_TYPE.SHADOW_EVALUATION_CYCLE) {
@@ -951,12 +1031,16 @@ function composeArtifact(input, status, errors, { activation = false, futureVali
 
   const provenance = freezeDeep({
     writer: SHADOW_TASK_STATE_WRITER,
-    methodKey: SHADOW_TASK_STATE_METHOD_KEY,
+    methodKey: activatedComposition
+      ? 'compose_activated_shadow_task_state_fail_closed'
+      : SHADOW_TASK_STATE_METHOD_KEY,
     stage: SHADOW_TASK_STATE_STAGE,
     recordedAt: input.recordedAt,
-    note: futureValidationOnly
-      ? 'future_validation_only_never_activated'
-      : 'library_composition_only',
+    note: activatedComposition
+      ? 'activation_boundary_composition'
+      : (futureValidationOnly
+        ? 'future_validation_only_never_activated'
+        : 'library_composition_only'),
     policyVersion: SHADOW_TASK_STATE_POLICY_VERSION,
     implementationVersion: input.implementationVersion || SHADOW_TASK_STATE_CONTRACT_VERSION,
     ...(input.provenance || {}),
