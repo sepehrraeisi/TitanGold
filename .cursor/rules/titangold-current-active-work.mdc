@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–8 CLOSED/FROZEN (Stage 8 Shadow Decision Mode FROZEN); Stage 9 IN_PROGRESS; S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY (PR #123 merge ef65921); AUTHORIZED_SLICE=NONE; NEXT_GATE=FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED NOT_AUTHORIZED; NEXT_MINIMUM_DEPENDENCY_DISCOVERED=S9-REPLAY-CONTRACT (NOT AUTHORIZED); PRODUCTION_MUTATION_CAPABILITY=CLOSED; NETWORK/FEEDER/B10/WORKER/SCHEDULER/LIVE/LLM/REPLAY/CALIBRATION NOT AUTHORIZED; LIVE_PG_MIGRATION NOT EXECUTED; migrations 051/053/054/055 DEFERRED_ACTIVATION_SURFACE
+description: TitanGold Rule 02 — M4 CLOSED/FROZEN; ARTEMIS Stages 1–8 CLOSED/FROZEN (Stage 8 Shadow Decision Mode FROZEN); Stage 9 IN_PROGRESS; S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY (PR #123 merge ef65921); AUTHORIZED_SLICE=S9-REPLAY-CONTRACT AUTHORIZED / NOT_STARTED; NEXT_GATE=STAGE_9_REPLAY_CONTRACT_BOUNDARY AUTHORIZED; REPLAY_EXECUTION=NO; PRODUCTION_MUTATION_CAPABILITY=CLOSED; NETWORK/FEEDER/B10/WORKER/SCHEDULER/LIVE/LLM/CALIBRATION NOT AUTHORIZED; LIVE_PG_MIGRATION NOT EXECUTED; migrations 051/053/054/055 DEFERRED_ACTIVATION_SURFACE
 alwaysApply: true
 ---
 
@@ -25,11 +25,11 @@ alwaysApply: true
 
 **REMAINING_STAGES = 7**
 
-**NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_GATE_STATUS = AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
+**AUTHORIZED_SLICE = S9-REPLAY-CONTRACT**
 **STAGE8_COMPLETION_READY = CONSUMED / FREEZE_COMPLETE**
 **STAGE8_LIBRARY_COMPLETENESS = PASS**
 **STAGE8_FORMAL_FREEZE = COMPLETE**
@@ -85,10 +85,10 @@ alwaysApply: true
 **ARTEMIS_CORE_STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **STAGE9_STARTED = YES**
-**STAGE9_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
+**STAGE9_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S9-REPLAY-CONTRACT**
+**AUTHORIZED_SLICE = S9-REPLAY-CONTRACT**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
 **S9_DECISION_LINEAGE_CONTRACT_OFFICIAL_NAME = ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY**
 **S9_DECISION_LINEAGE_CONTRACT_AUTHORITY_CLASS = DECISION_LINEAGE**
 **S9_DECISION_LINEAGE_CONTRACT_RISK_TIER = Tier 3**
@@ -132,14 +132,62 @@ alwaysApply: true
 **S9_DECISION_LINEAGE_CONTRACT_WALLET = NO**
 **S9_DECISION_LINEAGE_CONTRACT_FINANCIAL_EXECUTION = NO**
 **DECISION_LINEAGE = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY — AUTHORIZATION CONSUMED**
+**S9_REPLAY_CONTRACT_OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
+**S9_REPLAY_CONTRACT_AUTHORITY_CLASS = REPLAY**
+**S9_REPLAY_CONTRACT_RISK_TIER = Tier 3**
+**S9_REPLAY_CONTRACT_STATUS = AUTHORIZED / NOT_STARTED**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_STARTED = NO**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION = NOT_STARTED**
+**S9_REPLAY_CONTRACT_LIBRARY_ONLY = YES**
+**S9_REPLAY_CONTRACT_NEW_SOT_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_NEW_TABLE_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_NEW_MIGRATION_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_SERVICE_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_PERSISTENCE_ACTIVATION = NO**
+**S9_REPLAY_CONTRACT_RUNTIME_ACTIVATION = NO**
+**S9_REPLAY_CONTRACT_REPLAY_EXECUTION = NO**
+**S9_REPLAY_CONTRACT_RECONSTRUCTION_EXECUTION = NO**
+**S9_REPLAY_CONTRACT_EXPECTED_OWNER = `backend/contracts/artemisReplayContract.js`**
+**S9_REPLAY_CONTRACT_EXPECTED_TEST_OWNER = `backend/__tests__/unit/artemisReplayContract.test.js`**
+**S9_REPLAY_CONTRACT_IS_SOURCE_OF_TRUTH = false**
+**S9_REPLAY_CONTRACT_ORIGINAL_HISTORICAL_SEMANTICS = AUTHORIZED**
+**S9_REPLAY_CONTRACT_CURRENT_RECOMPUTATION_SEMANTICS = AUTHORIZED**
+**S9_REPLAY_CONTRACT_HISTORICAL_CUTOFF_SEMANTICS = AUTHORIZED**
+**S9_REPLAY_CONTRACT_REPLAY_IDENTITY_SEMANTICS = AUTHORIZED**
+**S9_REPLAY_CONTRACT_LINEAGE_BINDING = lineageId thin ref — READ/REFERENCE ONLY to Decision Lineage Contract**
+**S9_REPLAY_CONTRACT_MODEL_VERSION_CANONICAL_STATUS = UPSTREAM_METADATA_UNAVAILABLE**
+**S9_REPLAY_CONTRACT_CONFIGURATION_VERSION_CANONICAL_STATUS = UPSTREAM_METADATA_UNAVAILABLE**
+**S9_REPLAY_CONTRACT_POLICY_VERSION_CANONICAL_STATUS = CANONICAL_WHERE_UPSTREAM_SUPPORTS**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_VERSION_CANONICAL_STATUS = CANONICAL_WHERE_UPSTREAM_SUPPORTS**
+**S9_REPLAY_CONTRACT_NETWORK = NO**
+**S9_REPLAY_CONTRACT_PROVIDER = NO**
+**S9_REPLAY_CONTRACT_DB = NO**
+**S9_REPLAY_CONTRACT_REDIS = NO**
+**S9_REPLAY_CONTRACT_LLM = NO**
+**S9_REPLAY_CONTRACT_WORKER = NO**
+**S9_REPLAY_CONTRACT_SCHEDULER = NO**
+**S9_REPLAY_CONTRACT_FEEDER = NO**
+**S9_REPLAY_CONTRACT_B10 = NO**
+**S9_REPLAY_CONTRACT_CALIBRATION = NO**
+**S9_REPLAY_CONTRACT_PAPER = NO**
+**S9_REPLAY_CONTRACT_LIVE = NO**
+**S9_REPLAY_CONTRACT_ORDERS = NO**
+**S9_REPLAY_CONTRACT_WALLET = NO**
+**S9_REPLAY_CONTRACT_FINANCIAL_EXECUTION = NO**
+**REPLAY = LIBRARY_CONTRACT_AUTHORIZED — NOT_STARTED / REPLAY_EXECUTION=NO**
 **S9_NEXT_MINIMUM_DEPENDENCY_DISCOVERED = S9-REPLAY-CONTRACT**
 **S9_NEXT_MINIMUM_DEPENDENCY_OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
 **S9_NEXT_MINIMUM_DEPENDENCY_AUTHORITY_CLASS = REPLAY**
 **S9_NEXT_MINIMUM_DEPENDENCY_RISK_TIER = Tier 3**
-**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = YES — CONSUMED AS ACTIVE SLICE AUTHORIZATION**
+**S9_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
 **S9_NEXT_MINIMUM_DEPENDENCY_LIBRARY_ONLY_POSSIBLE = YES**
 **S9_NEXT_MINIMUM_DEPENDENCY_NEW_SOT_REQUIRED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_NEW_TABLE_REQUIRED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_NEW_MIGRATION_REQUIRED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_SERVICE_REQUIRED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_RUNTIME_ACTIVATION_REQUIRED = NO**
 **S9_NEXT_MINIMUM_DEPENDENCY_REPLAY_EXECUTION_REQUIRED = NO**
 **S8_OBSERVED_OUTCOME_EVALUATION_SOT_OFFICIAL_NAME = ARTEMIS_OBSERVED_OUTCOME_EVALUATION_SOURCE_OF_TRUTH**
 **S8_OBSERVED_OUTCOME_EVALUATION_SOT_AUTHORITY_CLASS = OUTCOME_EVALUATION**
@@ -567,7 +615,7 @@ alwaysApply: true
 
 **ARTEMIS_CONVERSATION_MATURITY = NOT_ASSESSED**
 
-Artemis Core Stage 1 through Stage 8 are closed. Stage 7 Control Chain slices C.1–C.6 are closed. C.6 Order Management Execution Boundary is **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS** at main `6b1274d75c16dd913e21fa781f277e29f1f5f13c` (PR #108) and remains library-only / non-executing. No `STAGE_7_3_2_C_7` exists or is authorized. Stage 8 Shadow Decision Mode is **CLOSED / FROZEN / VERIFIED** at main `8dd44dd7da22ffd21f48b65f0df6f42e2ffcd1a6` (PR #121; Evaluation SoT PR #120). `STAGE8_FORMAL_FREEZE = COMPLETE`. `STAGE8_LIBRARY_COMPLETENESS = PASS`. All Stage 8 slices are **READ_REFERENCE_ONLY**. No `C8_2` exists or is authorized. Artemis Core Stage 9 — **Decision Lineage, Replay and Evaluation Foundation** is **IN_PROGRESS**. Exact slice **S9-DECISION-LINEAGE-CONTRACT / ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY** is **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123; PR HEAD `913738b689f3bfd8f39b296ac2fa151920edd7fd`; `DECISION_LINEAGE` / Tier 3; library-only; `NEW_SOT/TABLE/MIGRATION_REQUIRED = NO`; `IMPLEMENTATION = COMPLETE`; `IMPLEMENTATION_AUTHORIZED = NO / CONSUMED`). Contract owner = `backend/contracts/artemisDecisionLineageContract.js`. Test owner = `backend/__tests__/unit/artemisDecisionLineageContract.test.js` (54/54 PASS; regression 23 suites / 951 tests PASS; CI Backend/E2E/GitGuardian SUCCESS). `AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION`. `NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED` with `NEXT_GATE_STATUS = NOT_AUTHORIZED`. Next minimum dependency **discovered (NOT authorized)** = `S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY` (library-only Replay identity/modes/original-vs-recomputed boundary; `NEW_SOT/TABLE/MIGRATION/SERVICE = NO`; `REPLAY_EXECUTION = NO`). Migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE**. This does **not** authorize Shadow worker/scheduler, Live, Paper trading, real orders, provider transactional transport, wallet/financial mutation, Emergency Stop clearing, runtime mutation, LLM/network calls, B10 live migration/activation, market feeder/network access, Replay execution, Calibration, deployment, or any next Stage 9 slice.
+Artemis Core Stage 1 through Stage 8 are closed. Stage 7 Control Chain slices C.1–C.6 are closed. C.6 Order Management Execution Boundary is **CLOSED / IMPLEMENTED / MERGED / AUDIT PASS / HUMAN_QA PASS** at main `6b1274d75c16dd913e21fa781f277e29f1f5f13c` (PR #108) and remains library-only / non-executing. No `STAGE_7_3_2_C_7` exists or is authorized. Stage 8 Shadow Decision Mode is **CLOSED / FROZEN / VERIFIED** at main `8dd44dd7da22ffd21f48b65f0df6f42e2ffcd1a6` (PR #121; Evaluation SoT PR #120). `STAGE8_FORMAL_FREEZE = COMPLETE`. `STAGE8_LIBRARY_COMPLETENESS = PASS`. All Stage 8 slices are **READ_REFERENCE_ONLY**. No `C8_2` exists or is authorized. Artemis Core Stage 9 — **Decision Lineage, Replay and Evaluation Foundation** is **IN_PROGRESS**. Exact prior slice **S9-DECISION-LINEAGE-CONTRACT / ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY** is **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123). Exact authorized slice **S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY** is **AUTHORIZED / NOT_STARTED** (`REPLAY` / Tier 3; library-only semantic Replay contract; `NEW_SOT/TABLE/MIGRATION/SERVICE_REQUIRED = NO`; `REPLAY_EXECUTION = NO`; `IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY`; `IMPLEMENTATION_STARTED = NO`). `AUTHORIZED_SLICE = S9-REPLAY-CONTRACT`. `NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY` with `NEXT_GATE_STATUS = AUTHORIZED`. Migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE**. This does **not** authorize Replay Engine/execution, historical reconstruction execution, Shadow worker/scheduler, Live, Paper trading, real orders, provider transactional transport, wallet/financial mutation, Emergency Stop clearing, runtime mutation, LLM/network calls, B10 live migration/activation, market feeder/network access, Calibration, deployment, or any further Stage 9 slice beyond S9-REPLAY-CONTRACT.
 
 ### Artemis Core Stage 7.3.2.c.3 — CLOSED / PORTFOLIO CONTROL_SIZING COMPLETE (20260911)
 
@@ -835,85 +883,138 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — Artemis Core Stage 9 Decision Lineage Contract (CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY)
+### Active Work Package — Artemis Core Stage 9 Replay Contract (AUTHORIZED / NOT_STARTED)
 
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**AUTHORIZED_SLICE = S9-REPLAY-CONTRACT**
 **PRIOR_SLICE = S9-DECISION-LINEAGE-CONTRACT**
-**SLICE_ID = S9-DECISION-LINEAGE-CONTRACT**
-**OFFICIAL_NAME = ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY**
+**SLICE_ID = S9-REPLAY-CONTRACT**
+**OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
 **STAGE_8_OFFICIAL_NAME = Shadow Decision Mode**
 **STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **ARTEMIS_CORE_STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **RISK_TIER = Tier 3**
-**AUTHORITY_CLASS = DECISION_LINEAGE**
-**IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**S9_DECISION_LINEAGE_CONTRACT_STATUS = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
-**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION = COMPLETE**
-**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION_STARTED = YES / COMPLETE**
-**S9_DECISION_LINEAGE_CONTRACT_AUDIT = PASS**
-**S9_DECISION_LINEAGE_CONTRACT_HUMAN_QA = PASS**
-**S9_DECISION_LINEAGE_CONTRACT_MAIN_GIT_SHA = `ef6592135fde87d711a8cb0cef5e48f22e156213`**
-**S9_DECISION_LINEAGE_CONTRACT_MERGED_PR = #123**
-**S9_DECISION_LINEAGE_CONTRACT_PR_HEAD = `913738b689f3bfd8f39b296ac2fa151920edd7fd`**
-**S9_DECISION_LINEAGE_CONTRACT_CI = Backend Tests SUCCESS · E2E SUCCESS · GitGuardian SUCCESS**
-**IMPLEMENTATION_STARTED = YES / COMPLETE**
+**AUTHORITY_CLASS = REPLAY**
+**IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**S9_REPLAY_CONTRACT_STATUS = AUTHORIZED / NOT_STARTED**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION = NOT_STARTED**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_STARTED = NO**
+**IMPLEMENTATION_STARTED = NO**
 **IMPLEMENTATION_SHAPE = DETERMINISTIC_NON_EXECUTING_LIBRARY_VALIDATION_BOUNDARY**
 **NEW_SOT_REQUIRED = NO**
 **NEW_TABLE_REQUIRED = NO**
 **NEW_MIGRATION_REQUIRED = NO**
+**SERVICE_REQUIRED = NO**
 **PERSISTENCE_ACTIVATION = NO**
 **LIBRARY_ONLY = YES**
 **LIBRARY_ONLY_POSSIBLE = YES**
 **RUNTIME_ACTIVATION_REQUIRED = NO**
+**REPLAY_EXECUTION = NO**
+**RECONSTRUCTION_EXECUTION = NO**
 
 **PURPOSE =**
-Define a deterministic, non-executing, library-only Decision Lineage contract capable of binding already-existing canonical Stage 8 artifacts into a reconstructable lineage envelope.
+Define a deterministic, non-executing, library-only Replay semantic contract capable of expressing the semantic boundary for a future Replay operation against an existing Decision Lineage reference.
 
-It is intended to answer:
+It may define concepts such as:
 
-"What exact canonical evidence, context, policy/version references, shadow recording, task/cycle lineage, observed outcome and evaluation belong to this historical decision?"
+- replay identity
+- replay source lineage identity (`lineageId` thin ref)
+- replay mode
+- ORIGINAL_HISTORICAL versus CURRENT_RECOMPUTATION distinction
+- historical cutoff / asOf semantics
+- anti-lookahead requirements
+- immutable source lineage binding
+- replay request envelope validation
+- replay-result classification semantics if strictly non-executing
 
-This slice defines lineage structure and validation only.
+This slice defines Replay semantics and validation only.
 
-It is NOT Replay execution.
+It is NOT Replay execution. It is NOT historical reconstruction execution.
 
-**CONTRACT_OWNER = `backend/contracts/artemisDecisionLineageContract.js`**
-**TEST_OWNER = `backend/__tests__/unit/artemisDecisionLineageContract.test.js`**
-**S9_DECISION_LINEAGE_CONTRACT_TESTS = 54/54 PASS**
-**S9_DECISION_LINEAGE_CONTRACT_REGRESSION = 23 suites / 951 tests PASS**
+**EXPECTED_CONTRACT_OWNER = `backend/contracts/artemisReplayContract.js`**
+**EXPECTED_TEST_OWNER = `backend/__tests__/unit/artemisReplayContract.test.js`**
 **NO_SERVICE_OWNER_IN_THIS_SLICE = YES**
 **NO_RUNTIME_OWNER_IN_THIS_SLICE = YES**
-**S9_DECISION_LINEAGE_CONTRACT_IS_SOURCE_OF_TRUTH = false**
+**NO_SOT_OWNER_IN_THIS_SLICE = YES**
+**S9_REPLAY_CONTRACT_IS_SOURCE_OF_TRUTH = false**
 
-**LINEAGE_MAY_REFERENCE_THIN_REFS_WHERE_UPSTREAM_SUPPORTS =**
-decisionId · decisionContextId/contextId · shadowRecordingArtifactId · marketContextId · taskId · bindingId · shadowCycleEnvelopeId · outcomeId · evaluationId
+Do NOT create these files in this governance authorization task. Expectations only.
 
-**VERSION_PROVENANCE_LINKAGE_WHERE_UPSTREAM_SUPPORTS =**
-decision contract version · decision context contract version · evidence version/reference · policyVersion · implementationVersion · market context contract version · outcome contract version · evaluation contract version
+**ORIGINAL_HISTORICAL_SEMANTICS = AUTHORIZED**
+ORIGINAL_HISTORICAL means: use only canonical information that belonged to the historical Decision lineage.
 
-Do NOT invent missing identifiers. Do NOT fabricate modelVersion/configurationVersion if upstream does not canonically own them. Unavailable remains unavailable.
+**CURRENT_RECOMPUTATION_SEMANTICS = AUTHORIZED**
+CURRENT_RECOMPUTATION means: a future recomputation performed using explicitly identified current/recomputed components.
 
-**RECONSTRUCTABILITY_BOUNDARY =**
-Contract validates whether a lineage envelope contains enough canonical references to support later deterministic reconstruction (`COMPLETE` / `PARTIAL` / `INSUFFICIENT`).
+The distinction must remain semantic/metadata-only. This authorization does NOT permit any actual recomputation.
 
-This slice MUST NOT perform reconstruction. NOT authorized: historical replay engine · state rehydration · market replay · provider replay · counterfactual replay · execution replay.
+**HISTORICAL_CUTOFF_SEMANTICS = AUTHORIZED**
+Future contract may own semantic historical cutoff (`asOf` / `historicalCutoff` — exact naming from repository conventions during implementation) to prevent future information from entering historical replay context.
 
-**LOOKAHEAD_HISTORICAL_INTEGRITY =**
-Preserve time integrity. Forbid future evidence injected into a historical decision; future market context injected into decision-side lineage; outcome/evaluation contaminating original decision inputs; post-decision artifacts masquerading as pre-decision evidence.
+Do NOT fetch historical data. Do NOT reconstruct data. Do NOT access market providers.
 
-Lineage may reference post-decision Outcome/Evaluation as descendants. Preserve directionality: pre-decision ancestors → Decision → post-decision descendants. Do not flatten into one undifferentiated payload.
+**REPLAY_IDENTITY_SEMANTICS = AUTHORIZED**
+Future contract may define deterministic replay identity derived from stable canonical components such as: source `lineageId` · replay mode · explicit historical cutoff/asOf · contract version · method/version metadata.
+
+Forbidden identity sources: Date.now() · Math.random() · randomUUID() · randomBytes().
+
+**SOURCE_LINEAGE_BINDING =**
+Future Replay Contract MUST bind to S9 Decision Lineage Contract through a thin canonical lineage reference (`lineageId`).
+
+Do NOT duplicate full Decision Lineage payloads. Do NOT create a second Decision Lineage owner.
+
+Existing `backend/contracts/artemisDecisionLineageContract.js` is READ/REFERENCE ONLY.
+
+**ANTI_LOOKAHEAD_BOUNDARY =**
+Future contract must fail closed against Replay requests that imply:
+
+- future Outcome used as original input
+- future Evaluation used as original input
+- post-decision Market Context used as decision-time context
+- current provider state represented as historical truth
+- current recomputation represented as ORIGINAL_HISTORICAL
+- current model output represented as original model output
+- future evidence represented as historical evidence
+
+No hidden repair. No silent downgrading of current data into historical data.
+
+**UPSTREAM_VERSION_LIMITATIONS =**
+MODEL_VERSION_CANONICAL_STATUS = UPSTREAM_METADATA_UNAVAILABLE
+CONFIGURATION_VERSION_CANONICAL_STATUS = UPSTREAM_METADATA_UNAVAILABLE
+POLICY_VERSION_CANONICAL_STATUS = CANONICAL_WHERE_UPSTREAM_SUPPORTS
+IMPLEMENTATION_VERSION_CANONICAL_STATUS = CANONICAL_WHERE_UPSTREAM_SUPPORTS
+
+Do NOT authorize synthetic: modelVersion · configurationVersion · modelSnapshotId · configurationSnapshotId · policySnapshotId. If unavailable: remain UNAVAILABLE.
+
+**RECONSTRUCTION_BOUNDARY =**
+Future Replay Contract may describe what a Replay request intends to reconstruct.
+
+But it MUST NOT: reconstruct historical state · rehydrate artifacts · fetch evidence · load provider data · run Decision logic · rerun model inference · recompute evaluation · execute Control Chain · execute orders.
+
+Historical reconstruction EXECUTION is out of scope.
+
+**REPLAY_MODE_VOCABULARY =**
+Bounded conceptual distinction supported by discovery:
+
+- ORIGINAL_HISTORICAL
+- CURRENT_RECOMPUTATION
+
+Do NOT invent additional modes unless repository evidence requires them.
+Do NOT authorize: simulation · paper replay · live replay · trade replay · order replay · portfolio replay · provider replay.
 
 **DETERMINISM =**
-Future Decision Lineage identity must be deterministic. Forbidden for canonical lineage identity: Date.now() · Math.random() · randomUUID() · randomBytes(). Derive identity from existing canonical lineage references and explicit version/method metadata.
+Future Replay Contract must be deterministic. Same canonical request input = same replay identity / semantic artifact. No hidden current time. No environment-dependent identity. No provider-dependent identity.
+
+**REPLAY_EXECUTION_ABSOLUTELY_FORBIDDEN = YES**
+This authorization does NOT permit: Replay Engine · Replay Runner · Replay Worker · Replay Scheduler · Replay Queue · reconstruction execution · historical state loading · model rerun · LLM rerun · provider rerun · strategy rerun · Decision rerun · Control Chain rerun · order rerun · wallet replay · financial simulation.
 
 **READ_REFERENCE_ONLY_UPSTREAM_OWNERS =**
-Decision · Decision Context · Evidence · Evidence Orchestration · Control Chain · C8.1 Shadow Decision Recording · Market Context Contract · Market Context SoT · Shadow Runtime Boundary · Task State · Task Cycle Binding · Task State Activation · Observed Outcome Contract · Observed Outcome SoT · Observed Outcome Evaluation Contract · Observed Outcome Evaluation SoT
+Decision Lineage Contract · Decision · Decision Context · Evidence · Evidence Orchestration · Control Chain · C8.1 Shadow Decision Recording · Market Context Contract · Market Context SoT · Shadow Runtime Boundary · Task State · Task Cycle Binding · Task State Activation · Observed Outcome Contract · Observed Outcome SoT · Observed Outcome Evaluation Contract · Observed Outcome Evaluation SoT
 
-Decision Lineage MUST NOT duplicate them. Decision Lineage MUST NOT modify them.
+Replay Contract MUST NOT duplicate them. Replay Contract MUST NOT modify them.
 
 **SIDE_EFFECT_BUDGET =**
-NETWORK=0 · PROVIDER=0 · DB_WRITES=0 · LIVE_DB_MIGRATION=0 · REDIS_WRITES=0 · LLM_CALLS=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · WORKER=0 · SCHEDULER=0 · FEEDER=0 · B10=0 · REPLAY=0 · CALIBRATION=0
+NETWORK=0 · PROVIDER=0 · DB_WRITES=0 · LIVE_DB_MIGRATION=0 · REDIS_WRITES=0 · LLM_CALLS=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · WORKER=0 · SCHEDULER=0 · FEEDER=0 · B10=0 · REPLAY_EXECUTION=0 · CALIBRATION=0
 
 **NETWORK = NO**
 **PROVIDER = NO**
@@ -925,7 +1026,10 @@ NETWORK=0 · PROVIDER=0 · DB_WRITES=0 · LIVE_DB_MIGRATION=0 · REDIS_WRITES=0 
 **FEEDER = NO**
 **B10 = NO**
 **RUNTIME_ACTIVATION = NO**
-**REPLAY = NO**
+**REPLAY_EXECUTION = NO**
+**RECONSTRUCTION_EXECUTION = NO**
+**MODEL_RECOMPUTATION = NO**
+**PROVIDER_RECOMPUTATION = NO**
 **CALIBRATION = NO**
 **PAPER = NO**
 **LIVE = NO**
@@ -934,7 +1038,7 @@ NETWORK=0 · PROVIDER=0 · DB_WRITES=0 · LIVE_DB_MIGRATION=0 · REDIS_WRITES=0 
 **FINANCIAL_EXECUTION = NO**
 
 **PROTECTED_SURFACES = READ/REFERENCE ONLY / CLOSED/FROZEN =**
-Core Rules · C.1–C.6 · Control Chain · Decision · Decision Context · Evidence · Evidence Orchestration · C8.1 · Market Context Contract · Market Context SoT · Shadow Runtime · Shadow Task State · Task Cycle Binding · Task State Activation · Observed Outcome Contract · Observed Outcome SoT · Observed Outcome Evaluation Contract · Observed Outcome Evaluation SoT · B10 · `artemisDecisionPersistenceService` · `runtimeExecutionStateService` · `engineWorkerLeader` · `messageQueue` · `scheduler.js` · `startArtemisScheduler` · `artemisOrchestrator` · `artemisExecutionGate` · `tradingEngine` · `routes/artemis` · market-proxy · MEXC/CCXT · Data Hub · production runtime
+Core Rules · C.1–C.6 · Control Chain · Decision · Decision Context · Evidence · Evidence Orchestration · C8.1 · Market Context Contract · Market Context SoT · Shadow Runtime · Shadow Task State · Task Cycle Binding · Task State Activation · Observed Outcome Contract · Observed Outcome SoT · Observed Outcome Evaluation Contract · Observed Outcome Evaluation SoT · Decision Lineage Contract · B10 · `artemisDecisionPersistenceService` · `runtimeExecutionStateService` · `engineWorkerLeader` · `messageQueue` · `scheduler.js` · `startArtemisScheduler` · `artemisOrchestrator` · `artemisExecutionGate` · `tradingEngine` · `routes/artemis` · market-proxy · MEXC/CCXT · Data Hub · production runtime
 
 **ARTEMIS_CORE_STAGE_8 = CLOSED / FROZEN / VERIFIED**
 **STAGE8_IMPLEMENTATION_AUTHORIZED = NO / CLOSED**
@@ -944,25 +1048,11 @@ Core Rules · C.1–C.6 · Control Chain · Decision · Decision Context · Evid
 **STAGE8_FORMAL_FREEZE = COMPLETE**
 **STAGE8_FREEZE_MAIN_GIT_SHA = `8dd44dd7da22ffd21f48b65f0df6f42e2ffcd1a6`**
 **STAGE8_FREEZE_CLOSEOUT_PR = #121**
-**STAGE8_EVALUATION_SOT_MERGED_PR = #120**
 **STAGE_8_STATUS = CLOSED / FROZEN / VERIFIED / ALL_SLICES_READ_REFERENCE_ONLY**
-**STAGE_8_STARTED = YES / CLOSED / FROZEN**
-**STAGE8_RUNTIME_REQUIRED_FOR_COMPLETION = NO**
-**STAGE8_LIVE_DB_REQUIRED_FOR_COMPLETION = NO**
-**STAGE8_WORKER_REQUIRED_FOR_COMPLETION = NO**
-**STAGE8_SCHEDULER_REQUIRED_FOR_COMPLETION = NO**
-**STAGE8_FEEDER_REQUIRED_FOR_COMPLETION = NO**
-**STAGE8_B10_ACTIVATION_REQUIRED_FOR_COMPLETION = NO**
-**RUNTIME_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**LIVE_DB_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**WORKER_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**SCHEDULER_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**FEEDER_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**B10_ACTIVATION_REQUIRED_FOR_STAGE8_FREEZE = NO**
-**MIGRATION_051_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
-**MIGRATION_053_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
-**MIGRATION_054_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
-**MIGRATION_055_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
+**MIGRATION_051_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**
+**MIGRATION_053_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**
+**MIGRATION_054_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**
+**MIGRATION_055_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**
 **LIVE_PG_MIGRATION_EXECUTED = NO**
 **B10_ACTIVATED = NO**
 **GLOBAL_SHADOW_RUNTIME_ACTIVATED = NO**
@@ -970,64 +1060,34 @@ Core Rules · C.1–C.6 · Control Chain · Decision · Decision Context · Evid
 **SCHEDULER = NO**
 **FEEDER = NO**
 
-**ALL_STAGE_8_SLICES = CLOSED / FROZEN / READ_REFERENCE_ONLY =**
-1. C8.1 Shadow Decision Recording
-2. Market Context Contract
-3. Market Context SoT
-4. C8.1 Market Context Ref
-5. Shadow Runtime Library Boundary
-6. Shadow Task State
-7. Shadow Task Cycle Binding
-8. Task State Activation
-9. Observed Outcome Contract
-10. Observed Outcome SoT
-11. Observed Outcome Evaluation Contract
-12. Observed Outcome Evaluation SoT
-
-**S8_OBSERVED_OUTCOME_EVALUATION_SOT_STATUS = CLOSED / VERIFIED / HUMAN_QA PASS / READ_REFERENCE_ONLY**
-**S8_OBSERVED_OUTCOME_EVALUATION_SOT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**S8_OBSERVED_OUTCOME_EVALUATION_SOT = READ/REFERENCE ONLY — NO MUTATION**
-**S8_OBSERVED_OUTCOME_EVALUATION_CONTRACT_STATUS = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
-**S8_OBSERVED_OUTCOME_EVALUATION_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**OUTCOME_SOT = CLOSED / VERIFIED / READ_REFERENCE_ONLY**
-**OUTCOME_EVALUATION = LIBRARY_CONTRACT_IMPLEMENTED — CLOSED / VERIFIED / READ_REFERENCE_ONLY**
-**EVALUATION_SOT = CLOSED / VERIFIED / HUMAN_QA PASS / READ_REFERENCE_ONLY — LIBRARY_OWNER / LIVE_PG_MIGRATION_NOT_EXECUTED**
+**S9_DECISION_LINEAGE_CONTRACT_STATUS = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
+**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**S9_DECISION_LINEAGE_CONTRACT = READ/REFERENCE ONLY — NO MUTATION**
+**DECISION_LINEAGE = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
 
 **ARTEMIS_CORE_STAGE_9 = IN_PROGRESS**
 **STAGE9_STARTED = YES**
-**STAGE9_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
+**STAGE9_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S9-REPLAY-CONTRACT**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
 **NO_C8_2 = YES**
 **C8_2 = NOT_DEFINED / NOT CREATED / NOT AUTHORIZED**
 **NO_STAGE_7_3_2_C_7 = YES**
 **STAGE_7_3_2_C_7 = NOT_DEFINED / NOT CREATED**
-**HUMAN_QA_MILESTONE = STAGE_9_DECISION_LINEAGE_CONTRACT_BOUNDARY_COMPLETE**
-**NEXT_APPROVED_TRANSITION = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED**
-**NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**HUMAN_QA_MILESTONE = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_APPROVED_TRANSITION = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_GATE_STATUS = AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
 
-**S9_NEXT_MINIMUM_DEPENDENCY_DISCOVERED = S9-REPLAY-CONTRACT**
-**S9_NEXT_MINIMUM_DEPENDENCY_OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
-**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORITY_CLASS = REPLAY**
-**S9_NEXT_MINIMUM_DEPENDENCY_RISK_TIER = Tier 3**
-**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_LIBRARY_ONLY_POSSIBLE = YES**
-**S9_NEXT_MINIMUM_DEPENDENCY_NEW_SOT_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_NEW_TABLE_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_NEW_MIGRATION_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_SERVICE_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_RUNTIME_ACTIVATION_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_REPLAY_EXECUTION_REQUIRED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_WHY = Stage 9 requires ORIGINAL_HISTORICAL versus CURRENT_RECOMPUTATION semantics before durable Lineage SoT or Replay execution; no Artemis Replay owner exists; Lineage Contract alone does not own replay mode/asOf/original-vs-recomputed classification**
+**DO_NOT_AUTHORIZE_IN_THIS_SLICE =**
+S9-REPLAY-SOT · S9-REPLAY-SERVICE · S9-REPLAY-ENGINE · S9-HISTORICAL-RECONSTRUCTION · S9-REPLAY-EVALUATION · S9-LINEAGE-SOT · S9-VERSION-SNAPSHOT · Calibration · Paper · Live
 
 **C1_C6 = UNCHANGED**
 **CONTROL_CHAIN = UNCHANGED**
 **LEGACY_RUNTIME = NOT_CANONICAL**
 **RAW_MARKET_DATA = FORBIDDEN**
-**HARD_BOUNDARY = Stage 8 CLOSED/FROZEN/READ_REFERENCE_ONLY; Stage 9 exact slice S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY / AUTHORIZATION CONSUMED at main ef65921 (PR #123); AUTHORIZED_SLICE=NONE; library-only Decision Lineage contract; NEW_SOT/TABLE/MIGRATION=NO; no Replay/Calibration/runtime/worker/scheduler/feeder/network; next Stage 9 slice NOT authorized (discovered dependency S9-REPLAY-CONTRACT remains NOT_AUTHORIZED)**
+**HARD_BOUNDARY = Stage 8 CLOSED/FROZEN/READ_REFERENCE_ONLY; Decision Lineage CLOSED/VERIFIED/LIBRARY_ONLY/READ_REFERENCE_ONLY; Stage 9 exact slice S9-REPLAY-CONTRACT AUTHORIZED / NOT_STARTED; library-only Replay semantic contract; NEW_SOT/TABLE/MIGRATION/SERVICE=NO; REPLAY_EXECUTION=NO; no reconstruction/Calibration/runtime/worker/scheduler/feeder/network; no further Stage 9 slice authorized**
 
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 **LIVE_EXECUTION = NOT AUTHORIZED**
@@ -1051,24 +1111,44 @@ Core Rules · C.1–C.6 · Control Chain · Decision · Decision Context · Evid
 **B10_ACTIVATED = NO**
 **B10_RUNTIME_WRITES = NO**
 **B10_MIGRATION_EXECUTED = NO**
-**MARKET_CONTEXT_AUTHORIZATION = S8-MC-SOT IMPLEMENTED — ATTESTED_ENVELOPE_SOT_ONLY / NETWORK_NOT_AUTHORIZED / PROVIDER_NOT_AUTHORIZED / FEEDER_SEPARATE_AUTH_REQUIRED**
-**MARKET_CONTEXT_SOT = IMPLEMENTED_LIBRARY_OWNER — LIVE_PG_MIGRATION_NOT_EXECUTED**
-**MARKET_CONTEXT_NETWORK = NO**
-**RAW_SERIES_STORAGE = FORBIDDEN_IN_THIS_SLICE**
-**OBSERVED_OUTCOME_STATUS = S8-OBSERVED-OUTCOME-SOT CLOSED / VERIFIED — LIBRARY_OWNER / LIVE_PG_MIGRATION_NOT_EXECUTED / EVALUATION_SOT_CLOSED_VERIFIED**
-**OUTCOME_SOT = CLOSED / VERIFIED / READ_REFERENCE_ONLY**
-**OBSERVED_OUTCOME = SOT_CLOSED_VERIFIED_LIBRARY_ONLY**
-**OUTCOME = SOT_CLOSED_VERIFIED_LIBRARY_ONLY**
 **LIVE = NO**
 **PAPER = NO**
 **ORDERS = NO**
 **WALLET = NO**
 
-This Active Work Package records **S9-DECISION-LINEAGE-CONTRACT / ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY** as **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** with `IMPLEMENTATION_AUTHORIZED = NO / CONSUMED` at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123). Stage 8 remains **CLOSED / FROZEN / VERIFIED** at main `8dd44dd7da22ffd21f48b65f0df6f42e2ffcd1a6` (PR #121). `STAGE8_FORMAL_FREEZE = COMPLETE`. `STAGE8_LIBRARY_COMPLETENESS = PASS`. All Stage 8 slices remain **READ_REFERENCE_ONLY**. Live PG migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE**. Formal closeout discovery identified **S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY** as the next minimum Stage 9 dependency and does **not** authorize it. This closeout does **not** authorize Worker/Scheduler/Feeder/B10/Replay execution/Calibration/Paper/Live/orders/wallet/financial execution/network/provider, and does **not** authorize any next Stage 9 slice.
+This Active Work Package authorizes **exact slice S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY** as **AUTHORIZED / NOT_STARTED** with `IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY` and `IMPLEMENTATION_STARTED = NO`. Prior slice S9-DECISION-LINEAGE-CONTRACT remains **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123). Stage 8 remains **CLOSED / FROZEN / VERIFIED** at main `8dd44dd7da22ffd21f48b65f0df6f42e2ffcd1a6` (PR #121). Live PG migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**. This authorization does **not** authorize Replay Engine/execution, historical reconstruction execution, Worker/Scheduler/Feeder/B10/Calibration/Paper/Live/orders/wallet/financial execution/network/provider, and does **not** authorize any further Stage 9 slice.
 
-`CONTRACT_OWNER = backend/contracts/artemisDecisionLineageContract.js`. `TEST_OWNER = backend/__tests__/unit/artemisDecisionLineageContract.test.js` (54/54 PASS; regression 23 suites / 951 tests PASS). `isSourceOfTruth = false`. `NEW_SOT/TABLE/MIGRATION = NO`. `REPLAY = NO`. `RUNTIME_ACTIVATION = NO`. `AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION`. `NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED` with `NEXT_GATE_STATUS = NOT_AUTHORIZED`. Stage 9 remains **IN_PROGRESS**.
+`EXPECTED_CONTRACT_OWNER = backend/contracts/artemisReplayContract.js`. `EXPECTED_TEST_OWNER = backend/__tests__/unit/artemisReplayContract.test.js`. Files not created by this governance task. `isSourceOfTruth = false`. `NEW_SOT/TABLE/MIGRATION/SERVICE = NO`. `REPLAY_EXECUTION = NO`. `NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY` with `NEXT_GATE_STATUS = AUTHORIZED`. Stage 9 remains **IN_PROGRESS**.
 
-Historical Active Work Package fields that once said `S9_DECISION_LINEAGE_CONTRACT_STATUS = AUTHORIZED / NOT_STARTED`, `IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS` as the active authority state without formal closeout, `IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY`, `AUTHORIZED_SLICE = S9-DECISION-LINEAGE-CONTRACT` as the active slice, `IMPLEMENTATION_STARTED = NO`, or `NEXT_GATE = STAGE_9_DECISION_LINEAGE_CONTRACT_BOUNDARY` / `STAGE_9_DECISION_LINEAGE_CONTRACT_BOUNDARY_COMPLETE` as the active next gate are **SUPERSEDED** by this formal closeout. Evaluation SoT / Evaluation Contract / Outcome SoT / Binding / Task State / RT / S8-C81-MC-REF / S8-MC-SOT / S8-MC-CONTRACT / C8.1 closeout evidence below remains historical/closed / READ_REFERENCE_ONLY.
+Historical Active Work Package fields that once said `AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION`, `S9_REPLAY_CONTRACT` / next dependency `AUTHORIZED = NO`, `NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED` with `NEXT_GATE_STATUS = NOT_AUTHORIZED`, or Decision Lineage as the active authority slice are **SUPERSEDED** by this authorization. Decision Lineage closeout evidence below remains historical/closed / READ_REFERENCE_ONLY.
+
+### Historical — S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY (superseded as active authority by S9-REPLAY-CONTRACT authorization)
+
+**HISTORICAL_SLICE_ID = S9-DECISION-LINEAGE-CONTRACT**
+**HISTORICAL_OFFICIAL_NAME = ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY**
+**S9_DECISION_LINEAGE_CONTRACT_STATUS = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
+**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION = COMPLETE**
+**S9_DECISION_LINEAGE_CONTRACT_AUDIT = PASS**
+**S9_DECISION_LINEAGE_CONTRACT_HUMAN_QA = PASS**
+**S9_DECISION_LINEAGE_CONTRACT_MAIN_GIT_SHA = `ef6592135fde87d711a8cb0cef5e48f22e156213`**
+**S9_DECISION_LINEAGE_CONTRACT_MERGED_PR = #123**
+**S9_DECISION_LINEAGE_CONTRACT_PR_HEAD = `913738b689f3bfd8f39b296ac2fa151920edd7fd`**
+**S9_DECISION_LINEAGE_CONTRACT_CI = Backend Tests SUCCESS · E2E SUCCESS · GitGuardian SUCCESS**
+**S9_DECISION_LINEAGE_CONTRACT_CONTRACT_OWNER = `backend/contracts/artemisDecisionLineageContract.js`**
+**S9_DECISION_LINEAGE_CONTRACT_TEST_OWNER = `backend/__tests__/unit/artemisDecisionLineageContract.test.js`**
+**S9_DECISION_LINEAGE_CONTRACT_TESTS = 54/54 PASS**
+**S9_DECISION_LINEAGE_CONTRACT_REGRESSION = 23 suites / 951 tests PASS**
+**S9_DECISION_LINEAGE_CONTRACT_IS_SOURCE_OF_TRUTH = false**
+**S9_DECISION_LINEAGE_CONTRACT_NEW_SOT_REQUIRED = NO**
+**S9_DECISION_LINEAGE_CONTRACT_NEW_TABLE_REQUIRED = NO**
+**S9_DECISION_LINEAGE_CONTRACT_NEW_MIGRATION_REQUIRED = NO**
+**S9_DECISION_LINEAGE_CONTRACT_LIBRARY_ONLY = YES**
+**S9_DECISION_LINEAGE_CONTRACT_REPLAY = NO**
+**S9_DECISION_LINEAGE_CONTRACT_RUNTIME_ACTIVATION = NO**
+**DECISION_LINEAGE = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
+
+Historical closeout at main `ef65921` (PR #123) + formal closeout/discovery at main `548c1f7` (PR #124) remain evidence only. Active authority is Stage 9 S9-REPLAY-CONTRACT above.
 
 ### Historical — S8-OBSERVED-OUTCOME-EVALUATION-SOT CLOSED / VERIFIED (superseded as active authority by Stage 8 freeze + Stage 9 auth)
 
@@ -1097,7 +1177,7 @@ Historical Active Work Package fields that once said `S9_DECISION_LINEAGE_CONTRA
 **S8_OBSERVED_OUTCOME_EVALUATION_CONTRACT_MERGED_PR = #119**
 **EVALUATION_SOT = CLOSED / VERIFIED / HUMAN_QA PASS / READ_REFERENCE_ONLY — LIBRARY_OWNER / LIVE_PG_MIGRATION_NOT_EXECUTED**
 
-Historical closeout at main `e65421a` (PR #120) + completion-ready normalization at main `8dd44dd` (PR #121) remain evidence only. Active authority is Stage 9 S9-DECISION-LINEAGE-CONTRACT above.
+Historical closeout at main `e65421a` (PR #120) + completion-ready normalization at main `8dd44dd` (PR #121) remain evidence only. Active authority is Stage 9 S9-REPLAY-CONTRACT above.
 
 ### Artemis Core Stage 8 — S8-SHADOW-TASK-CYCLE-BINDING CLOSED / SHADOW TASK CYCLE COMPOSITION BOUNDARY COMPLETE
 
@@ -2607,7 +2687,7 @@ Current outcome:
 
 All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots below are **HISTORICAL EVIDENCE ONLY** and **MUST NOT** override this current snapshot. In particular, any historical occurrence of `T2_REAUTH_READY = YES`, `ENGINE_ONLINE_COUNT = 2`, `ENGINE_TOPOLOGY_2_TO_1 = NOT_COMPLETE / NOT_EXECUTED`, `PRODUCTION_REAUTH_REQUIRED`, `T2_RETRY_AUTHORIZED = YES`, `C2_052 = NOT EXECUTED`, `C2_052_OWNER_ONE_SHOT`, `FULL_TELEGRAM_C2_MAJOR_MILESTONE = OPEN`, `C2_052_CURRENT_SAFETY = BLOCKED_RESOURCE_IO`, `READY_FOR_SEPARATE_OWNER_AUTH`, `Human Browser QA pending`, or `M4 IN PROGRESS` must be interpreted only within its explicitly historical section.
 
-**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / ARTEMIS CORE STAGE 1–8 CLOSED / STAGE_7_3_2_C_1–C_6 CLOSED / STAGE_7_3_2_C_6 ORDER MANAGEMENT EXECUTION BOUNDARY CLOSED IMPLEMENTED MERGED AUDIT PASS HUMAN_QA PASS / NO STAGE_7_3_2_C_7 / ARTEMIS_CORE_STAGE_8 CLOSED FROZEN VERIFIED / STAGE8_FORMAL_FREEZE COMPLETE / STAGE8_LIBRARY_COMPLETENESS PASS / ARTEMIS_CORE_STAGE_9 IN_PROGRESS / AUTHORIZED_SLICE NONE / S9-DECISION-LINEAGE-CONTRACT CLOSED VERIFIED LIBRARY_ONLY READ_REFERENCE_ONLY AT MAIN ef65921 PR #123 / NEXT_GATE FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED NOT_AUTHORIZED / NEXT_MINIMUM_DEPENDENCY_DISCOVERED S9-REPLAY-CONTRACT NOT AUTHORIZED / PRODUCTION_MUTATION_CAPABILITY CLOSED / SHADOW_RUNTIME LIBRARY ONLY GLOBAL ACTIVATION NO / B10_ACTIVATED NO / LIVE_PG_MIGRATION_EXECUTED NO / REPLAY NO / CALIBRATION NO / LIVE_EXECUTION NOT AUTHORIZED / ORDER_MANAGEMENT NOT EXECUTION-ACTIVATED / MODEL_PROVIDER NOT AUTHORIZED**
+**CURRENT_OUTCOME = M4 TELEGRAM/C2 PRODUCTION CLOSEOUT CLOSED / C2_052 CLOSED APPLIED VERIFIED / HUMAN_BROWSER_QA PASS / ARTEMIS CORE STAGE 1–8 CLOSED / STAGE_7_3_2_C_1–C_6 CLOSED / STAGE_7_3_2_C_6 ORDER MANAGEMENT EXECUTION BOUNDARY CLOSED IMPLEMENTED MERGED AUDIT PASS HUMAN_QA PASS / NO STAGE_7_3_2_C_7 / ARTEMIS_CORE_STAGE_8 CLOSED FROZEN VERIFIED / STAGE8_FORMAL_FREEZE COMPLETE / STAGE8_LIBRARY_COMPLETENESS PASS / ARTEMIS_CORE_STAGE_9 IN_PROGRESS / AUTHORIZED_SLICE S9-REPLAY-CONTRACT AUTHORIZED NOT_STARTED / S9-DECISION-LINEAGE-CONTRACT CLOSED VERIFIED LIBRARY_ONLY READ_REFERENCE_ONLY AT MAIN ef65921 PR #123 / NEXT_GATE STAGE_9_REPLAY_CONTRACT_BOUNDARY AUTHORIZED / REPLAY_EXECUTION NO / PRODUCTION_MUTATION_CAPABILITY CLOSED / SHADOW_RUNTIME LIBRARY ONLY GLOBAL ACTIVATION NO / B10_ACTIVATED NO / LIVE_PG_MIGRATION_EXECUTED NO / CALIBRATION NO / LIVE_EXECUTION NOT AUTHORIZED / ORDER_MANAGEMENT NOT EXECUTION-ACTIVATED / MODEL_PROVIDER NOT AUTHORIZED**
 
 **RIOIR_RESULT = COMPLETED**
 **RIOIR_RUN_ID = RIOIR-20260830T072328Z**
@@ -2777,8 +2857,8 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 
 **DO_NOT_ADVANCE_TO_B1 = NO / B1 DEPLOY CONSUMED**
 
-**NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_GATE_STATUS = AUTHORIZED**
 **C2_052_EXECUTION_AUTHORIZED = NO / CONSUMED**
 **TELEGRAM_LIVENESS_PRODUCTION_VALIDATION = PASS**
 **TELEGRAM_LIVENESS_STAGE = CLOSED**
@@ -2787,7 +2867,7 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STARTED = YES / CLOSED**
 **ARTEMIS_CORE_STAGE_7_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S9-REPLAY-CONTRACT**
 **STAGE_7_STARTED = YES / CLOSED**
 **STAGE_6_STATUS = CLOSED**
 **STAGE_7_STATUS = CLOSED**
@@ -2817,15 +2897,18 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **STAGE8_LIBRARY_COMPLETENESS = PASS**
 **ARTEMIS_CORE_STAGE_9 = IN_PROGRESS**
 **STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
-**STAGE9_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
+**STAGE9_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**AUTHORIZED_SLICE = S9-REPLAY-CONTRACT**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
 **S9_DECISION_LINEAGE_CONTRACT_STATUS = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY**
 **S9_DECISION_LINEAGE_CONTRACT_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**S9_REPLAY_CONTRACT_STATUS = AUTHORIZED / NOT_STARTED**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_STARTED = NO**
 **S9_NEXT_MINIMUM_DEPENDENCY_DISCOVERED = S9-REPLAY-CONTRACT**
-**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = YES — CONSUMED AS ACTIVE SLICE AUTHORIZATION**
 **STAGE8_RISK_TIER = Tier 3**
-**AUTHORITY_CLASS = DECISION_LINEAGE**
+**AUTHORITY_CLASS = REPLAY**
 **RISK_TIER = Tier 3**
 **C8_1_STATUS = CLOSED / IMPLEMENTED / AUDIT PASS / HUMAN_QA PASS / READ_REFERENCE_ONLY**
 **C8_1_AUTHORIZATION = NO / CONSUMED**
@@ -2843,7 +2926,8 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **MODEL_PROVIDER = NOT AUTHORIZED**
 **LLM = NOT AUTHORIZED**
 **DEPLOY = NO**
-**REPLAY = NO**
+**REPLAY = LIBRARY_CONTRACT_AUTHORIZED — NOT_STARTED / REPLAY_EXECUTION=NO**
+**REPLAY_EXECUTION = NO**
 **CALIBRATION = NO**
 **AUTOMATED_TRADING_ENABLED = NO**
 **LIVE_TRADING_ENABLED = NO**
@@ -2855,13 +2939,13 @@ All older T2/T2R14/T2R15/T2R16/T2R161/source-fix/sanitizer/re-auth snapshots bel
 **PRODUCTION_MUTATION_CAPABILITY = CLOSED**
 
 Current area:
-Artemis Core Completion — Stage 7 Control Chain C.1–C.6 CLOSED; Stage 8 CLOSED / FROZEN / VERIFIED; Stage 9 IN_PROGRESS; S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY (PR #123); AUTHORIZED_SLICE = NONE
+Artemis Core Completion — Stage 7 Control Chain C.1–C.6 CLOSED; Stage 8 CLOSED / FROZEN / VERIFIED; Stage 9 IN_PROGRESS; S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY (PR #123); AUTHORIZED_SLICE = S9-REPLAY-CONTRACT AUTHORIZED / NOT_STARTED
 
 Current program slice:
-ARTEMIS_CORE_COMPLETION / ARTEMIS_CORE_STAGE_9_DECISION_LINEAGE_REPLAY_AND_EVALUATION_FOUNDATION (S9-DECISION-LINEAGE-CONTRACT CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY; AUTHORIZED_SLICE = NONE; NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED NOT_AUTHORIZED; discovered next dependency S9-REPLAY-CONTRACT NOT AUTHORIZED)
+ARTEMIS_CORE_COMPLETION / ARTEMIS_CORE_STAGE_9_DECISION_LINEAGE_REPLAY_AND_EVALUATION_FOUNDATION (AUTHORIZED_SLICE = S9-REPLAY-CONTRACT AUTHORIZED / NOT_STARTED; NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY AUTHORIZED; REPLAY_EXECUTION = NO; Decision Lineage CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY)
 
 Risk context:
-Tier 3; Stage 8 formally frozen; Stage 9 S9-DECISION-LINEAGE-CONTRACT library-only contract CLOSED / VERIFIED / READ_REFERENCE_ONLY at main ef65921; NEW_SOT/TABLE/MIGRATION = NO; Production Mutation Capability CLOSED; Replay/Calibration/Paper/Live/Worker/Scheduler/Feeder/B10/orders/wallet/financial execution not authorized; no next Stage 9 slice authorized
+Tier 3; Stage 8 formally frozen; Stage 9 exact slice S9-REPLAY-CONTRACT library-only semantic Replay contract authorized not started; NEW_SOT/TABLE/MIGRATION/SERVICE = NO; REPLAY_EXECUTION = NO; Production Mutation Capability CLOSED; Replay Engine/reconstruction/Calibration/Paper/Live/Worker/Scheduler/Feeder/B10/orders/wallet/financial execution not authorized; no further Stage 9 slice authorized
 
 ## Durable provenance
 
@@ -5556,10 +5640,10 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 ## Next Owner gate
 
 **PRIMARY ROADMAP = Artemis Core Completion (15 stages) → Post-Core Agents → Settings/AI Provider → Council/Memory → Autonomous Ops → ACCP**
-**NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY**
+**NEXT_GATE_STATUS = AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
-**ARTEMIS IMPLEMENTATION AUTHORIZED = NO / CONSUMED**
+**ARTEMIS IMPLEMENTATION AUTHORIZED = YES — EXACT SLICE ONLY**
 **STAGE_6_STARTED = YES / CLOSED**
 **ARTEMIS_CORE_STAGE_6_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
 **STAGE_6_STATUS = CLOSED**
@@ -5598,10 +5682,24 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **ARTEMIS_CORE_STAGE_9_OFFICIAL_NAME = Decision Lineage, Replay and Evaluation Foundation**
 **STAGE9_STARTED = YES**
-**STAGE9_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
+**STAGE9_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S9-REPLAY-CONTRACT**
+**AUTHORIZED_SLICE = S9-REPLAY-CONTRACT**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
+**S9_REPLAY_CONTRACT_OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
+**S9_REPLAY_CONTRACT_AUTHORITY_CLASS = REPLAY**
+**S9_REPLAY_CONTRACT_RISK_TIER = Tier 3**
+**S9_REPLAY_CONTRACT_STATUS = AUTHORIZED / NOT_STARTED**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
+**S9_REPLAY_CONTRACT_IMPLEMENTATION_STARTED = NO**
+**S9_REPLAY_CONTRACT_LIBRARY_ONLY = YES**
+**S9_REPLAY_CONTRACT_NEW_SOT_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_NEW_TABLE_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_NEW_MIGRATION_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_SERVICE_REQUIRED = NO**
+**S9_REPLAY_CONTRACT_REPLAY_EXECUTION = NO**
+**S9_REPLAY_CONTRACT_EXPECTED_OWNER = `backend/contracts/artemisReplayContract.js`**
+**S9_REPLAY_CONTRACT_EXPECTED_TEST_OWNER = `backend/__tests__/unit/artemisReplayContract.test.js`**
 **S9_DECISION_LINEAGE_CONTRACT_OFFICIAL_NAME = ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY**
 **S9_DECISION_LINEAGE_CONTRACT_AUTHORITY_CLASS = DECISION_LINEAGE**
 **S9_DECISION_LINEAGE_CONTRACT_RISK_TIER = Tier 3**
@@ -5626,14 +5724,14 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **S9_DECISION_LINEAGE_CONTRACT_IS_SOURCE_OF_TRUTH = false**
 **S9_DECISION_LINEAGE_CONTRACT_REPLAY = NO**
 **S9_DECISION_LINEAGE_CONTRACT_RUNTIME_ACTIVATION = NO**
-**AUTHORITY_CLASS = DECISION_LINEAGE**
+**AUTHORITY_CLASS = REPLAY**
 **RISK_TIER = Tier 3**
 **S9_NEXT_MINIMUM_DEPENDENCY_DISCOVERED = S9-REPLAY-CONTRACT**
 **S9_NEXT_MINIMUM_DEPENDENCY_OFFICIAL_NAME = ARTEMIS_REPLAY_CONTRACT_BOUNDARY**
 **S9_NEXT_MINIMUM_DEPENDENCY_AUTHORITY_CLASS = REPLAY**
 **S9_NEXT_MINIMUM_DEPENDENCY_RISK_TIER = Tier 3**
-**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = NO**
-**S9_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = NO**
+**S9_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = YES — CONSUMED AS ACTIVE SLICE AUTHORIZATION**
+**S9_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY**
 **S9_NEXT_MINIMUM_DEPENDENCY_LIBRARY_ONLY_POSSIBLE = YES**
 **S9_NEXT_MINIMUM_DEPENDENCY_NEW_SOT_REQUIRED = NO**
 **S9_NEXT_MINIMUM_DEPENDENCY_REPLAY_EXECUTION_REQUIRED = NO**
@@ -5657,6 +5755,7 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **OUTCOME_EVALUATION = LIBRARY_CONTRACT_IMPLEMENTED — CLOSED / VERIFIED / READ_REFERENCE_ONLY**
 **EVALUATION_SOT = CLOSED / VERIFIED / HUMAN_QA PASS / READ_REFERENCE_ONLY — LIBRARY_OWNER / LIVE_PG_MIGRATION_NOT_EXECUTED**
 **DECISION_LINEAGE = CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY — AUTHORIZATION CONSUMED**
+**REPLAY_CONTRACT = AUTHORIZED / NOT_STARTED — LIBRARY_ONLY / REPLAY_EXECUTION=NO**
 **MIGRATION_051_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
 **MIGRATION_053_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
 **MIGRATION_054_CLASSIFICATION = DEFERRED_ACTIVATION_SURFACE**
@@ -5689,10 +5788,11 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **WORKER = NO**
 **SCHEDULER = NO**
 **FEEDER = NO**
-**REPLAY = NO**
+**REPLAY = LIBRARY_CONTRACT_AUTHORIZED — NOT_STARTED / REPLAY_EXECUTION=NO**
+**REPLAY_EXECUTION = NO**
 **CALIBRATION = NO**
 
-C.3–C.6 are formally closed. Stage 7 Control Chain is closed. No `STAGE_7_3_2_C_7` exists. Stage 8 Shadow Decision Mode is **CLOSED / FROZEN / VERIFIED** at main `8dd44dd` (PR #121; Evaluation SoT PR #120). `STAGE8_FORMAL_FREEZE = COMPLETE`. `STAGE8_LIBRARY_COMPLETENESS = PASS`. All Stage 8 slices are **READ_REFERENCE_ONLY**. Artemis Core Stage 9 — **Decision Lineage, Replay and Evaluation Foundation** is **IN_PROGRESS**. Exact slice **S9-DECISION-LINEAGE-CONTRACT / ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY** is **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123; PR HEAD `913738b689f3bfd8f39b296ac2fa151920edd7fd`; `DECISION_LINEAGE` / Tier 3; library-only; `NEW_SOT/TABLE/MIGRATION_REQUIRED = NO`; `IMPLEMENTATION = COMPLETE`; `IMPLEMENTATION_AUTHORIZED = NO / CONSUMED`). Contract owner = `backend/contracts/artemisDecisionLineageContract.js`. Test owner = `backend/__tests__/unit/artemisDecisionLineageContract.test.js` (54/54 PASS; regression 23 suites / 951 tests PASS; CI Backend/E2E/GitGuardian SUCCESS). `AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION`. `NEXT_GATE = FORMAL_NEXT_STAGE9_SLICE_AUTHORIZATION_REQUIRED` with `NEXT_GATE_STATUS = NOT_AUTHORIZED`. Next minimum dependency **discovered (NOT authorized)** = `S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY`. Migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE**. Worker/Scheduler/Feeder/B10/Replay execution/Calibration/Paper/Live/orders/wallet/financial execution/network/provider remain unauthorized. No next Stage 9 slice is authorized.
+C.3–C.6 are formally closed. Stage 7 Control Chain is closed. No `STAGE_7_3_2_C_7` exists. Stage 8 Shadow Decision Mode is **CLOSED / FROZEN / VERIFIED** at main `8dd44dd` (PR #121; Evaluation SoT PR #120). `STAGE8_FORMAL_FREEZE = COMPLETE`. `STAGE8_LIBRARY_COMPLETENESS = PASS`. All Stage 8 slices are **READ_REFERENCE_ONLY**. Artemis Core Stage 9 — **Decision Lineage, Replay and Evaluation Foundation** is **IN_PROGRESS**. Prior slice **S9-DECISION-LINEAGE-CONTRACT / ARTEMIS_DECISION_LINEAGE_CONTRACT_BOUNDARY** is **CLOSED / VERIFIED / LIBRARY_ONLY / READ_REFERENCE_ONLY** at main `ef6592135fde87d711a8cb0cef5e48f22e156213` (PR #123). Exact authorized slice **S9-REPLAY-CONTRACT / ARTEMIS_REPLAY_CONTRACT_BOUNDARY** is **AUTHORIZED / NOT_STARTED** (`REPLAY` / Tier 3; library-only semantic Replay contract; `NEW_SOT/TABLE/MIGRATION/SERVICE_REQUIRED = NO`; `REPLAY_EXECUTION = NO`; `IMPLEMENTATION_AUTHORIZED = YES — EXACT SLICE ONLY`; `IMPLEMENTATION_STARTED = NO`). Expected future owners (not created by this governance task): `backend/contracts/artemisReplayContract.js` · `backend/__tests__/unit/artemisReplayContract.test.js`. `AUTHORIZED_SLICE = S9-REPLAY-CONTRACT`. `NEXT_GATE = STAGE_9_REPLAY_CONTRACT_BOUNDARY` with `NEXT_GATE_STATUS = AUTHORIZED`. Migrations 051/053/054/055 remain **DEFERRED_ACTIVATION_SURFACE / NOT_LIVE**. Worker/Scheduler/Feeder/B10/Replay execution/reconstruction/Calibration/Paper/Live/orders/wallet/financial execution/network/provider remain unauthorized. No further Stage 9 slice is authorized beyond S9-REPLAY-CONTRACT.
 
 Historical T2/B1/C2 Owner-gate subsections below remain **HISTORICAL EVIDENCE ONLY**.
 
