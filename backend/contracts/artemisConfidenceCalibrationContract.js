@@ -47,7 +47,9 @@ import {
   OBSERVED_OUTCOME_EVALUATION_IS_SOURCE_OF_TRUTH,
   OBSERVED_OUTCOME_EVALUATION_IMPLEMENTATION_VERSION,
   REQUIRED_HARD_FLAGS as EVALUATION_REQUIRED_HARD_FLAGS,
+  ZERO_EVALUATION_SIDE_EFFECTS,
 } from './artemisObservedOutcomeEvaluationContract.js';
+import { OBSERVED_OUTCOME_CONTRACT_VERSION } from './artemisObservedOutcomeContract.js';
 import { hashToUuid } from './artemisReplayContract.js';
 
 export const CONFIDENCE_CALIBRATION_SCHEMA_VERSION = '1.0.0';
@@ -195,6 +197,9 @@ export const CONFIDENCE_CALIBRATION_LIMITATIONS = Object.freeze([
 const HARD_FLAG_KEYS = Object.freeze(Object.keys(REQUIRED_HARD_FLAGS));
 const EVALUATION_HARD_FLAG_KEYS = Object.freeze(
   Object.keys(EVALUATION_REQUIRED_HARD_FLAGS),
+);
+const EVALUATION_SIDE_EFFECT_KEYS = Object.freeze(
+  Object.keys(ZERO_EVALUATION_SIDE_EFFECTS),
 );
 const EVALUATION_STATUS_SET = Object.freeze(
   new Set(Object.values(EVALUATION_STATUS)),
@@ -969,6 +974,16 @@ function validateBuiltEvaluationArtifact(evaluation) {
     evaluation.decisionRef.contractVersion,
     'CALIBRATION_EVALUATION_DECISION_CONTRACT_VERSION_INVALID',
   );
+  if (evaluation.decisionRef.contractVersion !== DECISION_CONTRACT_VERSION) {
+    fail(
+      'CALIBRATION_EVALUATION_DECISION_CONTRACT_VERSION_MISMATCH',
+      'evaluation decisionRef.contractVersion mismatch',
+      {
+        expected: DECISION_CONTRACT_VERSION,
+        provided: evaluation.decisionRef.contractVersion,
+      },
+    );
+  }
 
   assertPlainObject(
     evaluation.outcomeRef,
@@ -985,6 +1000,21 @@ function validateBuiltEvaluationArtifact(evaluation) {
     evaluation.outcomeRef.outcomeId,
     'CALIBRATION_EVALUATION_OUTCOME_ID_INVALID',
   );
+  assertString(
+    'outcomeRef.contractVersion',
+    evaluation.outcomeRef.contractVersion,
+    'CALIBRATION_EVALUATION_OUTCOME_CONTRACT_VERSION_INVALID',
+  );
+  if (evaluation.outcomeRef.contractVersion !== OBSERVED_OUTCOME_CONTRACT_VERSION) {
+    fail(
+      'CALIBRATION_EVALUATION_OUTCOME_CONTRACT_VERSION_MISMATCH',
+      'evaluation outcomeRef.contractVersion mismatch',
+      {
+        expected: OBSERVED_OUTCOME_CONTRACT_VERSION,
+        provided: evaluation.outcomeRef.contractVersion,
+      },
+    );
+  }
 
   assertPlainObject(
     evaluation.evaluationMethod,
@@ -1088,14 +1118,45 @@ function validateBuiltEvaluationArtifact(evaluation) {
   }
 
   for (const key of EVALUATION_HARD_FLAG_KEYS) {
-    if (
-      Object.prototype.hasOwnProperty.call(evaluation, key)
-      && evaluation[key] !== false
-    ) {
+    if (!Object.prototype.hasOwnProperty.call(evaluation, key)) {
+      fail(
+        'CALIBRATION_EVALUATION_HARD_FLAG_MISSING',
+        `evaluation hard flag ${key} is required`,
+        { key },
+      );
+    }
+    if (evaluation[key] !== false) {
       fail(
         'CALIBRATION_EVALUATION_HARD_FLAG_INVALID',
         `evaluation hard flag ${key} must be false`,
         { key },
+      );
+    }
+  }
+
+  assertPlainObject(
+    evaluation.sideEffects,
+    'CALIBRATION_EVALUATION_SIDE_EFFECTS_REQUIRED',
+    'evaluation.sideEffects required',
+  );
+  assertAllowlist(
+    evaluation.sideEffects,
+    EVALUATION_SIDE_EFFECT_KEYS,
+    'CALIBRATION_EVALUATION_SIDE_EFFECTS',
+  );
+  for (const key of EVALUATION_SIDE_EFFECT_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(evaluation.sideEffects, key)) {
+      fail(
+        'CALIBRATION_EVALUATION_SIDE_EFFECT_MISSING',
+        `evaluation side effect ${key} is required`,
+        { key },
+      );
+    }
+    if (evaluation.sideEffects[key] !== 0) {
+      fail(
+        'CALIBRATION_EVALUATION_SIDE_EFFECT_NONZERO',
+        `evaluation side effect ${key} must be zero`,
+        { key, value: evaluation.sideEffects[key] },
       );
     }
   }
@@ -1241,7 +1302,7 @@ function extractUsableObservedTruth(evaluation, sourceDecision) {
   return ref;
 }
 
-function assertTemporalIntegrity(decision, evaluation, observedTruthRef) {
+function assertTemporalIntegrity(decision, evaluation, observedTruthRef, calibrationRecordedAt) {
   assertIso(
     'decision.analysisAt',
     decision.analysisAt,
@@ -1281,6 +1342,17 @@ function assertTemporalIntegrity(decision, evaluation, observedTruthRef) {
         'Predictive analysisAt must precede observed marketContextRef.sourceTimestamp',
       );
     }
+  }
+  const calibrationRecordedMs = Date.parse(calibrationRecordedAt);
+  if (!(evaluationMs <= calibrationRecordedMs)) {
+    fail(
+      'CALIBRATION_TEMPORAL_RECORDED_AT_VIOLATION',
+      'Calibration observation recordedAt must not precede evaluation recordedAt',
+      {
+        evaluationRecordedAt: evaluation.recordedAt,
+        calibrationRecordedAt,
+      },
+    );
   }
 }
 
@@ -1375,7 +1447,7 @@ export function buildArtemisConfidenceCalibrationObservation(input = {}) {
 
   const predictiveClaimRef = extractPredictiveClaimRef(decision);
   const observedTruthRef = extractUsableObservedTruth(evaluation, decision);
-  assertTemporalIntegrity(decision, evaluation, observedTruthRef);
+  assertTemporalIntegrity(decision, evaluation, observedTruthRef, input.recordedAt);
 
   const implementationVersion =
     input.implementationVersion ?? CONFIDENCE_CALIBRATION_IMPLEMENTATION_VERSION;
