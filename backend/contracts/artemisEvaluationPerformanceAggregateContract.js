@@ -38,9 +38,17 @@ import {
   DIRECTION_OR_ABSTAIN,
   DECISION_CONTRACT_VERSION,
 } from './artemisDecisionContract.js';
+import { DECISION_CONTEXT_CONTRACT_VERSION } from './artemisDecisionContextContract.js';
+import { MARKET_CONTEXT_CONTRACT_VERSION } from './artemisMarketContextContract.js';
+import { SHADOW_RECORDING_CONTRACT_VERSION } from './artemisShadowDecisionRecordingBoundaryContract.js';
+import { SHADOW_TASK_STATE_CONTRACT_VERSION } from './artemisShadowTaskStateBoundaryContract.js';
+import { SHADOW_TASK_CYCLE_BINDING_CONTRACT_VERSION } from './artemisShadowTaskCycleCompositionBoundaryContract.js';
 import {
   OBSERVED_OUTCOME_CONTRACT_VERSION,
 } from './artemisObservedOutcomeContract.js';
+import {
+  OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
+} from './artemisObservedOutcomeSourceOfTruthContract.js';
 import { hashToUuid } from './artemisReplayContract.js';
 import {
   OBSERVED_OUTCOME_EVALUATION_ARTIFACT_TYPE as EVALUATION_ARTIFACT_TYPE,
@@ -53,6 +61,7 @@ import {
   OBSERVED_OUTCOME_EVALUATION_OWNERSHIP_ROLE as EVALUATION_OWNERSHIP_ROLE,
   OBSERVED_OUTCOME_EVALUATION_WRITER as EVALUATION_WRITER,
   OBSERVED_OUTCOME_EVALUATION_IS_SOURCE_OF_TRUTH as EVALUATION_IS_SOURCE_OF_TRUTH,
+  OBSERVED_OUTCOME_EVALUATION_STAGE as EVALUATION_STAGE,
   EVALUATION_STATUS,
   OBSERVATION_CLASS,
   EVALUATION_METHOD_KEY,
@@ -76,6 +85,8 @@ export const EVALUATION_PERFORMANCE_AGGREGATE_AUTHORITY_CLASS =
   'OUTCOME_EVALUATION';
 export const EVALUATION_PERFORMANCE_AGGREGATE_SLICE_ID =
   'S10-EVALUATION-PERFORMANCE-AGGREGATE-CONTRACT';
+/** Artemis Core stage identity in Aggregate provenance.stage (not sliceId). */
+export const EVALUATION_PERFORMANCE_AGGREGATE_STAGE = 'ARTEMIS_CORE_STAGE_10';
 export const EVALUATION_PERFORMANCE_AGGREGATE_WRITER =
   'artemisEvaluationPerformanceAggregateContract';
 export const EVALUATION_PERFORMANCE_AGGREGATE_METHOD_KEY =
@@ -87,6 +98,10 @@ export const EVALUATION_PERFORMANCE_AGGREGATE_IS_SOURCE_OF_TRUTH = false;
 export const AGGREGATE_RATIO_STATUS = Object.freeze({
   AVAILABLE: 'AVAILABLE',
   UNAVAILABLE: 'UNAVAILABLE',
+});
+
+/** Unavailable-ratio reason only — never a ratio.status value. */
+export const RATIO_UNAVAILABLE_REASON = Object.freeze({
   NO_COMPARABLE_EVIDENCE: 'NO_COMPARABLE_EVIDENCE',
 });
 
@@ -282,7 +297,8 @@ const COHORT_ALLOWLIST = Object.freeze([
   'symbol',
   'timeframe',
   'methodKey',
-  'implementationVersion',
+  'methodImplementationVersion',
+  'evaluationImplementationVersion',
   'policyVersion',
   'contractVersion',
 ]);
@@ -309,6 +325,7 @@ const RATIO_ALLOWLIST = Object.freeze([
   'numerator',
   'denominator',
   'status',
+  'reason',
 ]);
 
 const TIME_COVERAGE_ALLOWLIST = Object.freeze([
@@ -325,6 +342,7 @@ const VERSIONS_ALLOWLIST = Object.freeze([
   'sourceEvaluationPolicyVersion',
   'sourceEvaluationMethodKey',
   'sourceEvaluationMethodImplementationVersion',
+  'sourceEvaluationImplementationVersion',
 ]);
 
 const PROVENANCE_ALLOWLIST = Object.freeze([
@@ -345,7 +363,8 @@ const SOURCE_REF_ALLOWLIST = Object.freeze([
   'observationClass',
   'policyVersion',
   'methodKey',
-  'implementationVersion',
+  'methodImplementationVersion',
+  'evaluationImplementationVersion',
 ]);
 
 const EVAL_TOP_ALLOWLIST = Object.freeze([
@@ -567,13 +586,14 @@ function isPlainObject(value) {
 
 function deepFreeze(value) {
   if (value === null || typeof value !== 'object') return value;
-  if (Object.isFrozen(value)) return value;
+  // Always recurse into children even when the parent is already frozen —
+  // a shallow-frozen parent must not bypass nested mutability.
   if (Array.isArray(value)) {
     for (const item of value) deepFreeze(item);
-    return Object.freeze(value);
+    return Object.isFrozen(value) ? value : Object.freeze(value);
   }
   for (const key of Object.keys(value)) deepFreeze(value[key]);
-  return Object.freeze(value);
+  return Object.isFrozen(value) ? value : Object.freeze(value);
 }
 
 function assertString(value, field, { max = MAX_STRING, allowEmpty = false } = {}) {
@@ -749,6 +769,85 @@ function stableJson(value) {
 // Built Evaluation validation (Option-B)
 // ---------------------------------------------------------------------------
 
+function validateOptionalIdRef(ref, {
+  label,
+  allowlist,
+  idKey,
+  expectedContractVersion,
+  required = false,
+}) {
+  if (ref == null) {
+    if (required) {
+      fail('AGGREGATE_EVALUATION_REF_REQUIRED', `${label} required`);
+    }
+    return null;
+  }
+  if (!isPlainObject(ref)) {
+    fail('AGGREGATE_INVALID_REF', `${label} must be a plain object`);
+  }
+  assertAllowlist(ref, allowlist, 'AGGREGATE_EVALUATION_UNKNOWN_FIELD', label);
+  assertCanonicalUuid(ref[idKey], `${label}.${idKey}`);
+  assertString(ref.contractVersion, `${label}.contractVersion`);
+  if (expectedContractVersion != null
+    && ref.contractVersion !== expectedContractVersion) {
+    fail(
+      'AGGREGATE_EVALUATION_REF_CONTRACT_VERSION_MISMATCH',
+      `${label}.contractVersion mismatch`,
+      { expected: expectedContractVersion, provided: ref.contractVersion },
+    );
+  }
+  return ref;
+}
+
+/**
+ * Mirror Stage 8 computeEvaluationStatus READ-ONLY.
+ * Do not invent alternative status semantics.
+ */
+function deriveExpectedEvaluationStatus({
+  observationClass,
+  comparisonClaims,
+  blockedReason,
+}) {
+  if (blockedReason != null && blockedReason !== '') {
+    return EVALUATION_STATUS.BLOCKED;
+  }
+  if (
+    observationClass === OBSERVATION_CLASS.NOT_OBSERVED
+    || observationClass === OBSERVATION_CLASS.OBSERVED_BUT_UNAVAILABLE
+  ) {
+    return EVALUATION_STATUS.UNAVAILABLE;
+  }
+  if (observationClass === OBSERVATION_CLASS.OBSERVED_AND_EVALUABLE) {
+    const hasDecision = comparisonClaims?.decisionDirection != null;
+    const hasObserved = comparisonClaims?.observedDirection != null;
+    if (hasDecision && hasObserved) {
+      if (
+        comparisonClaims.decisionDirection === DIRECTION_OR_ABSTAIN.UNAVAILABLE
+        || comparisonClaims.decisionDirection === DIRECTION_OR_ABSTAIN.ABSTAIN
+        || comparisonClaims.decisionDirection === DIRECTION_OR_ABSTAIN.NOT_APPLICABLE
+        || comparisonClaims.observedDirection === DIRECTION_OR_ABSTAIN.UNAVAILABLE
+        || comparisonClaims.observedDirection === DIRECTION_OR_ABSTAIN.ABSTAIN
+        || comparisonClaims.observedDirection === DIRECTION_OR_ABSTAIN.NOT_APPLICABLE
+      ) {
+        return EVALUATION_STATUS.INSUFFICIENT_DATA;
+      }
+      return comparisonClaims.decisionDirection === comparisonClaims.observedDirection
+        ? EVALUATION_STATUS.MATCH
+        : EVALUATION_STATUS.MISMATCH;
+    }
+    if (hasDecision || hasObserved) {
+      return EVALUATION_STATUS.INSUFFICIENT_DATA;
+    }
+    // Stage 8 legacy: empty comparisonClaims → MATCH
+    return EVALUATION_STATUS.MATCH;
+  }
+  return EVALUATION_STATUS.UNAVAILABLE;
+}
+
+/**
+ * Option-B read/reference validation of a built Stage 8 Observed Outcome
+ * Evaluation artifact. Must match shapes the Stage 8 builder can produce.
+ */
 function validateBuiltEvaluationArtifact(evaluation, index) {
   const label = `evaluations[${index}]`;
   if (!isPlainObject(evaluation)) {
@@ -760,6 +859,7 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
     label,
   );
+
   assertExactString(
     evaluation.schemaVersion,
     EVALUATION_SCHEMA_VERSION,
@@ -792,16 +892,10 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
   );
   assertCanonicalUuid(evaluation.evaluationId, `${label}.evaluationId`);
   if (!EVALUATION_STATUS_SET.has(evaluation.evaluationStatus)) {
-    fail(
-      'AGGREGATE_INVALID_EVALUATION_STATUS',
-      `${label}.evaluationStatus is not canonical`,
-    );
+    fail('AGGREGATE_INVALID_EVALUATION_STATUS', `${label}.evaluationStatus invalid`);
   }
   if (!OBSERVATION_CLASS_SET.has(evaluation.observationClass)) {
-    fail(
-      'AGGREGATE_INVALID_OBSERVATION_CLASS',
-      `${label}.observationClass is not canonical`,
-    );
+    fail('AGGREGATE_INVALID_OBSERVATION_CLASS', `${label}.observationClass invalid`);
   }
   assertIsoTimestamp(evaluation.recordedAt, `${label}.recordedAt`);
   assertExactString(
@@ -812,145 +906,125 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
   if (evaluation.isSourceOfTruth !== EVALUATION_IS_SOURCE_OF_TRUTH) {
     fail(
       'AGGREGATE_EVALUATION_SOT_FLAG',
-      `${label}.isSourceOfTruth must be false`,
+      `${label}.isSourceOfTruth must be ${EVALUATION_IS_SOURCE_OF_TRUTH}`,
     );
   }
-  assertExactString(
+  // Stage 8: implementationVersion = input.implementationVersion || method.implementationVersion
+  // Do NOT force the default constant — caller-provided canonical string is legal.
+  assertString(
     evaluation.implementationVersion,
-    EVALUATION_IMPLEMENTATION_VERSION,
     `${label}.implementationVersion`,
   );
 
-  // decisionRef — built thin ref: decisionId + contractVersion only
-  if (!isPlainObject(evaluation.decisionRef)) {
-    fail('AGGREGATE_INVALID_DECISION_REF', `${label}.decisionRef required`);
+  if (evaluation.blockedReason != null) {
+    assertString(evaluation.blockedReason, `${label}.blockedReason`, { allowEmpty: true });
   }
-  assertAllowlist(
-    evaluation.decisionRef,
-    EVAL_DECISION_REF_ALLOWLIST,
-    'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-    `${label}.decisionRef`,
-  );
-  assertCanonicalUuid(evaluation.decisionRef.decisionId, `${label}.decisionRef.decisionId`);
-  assertString(evaluation.decisionRef.contractVersion, `${label}.decisionRef.contractVersion`);
-  if (evaluation.decisionRef.contractVersion !== DECISION_CONTRACT_VERSION) {
-    fail(
-      'AGGREGATE_EVALUATION_DECISION_CONTRACT_VERSION_MISMATCH',
-      `${label}.decisionRef.contractVersion mismatch`,
-      {
-        expected: DECISION_CONTRACT_VERSION,
-        provided: evaluation.decisionRef.contractVersion,
-      },
-    );
+  if (evaluation.realizedPnlStatus != null) {
+    assertString(evaluation.realizedPnlStatus, `${label}.realizedPnlStatus`);
   }
 
-  // outcomeRef — built thin ref: outcomeId + contractVersion only
-  if (!isPlainObject(evaluation.outcomeRef)) {
-    fail('AGGREGATE_INVALID_OUTCOME_REF', `${label}.outcomeRef required`);
+  // decisionRef — required
+  validateOptionalIdRef(evaluation.decisionRef, {
+    label: `${label}.decisionRef`,
+    allowlist: EVAL_DECISION_REF_ALLOWLIST,
+    idKey: 'decisionId',
+    expectedContractVersion: DECISION_CONTRACT_VERSION,
+    required: true,
+  });
+
+  // outcomeRef — required
+  validateOptionalIdRef(evaluation.outcomeRef, {
+    label: `${label}.outcomeRef`,
+    allowlist: EVAL_OUTCOME_REF_ALLOWLIST,
+    idKey: 'outcomeId',
+    expectedContractVersion: OBSERVED_OUTCOME_CONTRACT_VERSION,
+    required: true,
+  });
+
+  // marketContextRef — REQUIRED (Stage 8 builder always emits thin object)
+  if (!isPlainObject(evaluation.marketContextRef)) {
+    fail(
+      'AGGREGATE_INVALID_MARKET_CONTEXT_REF',
+      `${label}.marketContextRef must be a plain object (Stage 8 built shape)`,
+    );
   }
   assertAllowlist(
-    evaluation.outcomeRef,
-    EVAL_OUTCOME_REF_ALLOWLIST,
+    evaluation.marketContextRef,
+    EVAL_MC_REF_ALLOWLIST,
     'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-    `${label}.outcomeRef`,
+    `${label}.marketContextRef`,
   );
-  assertCanonicalUuid(evaluation.outcomeRef.outcomeId, `${label}.outcomeRef.outcomeId`);
-  assertString(evaluation.outcomeRef.contractVersion, `${label}.outcomeRef.contractVersion`);
-  if (evaluation.outcomeRef.contractVersion !== OBSERVED_OUTCOME_CONTRACT_VERSION) {
-    fail(
-      'AGGREGATE_EVALUATION_OUTCOME_CONTRACT_VERSION_MISMATCH',
-      `${label}.outcomeRef.contractVersion mismatch`,
-      {
-        expected: OBSERVED_OUTCOME_CONTRACT_VERSION,
-        provided: evaluation.outcomeRef.contractVersion,
-      },
+  assertCanonicalUuid(
+    evaluation.marketContextRef.marketContextId,
+    `${label}.marketContextRef.marketContextId`,
+  );
+  assertExactString(
+    evaluation.marketContextRef.contractVersion,
+    MARKET_CONTEXT_CONTRACT_VERSION,
+    `${label}.marketContextRef.contractVersion`,
+  );
+  if (evaluation.marketContextRef.sourceTimestamp != null) {
+    assertIsoTimestamp(
+      evaluation.marketContextRef.sourceTimestamp,
+      `${label}.marketContextRef.sourceTimestamp`,
     );
   }
-
-  // marketContextRef — optional thin ref (Confidence Calibration Option-B)
-  let marketContextRef = null;
-  if (evaluation.marketContextRef != null) {
-    if (!isPlainObject(evaluation.marketContextRef)) {
-      fail(
-        'AGGREGATE_INVALID_MARKET_CONTEXT_REF',
-        `${label}.marketContextRef must be plain object or null`,
-      );
-    }
-    assertAllowlist(
-      evaluation.marketContextRef,
-      EVAL_MC_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.marketContextRef`,
-    );
-    if (evaluation.marketContextRef.marketContextId != null) {
-      assertCanonicalUuid(
-        evaluation.marketContextRef.marketContextId,
-        `${label}.marketContextRef.marketContextId`,
-      );
-    }
-    if (evaluation.marketContextRef.contractVersion != null) {
+  for (const dim of ['venue', 'marketType', 'symbol', 'timeframe']) {
+    if (evaluation.marketContextRef[dim] != null) {
       assertString(
-        evaluation.marketContextRef.contractVersion,
-        `${label}.marketContextRef.contractVersion`,
+        evaluation.marketContextRef[dim],
+        `${label}.marketContextRef.${dim}`,
       );
     }
-    if (evaluation.marketContextRef.sourceTimestamp != null) {
-      assertIsoTimestamp(
-        evaluation.marketContextRef.sourceTimestamp,
-        `${label}.marketContextRef.sourceTimestamp`,
-      );
-    }
-    for (const dim of ['venue', 'marketType', 'symbol', 'timeframe']) {
-      if (evaluation.marketContextRef[dim] != null) {
-        assertString(
-          evaluation.marketContextRef[dim],
-          `${label}.marketContextRef.${dim}`,
-        );
-      }
-    }
-    marketContextRef = evaluation.marketContextRef;
   }
+  const marketContextRef = evaluation.marketContextRef;
 
-  // Optional thin refs (allowlist only when present)
-  if (evaluation.decisionContextRef != null) {
-    assertAllowlist(
-      evaluation.decisionContextRef,
-      EVAL_CONTEXT_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.decisionContextRef`,
-    );
-  }
-  if (evaluation.shadowRecordingRef != null) {
-    assertAllowlist(
-      evaluation.shadowRecordingRef,
-      EVAL_SHADOW_RECORDING_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.shadowRecordingRef`,
-    );
-  }
+  // Stage 8 always emits decisionContextRef + shadowRecordingRef
+  validateOptionalIdRef(evaluation.decisionContextRef, {
+    label: `${label}.decisionContextRef`,
+    allowlist: EVAL_CONTEXT_REF_ALLOWLIST,
+    idKey: 'contextId',
+    expectedContractVersion: DECISION_CONTEXT_CONTRACT_VERSION,
+    required: true,
+  });
+  validateOptionalIdRef(evaluation.shadowRecordingRef, {
+    label: `${label}.shadowRecordingRef`,
+    allowlist: EVAL_SHADOW_RECORDING_REF_ALLOWLIST,
+    idKey: 'shadowRecordingArtifactId',
+    expectedContractVersion: SHADOW_RECORDING_CONTRACT_VERSION,
+    required: true,
+  });
+
+  // Optional refs — validate IDs/versions when present
   if (evaluation.taskRef != null) {
-    assertAllowlist(
-      evaluation.taskRef,
-      EVAL_TASK_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.taskRef`,
-    );
+    const taskRef = validateOptionalIdRef(evaluation.taskRef, {
+      label: `${label}.taskRef`,
+      allowlist: EVAL_TASK_REF_ALLOWLIST,
+      idKey: 'taskId',
+      expectedContractVersion: SHADOW_TASK_STATE_CONTRACT_VERSION,
+      required: false,
+    });
+    if (taskRef.attempt != null) {
+      assertNonNegativeInteger(taskRef.attempt, `${label}.taskRef.attempt`);
+    }
   }
   if (evaluation.bindingRef != null) {
-    assertAllowlist(
-      evaluation.bindingRef,
-      EVAL_BINDING_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.bindingRef`,
-    );
+    validateOptionalIdRef(evaluation.bindingRef, {
+      label: `${label}.bindingRef`,
+      allowlist: EVAL_BINDING_REF_ALLOWLIST,
+      idKey: 'bindingId',
+      expectedContractVersion: SHADOW_TASK_CYCLE_BINDING_CONTRACT_VERSION,
+      required: false,
+    });
   }
   if (evaluation.outcomeSotRef != null) {
-    assertAllowlist(
-      evaluation.outcomeSotRef,
-      EVAL_OUTCOME_SOT_REF_ALLOWLIST,
-      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
-      `${label}.outcomeSotRef`,
-    );
+    validateOptionalIdRef(evaluation.outcomeSotRef, {
+      label: `${label}.outcomeSotRef`,
+      allowlist: EVAL_OUTCOME_SOT_REF_ALLOWLIST,
+      idKey: 'outcomeId',
+      expectedContractVersion: OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
+      required: false,
+    });
   }
 
   // evaluationMethod
@@ -1009,7 +1083,27 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     comparisonClaims = evaluation.comparisonClaims;
   }
 
-  // lineage
+  // Status consistency vs Stage 8 computeEvaluationStatus
+  const expectedStatus = deriveExpectedEvaluationStatus({
+    observationClass: evaluation.observationClass,
+    comparisonClaims,
+    blockedReason: evaluation.blockedReason,
+  });
+  if (evaluation.evaluationStatus !== expectedStatus) {
+    fail(
+      'AGGREGATE_SOURCE_EVALUATION_STATUS_INCONSISTENT',
+      `${label}.evaluationStatus inconsistent with observationClass/comparisonClaims/blockedReason`,
+      {
+        evaluationId: evaluation.evaluationId,
+        evaluationStatus: evaluation.evaluationStatus,
+        expectedStatus,
+        observationClass: evaluation.observationClass,
+        blockedReason: evaluation.blockedReason ?? null,
+      },
+    );
+  }
+
+  // lineage — required + Stage 8 guaranteed bindings
   if (!isPlainObject(evaluation.lineage)) {
     fail('AGGREGATE_INVALID_LINEAGE', `${label}.lineage required`);
   }
@@ -1019,8 +1113,71 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
     `${label}.lineage`,
   );
+  if (evaluation.lineage.decisionId !== evaluation.decisionRef.decisionId) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.decisionId must equal decisionRef.decisionId`,
+    );
+  }
+  if (evaluation.lineage.outcomeId !== evaluation.outcomeRef.outcomeId) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.outcomeId must equal outcomeRef.outcomeId`,
+    );
+  }
+  if (evaluation.lineage.marketContextId !== marketContextRef.marketContextId) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.marketContextId must equal marketContextRef.marketContextId`,
+    );
+  }
+  if (evaluation.lineage.evaluationContractVersion !== EVALUATION_CONTRACT_VERSION) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.evaluationContractVersion must equal Evaluation contract version`,
+    );
+  }
+  if (
+    evaluation.lineage.contextId != null
+    && evaluation.lineage.contextId !== evaluation.decisionContextRef.contextId
+  ) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.contextId must equal decisionContextRef.contextId`,
+    );
+  }
+  if (
+    evaluation.lineage.shadowRecordingArtifactId != null
+    && evaluation.lineage.shadowRecordingArtifactId
+      !== evaluation.shadowRecordingRef.shadowRecordingArtifactId
+  ) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.shadowRecordingArtifactId must equal shadowRecordingRef.shadowRecordingArtifactId`,
+    );
+  }
+  if (
+    evaluation.taskRef != null
+    && evaluation.lineage.taskId != null
+    && evaluation.lineage.taskId !== evaluation.taskRef.taskId
+  ) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.taskId must equal taskRef.taskId`,
+    );
+  }
+  if (
+    evaluation.bindingRef != null
+    && evaluation.lineage.bindingId != null
+    && evaluation.lineage.bindingId !== evaluation.bindingRef.bindingId
+  ) {
+    fail(
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+      `${label}.lineage.bindingId must equal bindingRef.bindingId`,
+    );
+  }
 
-  // provenance
+  // provenance — required + Stage 8 authority bindings
   if (!isPlainObject(evaluation.provenance)) {
     fail('AGGREGATE_INVALID_PROVENANCE', `${label}.provenance required`);
   }
@@ -1035,24 +1192,51 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     EVALUATION_WRITER,
     `${label}.provenance.writer`,
   );
-  assertIsoTimestamp(evaluation.provenance.recordedAt, `${label}.provenance.recordedAt`);
+  assertExactString(
+    evaluation.provenance.methodKey,
+    evaluation.evaluationMethod.methodKey,
+    `${label}.provenance.methodKey`,
+  );
+  assertExactString(
+    evaluation.provenance.stage,
+    EVALUATION_STAGE,
+    `${label}.provenance.stage`,
+  );
+  assertExactString(
+    evaluation.provenance.recordedAt,
+    evaluation.recordedAt,
+    `${label}.provenance.recordedAt`,
+  );
+  assertExactString(
+    evaluation.provenance.policyVersion,
+    EVALUATION_POLICY_VERSION,
+    `${label}.provenance.policyVersion`,
+  );
+  assertExactString(
+    evaluation.provenance.implementationVersion,
+    evaluation.implementationVersion,
+    `${label}.provenance.implementationVersion`,
+  );
 
   // limitations
   if (!Array.isArray(evaluation.limitations)) {
     fail('AGGREGATE_INVALID_LIMITATIONS', `${label}.limitations must be an array`);
   }
 
-  // sideEffects — complete zero ledger
+  // sideEffects — exact canonical Evaluation keyset, all zero, no unknown
   if (!isPlainObject(evaluation.sideEffects)) {
     fail('AGGREGATE_EVALUATION_SIDE_EFFECTS', `${label}.sideEffects required`);
   }
+  const seKeys = Object.keys(evaluation.sideEffects).sort();
+  const expectedSeKeys = [...EVALUATION_SIDE_EFFECT_KEYS].sort();
+  if (stableJson(seKeys) !== stableJson(expectedSeKeys)) {
+    fail(
+      'AGGREGATE_EVALUATION_SIDE_EFFECTS',
+      `${label}.sideEffects must have exact Evaluation side-effect keyset`,
+      { provided: seKeys, expected: expectedSeKeys },
+    );
+  }
   for (const key of EVALUATION_SIDE_EFFECT_KEYS) {
-    if (!(key in evaluation.sideEffects)) {
-      fail(
-        'AGGREGATE_EVALUATION_SIDE_EFFECTS',
-        `${label}.sideEffects.${key} missing`,
-      );
-    }
     if (evaluation.sideEffects[key] !== 0) {
       fail(
         'AGGREGATE_EVALUATION_SIDE_EFFECTS',
@@ -1081,7 +1265,8 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     observationClass: evaluation.observationClass,
     recordedAt: evaluation.recordedAt,
     methodKey: evaluation.evaluationMethod.methodKey,
-    implementationVersion: evaluation.evaluationMethod.implementationVersion,
+    methodImplementationVersion: evaluation.evaluationMethod.implementationVersion,
+    evaluationImplementationVersion: evaluation.implementationVersion,
     marketContextRef,
     comparisonClaims,
     artifact: evaluation,
@@ -1096,45 +1281,57 @@ function classifyDirectional(validated) {
   const { observationClass, comparisonClaims, evaluationStatus, evaluationId } =
     validated;
 
+  // Directional performance requires MATCH or MISMATCH status first —
+  // BLOCKED / UNAVAILABLE / INSUFFICIENT_DATA remain non-comparable even
+  // when comparisonClaims happen to be present.
+  if (
+    evaluationStatus !== EVALUATION_STATUS.MATCH
+    && evaluationStatus !== EVALUATION_STATUS.MISMATCH
+  ) {
+    return { comparable: false, match: false };
+  }
+
+  if (observationClass !== OBSERVATION_CLASS.OBSERVED_AND_EVALUABLE) {
+    return { comparable: false, match: false };
+  }
+
   const hasExplicitClaims = (
     comparisonClaims !== null
     && comparisonClaims.decisionDirection !== undefined
     && comparisonClaims.observedDirection !== undefined
   );
-
-  if (
-    observationClass === OBSERVATION_CLASS.OBSERVED_AND_EVALUABLE
-    && hasExplicitClaims
-  ) {
-    const { decisionDirection, observedDirection } = comparisonClaims;
-    if (
-      COMPARABLE_DIRECTION_SET.has(decisionDirection)
-      && COMPARABLE_DIRECTION_SET.has(observedDirection)
-    ) {
-      const expectedStatus = decisionDirection === observedDirection
-        ? EVALUATION_STATUS.MATCH
-        : EVALUATION_STATUS.MISMATCH;
-      if (evaluationStatus !== expectedStatus) {
-        fail(
-          'EVALUATION_DIRECTION_STATUS_CONFLICT',
-          'evaluationStatus conflicts with explicit comparisonClaims directions',
-          {
-            evaluationId,
-            evaluationStatus,
-            expectedStatus,
-            decisionDirection,
-            observedDirection,
-          },
-        );
-      }
-      return {
-        comparable: true,
-        match: expectedStatus === EVALUATION_STATUS.MATCH,
-      };
-    }
+  if (!hasExplicitClaims) {
+    return { comparable: false, match: false };
   }
 
-  return { comparable: false, match: false };
+  const { decisionDirection, observedDirection } = comparisonClaims;
+  if (
+    !COMPARABLE_DIRECTION_SET.has(decisionDirection)
+    || !COMPARABLE_DIRECTION_SET.has(observedDirection)
+  ) {
+    return { comparable: false, match: false };
+  }
+
+  const expectedStatus = decisionDirection === observedDirection
+    ? EVALUATION_STATUS.MATCH
+    : EVALUATION_STATUS.MISMATCH;
+  if (evaluationStatus !== expectedStatus) {
+    fail(
+      'EVALUATION_DIRECTION_STATUS_CONFLICT',
+      'evaluationStatus conflicts with explicit comparisonClaims directions',
+      {
+        evaluationId,
+        evaluationStatus,
+        expectedStatus,
+        decisionDirection,
+        observedDirection,
+      },
+    );
+  }
+  return {
+    comparable: true,
+    match: expectedStatus === EVALUATION_STATUS.MATCH,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1145,12 +1342,13 @@ function extractCohortDescriptor(validatedList) {
   const first = validatedList[0];
   const mc = first.marketContextRef;
   const cohort = {
-    venue: mc ? mc.venue : null,
-    marketType: mc ? mc.marketType : null,
-    symbol: mc ? mc.symbol : null,
-    timeframe: mc ? mc.timeframe : null,
+    venue: mc?.venue ?? null,
+    marketType: mc?.marketType ?? null,
+    symbol: mc?.symbol ?? null,
+    timeframe: mc?.timeframe ?? null,
     methodKey: first.methodKey,
-    implementationVersion: first.implementationVersion,
+    methodImplementationVersion: first.methodImplementationVersion,
+    evaluationImplementationVersion: first.evaluationImplementationVersion,
     policyVersion: first.policyVersion,
     contractVersion: first.contractVersion,
   };
@@ -1159,22 +1357,24 @@ function extractCohortDescriptor(validatedList) {
     const v = validatedList[i];
     const vMc = v.marketContextRef;
     const next = {
-      venue: vMc ? vMc.venue : null,
-      marketType: vMc ? vMc.marketType : null,
-      symbol: vMc ? vMc.symbol : null,
-      timeframe: vMc ? vMc.timeframe : null,
+      venue: vMc?.venue ?? null,
+      marketType: vMc?.marketType ?? null,
+      symbol: vMc?.symbol ?? null,
+      timeframe: vMc?.timeframe ?? null,
       methodKey: v.methodKey,
-      implementationVersion: v.implementationVersion,
+      methodImplementationVersion: v.methodImplementationVersion,
+      evaluationImplementationVersion: v.evaluationImplementationVersion,
       policyVersion: v.policyVersion,
       contractVersion: v.contractVersion,
     };
 
-    // Version homogeneity
     if (
       next.contractVersion !== cohort.contractVersion
       || next.policyVersion !== cohort.policyVersion
       || next.methodKey !== cohort.methodKey
-      || next.implementationVersion !== cohort.implementationVersion
+      || next.methodImplementationVersion !== cohort.methodImplementationVersion
+      || next.evaluationImplementationVersion
+        !== cohort.evaluationImplementationVersion
     ) {
       fail(
         'MIXED_EVALUATION_VERSION_COHORT',
@@ -1183,7 +1383,6 @@ function extractCohortDescriptor(validatedList) {
       );
     }
 
-    // Market cohort homogeneity
     if (
       next.venue !== cohort.venue
       || next.marketType !== cohort.marketType
@@ -1208,26 +1407,53 @@ function extractCohortDescriptor(validatedList) {
 export function computeEvaluationPerformanceAggregateId({
   cohort,
   evaluationIds,
-  contractVersion = EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
-  policyVersion = EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
 } = {}) {
   if (!isPlainObject(cohort)) {
     fail('AGGREGATE_INVALID_COHORT', 'cohort must be a plain object for identity');
   }
+  assertAllowlist(
+    cohort,
+    COHORT_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'cohort',
+  );
   if (!Array.isArray(evaluationIds) || evaluationIds.length === 0) {
     fail('AGGREGATE_INVALID_IDENTITY', 'evaluationIds must be a non-empty array');
   }
+  const seen = new Set();
+  for (const id of evaluationIds) {
+    assertCanonicalUuid(id, 'evaluationIds[]');
+    if (seen.has(id)) {
+      fail('AGGREGATE_DUPLICATE_EVALUATION_ID', 'duplicate evaluationId in identity set', {
+        evaluationId: id,
+      });
+    }
+    seen.add(id);
+  }
+  assertString(cohort.methodKey, 'cohort.methodKey');
+  assertString(
+    cohort.methodImplementationVersion,
+    'cohort.methodImplementationVersion',
+  );
+  assertString(
+    cohort.evaluationImplementationVersion,
+    'cohort.evaluationImplementationVersion',
+  );
+  assertString(cohort.policyVersion, 'cohort.policyVersion');
+  assertString(cohort.contractVersion, 'cohort.contractVersion');
+
   const sortedIds = [...evaluationIds].sort();
   const material = {
-    contractVersion,
-    policyVersion,
+    contractVersion: EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
+    policyVersion: EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
     cohort: {
       venue: cohort.venue ?? null,
       marketType: cohort.marketType ?? null,
       symbol: cohort.symbol ?? null,
       timeframe: cohort.timeframe ?? null,
       methodKey: cohort.methodKey,
-      implementationVersion: cohort.implementationVersion,
+      methodImplementationVersion: cohort.methodImplementationVersion,
+      evaluationImplementationVersion: cohort.evaluationImplementationVersion,
       policyVersion: cohort.policyVersion,
       contractVersion: cohort.contractVersion,
     },
@@ -1248,8 +1474,7 @@ function buildRatio(numerator, denominator) {
       numerator: 0,
       denominator: 0,
       status: AGGREGATE_RATIO_STATUS.UNAVAILABLE,
-      // Explicit secondary status token for NO_COMPARABLE_EVIDENCE
-      reason: AGGREGATE_RATIO_STATUS.NO_COMPARABLE_EVIDENCE,
+      reason: RATIO_UNAVAILABLE_REASON.NO_COMPARABLE_EVIDENCE,
     });
   }
   return deepFreeze({
@@ -1283,7 +1508,7 @@ function buildProvenance(recordedAt, callerProvenance) {
   const base = {
     writer: EVALUATION_PERFORMANCE_AGGREGATE_WRITER,
     methodKey: EVALUATION_PERFORMANCE_AGGREGATE_METHOD_KEY,
-    stage: 'ARTEMIS_CORE_STAGE_10',
+    stage: EVALUATION_PERFORMANCE_AGGREGATE_STAGE,
     sliceId: EVALUATION_PERFORMANCE_AGGREGATE_SLICE_ID,
     recordedAt,
     policyVersion: EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
@@ -1512,7 +1737,8 @@ export function buildArtemisEvaluationPerformanceAggregate(input) {
         observationClass: v.observationClass,
         policyVersion: v.policyVersion,
         methodKey: v.methodKey,
-        implementationVersion: v.implementationVersion,
+        methodImplementationVersion: v.methodImplementationVersion,
+        evaluationImplementationVersion: v.evaluationImplementationVersion,
       })),
   );
 
@@ -1552,7 +1778,8 @@ export function buildArtemisEvaluationPerformanceAggregate(input) {
       sourceEvaluationContractVersion: cohort.contractVersion,
       sourceEvaluationPolicyVersion: cohort.policyVersion,
       sourceEvaluationMethodKey: cohort.methodKey,
-      sourceEvaluationMethodImplementationVersion: cohort.implementationVersion,
+      sourceEvaluationMethodImplementationVersion: cohort.methodImplementationVersion,
+      sourceEvaluationImplementationVersion: cohort.evaluationImplementationVersion,
     }),
     provenance: buildProvenance(recordedAt, input.provenance),
     limitations: normalizeLimitations(input.limitations),
@@ -1582,16 +1809,14 @@ export function buildArtemisEvaluationPerformanceAggregate(input) {
 }
 
 /**
- * Validate a built Aggregate artifact by re-deriving from its thin source
- * refs' corresponding full Evaluation artifacts when provided via
- * `sourceEvaluations`, OR by structural validation of a previously built
- * artifact when `evaluations` are re-supplied.
+ * Validate a built Aggregate artifact by re-deriving the ENTIRE canonical
+ * artifact from the supplied Evaluations. Caller-derived fields are never
+ * authoritative. Only explicitly allowed annotation metadata
+ * (limitations, provenance.note) may influence rebuild via the builder.
  *
- * Preferred path: pass the same shape as build (evaluations + recordedAt) —
- * validation re-builds and compares identity.
- *
- * Alternative: pass `{ artifact, evaluations }` to assert the artifact matches
- * a fresh rebuild from the same Evaluation set.
+ * Path A: build-input shape → rebuild and return
+ * Path B: { artifact, evaluations } → rebuild, compare all canonical fields,
+ *         return rebuilt (never the caller artifact)
  */
 export function validateArtemisEvaluationPerformanceAggregate(input) {
   if (!isPlainObject(input)) {
@@ -1603,34 +1828,27 @@ export function validateArtemisEvaluationPerformanceAggregate(input) {
     return buildArtemisEvaluationPerformanceAggregate(input);
   }
 
-  // Path B: { artifact, evaluations } → rebuild and compare identity + counts
+  // Path B: { artifact, evaluations } → full canonical re-derivation
   if (isPlainObject(input.artifact) && Array.isArray(input.evaluations)) {
+    assertBuiltArtifactStructure(input.artifact);
+
+    const annotationProvenance = isPlainObject(input.artifact.provenance)
+      && typeof input.artifact.provenance.note === 'string'
+      ? { note: input.artifact.provenance.note }
+      : undefined;
+
     const rebuilt = buildArtemisEvaluationPerformanceAggregate({
       evaluations: input.evaluations,
-      recordedAt: input.recordedAt ?? input.artifact.recordedAt,
-      limitations: input.limitations,
-      provenance: input.provenance,
+      recordedAt: input.artifact.recordedAt,
+      limitations: input.artifact.limitations,
+      provenance: annotationProvenance,
     });
-    assertBuiltArtifactStructure(input.artifact);
-    if (input.artifact.aggregateId !== rebuilt.aggregateId) {
-      fail('AGGREGATE_ID_MISMATCH', 'artifact aggregateId does not match rebuild');
-    }
-    if (
-      input.artifact.counts.matchCount !== rebuilt.counts.matchCount
-      || input.artifact.counts.mismatchCount !== rebuilt.counts.mismatchCount
-      || input.artifact.counts.directionalComparableCount
-        !== rebuilt.counts.directionalComparableCount
-    ) {
-      fail(
-        'AGGREGATE_COUNT_MISMATCH',
-        'artifact directional counts do not match rebuild from source Evaluations',
-      );
-    }
-    return deepFreeze(input.artifact);
+
+    assertCanonicalAggregateEquality(input.artifact, rebuilt);
+    return rebuilt;
   }
 
-  // Path C: structural-only on a claimed artifact (must still not trust counts
-  // without source Evaluations — reject)
+  // Path C: claimed artifact without source Evaluations → reject
   if (isPlainObject(input.artifact) && input.evaluations === undefined) {
     fail(
       'AGGREGATE_SOURCE_EVALUATIONS_REQUIRED',
@@ -1642,6 +1860,117 @@ export function validateArtemisEvaluationPerformanceAggregate(input) {
     'AGGREGATE_INVALID_VALIDATE_INPUT',
     'validate requires build-input or { artifact, evaluations }',
   );
+}
+
+function assertCanonicalAggregateEquality(claimed, rebuilt) {
+  const mismatches = [];
+
+  const compare = (path, a, b) => {
+    if (stableJson(a) !== stableJson(b)) {
+      mismatches.push(path);
+    }
+  };
+
+  compare('schemaVersion', claimed.schemaVersion, rebuilt.schemaVersion);
+  compare('contractVersion', claimed.contractVersion, rebuilt.contractVersion);
+  compare('policyVersion', claimed.policyVersion, rebuilt.policyVersion);
+  compare('artifactType', claimed.artifactType, rebuilt.artifactType);
+  compare('authorityClass', claimed.authorityClass, rebuilt.authorityClass);
+  compare('sliceId', claimed.sliceId, rebuilt.sliceId);
+  compare('aggregateId', claimed.aggregateId, rebuilt.aggregateId);
+  compare('cohort', claimed.cohort, rebuilt.cohort);
+  compare('sourceEvaluationRefs', claimed.sourceEvaluationRefs, rebuilt.sourceEvaluationRefs);
+  compare('counts', claimed.counts, rebuilt.counts);
+  compare('performanceRatios', claimed.performanceRatios, rebuilt.performanceRatios);
+  compare('timeCoverage', claimed.timeCoverage, rebuilt.timeCoverage);
+  compare('versions', claimed.versions, rebuilt.versions);
+
+  compare('provenance.writer', claimed.provenance?.writer, rebuilt.provenance.writer);
+  compare('provenance.methodKey', claimed.provenance?.methodKey, rebuilt.provenance.methodKey);
+  compare('provenance.stage', claimed.provenance?.stage, rebuilt.provenance.stage);
+  compare('provenance.sliceId', claimed.provenance?.sliceId, rebuilt.provenance.sliceId);
+  compare('provenance.recordedAt', claimed.provenance?.recordedAt, rebuilt.provenance.recordedAt);
+  compare(
+    'provenance.policyVersion',
+    claimed.provenance?.policyVersion,
+    rebuilt.provenance.policyVersion,
+  );
+  compare(
+    'provenance.implementationVersion',
+    claimed.provenance?.implementationVersion,
+    rebuilt.provenance.implementationVersion,
+  );
+
+  compare('sideEffects', claimed.sideEffects, rebuilt.sideEffects);
+  compare('ownershipRole', claimed.ownershipRole, rebuilt.ownershipRole);
+  compare('isSourceOfTruth', claimed.isSourceOfTruth, rebuilt.isSourceOfTruth);
+  compare(
+    'implementationVersion',
+    claimed.implementationVersion,
+    rebuilt.implementationVersion,
+  );
+  compare(
+    'sourceEvaluationSot',
+    claimed.sourceEvaluationSot,
+    rebuilt.sourceEvaluationSot,
+  );
+  compare(
+    'evaluationSotQueryAuthority',
+    claimed.evaluationSotQueryAuthority,
+    rebuilt.evaluationSotQueryAuthority,
+  );
+  compare(
+    'callerSuppliedAggregateAuthority',
+    claimed.callerSuppliedAggregateAuthority,
+    rebuilt.callerSuppliedAggregateAuthority,
+  );
+  compare(
+    'emptyMatchPerformanceBypass',
+    claimed.emptyMatchPerformanceBypass,
+    rebuilt.emptyMatchPerformanceBypass,
+  );
+  compare(
+    'sampleSufficiencyPolicy',
+    claimed.sampleSufficiencyPolicy,
+    rebuilt.sampleSufficiencyPolicy,
+  );
+  compare(
+    'regimeIdentityCanonical',
+    claimed.regimeIdentityCanonical,
+    rebuilt.regimeIdentityCanonical,
+  );
+  compare(
+    'regimeSegmentation',
+    claimed.regimeSegmentation,
+    rebuilt.regimeSegmentation,
+  );
+
+  for (const key of HARD_FLAG_KEYS) {
+    compare(`hardFlag.${key}`, claimed[key], rebuilt[key]);
+  }
+
+  // limitations: rebuilt already normalized from claimed; must match
+  compare('limitations', claimed.limitations, rebuilt.limitations);
+
+  // provenance.note: if claimed had note, rebuilt must carry same; if absent both ok
+  const claimedNote = isPlainObject(claimed.provenance)
+    ? claimed.provenance.note
+    : undefined;
+  const rebuiltNote = rebuilt.provenance.note;
+  if (claimedNote !== rebuiltNote) {
+    // Allow claimed without note vs rebuilt without note
+    if (!(claimedNote === undefined && rebuiltNote === undefined)) {
+      mismatches.push('provenance.note');
+    }
+  }
+
+  if (mismatches.length > 0) {
+    fail(
+      'AGGREGATE_VALUE_MISMATCH',
+      'claimed Aggregate diverges from canonical rebuild',
+      { mismatches },
+    );
+  }
 }
 
 function assertBuiltArtifactStructure(artifact) {
@@ -1686,16 +2015,64 @@ function assertBuiltArtifactStructure(artifact) {
   );
   assertCanonicalUuid(artifact.aggregateId, 'artifact.aggregateId');
   assertIsoTimestamp(artifact.recordedAt, 'artifact.recordedAt');
+
+  assertExactString(
+    artifact.ownershipRole,
+    EVALUATION_PERFORMANCE_AGGREGATE_OWNERSHIP_ROLE,
+    'artifact.ownershipRole',
+  );
+  assertExactString(
+    artifact.implementationVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_IMPLEMENTATION_VERSION,
+    'artifact.implementationVersion',
+  );
   if (artifact.isSourceOfTruth !== false) {
     fail('AGGREGATE_SOT_FLAG', 'isSourceOfTruth must be false');
   }
+  if (artifact.sourceEvaluationSot !== 'READ_REFERENCE_ONLY') {
+    fail('AGGREGATE_SOT_RELATION', 'sourceEvaluationSot must be READ_REFERENCE_ONLY');
+  }
+  if (artifact.evaluationSotQueryAuthority !== false) {
+    fail('AGGREGATE_SOT_QUERY', 'evaluationSotQueryAuthority must be false');
+  }
+  if (artifact.callerSuppliedAggregateAuthority !== false) {
+    fail(
+      'AGGREGATE_CALLER_AUTHORITY_FORBIDDEN',
+      'callerSuppliedAggregateAuthority must be false',
+    );
+  }
+  if (artifact.emptyMatchPerformanceBypass !== 'CLOSED') {
+    fail(
+      'AGGREGATE_EMPTY_MATCH_BYPASS',
+      'emptyMatchPerformanceBypass must be CLOSED',
+    );
+  }
+  if (artifact.sampleSufficiencyPolicy !== 'DEFERRED') {
+    fail(
+      'AGGREGATE_SAMPLE_SUFFICIENCY',
+      'sampleSufficiencyPolicy must be DEFERRED',
+    );
+  }
+  if (artifact.regimeIdentityCanonical !== false) {
+    fail('AGGREGATE_REGIME_INVENTED', 'regimeIdentityCanonical must be false');
+  }
+  if (artifact.regimeSegmentation !== 'DEFERRED') {
+    fail('AGGREGATE_REGIME_INVENTED', 'regimeSegmentation must be DEFERRED');
+  }
+
   if (!isPlainObject(artifact.sideEffects)) {
     fail('AGGREGATE_SIDE_EFFECTS', 'sideEffects required');
   }
+  const seKeys = Object.keys(artifact.sideEffects).sort();
+  const expectedSeKeys = [...SIDE_EFFECT_KEYS].sort();
+  if (stableJson(seKeys) !== stableJson(expectedSeKeys)) {
+    fail(
+      'AGGREGATE_SIDE_EFFECTS',
+      'sideEffects must have exact Aggregate side-effect key set',
+      { expected: expectedSeKeys, actual: seKeys },
+    );
+  }
   for (const key of SIDE_EFFECT_KEYS) {
-    if (!(key in artifact.sideEffects)) {
-      fail('AGGREGATE_SIDE_EFFECTS', `sideEffects.${key} missing`);
-    }
     if (artifact.sideEffects[key] !== 0) {
       fail('AGGREGATE_SIDE_EFFECTS', `sideEffects.${key} must be 0`);
     }
@@ -1708,6 +2085,7 @@ function assertBuiltArtifactStructure(artifact) {
       fail('AGGREGATE_HARD_FLAG', `${key} must be false`);
     }
   }
+
   if (!isPlainObject(artifact.counts)) {
     fail('AGGREGATE_INVALID_COUNTS', 'counts required');
   }
@@ -1717,6 +2095,51 @@ function assertBuiltArtifactStructure(artifact) {
     'AGGREGATE_UNKNOWN_FIELD',
     'counts',
   );
+  assertNonNegativeInteger(
+    artifact.counts.sourceEvaluationCount,
+    'counts.sourceEvaluationCount',
+  );
+  assertNonNegativeInteger(
+    artifact.counts.directionalComparableCount,
+    'counts.directionalComparableCount',
+  );
+  assertNonNegativeInteger(
+    artifact.counts.directionalNonComparableCount,
+    'counts.directionalNonComparableCount',
+  );
+  assertNonNegativeInteger(artifact.counts.matchCount, 'counts.matchCount');
+  assertNonNegativeInteger(artifact.counts.mismatchCount, 'counts.mismatchCount');
+  if (!isPlainObject(artifact.counts.evaluationStatusCounts)) {
+    fail('AGGREGATE_INVALID_COUNTS', 'evaluationStatusCounts required');
+  }
+  assertAllowlist(
+    artifact.counts.evaluationStatusCounts,
+    EVAL_STATUS_COUNTS_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'evaluationStatusCounts',
+  );
+  for (const s of EVALUATION_STATUS_VALUES) {
+    assertNonNegativeInteger(
+      artifact.counts.evaluationStatusCounts[s],
+      `evaluationStatusCounts.${s}`,
+    );
+  }
+  if (!isPlainObject(artifact.counts.observationClassCounts)) {
+    fail('AGGREGATE_INVALID_COUNTS', 'observationClassCounts required');
+  }
+  assertAllowlist(
+    artifact.counts.observationClassCounts,
+    OBS_CLASS_COUNTS_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'observationClassCounts',
+  );
+  for (const c of OBSERVATION_CLASS_VALUES) {
+    assertNonNegativeInteger(
+      artifact.counts.observationClassCounts[c],
+      `observationClassCounts.${c}`,
+    );
+  }
+
   if (!isPlainObject(artifact.performanceRatios)) {
     fail('AGGREGATE_INVALID_RATIOS', 'performanceRatios required');
   }
@@ -1727,33 +2150,13 @@ function assertBuiltArtifactStructure(artifact) {
     'performanceRatios',
   );
   for (const ratioKey of PERFORMANCE_RATIOS_ALLOWLIST) {
-    const ratio = artifact.performanceRatios[ratioKey];
-    if (!isPlainObject(ratio)) {
-      fail('AGGREGATE_INVALID_RATIOS', `${ratioKey} must be plain object`);
-    }
-    assertAllowlist(
-      ratio,
-      Object.freeze(['numerator', 'denominator', 'status', 'reason']),
-      'AGGREGATE_UNKNOWN_FIELD',
+    assertCanonicalRatio(
+      artifact.performanceRatios[ratioKey],
       ratioKey,
+      artifact.counts,
     );
-    assertNonNegativeInteger(ratio.numerator, `${ratioKey}.numerator`);
-    assertNonNegativeInteger(ratio.denominator, `${ratioKey}.denominator`);
-    if (!RATIO_STATUS_SET.has(ratio.status)
-      && ratio.status !== AGGREGATE_RATIO_STATUS.UNAVAILABLE) {
-      // status must be AVAILABLE or UNAVAILABLE
-      if (ratio.status !== AGGREGATE_RATIO_STATUS.AVAILABLE
-        && ratio.status !== AGGREGATE_RATIO_STATUS.UNAVAILABLE) {
-        fail('AGGREGATE_INVALID_RATIO_STATUS', `${ratioKey}.status invalid`);
-      }
-    }
-    if (typeof ratio.numerator === 'number' && !Number.isFinite(ratio.numerator)) {
-      fail('AGGREGATE_NAN_INFINITY', `${ratioKey}.numerator is not finite`);
-    }
-    if (typeof ratio.denominator === 'number' && !Number.isFinite(ratio.denominator)) {
-      fail('AGGREGATE_NAN_INFINITY', `${ratioKey}.denominator is not finite`);
-    }
   }
+
   if (!Array.isArray(artifact.sourceEvaluationRefs)) {
     fail('AGGREGATE_INVALID_SOURCE_REFS', 'sourceEvaluationRefs must be an array');
   }
@@ -1767,7 +2170,36 @@ function assertBuiltArtifactStructure(artifact) {
       'AGGREGATE_UNKNOWN_FIELD',
       'sourceEvaluationRef',
     );
+    assertCanonicalUuid(ref.evaluationId, 'sourceEvaluationRef.evaluationId');
+    assertExactString(
+      ref.contractVersion,
+      EVALUATION_CONTRACT_VERSION,
+      'sourceEvaluationRef.contractVersion',
+    );
+    if (!EVALUATION_STATUS_SET.has(ref.evaluationStatus)) {
+      fail('AGGREGATE_INVALID_SOURCE_REFS', 'sourceEvaluationRef.evaluationStatus');
+    }
+    if (!OBSERVATION_CLASS_SET.has(ref.observationClass)) {
+      fail('AGGREGATE_INVALID_SOURCE_REFS', 'sourceEvaluationRef.observationClass');
+    }
+    assertExactString(
+      ref.policyVersion,
+      EVALUATION_POLICY_VERSION,
+      'sourceEvaluationRef.policyVersion',
+    );
+    if (!METHOD_KEY_SET.has(ref.methodKey)) {
+      fail('AGGREGATE_INVALID_SOURCE_REFS', 'sourceEvaluationRef.methodKey');
+    }
+    assertString(
+      ref.methodImplementationVersion,
+      'sourceEvaluationRef.methodImplementationVersion',
+    );
+    assertString(
+      ref.evaluationImplementationVersion,
+      'sourceEvaluationRef.evaluationImplementationVersion',
+    );
   }
+
   if (!isPlainObject(artifact.cohort)) {
     fail('AGGREGATE_INVALID_COHORT', 'cohort required');
   }
@@ -1777,24 +2209,214 @@ function assertBuiltArtifactStructure(artifact) {
     'AGGREGATE_UNKNOWN_FIELD',
     'cohort',
   );
+  for (const dim of ['venue', 'marketType', 'symbol', 'timeframe']) {
+    if (!(dim in artifact.cohort)) {
+      fail('AGGREGATE_INVALID_COHORT', `cohort.${dim} required (may be null)`);
+    }
+    if (artifact.cohort[dim] !== null
+      && typeof artifact.cohort[dim] !== 'string') {
+      fail('AGGREGATE_INVALID_COHORT', `cohort.${dim} must be string or null`);
+    }
+  }
   for (const banned of ['regime', 'agentRole', 'analysisHorizon']) {
     if (Object.prototype.hasOwnProperty.call(artifact.cohort, banned)) {
       fail('AGGREGATE_REGIME_INVENTED', `cohort must not contain ${banned}`);
     }
   }
-  if (artifact.sampleSufficiencyPolicy !== 'DEFERRED') {
+
+  if (!isPlainObject(artifact.timeCoverage)) {
+    fail('AGGREGATE_INVALID_TIME_COVERAGE', 'timeCoverage required');
+  }
+  assertAllowlist(
+    artifact.timeCoverage,
+    TIME_COVERAGE_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'timeCoverage',
+  );
+  assertIsoTimestamp(
+    artifact.timeCoverage.earliestEvaluationRecordedAt,
+    'timeCoverage.earliestEvaluationRecordedAt',
+  );
+  assertIsoTimestamp(
+    artifact.timeCoverage.latestEvaluationRecordedAt,
+    'timeCoverage.latestEvaluationRecordedAt',
+  );
+
+  if (!isPlainObject(artifact.versions)) {
+    fail('AGGREGATE_INVALID_VERSIONS', 'versions required');
+  }
+  assertAllowlist(
+    artifact.versions,
+    VERSIONS_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'versions',
+  );
+  assertExactString(
+    artifact.versions.schemaVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_SCHEMA_VERSION,
+    'versions.schemaVersion',
+  );
+  assertExactString(
+    artifact.versions.contractVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
+    'versions.contractVersion',
+  );
+  assertExactString(
+    artifact.versions.policyVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
+    'versions.policyVersion',
+  );
+  assertExactString(
+    artifact.versions.implementationVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_IMPLEMENTATION_VERSION,
+    'versions.implementationVersion',
+  );
+  assertExactString(
+    artifact.versions.sourceEvaluationContractVersion,
+    EVALUATION_CONTRACT_VERSION,
+    'versions.sourceEvaluationContractVersion',
+  );
+  assertExactString(
+    artifact.versions.sourceEvaluationPolicyVersion,
+    EVALUATION_POLICY_VERSION,
+    'versions.sourceEvaluationPolicyVersion',
+  );
+
+  if (!isPlainObject(artifact.provenance)) {
+    fail('AGGREGATE_INVALID_PROVENANCE', 'provenance required');
+  }
+  assertAllowlist(
+    artifact.provenance,
+    PROVENANCE_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    'provenance',
+  );
+  assertExactString(
+    artifact.provenance.writer,
+    EVALUATION_PERFORMANCE_AGGREGATE_WRITER,
+    'provenance.writer',
+  );
+  assertExactString(
+    artifact.provenance.methodKey,
+    EVALUATION_PERFORMANCE_AGGREGATE_METHOD_KEY,
+    'provenance.methodKey',
+  );
+  assertExactString(
+    artifact.provenance.stage,
+    EVALUATION_PERFORMANCE_AGGREGATE_STAGE,
+    'provenance.stage',
+  );
+  assertExactString(
+    artifact.provenance.sliceId,
+    EVALUATION_PERFORMANCE_AGGREGATE_SLICE_ID,
+    'provenance.sliceId',
+  );
+  assertIsoTimestamp(artifact.provenance.recordedAt, 'provenance.recordedAt');
+  if (artifact.provenance.recordedAt !== artifact.recordedAt) {
     fail(
-      'AGGREGATE_SAMPLE_SUFFICIENCY',
-      'sampleSufficiencyPolicy must be DEFERRED',
+      'AGGREGATE_PROVENANCE_RECORDED_AT_MISMATCH',
+      'provenance.recordedAt must equal artifact.recordedAt',
     );
   }
-  if (artifact.regimeIdentityCanonical !== false) {
-    fail('AGGREGATE_REGIME_INVENTED', 'regimeIdentityCanonical must be false');
+  assertExactString(
+    artifact.provenance.policyVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
+    'provenance.policyVersion',
+  );
+  assertExactString(
+    artifact.provenance.implementationVersion,
+    EVALUATION_PERFORMANCE_AGGREGATE_IMPLEMENTATION_VERSION,
+    'provenance.implementationVersion',
+  );
+
+  if (!Array.isArray(artifact.limitations) || artifact.limitations.length === 0) {
+    fail('AGGREGATE_LIMITATIONS', 'limitations must be a non-empty array');
   }
-  if (artifact.callerSuppliedAggregateAuthority !== false) {
+  for (const baseline of AGGREGATE_LIMITATIONS) {
+    if (!artifact.limitations.includes(baseline)) {
+      fail(
+        'AGGREGATE_LIMITATIONS',
+        `canonical baseline limitation missing: ${baseline}`,
+      );
+    }
+  }
+}
+
+function assertCanonicalRatio(ratio, ratioKey, counts) {
+  if (!isPlainObject(ratio)) {
+    fail('AGGREGATE_INVALID_RATIOS', `${ratioKey} must be plain object`);
+  }
+  assertAllowlist(
+    ratio,
+    RATIO_ALLOWLIST,
+    'AGGREGATE_UNKNOWN_FIELD',
+    ratioKey,
+  );
+  assertNonNegativeInteger(ratio.numerator, `${ratioKey}.numerator`);
+  assertNonNegativeInteger(ratio.denominator, `${ratioKey}.denominator`);
+  if (typeof ratio.numerator === 'number' && !Number.isFinite(ratio.numerator)) {
+    fail('AGGREGATE_NAN_INFINITY', `${ratioKey}.numerator is not finite`);
+  }
+  if (typeof ratio.denominator === 'number' && !Number.isFinite(ratio.denominator)) {
+    fail('AGGREGATE_NAN_INFINITY', `${ratioKey}.denominator is not finite`);
+  }
+
+  if (ratio.denominator === 0) {
+    if (ratio.numerator !== 0) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_BINDING',
+        `${ratioKey}: zero denominator requires numerator 0`,
+      );
+    }
+    if (ratio.status !== AGGREGATE_RATIO_STATUS.UNAVAILABLE) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_STATUS',
+        `${ratioKey}: zero denominator requires status UNAVAILABLE`,
+      );
+    }
+    if (ratio.reason !== RATIO_UNAVAILABLE_REASON.NO_COMPARABLE_EVIDENCE) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_REASON',
+        `${ratioKey}: zero denominator requires reason NO_COMPARABLE_EVIDENCE`,
+      );
+    }
+  } else {
+    if (ratio.status !== AGGREGATE_RATIO_STATUS.AVAILABLE) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_STATUS',
+        `${ratioKey}: positive denominator requires status AVAILABLE`,
+      );
+    }
+    if (ratio.reason !== undefined) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_REASON',
+        `${ratioKey}: AVAILABLE ratio must not carry reason`,
+      );
+    }
+    if (ratio.numerator > ratio.denominator) {
+      fail(
+        'AGGREGATE_INVALID_RATIO_BINDING',
+        `${ratioKey}: numerator must be <= denominator`,
+      );
+    }
+  }
+
+  if (ratio.denominator !== counts.directionalComparableCount) {
     fail(
-      'AGGREGATE_CALLER_AUTHORITY_FORBIDDEN',
-      'callerSuppliedAggregateAuthority must be false',
+      'AGGREGATE_INVALID_RATIO_BINDING',
+      `${ratioKey}.denominator must equal directionalComparableCount`,
+    );
+  }
+  if (ratioKey === 'matchRatio' && ratio.numerator !== counts.matchCount) {
+    fail(
+      'AGGREGATE_INVALID_RATIO_BINDING',
+      'matchRatio.numerator must equal matchCount',
+    );
+  }
+  if (ratioKey === 'mismatchRatio' && ratio.numerator !== counts.mismatchCount) {
+    fail(
+      'AGGREGATE_INVALID_RATIO_BINDING',
+      'mismatchRatio.numerator must equal mismatchCount',
     );
   }
 }
@@ -1807,11 +2429,13 @@ export default {
   EVALUATION_PERFORMANCE_AGGREGATE_ARTIFACT_TYPE,
   EVALUATION_PERFORMANCE_AGGREGATE_AUTHORITY_CLASS,
   EVALUATION_PERFORMANCE_AGGREGATE_SLICE_ID,
+  EVALUATION_PERFORMANCE_AGGREGATE_STAGE,
   EVALUATION_PERFORMANCE_AGGREGATE_WRITER,
   EVALUATION_PERFORMANCE_AGGREGATE_METHOD_KEY,
   EVALUATION_PERFORMANCE_AGGREGATE_OWNERSHIP_ROLE,
   EVALUATION_PERFORMANCE_AGGREGATE_IS_SOURCE_OF_TRUTH,
   AGGREGATE_RATIO_STATUS,
+  RATIO_UNAVAILABLE_REASON,
   COMPARABLE_DIRECTIONS,
   COMPARABLE_DIRECTION_VALUES,
   ZERO_AGGREGATE_SIDE_EFFECTS,
