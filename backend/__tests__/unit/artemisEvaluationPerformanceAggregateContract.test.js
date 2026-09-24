@@ -21,7 +21,12 @@ import { SHADOW_RECORDING_CONTRACT_VERSION } from '../../contracts/artemisShadow
 import { SHADOW_RUNTIME_CONTRACT_VERSION } from '../../contracts/artemisShadowRuntimeLibraryBoundaryContract.js';
 import { SHADOW_TASK_STATE_CONTRACT_VERSION } from '../../contracts/artemisShadowTaskStateBoundaryContract.js';
 import { SHADOW_TASK_CYCLE_BINDING_CONTRACT_VERSION } from '../../contracts/artemisShadowTaskCycleCompositionBoundaryContract.js';
-import { buildObservedOutcome } from '../../contracts/artemisObservedOutcomeContract.js';
+import {
+  OBSERVED_OUTCOME_CONTRACT_VERSION,
+  REALIZED_PNL_STATUS,
+  buildObservedOutcome,
+} from '../../contracts/artemisObservedOutcomeContract.js';
+import { OBSERVED_OUTCOME_SOT_CONTRACT_VERSION } from '../../contracts/artemisObservedOutcomeSourceOfTruthContract.js';
 import {
   EVALUATION_METHOD_KEY,
   EVALUATION_STATUS,
@@ -2314,5 +2319,765 @@ describe('S10 Evaluation Performance Aggregate — canonical source acceptance',
       recordedAt: T_AGG,
     });
     expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SOURCE IDENTITY / CANONICAL BUILT-SHAPE HARDENING
+// ---------------------------------------------------------------------------
+
+function canonicalPublicIdCohort(overrides = {}) {
+  return {
+    venue: 'mexc',
+    marketType: MARKET_TYPE.SPOT,
+    symbol: 'BTC/USDT',
+    timeframe: '1h',
+    methodKey:
+      EVALUATION_METHOD_KEY.COMPARE_SHADOW_DECISION_TO_OBSERVED_OUTCOME_FAIL_CLOSED,
+    methodImplementationVersion: '1.0.0',
+    evaluationImplementationVersion: '1.0.0',
+    policyVersion: OBSERVED_OUTCOME_EVALUATION_POLICY_VERSION,
+    contractVersion: OBSERVED_OUTCOME_EVALUATION_CONTRACT_VERSION,
+    ...overrides,
+  };
+}
+
+function buildEvaluationWithoutOptionalTaskBinding(overrides = {}) {
+  return buildValidEvaluation({
+    outcomeArtifact: buildValidOutcome({
+      taskRef: undefined,
+      cycleBindingRef: undefined,
+    }),
+    ...overrides,
+  });
+}
+
+describe('S10 Evaluation Performance Aggregate — source evaluationId re-derivation', () => {
+  it('I1. canonical buildObservedOutcomeEvaluation artifact passes Aggregate', () => {
+    const ev = buildValidEvaluation();
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [ev],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+    expect(agg.counts.matchCount).toBe(1);
+  });
+
+  it('I2. random canonical UUID evaluationId fails AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.evaluationId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I3. decisionRef.decisionId tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.decisionRef.decisionId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I4. outcomeRef.outcomeId tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.outcomeRef.outcomeId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I5. decisionContextRef.contextId tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.decisionContextRef.contextId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I6. shadowRecordingRef.shadowRecordingArtifactId tamper → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.shadowRecordingRef.shadowRecordingArtifactId =
+        '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I7. taskRef.taskId tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.taskRef.taskId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I8. bindingRef.bindingId tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.bindingRef.bindingId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I9. marketContextRef.marketContextId tamper → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.marketContextRef.marketContextId =
+        '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I10. evaluationMethod.methodKey tamper (canonical alternate) → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.evaluationMethod.methodKey =
+        EVALUATION_METHOD_KEY.LINEAGE_COMPATIBILITY_FAIL_CLOSED;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('I11. recordedAt tamper keeps evaluationId → identity conflict', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.recordedAt = '2026-09-20T12:99:00.000Z'.replace('99', '11');
+      // Use a clearly different valid ISO timestamp
+      e.recordedAt = '2026-09-21T12:10:00.000Z';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+    );
+  });
+});
+
+describe('S10 Evaluation Performance Aggregate — required lineage ID/version bindings', () => {
+  it('L1. lineage.contextId missing fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.contextId;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L2. lineage.shadowRecordingArtifactId missing fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.shadowRecordingArtifactId;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L3. lineage.decisionId mismatch fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.decisionId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L4. lineage.outcomeId mismatch fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.outcomeId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L5. lineage.marketContextId mismatch fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.marketContextId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L6. lineage.decisionContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.decisionContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.decisionContractVersion = 'evil-decision-contract';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L7. lineage.decisionContextContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.decisionContextContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.decisionContextContractVersion = 'evil-context-contract';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L8. lineage.shadowRecordingContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.shadowRecordingContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.shadowRecordingContractVersion = 'evil-shadow-recording';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L9. lineage.observedOutcomeContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.observedOutcomeContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.observedOutcomeContractVersion = 'evil-outcome-contract';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    expect(OBSERVED_OUTCOME_CONTRACT_VERSION).toEqual(expect.any(String));
+  });
+
+  it('L10. lineage.marketContextContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.marketContextContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.marketContextContractVersion = 'evil-market-context';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('L11. lineage.evaluationContractVersion missing/wrong fails closed', () => {
+    const missing = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.evaluationContractVersion;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [missing],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const wrong = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.evaluationContractVersion = 'evil-evaluation-contract';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [wrong],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+});
+
+describe('S10 Evaluation Performance Aggregate — optional lineage ref bindings', () => {
+  it('O1. taskRef present but lineage.taskId differs fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.taskId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('O2. taskRef present but lineage.taskId missing fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.taskId;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('O3. bindingRef present but lineage.bindingId differs fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.lineage.bindingId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('O4. bindingRef present but lineage.bindingId missing fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      delete e.lineage.bindingId;
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('O5. outcomeSotRef present but observedOutcomeSotContractVersion differs', () => {
+    const outcomeArtifact = buildValidOutcome();
+    const withSot = buildValidEvaluation({
+      outcomeArtifact,
+      outcomeSotRef: {
+        outcomeId: outcomeArtifact.outcomeId,
+        contractVersion: OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
+      },
+    });
+    expect(withSot.outcomeSotRef).toBeTruthy();
+    expect(withSot.lineage.observedOutcomeSotContractVersion).toBe(
+      OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
+    );
+    const tampered = mutateEval(withSot, (e) => {
+      e.lineage.observedOutcomeSotContractVersion = 'evil-sot-version';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [tampered],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [withSot],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(withSot.evaluationId);
+  });
+
+  it('O6. no taskRef — contradictory non-null lineage.taskId fails closed', () => {
+    const ev = mutateEval(buildEvaluationWithoutOptionalTaskBinding(), (e) => {
+      e.lineage.taskId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+    );
+  });
+
+  it('O7. no bindingRef — contradictory non-null lineage.bindingId fails closed', () => {
+    const ev = mutateEval(buildEvaluationWithoutOptionalTaskBinding(), (e) => {
+      e.lineage.bindingId = '99999999-9999-4999-8999-999999999999';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+    );
+  });
+
+  it('O8. Evaluation without optional task/binding still aggregates', () => {
+    const ev = buildEvaluationWithoutOptionalTaskBinding();
+    expect(ev.taskRef == null).toBe(true);
+    expect(ev.bindingRef == null).toBe(true);
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [ev],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+  });
+});
+
+describe('S10 Evaluation Performance Aggregate — nested provenance + realizedPnlStatus', () => {
+  it('N1. decisionProvenance unknown field fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.provenance.decisionProvenance = {
+        ...e.provenance.decisionProvenance,
+        evilExtra: 'nope',
+      };
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
+    );
+  });
+
+  it('N2. outcomeProvenance unknown field fails closed', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.provenance.outcomeProvenance = {
+        ...e.provenance.outcomeProvenance,
+        evilExtra: 'nope',
+      };
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
+    );
+  });
+
+  it('N3. decisionProvenance unavailable form accepted', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.provenance.decisionProvenance = { availability: 'unavailable' };
+    });
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [ev],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+  });
+
+  it('N4. outcomeProvenance unavailable form accepted', () => {
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.provenance.outcomeProvenance = { availability: 'unavailable' };
+    });
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [ev],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+  });
+
+  it('N5. realizedPnlStatus arbitrary string fails closed', () => {
+    expect(REALIZED_PNL_STATUS).toEqual(expect.any(String));
+    const ev = mutateEval(buildValidEvaluation(), (e) => {
+      e.realizedPnlStatus = 'FAKE_PNL_STATUS';
+    });
+    expectFail(
+      () =>
+        buildArtemisEvaluationPerformanceAggregate({
+          evaluations: [ev],
+          recordedAt: T_AGG,
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('N6. canonical realizedPnlStatus passes', () => {
+    const ev = buildValidEvaluation();
+    expect(ev.realizedPnlStatus).toBe(REALIZED_PNL_STATUS);
+    const agg = buildArtemisEvaluationPerformanceAggregate({
+      evaluations: [ev],
+      recordedAt: T_AGG,
+    });
+    expect(agg.sourceEvaluationRefs[0].evaluationId).toBe(ev.evaluationId);
+  });
+});
+
+describe('S10 Evaluation Performance Aggregate — public Aggregate ID source authority', () => {
+  it('P1. cohort.contractVersion=evil forbidden', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort({ contractVersion: 'evil' }),
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('P2. cohort.policyVersion=evil forbidden', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort({ policyVersion: 'evil' }),
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('P3. cohort.methodKey=evil forbidden', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort({ methodKey: 'evil' }),
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE_INVALID_METHOD_KEY',
+    );
+  });
+
+  it('P4. malformed evaluationId rejected', () => {
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort(),
+          evaluationIds: ['not-a-uuid'],
+        }),
+      'AGGREGATE',
+    );
+  });
+
+  it('P5. duplicate evaluationIds fail closed', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort(),
+          evaluationIds: [ev.evaluationId, ev.evaluationId],
+        }),
+      'AGGREGATE_DUPLICATE_EVALUATION_ID',
+    );
+  });
+
+  it('P6. unknown cohort field rejected', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: { ...canonicalPublicIdCohort(), evilExtra: true },
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE_UNKNOWN_FIELD',
+    );
+  });
+
+  it('P7. empty methodImplementationVersion rejected', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort({ methodImplementationVersion: '' }),
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE_EMPTY_STRING',
+    );
+  });
+
+  it('P8. empty evaluationImplementationVersion rejected', () => {
+    const ev = buildValidEvaluation();
+    expectFail(
+      () =>
+        computeEvaluationPerformanceAggregateId({
+          cohort: canonicalPublicIdCohort({
+            evaluationImplementationVersion: '',
+          }),
+          evaluationIds: [ev.evaluationId],
+        }),
+      'AGGREGATE_EMPTY_STRING',
+    );
+  });
+
+  it('P9. canonical cohort + IDs deterministic and order-independent', () => {
+    const a = buildValidEvaluation();
+    const b = buildMismatchEvaluation();
+    const cohort = canonicalPublicIdCohort();
+    const idAb = computeEvaluationPerformanceAggregateId({
+      cohort,
+      evaluationIds: [a.evaluationId, b.evaluationId],
+    });
+    const idBa = computeEvaluationPerformanceAggregateId({
+      cohort,
+      evaluationIds: [b.evaluationId, a.evaluationId],
+    });
+    expect(idAb).toBe(idBa);
+    expect(idAb).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    // Null-normalized optional dims still produce stable ID
+    const idNullDims = computeEvaluationPerformanceAggregateId({
+      cohort: canonicalPublicIdCohort({
+        venue: null,
+        marketType: null,
+        symbol: null,
+        timeframe: null,
+      }),
+      evaluationIds: [a.evaluationId],
+    });
+    const idUndefDims = computeEvaluationPerformanceAggregateId({
+      cohort: (() => {
+        const c = canonicalPublicIdCohort();
+        delete c.venue;
+        delete c.marketType;
+        delete c.symbol;
+        delete c.timeframe;
+        return c;
+      })(),
+      evaluationIds: [a.evaluationId],
+    });
+    expect(idNullDims).toBe(idUndefDims);
   });
 });

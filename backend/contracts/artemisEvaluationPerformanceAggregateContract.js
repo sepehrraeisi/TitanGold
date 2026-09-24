@@ -45,6 +45,7 @@ import { SHADOW_TASK_STATE_CONTRACT_VERSION } from './artemisShadowTaskStateBoun
 import { SHADOW_TASK_CYCLE_BINDING_CONTRACT_VERSION } from './artemisShadowTaskCycleCompositionBoundaryContract.js';
 import {
   OBSERVED_OUTCOME_CONTRACT_VERSION,
+  REALIZED_PNL_STATUS,
 } from './artemisObservedOutcomeContract.js';
 import {
   OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
@@ -475,6 +476,25 @@ const EVAL_PROVENANCE_ALLOWLIST = Object.freeze([
   'outcomeProvenance',
   'note',
 ]);
+/** Stage 8 nested decisionProvenance available form — strict allowlist. */
+const EVAL_DECISION_PROVENANCE_AVAILABLE_ALLOWLIST = Object.freeze([
+  'writer',
+  'methodKey',
+  'recordedAt',
+  'policyVersion',
+]);
+/** Stage 8 nested outcomeProvenance available form — strict allowlist. */
+const EVAL_OUTCOME_PROVENANCE_AVAILABLE_ALLOWLIST = Object.freeze([
+  'writer',
+  'methodKey',
+  'sourceTimestamp',
+  'recordedAt',
+  'policyVersion',
+]);
+/** Canonical unavailable nested provenance — only availability. */
+const EVAL_NESTED_PROVENANCE_UNAVAILABLE_ALLOWLIST = Object.freeze([
+  'availability',
+]);
 
 const FORBIDDEN_AGGREGATE_AUTHORITY_KEYS = Object.freeze([
   'matchCount',
@@ -643,6 +663,84 @@ function assertAllowlist(obj, allowlist, code, label) {
       fail(code, `${label} contains unknown field: ${key}`, { key });
     }
   }
+}
+
+/**
+ * Stage 8 Observed Outcome Evaluation identity hash — READ-ONLY local mirror.
+ *
+ * Exact copy of the non-exported FNV-style hashToUuid in
+ * artemisObservedOutcomeEvaluationContract.js. Must NOT use Replay's
+ * exported SHA256 hashToUuid (different algorithm → different UUIDs).
+ *
+ * @param {string[]} parts
+ * @returns {string} canonical UUID v4-shaped
+ */
+function stage8EvaluationIdentityHashToUuid(parts) {
+  // Exact byte-for-byte mirror of Stage 8 Observed Outcome Evaluation
+  // Contract's non-exported hashToUuid. Do NOT "improve" or substitute
+  // Replay's SHA256 hashToUuid — different algorithm yields different UUIDs.
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  const text = parts.join('|');
+  for (let i = 0; i < text.length; i += 1) {
+    h1 ^= text.charCodeAt(i);
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= text.charCodeAt(text.length - 1 - i);
+    h2 = Math.imul(h2, 0x01000193);
+  }
+  const a = (h1 >>> 0).toString(16).padStart(8, '0');
+  const b = (h2 >>> 0).toString(16).padStart(8, '0');
+  const hex = `${a}${b}${a}${b}`.slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Validate Stage 8 nested decisionProvenance / outcomeProvenance shapes.
+ * Available form: strict allowlist + required fields.
+ * Unavailable form: { availability: 'unavailable' } only.
+ *
+ * @param {object} nested
+ * @param {'decision'|'outcome'} kind
+ * @param {string} label
+ */
+function validateNestedProvenance(nested, kind, label) {
+  if (!isPlainObject(nested)) {
+    fail('AGGREGATE_EVALUATION_INVALID_REF', `${label} must be a plain object`);
+  }
+  if (nested.availability === 'unavailable') {
+    assertAllowlist(
+      nested,
+      EVAL_NESTED_PROVENANCE_UNAVAILABLE_ALLOWLIST,
+      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
+      label,
+    );
+    assertExactString(nested.availability, 'unavailable', `${label}.availability`);
+    return;
+  }
+  if (kind === 'decision') {
+    assertAllowlist(
+      nested,
+      EVAL_DECISION_PROVENANCE_AVAILABLE_ALLOWLIST,
+      'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
+      label,
+    );
+    assertString(nested.writer, `${label}.writer`);
+    assertString(nested.methodKey, `${label}.methodKey`);
+    assertIsoTimestamp(nested.recordedAt, `${label}.recordedAt`);
+    assertString(nested.policyVersion, `${label}.policyVersion`);
+    return;
+  }
+  assertAllowlist(
+    nested,
+    EVAL_OUTCOME_PROVENANCE_AVAILABLE_ALLOWLIST,
+    'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
+    label,
+  );
+  assertString(nested.writer, `${label}.writer`);
+  assertString(nested.methodKey, `${label}.methodKey`);
+  assertIsoTimestamp(nested.sourceTimestamp, `${label}.sourceTimestamp`);
+  assertIsoTimestamp(nested.recordedAt, `${label}.recordedAt`);
+  assertString(nested.policyVersion, `${label}.policyVersion`);
 }
 
 function assertNonNegativeInteger(value, field) {
@@ -919,9 +1017,12 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
   if (evaluation.blockedReason != null) {
     assertString(evaluation.blockedReason, `${label}.blockedReason`, { allowEmpty: true });
   }
-  if (evaluation.realizedPnlStatus != null) {
-    assertString(evaluation.realizedPnlStatus, `${label}.realizedPnlStatus`);
-  }
+  // Stage 8 canonical builder always emits realizedPnlStatus = REALIZED_PNL_STATUS.
+  assertExactString(
+    evaluation.realizedPnlStatus,
+    REALIZED_PNL_STATUS,
+    `${label}.realizedPnlStatus`,
+  );
 
   // decisionRef — required
   validateOptionalIdRef(evaluation.decisionRef, {
@@ -1048,6 +1149,30 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     `${label}.evaluationMethod.implementationVersion`,
   );
 
+  // Re-derive Stage 8 evaluationId — random-but-valid UUID cannot impersonate.
+  const expectedEvaluationId = stage8EvaluationIdentityHashToUuid([
+    EVALUATION_CONTRACT_VERSION,
+    evaluation.decisionRef.decisionId,
+    evaluation.outcomeRef.outcomeId,
+    evaluation.decisionContextRef.contextId,
+    evaluation.shadowRecordingRef.shadowRecordingArtifactId,
+    evaluation.taskRef?.taskId || '',
+    evaluation.bindingRef?.bindingId || '',
+    marketContextRef.marketContextId,
+    evaluation.evaluationMethod.methodKey,
+    evaluation.recordedAt,
+  ]);
+  if (evaluation.evaluationId !== expectedEvaluationId) {
+    fail(
+      'AGGREGATE_SOURCE_EVALUATION_IDENTITY_CONFLICT',
+      `${label}.evaluationId is not the deterministic Stage 8 Evaluation identity`,
+      {
+        evaluationId: evaluation.evaluationId,
+        expectedEvaluationId,
+      },
+    );
+  }
+
   // comparisonClaims (optional)
   let comparisonClaims = null;
   if (evaluation.comparisonClaims !== undefined && evaluation.comparisonClaims !== null) {
@@ -1103,7 +1228,7 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     );
   }
 
-  // lineage — required + Stage 8 guaranteed bindings
+  // lineage — required Stage 8 identity + version bindings
   if (!isPlainObject(evaluation.lineage)) {
     fail('AGGREGATE_INVALID_LINEAGE', `${label}.lineage required`);
   }
@@ -1113,67 +1238,124 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     'AGGREGATE_EVALUATION_UNKNOWN_FIELD',
     `${label}.lineage`,
   );
-  if (evaluation.lineage.decisionId !== evaluation.decisionRef.decisionId) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.decisionId must equal decisionRef.decisionId`,
+  // Required non-optional lineage identity bindings
+  assertExactString(
+    evaluation.lineage.decisionId,
+    evaluation.decisionRef.decisionId,
+    `${label}.lineage.decisionId`,
+  );
+  assertExactString(
+    evaluation.lineage.outcomeId,
+    evaluation.outcomeRef.outcomeId,
+    `${label}.lineage.outcomeId`,
+  );
+  assertExactString(
+    evaluation.lineage.contextId,
+    evaluation.decisionContextRef.contextId,
+    `${label}.lineage.contextId`,
+  );
+  assertExactString(
+    evaluation.lineage.shadowRecordingArtifactId,
+    evaluation.shadowRecordingRef.shadowRecordingArtifactId,
+    `${label}.lineage.shadowRecordingArtifactId`,
+  );
+  assertExactString(
+    evaluation.lineage.marketContextId,
+    marketContextRef.marketContextId,
+    `${label}.lineage.marketContextId`,
+  );
+  // Required lineage contract versions (Stage 8 always emits these)
+  assertExactString(
+    evaluation.lineage.decisionContractVersion,
+    DECISION_CONTRACT_VERSION,
+    `${label}.lineage.decisionContractVersion`,
+  );
+  assertExactString(
+    evaluation.lineage.decisionContextContractVersion,
+    DECISION_CONTEXT_CONTRACT_VERSION,
+    `${label}.lineage.decisionContextContractVersion`,
+  );
+  assertExactString(
+    evaluation.lineage.shadowRecordingContractVersion,
+    SHADOW_RECORDING_CONTRACT_VERSION,
+    `${label}.lineage.shadowRecordingContractVersion`,
+  );
+  assertExactString(
+    evaluation.lineage.observedOutcomeContractVersion,
+    OBSERVED_OUTCOME_CONTRACT_VERSION,
+    `${label}.lineage.observedOutcomeContractVersion`,
+  );
+  assertExactString(
+    evaluation.lineage.marketContextContractVersion,
+    MARKET_CONTEXT_CONTRACT_VERSION,
+    `${label}.lineage.marketContextContractVersion`,
+  );
+  assertExactString(
+    evaluation.lineage.evaluationContractVersion,
+    EVALUATION_CONTRACT_VERSION,
+    `${label}.lineage.evaluationContractVersion`,
+  );
+  // Optional lineage ref bindings — Stage 8 keeps undefined keys when ref absent
+  if (evaluation.taskRef != null) {
+    assertExactString(
+      evaluation.lineage.taskId,
+      evaluation.taskRef.taskId,
+      `${label}.lineage.taskId`,
     );
-  }
-  if (evaluation.lineage.outcomeId !== evaluation.outcomeRef.outcomeId) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.outcomeId must equal outcomeRef.outcomeId`,
+    assertExactString(
+      evaluation.lineage.shadowTaskStateContractVersion,
+      SHADOW_TASK_STATE_CONTRACT_VERSION,
+      `${label}.lineage.shadowTaskStateContractVersion`,
     );
+  } else {
+    if (evaluation.lineage.taskId != null) {
+      fail(
+        'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+        `${label}.lineage.taskId must be absent/undefined when taskRef is absent`,
+      );
+    }
+    if (evaluation.lineage.shadowTaskStateContractVersion != null) {
+      fail(
+        'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+        `${label}.lineage.shadowTaskStateContractVersion must be absent/undefined when taskRef is absent`,
+      );
+    }
   }
-  if (evaluation.lineage.marketContextId !== marketContextRef.marketContextId) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.marketContextId must equal marketContextRef.marketContextId`,
+  if (evaluation.bindingRef != null) {
+    assertExactString(
+      evaluation.lineage.bindingId,
+      evaluation.bindingRef.bindingId,
+      `${label}.lineage.bindingId`,
     );
-  }
-  if (evaluation.lineage.evaluationContractVersion !== EVALUATION_CONTRACT_VERSION) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.evaluationContractVersion must equal Evaluation contract version`,
+    assertExactString(
+      evaluation.lineage.shadowTaskCycleBindingContractVersion,
+      SHADOW_TASK_CYCLE_BINDING_CONTRACT_VERSION,
+      `${label}.lineage.shadowTaskCycleBindingContractVersion`,
     );
+  } else {
+    if (evaluation.lineage.bindingId != null) {
+      fail(
+        'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+        `${label}.lineage.bindingId must be absent/undefined when bindingRef is absent`,
+      );
+    }
+    if (evaluation.lineage.shadowTaskCycleBindingContractVersion != null) {
+      fail(
+        'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
+        `${label}.lineage.shadowTaskCycleBindingContractVersion must be absent/undefined when bindingRef is absent`,
+      );
+    }
   }
-  if (
-    evaluation.lineage.contextId != null
-    && evaluation.lineage.contextId !== evaluation.decisionContextRef.contextId
-  ) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.contextId must equal decisionContextRef.contextId`,
+  if (evaluation.outcomeSotRef != null) {
+    assertExactString(
+      evaluation.lineage.observedOutcomeSotContractVersion,
+      OBSERVED_OUTCOME_SOT_CONTRACT_VERSION,
+      `${label}.lineage.observedOutcomeSotContractVersion`,
     );
-  }
-  if (
-    evaluation.lineage.shadowRecordingArtifactId != null
-    && evaluation.lineage.shadowRecordingArtifactId
-      !== evaluation.shadowRecordingRef.shadowRecordingArtifactId
-  ) {
+  } else if (evaluation.lineage.observedOutcomeSotContractVersion != null) {
     fail(
       'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.shadowRecordingArtifactId must equal shadowRecordingRef.shadowRecordingArtifactId`,
-    );
-  }
-  if (
-    evaluation.taskRef != null
-    && evaluation.lineage.taskId != null
-    && evaluation.lineage.taskId !== evaluation.taskRef.taskId
-  ) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.taskId must equal taskRef.taskId`,
-    );
-  }
-  if (
-    evaluation.bindingRef != null
-    && evaluation.lineage.bindingId != null
-    && evaluation.lineage.bindingId !== evaluation.bindingRef.bindingId
-  ) {
-    fail(
-      'AGGREGATE_EVALUATION_LINEAGE_MISMATCH',
-      `${label}.lineage.bindingId must equal bindingRef.bindingId`,
+      `${label}.lineage.observedOutcomeSotContractVersion must be absent/undefined when outcomeSotRef is absent`,
     );
   }
 
@@ -1216,6 +1398,17 @@ function validateBuiltEvaluationArtifact(evaluation, index) {
     evaluation.provenance.implementationVersion,
     evaluation.implementationVersion,
     `${label}.provenance.implementationVersion`,
+  );
+  // Nested provenance shapes — mirror Stage 8 builder semantics only
+  validateNestedProvenance(
+    evaluation.provenance.decisionProvenance,
+    'decision',
+    `${label}.provenance.decisionProvenance`,
+  );
+  validateNestedProvenance(
+    evaluation.provenance.outcomeProvenance,
+    'outcome',
+    `${label}.provenance.outcomeProvenance`,
   );
 
   // limitations
@@ -1430,7 +1623,23 @@ export function computeEvaluationPerformanceAggregateId({
     }
     seen.add(id);
   }
-  assertString(cohort.methodKey, 'cohort.methodKey');
+  // Source Evaluation contract/policy/method — Aggregate ID cannot canonicalize fake sources
+  assertExactString(
+    cohort.contractVersion,
+    EVALUATION_CONTRACT_VERSION,
+    'cohort.contractVersion',
+  );
+  assertExactString(
+    cohort.policyVersion,
+    EVALUATION_POLICY_VERSION,
+    'cohort.policyVersion',
+  );
+  if (!METHOD_KEY_SET.has(cohort.methodKey)) {
+    fail(
+      'AGGREGATE_INVALID_METHOD_KEY',
+      'cohort.methodKey is not a canonical EVALUATION_METHOD_KEY',
+    );
+  }
   assertString(
     cohort.methodImplementationVersion,
     'cohort.methodImplementationVersion',
@@ -1439,18 +1648,29 @@ export function computeEvaluationPerformanceAggregateId({
     cohort.evaluationImplementationVersion,
     'cohort.evaluationImplementationVersion',
   );
-  assertString(cohort.policyVersion, 'cohort.policyVersion');
-  assertString(cohort.contractVersion, 'cohort.contractVersion');
+  // Optional market dimensions — null when absent; bounded strings when present
+  const venue = cohort.venue === undefined || cohort.venue === null
+    ? null
+    : assertString(cohort.venue, 'cohort.venue');
+  const marketType = cohort.marketType === undefined || cohort.marketType === null
+    ? null
+    : assertString(cohort.marketType, 'cohort.marketType');
+  const symbol = cohort.symbol === undefined || cohort.symbol === null
+    ? null
+    : assertString(cohort.symbol, 'cohort.symbol');
+  const timeframe = cohort.timeframe === undefined || cohort.timeframe === null
+    ? null
+    : assertString(cohort.timeframe, 'cohort.timeframe');
 
   const sortedIds = [...evaluationIds].sort();
   const material = {
     contractVersion: EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
     policyVersion: EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
     cohort: {
-      venue: cohort.venue ?? null,
-      marketType: cohort.marketType ?? null,
-      symbol: cohort.symbol ?? null,
-      timeframe: cohort.timeframe ?? null,
+      venue,
+      marketType,
+      symbol,
+      timeframe,
       methodKey: cohort.methodKey,
       methodImplementationVersion: cohort.methodImplementationVersion,
       evaluationImplementationVersion: cohort.evaluationImplementationVersion,
