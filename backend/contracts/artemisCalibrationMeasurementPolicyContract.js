@@ -1,207 +1,173 @@
 /**
- * Artemis Core Stage 10 — S10-CALIBRATION-MEASUREMENT-POLICY-CONTRACT
- * ARTEMIS_CALIBRATION_MEASUREMENT_POLICY_CONTRACT_BOUNDARY
+ * Artemis Calibration Measurement Policy Contract Boundary
+ * Stage 10 — S10-CALIBRATION-MEASUREMENT-POLICY-CONTRACT
  *
- * Deterministic, non-executing, library-only Calibration Measurement Policy
- * semantic / validation boundary. Canonically defines v1 target-event identity,
- * eligibility, provenance requirements, scalar top-label probability semantics,
- * MATCH/MISMATCH correctness mapping, UNIT_INTERVAL normalization, and
- * BINARY_BRIER_SCORE identity/formula metadata.
+ * Deterministic, non-executing, library-only semantic / validation boundary.
+ * AUTHORITY_CLASS = CALIBRATION · RISK_TIER = Tier 3 · isSourceOfTruth = false
  *
- * This is NOT a calibration engine. It does NOT compute Brier scores, ECE,
- * aggregates, thresholds, trust/weights, or promotion/demotion.
+ * Governed v1 semantics (COMPLETE):
+ * - TARGET_EVENT = TOP_LABEL_DIRECTIONAL_CORRECTNESS
+ * - EXPLICIT_PROVENANCE_REQUIRED = YES · NOT_INFERRED_FROM_KIND
+ * - AUTHORIZED_MEASUREMENT_METHODS = EMPTY (immutable frozen array)
+ * - FIRST_ALLOWED_PROPER_SCORE = BINARY_BRIER_SCORE ((p−y)² semantics only)
+ * - BINARY_BRIER_EXECUTION = NO · AGGREGATE_MEASUREMENT = NO
+ * - CALIBRATION_EXECUTION = NO · TRUST/WEIGHT/PROMOTION/DEMOTION = NO
  *
- * Authority: CALIBRATION · Tier 3 · isSourceOfTruth = false
- *
- * Governed v1 target:
- *   TOP_LABEL_DIRECTIONAL_CORRECTNESS =
- *     P(selected canonical Decision direction matches future canonical
- *       observed direction at compatible evaluation horizon)
- *
- * Confidence kind ∈ {MODEL_PROBABILITY, CALIBRATED} is necessary but NOT
- * sufficient. Explicit provenance/method semantics registered by this policy
- * owner are required. AUTHORIZED_MEASUREMENT_METHODS is empty for v1.
+ * Hardening:
+ * - No exported mutable Set authority surfaces
+ * - Thin observation ref only (calibrationObservationRef)
+ * - Strict descriptor allowlist + complete hardFlags/sideEffects
+ * - Deep freeze recurses into already-frozen parents
+ * - Source-conflict fail-closed · provenance method authority
+ * - No execution-shaped Brier API surface
  */
 
 import {
+  AVAILABILITY,
   CONFIDENCE_KIND,
   CONFIDENCE_SCALE,
-  utf8ByteLength,
-  collectForbiddenSecretKeys,
+  isCanonicalUuid,
 } from './artemisEvidenceContract.js';
 import {
   CONFIDENCE_CALIBRATION_ARTIFACT_TYPE,
   CONFIDENCE_CALIBRATION_CONTRACT_VERSION,
   CONFIDENCE_CALIBRATION_SCHEMA_VERSION,
-  PREDICTIVE_CONFIDENCE_KINDS as UPSTREAM_PREDICTIVE_CONFIDENCE_KINDS,
 } from './artemisConfidenceCalibrationContract.js';
 import { EVALUATION_STATUS } from './artemisObservedOutcomeEvaluationContract.js';
 
-// ---------------------------------------------------------------------------
-// Version / identity
-// ---------------------------------------------------------------------------
+// ─── Identity / versions ─────────────────────────────────────────────────────
 
-export const CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION = '1.0.0';
 export const CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION =
   'artemis-calibration-measurement-policy-1.0.0';
-export const CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION =
-  'stage10-calibration-measurement-policy-1.0.0';
+export const CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION = '1.0.0';
+export const CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION = '1.0.0';
 export const CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION = '1.0.0';
-
 export const CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE =
   'ARTEMIS_CALIBRATION_MEASUREMENT_POLICY';
-export const CALIBRATION_MEASUREMENT_POLICY_POLICY_TYPE =
+export const CALIBRATION_MEASUREMENT_POLICY_TYPE =
   'CALIBRATION_MEASUREMENT_POLICY';
 export const CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS = 'CALIBRATION';
 export const CALIBRATION_MEASUREMENT_POLICY_SLICE_ID =
   'S10-CALIBRATION-MEASUREMENT-POLICY-CONTRACT';
-export const CALIBRATION_MEASUREMENT_POLICY_OWNERSHIP_ROLE =
-  'VALIDATION_BOUNDARY';
-export const CALIBRATION_MEASUREMENT_POLICY_IS_SOURCE_OF_TRUTH = false;
-export const CALIBRATION_MEASUREMENT_POLICY_WRITER =
-  'artemisCalibrationMeasurementPolicyContract';
-export const CALIBRATION_MEASUREMENT_POLICY_STAGE =
-  'ARTEMIS_CORE_STAGE_10_CALIBRATION_MEASUREMENT_POLICY_CONTRACT_BOUNDARY';
-export const CALIBRATION_MEASUREMENT_POLICY_METHOD_KEY =
-  'artemis.calibration.measurement.policy.v1';
-
-export const MAX_POLICY_DESCRIPTOR_UTF8_BYTES = 16 * 1024;
-export const MAX_ELIGIBILITY_ASSESSMENT_UTF8_BYTES = 8 * 1024;
-export const MAX_STRING = 256;
-export const MAX_NOTE_CHARS = 2048;
-export const MAX_REASON_CODES = 32;
-
-// ---------------------------------------------------------------------------
-// Governed v1 target event
-// ---------------------------------------------------------------------------
-
-export const CALIBRATION_TARGET_EVENT = Object.freeze({
-  TOP_LABEL_DIRECTIONAL_CORRECTNESS: 'TOP_LABEL_DIRECTIONAL_CORRECTNESS',
-});
-
-export const CALIBRATION_TARGET_EVENT_V1 =
-  CALIBRATION_TARGET_EVENT.TOP_LABEL_DIRECTIONAL_CORRECTNESS;
-
-export const CALIBRATION_TARGET_EVENT_V1_SEMANTICS = Object.freeze({
-  targetEvent: CALIBRATION_TARGET_EVENT_V1,
-  meaning:
-    'P(selected_canonical_Decision_direction_matches_future_canonical_observed_direction_at_compatible_evaluation_horizon)',
-  prospective: true,
-  policyScoped: true,
-  inferredFromConfidenceKind: false,
-  explicitProvenanceRequired: true,
-  fullClassProbabilityVectorRequired: false,
-  synthesizesUnselectedClassDistribution: false,
-});
-
-export const V1_CALIBRATION_SCOPE = 'TOP_LABEL_DIRECTIONAL_CORRECTNESS';
-export const FULL_CLASS_PROBABILITY_VECTOR = false;
-export const MULTICLASS_CALIBRATION = 'DEFERRED';
-
-// ---------------------------------------------------------------------------
-// Confidence kinds — necessary, not sufficient
-// ---------------------------------------------------------------------------
-
-export const ALLOWED_PREDICTIVE_KINDS = Object.freeze({
-  MODEL_PROBABILITY: CONFIDENCE_KIND.MODEL_PROBABILITY,
-  CALIBRATED: CONFIDENCE_KIND.CALIBRATED,
-});
-export const ALLOWED_PREDICTIVE_KIND_SET = Object.freeze(
-  new Set(Object.values(ALLOWED_PREDICTIVE_KINDS)),
-);
-
-/** Non-eligible kinds (never measurement probabilities under this policy). */
-export const NON_MEASUREMENT_PROBABILITY_KINDS = Object.freeze({
-  MEASURED: CONFIDENCE_KIND.MEASURED,
-  HEURISTIC: CONFIDENCE_KIND.HEURISTIC,
-  RULE_SCORE: CONFIDENCE_KIND.RULE_SCORE,
-  DERIVED: CONFIDENCE_KIND.DERIVED,
-  LEGACY: CONFIDENCE_KIND.LEGACY,
-  UNAVAILABLE: CONFIDENCE_KIND.UNAVAILABLE,
-});
-export const NON_MEASUREMENT_PROBABILITY_KIND_SET = Object.freeze(
-  new Set(Object.values(NON_MEASUREMENT_PROBABILITY_KINDS)),
-);
-
-export const MEASURED_KIND_IS_CALIBRATION_RESULT = false;
-export const CALIBRATED_KIND_TITANGOLD_VERIFIED = false;
-export const CALIBRATED_KIND_SELF_ATTESTATION_ALLOWED = false;
-export const CONFIDENCE_TARGET_SEMANTICS =
-  'EXPLICIT_PROVENANCE_REQUIRED / NOT_INFERRED_FROM_KIND';
-
-export const CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS =
-  'NONE / NOT PROVEN';
-
-// ---------------------------------------------------------------------------
-// Method semantic registry — fail closed / empty for v1
-// ---------------------------------------------------------------------------
-
-/**
- * Canonical authorized measurement methods. Empty for v1.
- * Only this policy owner may register methods via a later versioned governance
- * change. Caller-supplied methodKey+targetEvent cannot self-register.
- */
-export const AUTHORIZED_MEASUREMENT_METHODS = Object.freeze([]);
-export const AUTHORIZED_MEASUREMENT_METHOD_SET = Object.freeze(new Set());
+export const CALIBRATION_MEASUREMENT_POLICY_OFFICIAL_NAME =
+  'ARTEMIS_CALIBRATION_MEASUREMENT_POLICY_CONTRACT_BOUNDARY';
+export const CALIBRATION_MEASUREMENT_POLICY_RISK_TIER = 'Tier 3';
 
 export const METHOD_REGISTRATION_OWNER =
   'artemisCalibrationMeasurementPolicyContract';
 export const CALLER_SELF_REGISTRATION = 'FORBIDDEN';
 
-// ---------------------------------------------------------------------------
-// Binary correctness mapping (policy-scoped only)
-// ---------------------------------------------------------------------------
+export const MAX_CALIBRATION_MEASUREMENT_POLICY_BYTES = 48 * 1024;
+export const MAX_CALIBRATION_MEASUREMENT_POLICY_NOTE_CHARS = 512;
+
+// ─── Canonical target event / scope ──────────────────────────────────────────
+
+export const CALIBRATION_TARGET_EVENT_V1 = 'TOP_LABEL_DIRECTIONAL_CORRECTNESS';
+export const CALIBRATION_TARGET_EVENT_V1_SEMANTICS = Object.freeze({
+  identity: CALIBRATION_TARGET_EVENT_V1,
+  probabilityMeaning:
+    'P(the explicitly selected canonical Decision direction matches the future canonical observed direction at the compatible canonical evaluation horizon)',
+  prospective: true,
+  policyScoped: true,
+  inferredFromConfidenceKindAlone: false,
+  explicitProvenanceRequired: true,
+  fullClassProbabilityVectorRequired: false,
+  synthesizesUnselectedClassDistribution: false,
+});
+
+export const TARGET_SEMANTICS_INFERRED_FROM_KIND = false;
+export const EXPLICIT_PROVENANCE_REQUIRED = true;
+export const MEASUREMENT_SCOPE = 'TOP_LABEL_SELECTED_DIRECTION_SCALAR';
+export const SCALAR_SELECTED_CLASS_CONFIDENCE = true;
+export const FULL_CLASS_PROBABILITY_VECTOR = false;
+export const MULTICLASS_CALIBRATION = 'DEFERRED';
+
+// ─── Authorized measurement methods — EMPTY immutable array (v1) ─────────────
+// Object.freeze(new Set(...)) is NOT an immutable Set — .add() still mutates.
+// Authority surface is a frozen empty array only. No mutable Set is exported.
+
+export const AUTHORIZED_MEASUREMENT_METHODS = Object.freeze([]);
+
+export const CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS =
+  'NONE / NOT PROVEN';
+
+export const ALLOWED_PREDICTIVE_KINDS = Object.freeze({
+  MODEL_PROBABILITY: CONFIDENCE_KIND.MODEL_PROBABILITY,
+  CALIBRATED: CONFIDENCE_KIND.CALIBRATED,
+});
+
+/** Immutable frozen array of allowed predictive kind values (authority surface). */
+export const ALLOWED_PREDICTIVE_KIND_VALUES = Object.freeze([
+  CONFIDENCE_KIND.MODEL_PROBABILITY,
+  CONFIDENCE_KIND.CALIBRATED,
+]);
+
+export const NON_MEASUREMENT_PROBABILITY_KINDS = Object.freeze({
+  HEURISTIC: CONFIDENCE_KIND.HEURISTIC,
+  RULE_SCORE: CONFIDENCE_KIND.RULE_SCORE,
+  DERIVED: CONFIDENCE_KIND.DERIVED,
+  LEGACY: CONFIDENCE_KIND.LEGACY,
+  MEASURED: CONFIDENCE_KIND.MEASURED,
+  UNAVAILABLE: CONFIDENCE_KIND.UNAVAILABLE,
+});
+
+export const NON_MEASUREMENT_PROBABILITY_KIND_VALUES = Object.freeze([
+  CONFIDENCE_KIND.HEURISTIC,
+  CONFIDENCE_KIND.RULE_SCORE,
+  CONFIDENCE_KIND.DERIVED,
+  CONFIDENCE_KIND.LEGACY,
+  CONFIDENCE_KIND.MEASURED,
+  CONFIDENCE_KIND.UNAVAILABLE,
+]);
+
+export const MEASURED_KIND_IS_CALIBRATION_RESULT = false;
+export const CALIBRATED_KIND_TITANGOLD_VERIFIED = false;
+export const CALIBRATED_KIND_SELF_ATTESTATION_ALLOWED = false;
+
+// ─── Binary correctness mapping (policy-scoped) ──────────────────────────────
 
 export const BINARY_CORRECTNESS_MAPPING = Object.freeze({
   MATCH: 1,
   MISMATCH: 0,
+  policyScopedOnly: true,
+  changesObservedOutcomeEvaluationContract: false,
+  missingStaleIncompatibleUnavailableAreNotZero: true,
 });
 
-export const BINARY_CORRECTNESS_SCOPE =
-  CALIBRATION_TARGET_EVENT_V1;
-export const BINARY_CORRECTNESS_POLICY_SCOPED_ONLY = true;
+export const MATCH_NUMERIC = 1;
+export const MISMATCH_NUMERIC = 0;
 
-export const USABLE_BINARY_EVALUATION_STATUS = Object.freeze({
-  MATCH: EVALUATION_STATUS.MATCH,
-  MISMATCH: EVALUATION_STATUS.MISMATCH,
-});
-export const USABLE_BINARY_EVALUATION_STATUS_SET = Object.freeze(
-  new Set(Object.values(USABLE_BINARY_EVALUATION_STATUS)),
-);
+export const USABLE_BINARY_EVALUATION_STATUSES = Object.freeze([
+  EVALUATION_STATUS.MATCH,
+  EVALUATION_STATUS.MISMATCH,
+]);
 
-// ---------------------------------------------------------------------------
-// Measurement domain / scale normalization
-// ---------------------------------------------------------------------------
+// ─── Measurement domain / scale normalization ────────────────────────────────
 
 export const MEASUREMENT_DOMAIN = 'UNIT_INTERVAL';
-export const MEASUREMENT_DOMAIN_BOUNDS = Object.freeze({ min: 0, max: 1 });
+export const UNIT_INTERVAL_NORMALIZATION = 'IDENTITY';
+export const PERCENT_100_NORMALIZATION = 'DIVIDE_BY_100';
+export const UNKNOWN_SCALE_POLICY = 'REJECT';
 
 export const SCALE_NORMALIZATION_POLICY = Object.freeze({
   measurementDomain: MEASUREMENT_DOMAIN,
-  unit_interval: 'IDENTITY',
-  percent_100: 'DIVIDE_BY_100',
-  unknown: 'REJECT',
+  unit_interval: UNIT_INTERVAL_NORMALIZATION,
+  percent_100: PERCENT_100_NORMALIZATION,
+  unknown: UNKNOWN_SCALE_POLICY,
   clamp: false,
-  roundingRepair: false,
-  guessedScale: false,
-  minMaxNormalization: false,
-  empiricalNormalization: false,
-  coercion: false,
-  sourceRawValueUnmodified: true,
-  sourceScaleMustBeExplicit: true,
+  empirical: false,
+  minMax: false,
+  inferredScale: false,
+  hiddenRounding: false,
 });
 
-export const UNIT_INTERVAL_NORMALIZATION = 'IDENTITY';
-export const PERCENT_100_NORMALIZATION = 'DIVIDE_BY_100';
-export const UNKNOWN_SCALE = 'REJECT';
+export const CONFIDENCE_SCALE_VALUES = Object.freeze([
+  CONFIDENCE_SCALE.UNIT_INTERVAL,
+  CONFIDENCE_SCALE.PERCENT_100,
+  CONFIDENCE_SCALE.UNKNOWN,
+]);
 
-export const CONFIDENCE_SCALE_SET = Object.freeze(
-  new Set(Object.values(CONFIDENCE_SCALE)),
-);
-
-// ---------------------------------------------------------------------------
-// BINARY_BRIER_SCORE semantics (identity / formula only — NO execution)
-// ---------------------------------------------------------------------------
+// ─── First allowed proper score (semantics only — NO execution) ──────────────
 
 export const FIRST_ALLOWED_PROPER_SCORE = 'BINARY_BRIER_SCORE';
 export const BINARY_BRIER_SCORE = 'BINARY_BRIER_SCORE';
@@ -211,118 +177,56 @@ export const BINARY_BRIER_STANDALONE_CALIBRATION_VERDICT = false;
 export const BINARY_BRIER_ROLE =
   'PROPER_PROBABILITY_SCORE / INPUT_TO_LATER_CALIBRATION_EVALUATION';
 
-export const BINARY_BRIER_METRIC_SEMANTICS = Object.freeze({
+export const BINARY_BRIER_SEMANTIC_DESCRIPTOR = Object.freeze({
   metricIdentity: BINARY_BRIER_SCORE,
   formulaIdentity: BINARY_BRIER_FORMULA_SEMANTICS,
-  formulaDescription:
-    'Per-observation proper score (p - y)^2 with p in [0,1] and y in {0,1}',
-  inputDomain: MEASUREMENT_DOMAIN,
-  probabilityBounds: MEASUREMENT_DOMAIN_BOUNDS,
-  targetMapping: BINARY_CORRECTNESS_MAPPING,
-  targetEvent: CALIBRATION_TARGET_EVENT_V1,
+  perObservationLoss: '(p-y)^2',
+  pDomain: '[0,1]',
+  yDomain: '{0,1}',
+  ySource: 'MATCH=1 / MISMATCH=0 (policy-scoped)',
   executionAuthorized: false,
+  aggregateAuthorized: false,
   standaloneCalibrationVerdict: false,
   role: BINARY_BRIER_ROLE,
-  limitations: Object.freeze([
-    'semantics_only',
-    'no_numeric_score_computation',
-    'no_aggregate',
-    'no_threshold',
-    'no_grade',
-    'no_trust_interpretation',
-    'no_promotion_interpretation',
-  ]),
 });
 
-// ---------------------------------------------------------------------------
-// Deferred / unsupported metrics
-// ---------------------------------------------------------------------------
-
-export const DEFERRED_METRIC_STATUS = Object.freeze({
-  TOP_LABEL_ECE: 'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY',
-  EXPECTED_CALIBRATION_ERROR:
-    'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY',
-  RELIABILITY_CURVE: 'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY',
-  CONFIDENCE_BUCKETS: 'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY',
-  CLASSWISE_CALIBRATION_ERROR: 'DEFERRED',
-  MULTICLASS_BRIER: 'DEFERRED',
-  LOG_LOSS: 'DEFERRED',
-  CROSS_ENTROPY: 'DEFERRED',
-  PLATT_SCALING: 'DEFERRED',
-  ISOTONIC_REGRESSION: 'DEFERRED',
-  TEMPERATURE_SCALING: 'DEFERRED',
-});
-
-export const ECE = DEFERRED_METRIC_STATUS.TOP_LABEL_ECE;
-export const RELIABILITY_CURVE = DEFERRED_METRIC_STATUS.RELIABILITY_CURVE;
+export const ECE = 'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY';
+export const RELIABILITY_CURVE = 'DEFERRED_PENDING_AGGREGATION_AND_BINNING_POLICY';
 export const BINNING_POLICY = 'UNDEFINED / DEFERRED';
 export const SAMPLE_SUFFICIENCY_POLICY = 'UNDEFINED / DEFERRED';
+export const PROMOTION_THRESHOLD = 'UNDEFINED';
+export const DEMOTION_THRESHOLD = 'UNDEFINED';
 export const SEGMENTED_PERFORMANCE_POLICY =
   'DEFERRED / REQUIRED_BEFORE_STAGE10_COMPLETION';
-export const GLOBAL_AVERAGE_ONLY =
-  'NOT SUFFICIENT FOR STAGE10_COMPLETION';
+export const GLOBAL_AVERAGE_ONLY = 'NOT SUFFICIENT FOR STAGE10 COMPLETION';
 
-export const DEFERRED_CAPABILITIES = Object.freeze({
-  ...DEFERRED_METRIC_STATUS,
+export const DEFERRED_METRIC_STATUS = Object.freeze({
+  TOP_LABEL_ECE: ECE,
+  RELIABILITY_CURVE,
+  MULTICLASS_CALIBRATION,
+  CLASSWISE_CALIBRATION: 'DEFERRED',
+  MULTICLASS_BRIER: 'DEFERRED',
+  LOG_LOSS: 'DEFERRED',
+  PLATT: 'DEFERRED',
+  ISOTONIC: 'DEFERRED',
+  TEMPERATURE_SCALING: 'DEFERRED',
+  CONFIDENCE_BUCKETS: 'DEFERRED',
   BINNING_POLICY,
   SAMPLE_SUFFICIENCY_POLICY,
+  PROMOTION_THRESHOLD,
+  DEMOTION_THRESHOLD,
   SEGMENTED_PERFORMANCE_POLICY,
-  MULTICLASS_CALIBRATION,
-  FULL_CLASS_PROBABILITY_VECTOR,
-  AGGREGATE_MEASUREMENT: false,
-  CALIBRATION_EXECUTION: false,
-  TRUST_WEIGHT_MUTATION: false,
-  PROMOTION_EXECUTION: false,
-  DEMOTION_EXECUTION: false,
 });
 
-// ---------------------------------------------------------------------------
-// Side-effect ledger / hard flags
-// ---------------------------------------------------------------------------
-
-export const ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS = Object.freeze({
-  dbWriteCount: 0,
-  redisWriteCount: 0,
-  networkCallCount: 0,
-  networkRequestCount: 0,
-  providerCallCount: 0,
-  providerRequestCount: 0,
-  llmCallCount: 0,
-  workerMutationCount: 0,
-  schedulerMutationCount: 0,
-  runtimeMutationCount: 0,
-  calibrationExecutionCount: 0,
-  aggregateMeasurementCount: 0,
-  trustMutationCount: 0,
-  trustWeightMutationCount: 0,
-  weightMutationCount: 0,
-  promotionCount: 0,
-  promotionExecutionCount: 0,
-  demotionCount: 0,
-  demotionExecutionCount: 0,
-  orderCount: 0,
-  orderOperationCount: 0,
-  walletMutationCount: 0,
-  financialExecutionCount: 0,
-  redis: 0,
-  db: 0,
-  network: 0,
-  provider: 0,
-  llm: 0,
-  orders: 0,
-  financial: 0,
-  runtime: 0,
-  calibrationExecution: 0,
-  aggregateMeasurement: 0,
-  trustWeightMutation: 0,
-  promotionExecution: 0,
-  demotionExecution: 0,
-});
+// ─── Hard flags / side-effect ledger ─────────────────────────────────────────
 
 export const REQUIRED_HARD_FLAGS = Object.freeze({
   isSourceOfTruth: false,
   calibrationExecution: false,
   aggregateMeasurement: false,
+  binaryBrierExecution: false,
+  eceExecution: false,
+  reliabilityCurveExecution: false,
   trustMutation: false,
   weightMutation: false,
   promotionExecution: false,
@@ -334,1005 +238,1510 @@ export const REQUIRED_HARD_FLAGS = Object.freeze({
   llmActivation: false,
   workerActivation: false,
   schedulerActivation: false,
+  feederActivation: false,
+  b10Activation: false,
   financialExecution: false,
+  liveExecution: false,
+  paperExecution: false,
+  orderPlacement: false,
+  walletMutation: false,
+  emergencyStopClear: false,
   decisionEligible: false,
+  controlEligible: false,
   executionEligible: false,
   approvedForExecution: false,
-  liveTradingEnabled: false,
-  paperTradingEnabled: false,
-  providerConnected: false,
-  persistenceEnabled: false,
-  runtimeActivated: false,
-  workerActivated: false,
-  schedulerActivated: false,
-  calibrationExecutionAuthorized: false,
-  trustWeightMutationAuthorized: false,
-  promotionExecutionAuthorized: false,
-  demotionExecutionAuthorized: false,
+  metricInvention: false,
+  thresholdInvention: false,
+  sampleSizeInvention: false,
+  producerReclassification: false,
+  selfRegistration: false,
+});
+
+/**
+ * Explicit zero side-effect counters only.
+ * Ambiguous aliases that collide with forbidden result vocabulary (e.g. `orders`)
+ * are intentionally absent — use `orderCount` etc.
+ */
+export const ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS = Object.freeze({
+  networkCallCount: 0,
+  providerCallCount: 0,
+  dbWriteCount: 0,
+  liveDbMigrationCount: 0,
+  redisWriteCount: 0,
+  llmCallCount: 0,
+  orderCount: 0,
+  walletMutationCount: 0,
+  financialExecutionCount: 0,
+  runtimeMutationCount: 0,
+  workerMutationCount: 0,
+  schedulerMutationCount: 0,
+  feederMutationCount: 0,
+  b10MutationCount: 0,
+  calibrationExecutionCount: 0,
+  aggregateMeasurementCount: 0,
+  binaryBrierExecutionCount: 0,
+  eceExecutionCount: 0,
+  reliabilityCurveExecutionCount: 0,
+  trustMutationCount: 0,
+  weightMutationCount: 0,
+  promotionCount: 0,
+  demotionCount: 0,
+  metricInventionCount: 0,
+  thresholdInventionCount: 0,
+  sampleSizeInventionCount: 0,
+  producerReclassificationCount: 0,
+  selfRegistrationCount: 0,
 });
 
 export const CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS = Object.freeze([
-  'stage10_calibration_measurement_policy_contract_boundary_only',
-  'library_only',
-  'deterministic_non_executing',
-  'validation_boundary_not_sot',
-  'is_source_of_truth_false',
-  'no_calibration_execution',
-  'no_brier_numeric_computation',
-  'no_aggregate_measurement',
-  'no_ece',
-  'no_reliability_curve',
-  'no_binning_policy',
-  'no_sample_sufficiency_policy',
-  'no_threshold',
-  'no_trust_weight_mutation',
-  'no_promotion_execution',
-  'no_demotion_execution',
-  'authorized_measurement_methods_empty_v1',
-  'current_production_calibration_eligible_producers_none_not_proven',
-  'kind_necessary_not_sufficient',
-  'explicit_provenance_required',
-  'calibrated_kind_not_titangold_verified',
-  'measured_kind_is_not_calibration_result',
-  'no_full_class_probability_vector',
-  'no_1_minus_confidence_distribution',
-  'binary_correctness_policy_scoped_only',
-  'segmented_performance_deferred',
-  'does_not_write_db_or_redis',
-  'does_not_call_llm_or_provider',
-  'does_not_activate_worker_or_scheduler',
-  'does_not_authorize_execution',
+  'AUTHORIZED_MEASUREMENT_METHODS is EMPTY for v1 — no method is measurement-eligible',
+  'CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS = NONE / NOT PROVEN',
+  'BINARY_BRIER_SCORE semantics only — execution of (p−y)² is NOT authorized',
+  'BINARY_BRIER_SCORE is NOT a standalone calibration verdict',
+  'ECE / reliability curve / multiclass / binning / sample sufficiency deferred',
+  'CALIBRATED kind does NOT mean TitanGold-verified calibration',
+  'MEASURED kind is NOT a calibration result',
+  'Caller targetEvent / targetSemantics NEVER authorize a method',
+  'Top-level methodKey NEVER substitutes for canonical provenance.methodKey',
+  'Only thin calibrationObservationRef is accepted — not a full observation artifact',
+  'No Calibration SoT / table / migration / service / runtime / persistence',
+  'No trust / weight / promotion / demotion mutation',
+  'No network / provider / LLM / worker / scheduler / feeder / B10 / financial',
 ]);
 
-// ---------------------------------------------------------------------------
-// Forbidden contamination keys
-// ---------------------------------------------------------------------------
+export const UPSTREAM_READ_REFERENCE_ONLY = Object.freeze({
+  confidenceCalibrationContract: 'READ_REFERENCE_ONLY',
+  evidenceContract: 'READ_REFERENCE_ONLY',
+  decisionContract: 'READ_REFERENCE_ONLY',
+  observedOutcomeContract: 'READ_REFERENCE_ONLY',
+  observedOutcomeEvaluationContract: 'READ_REFERENCE_ONLY',
+  decisionLineageContract: 'READ_REFERENCE_ONLY',
+  replayContract: 'READ_REFERENCE_ONLY',
+  replayResultContract: 'READ_REFERENCE_ONLY',
+});
 
-const FORBIDDEN_RESULT_KEYS = Object.freeze([
-  'brierScore',
-  'brier',
-  'score',
-  'loss',
-  'calibrationError',
-  'calibrationScore',
-  'ece',
-  'expectedCalibrationError',
-  'reliability',
-  'reliabilityScore',
-  'reliabilityCurve',
-  'bucket',
-  'bucketCounts',
-  'confidenceBucket',
-  'binCount',
-  'sampleCount',
-  'meanScore',
-  'aggregateScore',
-  'calibrationGrade',
-  'calibrationPass',
-  'trustScore',
-  'weight',
-  'agentWeight',
-  'weightDelta',
-  'promotionStatus',
-  'demotionStatus',
-  'promotion',
-  'demotion',
-  'promotionScore',
-  'demotionScore',
-  'promotionThreshold',
-  'demotionThreshold',
-  'threshold',
-  'correctedConfidence',
-  'adjustedConfidence',
-  'calibratedConfidence',
-  'platt',
-  'isotonic',
-  'temperatureScaling',
-]);
+// ─── Fail-closed error ───────────────────────────────────────────────────────
 
-const FORBIDDEN_PAYLOAD_KEYS = Object.freeze([
-  'apiKey',
-  'apiSecret',
-  'token',
-  'secret',
-  'password',
-  'credential',
-  'credentials',
-  'walletSecret',
-  'exchangeCredential',
-  'authorization',
-  'rawProviderPayload',
-  'providerPayload',
-  'rawMarketPayload',
-  'ohlcv',
-  'candles',
-  'ticker',
-  'orderBook',
-  'depth',
-  'order',
-  'orders',
-  'balance',
-  'wallet',
-  'transfer',
-  'withdrawal',
-  'pnl',
-  'realizedPnl',
-  'simulatedPnl',
-]);
-
-const FORBIDDEN_KEYS = Object.freeze([
-  ...FORBIDDEN_RESULT_KEYS,
-  ...FORBIDDEN_PAYLOAD_KEYS,
-]);
-
-const ELIGIBILITY_INPUT_ALLOWLIST = Object.freeze([
-  'confidenceKind',
-  'kind',
-  'value',
-  'scale',
-  'methodKey',
-  'targetEvent',
-  'targetSemantics',
-  'provenance',
-  'confidence',
-  'predictiveClaimRef',
-  'calibrationObservation',
-  'calibrationObservationRef',
-  'note',
-]);
-
-const PROVENANCE_ALLOWLIST = Object.freeze([
-  'writer',
-  'methodKey',
-  'stage',
-  'policyVersion',
-  'implementationVersion',
-  'note',
-  'targetEvent',
-  'targetSemantics',
-]);
-
-const CONFIDENCE_ALLOWLIST = Object.freeze([
-  'kind',
-  'value',
-  'scale',
-  'availability',
-  'calibrationState',
-  'provenance',
-  'method',
-  'methodKey',
-]);
-
-const PREDICTIVE_CLAIM_REF_ALLOWLIST = Object.freeze([
-  'decisionId',
-  'confidence',
-  'contractVersion',
-  'schemaVersion',
-  'artifactType',
-]);
-
-const CALIBRATION_OBSERVATION_REF_ALLOWLIST = Object.freeze([
-  'calibrationObservationId',
-  'artifactType',
-  'contractVersion',
-  'schemaVersion',
-  'predictiveClaimRef',
-]);
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function fail(code, message, extra = {}) {
-  const err = new Error(message || code);
-  Object.assign(err, extra);
-  err.code = code;
-  throw err;
+export class CalibrationMeasurementPolicyContractError extends Error {
+  constructor(code, message, details = undefined) {
+    super(message);
+    this.name = 'CalibrationMeasurementPolicyContractError';
+    this.code = code;
+    if (details !== undefined) this.details = details;
+  }
 }
 
-function freezeDeep(value) {
-  if (value == null || typeof value !== 'object') return value;
-  if (Object.isFrozen(value)) return value;
+function fail(code, message, details) {
+  throw new CalibrationMeasurementPolicyContractError(code, message, details);
+}
+
+// ─── Deep freeze (recurse into already-frozen parents) ───────────────────────
+
+function freezeDeep(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return value;
+  seen.add(value);
+
   if (Array.isArray(value)) {
-    for (const item of value) freezeDeep(item);
-    return Object.freeze(value);
+    for (let i = 0; i < value.length; i += 1) {
+      freezeDeep(value[i], seen);
+    }
+  } else {
+    for (const key of Reflect.ownKeys(value)) {
+      freezeDeep(value[key], seen);
+    }
   }
-  for (const key of Object.keys(value)) freezeDeep(value[key]);
-  return Object.freeze(value);
+
+  if (!Object.isFrozen(value)) {
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
 }
 
 function assertPlainObject(value, code, message) {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+  if (
+    value === null
+    || typeof value !== 'object'
+    || Array.isArray(value)
+    || Object.prototype.toString.call(value) !== '[object Object]'
+  ) {
     fail(code, message);
   }
 }
 
-function assertAllowlist(obj, allowed, codePrefix) {
-  const allowedSet = allowed instanceof Set ? allowed : new Set(allowed);
-  const unknown = Object.keys(obj).filter((k) => !allowedSet.has(k));
-  if (unknown.length) {
-    fail(`${codePrefix}_UNKNOWN_FIELD`, `Unknown field(s): ${unknown.join(',')}`, {
-      unknownFields: unknown,
-    });
+function assertExactString(actual, expected, code, message) {
+  if (actual !== expected) {
+    fail(code, message, { actual, expected });
   }
 }
 
-function assertString(field, value, code, { max = MAX_STRING, required = true } = {}) {
-  if (value == null || value === '') {
-    if (required) fail(code, `${field} required string`, { field });
+function assertFiniteNumber(value, code, message) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    fail(code, message, { value });
+  }
+}
+
+function byteLengthUtf8(value) {
+  return Buffer.byteLength(stableStringify(value), 'utf8');
+}
+
+function assertSizeBound(value, maxBytes, code) {
+  const n = byteLengthUtf8(value);
+  if (n > maxBytes) {
+    fail(code, `Artifact exceeds size bound (${n} > ${maxBytes})`, { bytes: n, maxBytes });
+  }
+}
+
+// ─── Immutable membership helpers (no exported mutable Sets) ─────────────────
+
+function isAuthorizedMeasurementMethod(methodKey) {
+  return typeof methodKey === 'string'
+    && methodKey.length > 0
+    && AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey);
+}
+
+function isAllowedPredictiveKind(kind) {
+  return ALLOWED_PREDICTIVE_KIND_VALUES.includes(kind);
+}
+
+function isNonMeasurementProbabilityKind(kind) {
+  return NON_MEASUREMENT_PROBABILITY_KIND_VALUES.includes(kind);
+}
+
+function isUsableBinaryEvaluationStatus(status) {
+  return USABLE_BINARY_EVALUATION_STATUSES.includes(status);
+}
+
+function isKnownConfidenceScale(scale) {
+  return CONFIDENCE_SCALE_VALUES.includes(scale);
+}
+
+// ─── Forbidden contamination vocabulary ──────────────────────────────────────
+
+const FORBIDDEN_RESULT_KEYS = Object.freeze([
+  'brierScore',
+  'brier',
+  'ece',
+  'expectedCalibrationError',
+  'reliabilityCurve',
+  'reliability',
+  'logLoss',
+  'log_loss',
+  'platt',
+  'isotonic',
+  'temperatureScaling',
+  'temperature_scaling',
+  'score',
+  'scores',
+  'metricValue',
+  'metricResult',
+  'aggregateScore',
+  'meanBrier',
+  'mean_brier',
+  'sampleCount',
+  'minimumSampleCount',
+  'binCount',
+  'bucketCounts',
+  'bins',
+  'buckets',
+  'threshold',
+  'thresholds',
+  'promotionThreshold',
+  'demotionThreshold',
+  'trustScore',
+  'trustWeight',
+  'weight',
+  'weights',
+  'promotionStatus',
+  'demotionStatus',
+  'promoted',
+  'demoted',
+  'y',
+  'correctnessNumeric',
+  'probabilityLoss',
+]);
+
+const FORBIDDEN_SECRET_KEYS = Object.freeze([
+  'password',
+  'secret',
+  'token',
+  'apiKey',
+  'api_key',
+  'authorization',
+  'privateKey',
+  'private_key',
+  'accessToken',
+  'refreshToken',
+  'jwt',
+  'credential',
+  'credentials',
+]);
+
+const FORBIDDEN_PAYLOAD_KEYS = Object.freeze([
+  'ohlcv',
+  'candles',
+  'ticker',
+  'orderbook',
+  'depth',
+  'providerResponse',
+  'exchangePayload',
+  'rawMarketData',
+  'llmOutput',
+  'modelOutputBlob',
+  'wallet',
+  'orders',
+  'order',
+  'financialExecution',
+]);
+
+const FORBIDDEN_KEY_LOOKUP = Object.freeze(
+  Object.fromEntries(
+    [...FORBIDDEN_RESULT_KEYS, ...FORBIDDEN_SECRET_KEYS, ...FORBIDDEN_PAYLOAD_KEYS].map((k) => [
+      k.toLowerCase(),
+      true,
+    ]),
+  ),
+);
+
+/**
+ * Paths/keys that are legitimate policy-descriptor vocabulary and must not be
+ * treated as result-payload contamination when scanning the canonical descriptor.
+ * Eligibility inputs do NOT use these exemptions — score:0 / weight:0 remain forbidden.
+ */
+const DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_PREFIXES = Object.freeze([
+  'hardFlags.',
+  'sideEffects.',
+  'deferredMetricStatus.',
+  'metricSemantics.',
+  'binaryCorrectnessMapping.',
+  'scaleNormalizationPolicy.',
+  'upstreamReadReferenceOnly.',
+]);
+
+const DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_TOP_KEYS = Object.freeze([
+  'promotionThreshold',
+  'demotionThreshold',
+  'binningPolicy',
+  'sampleSufficiencyPolicy',
+  'segmentedPerformancePolicy',
+  'eceStatus',
+  'reliabilityCurveStatus',
+  'deferredMetricStatus',
+  'hardFlags',
+  'sideEffects',
+  'metricSemantics',
+]);
+
+function isDescriptorForbiddenScanExempt(path, key) {
+  if (DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_TOP_KEYS.includes(key) && (path === key || path === '')) {
+    return true;
+  }
+  if (DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_TOP_KEYS.includes(key) && path === key) {
+    return true;
+  }
+  // Exempt the key node itself when it is a known top-level deferred/policy field.
+  if (path === key && DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_TOP_KEYS.includes(key)) {
+    return true;
+  }
+  for (const prefix of DESCRIPTOR_FORBIDDEN_SCAN_EXEMPT_PREFIXES) {
+    if (path.startsWith(prefix) || path === prefix.slice(0, -1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectForbiddenKeysDeep(value, path, out, seen, options = {}) {
+  if (value === null || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => {
+      collectForbiddenKeysDeep(item, `${path}[${i}]`, out, seen, options);
+    });
     return;
   }
-  if (typeof value !== 'string') {
-    fail(code, `${field} must be a string`, { field });
-  }
-  if (value.length > max) {
-    fail(code, `${field} exceeds max length`, { field, max });
-  }
-}
 
-function collectForbiddenKeysDeep(value, found = new Set()) {
-  if (value == null || typeof value !== 'object') return found;
-  if (Array.isArray(value)) {
-    for (const item of value) collectForbiddenKeysDeep(item, found);
-    return found;
-  }
   for (const key of Object.keys(value)) {
-    if (FORBIDDEN_KEYS.includes(key)) {
-      const leaf = value[key];
-      // Numeric zero side-effect counters with forbidden-looking names are allowed.
-      if (
-        typeof leaf === 'number'
-        && Number.isFinite(leaf)
-        && leaf === 0
-        && (
-          key === 'orders'
-          || key === 'orderCount'
-          || key === 'walletMutationCount'
-          || key === 'financialExecutionCount'
-          || key === 'score'
-          || key === 'sampleCount'
-          || key === 'weight'
-        )
-      ) {
-        // allow zero counter leaf
-      } else {
-        found.add(key);
-      }
+    const nextPath = path ? `${path}.${key}` : key;
+    const exempt = options.descriptorMode === true
+      && isDescriptorForbiddenScanExempt(nextPath, key);
+    if (!exempt && FORBIDDEN_KEY_LOOKUP[key.toLowerCase()]) {
+      // Forbidden calibration/result/payload/secret fields remain forbidden even at zero.
+      out.push({ path: nextPath, key });
     }
-    collectForbiddenKeysDeep(value[key], found);
+    collectForbiddenKeysDeep(value[key], nextPath, out, seen, options);
   }
-  return found;
 }
 
-function assertNoForbiddenOrSecrets(input) {
-  const forbidden = collectForbiddenKeysDeep(input);
-  if (forbidden.size) {
+function assertNoForbiddenOrSecrets(value, contextCode, options = {}) {
+  const hits = [];
+  collectForbiddenKeysDeep(value, '', hits, new WeakSet(), options);
+  if (hits.length > 0) {
     fail(
-      'CALIBRATION_MEASUREMENT_POLICY_FORBIDDEN_FIELD',
-      `Forbidden field(s): ${[...forbidden].join(',')}`,
-      { forbiddenFields: [...forbidden] },
-    );
-  }
-  const secrets = collectForbiddenSecretKeys(input);
-  if (secrets && secrets.length) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_SECRET_FIELD',
-      `Secret-bearing field(s): ${secrets.join(',')}`,
-      { secretFields: secrets },
+      contextCode || 'CALIBRATION_MEASUREMENT_POLICY_FORBIDDEN_FIELD',
+      'Forbidden result/secret/payload field present',
+      { hits: hits.slice(0, 20) },
     );
   }
 }
 
-function isFiniteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function resolveKind(input) {
-  if (input.confidenceKind != null) return input.confidenceKind;
-  if (input.kind != null) return input.kind;
-  if (input.confidence && input.confidence.kind != null) {
-    return input.confidence.kind;
-  }
-  if (
-    input.predictiveClaimRef
-    && input.predictiveClaimRef.confidence
-    && input.predictiveClaimRef.confidence.kind != null
-  ) {
-    return input.predictiveClaimRef.confidence.kind;
-  }
-  return null;
-}
-
-function resolveValue(input) {
-  if (input.value != null) return input.value;
-  if (input.confidence && input.confidence.value != null) {
-    return input.confidence.value;
-  }
-  if (
-    input.predictiveClaimRef
-    && input.predictiveClaimRef.confidence
-    && input.predictiveClaimRef.confidence.value != null
-  ) {
-    return input.predictiveClaimRef.confidence.value;
-  }
-  return undefined;
-}
-
-function resolveScale(input) {
-  if (input.scale != null) return input.scale;
-  if (input.confidence && input.confidence.scale != null) {
-    return input.confidence.scale;
-  }
-  if (
-    input.predictiveClaimRef
-    && input.predictiveClaimRef.confidence
-    && input.predictiveClaimRef.confidence.scale != null
-  ) {
-    return input.predictiveClaimRef.confidence.scale;
-  }
-  return null;
-}
-
-function resolveMethodKey(input) {
-  if (input.methodKey != null) return input.methodKey;
-  if (input.provenance && input.provenance.methodKey != null) {
-    return input.provenance.methodKey;
-  }
-  if (
-    input.confidence
-    && input.confidence.provenance
-    && input.confidence.provenance.methodKey != null
-  ) {
-    return input.confidence.provenance.methodKey;
-  }
-  if (input.confidence && input.confidence.methodKey != null) {
-    return input.confidence.methodKey;
-  }
-  if (
-    input.predictiveClaimRef
-    && input.predictiveClaimRef.confidence
-    && input.predictiveClaimRef.confidence.provenance
-    && input.predictiveClaimRef.confidence.provenance.methodKey != null
-  ) {
-    return input.predictiveClaimRef.confidence.provenance.methodKey;
-  }
-  return null;
-}
-
-function resolveTargetEvent(input) {
-  if (input.targetEvent != null) return input.targetEvent;
-  if (input.provenance && input.provenance.targetEvent != null) {
-    return input.provenance.targetEvent;
-  }
-  if (
-    input.confidence
-    && input.confidence.provenance
-    && input.confidence.provenance.targetEvent != null
-  ) {
-    return input.confidence.provenance.targetEvent;
-  }
-  return null;
-}
-
-function resolveProvenance(input) {
-  if (input.provenance != null) return input.provenance;
-  if (input.confidence && input.confidence.provenance != null) {
-    return input.confidence.provenance;
-  }
-  if (
-    input.predictiveClaimRef
-    && input.predictiveClaimRef.confidence
-    && input.predictiveClaimRef.confidence.provenance != null
-  ) {
-    return input.predictiveClaimRef.confidence.provenance;
-  }
-  return null;
-}
-
-function isMethodAuthorized(methodKey) {
-  return (
-    typeof methodKey === 'string'
-    && methodKey.length > 0
-    && AUTHORIZED_MEASUREMENT_METHOD_SET.has(methodKey)
-  );
-}
-
-function validateNestedConfidence(confidence, codePrefix) {
-  assertPlainObject(confidence, `${codePrefix}_CONFIDENCE_INVALID`, 'confidence must be object');
-  assertAllowlist(confidence, CONFIDENCE_ALLOWLIST, `${codePrefix}_CONFIDENCE`);
-  if (confidence.provenance != null) {
-    assertPlainObject(
-      confidence.provenance,
-      `${codePrefix}_PROVENANCE_INVALID`,
-      'provenance must be object',
-    );
-    assertAllowlist(confidence.provenance, PROVENANCE_ALLOWLIST, `${codePrefix}_PROVENANCE`);
-  }
-}
-
-function validateCalibrationObservationBinding(obs) {
-  assertPlainObject(
-    obs,
-    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_INVALID',
-    'calibrationObservation must be object',
-  );
-  assertAllowlist(
-    obs,
-    CALIBRATION_OBSERVATION_REF_ALLOWLIST,
-    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION',
-  );
-  if (obs.artifactType != null
-    && obs.artifactType !== CONFIDENCE_CALIBRATION_ARTIFACT_TYPE) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_ARTIFACT_TYPE_MISMATCH',
-      'calibrationObservation.artifactType must match Confidence Calibration Contract',
-    );
-  }
-  if (obs.contractVersion != null
-    && obs.contractVersion !== CONFIDENCE_CALIBRATION_CONTRACT_VERSION) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_CONTRACT_VERSION_MISMATCH',
-      'calibrationObservation.contractVersion must match Confidence Calibration Contract',
-    );
-  }
-  if (obs.schemaVersion != null
-    && obs.schemaVersion !== CONFIDENCE_CALIBRATION_SCHEMA_VERSION) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_SCHEMA_VERSION_MISMATCH',
-      'calibrationObservation.schemaVersion must match Confidence Calibration Contract',
-    );
-  }
-  if (obs.predictiveClaimRef != null) {
-    assertPlainObject(
-      obs.predictiveClaimRef,
-      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF_INVALID',
-      'predictiveClaimRef must be object',
-    );
-    assertAllowlist(
-      obs.predictiveClaimRef,
-      PREDICTIVE_CLAIM_REF_ALLOWLIST,
-      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF',
-    );
-    if (obs.predictiveClaimRef.confidence != null) {
-      validateNestedConfidence(
-        obs.predictiveClaimRef.confidence,
-        'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF',
-      );
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Canonical policy descriptor
-// ---------------------------------------------------------------------------
+// ─── Canonical descriptor construction ───────────────────────────────────────
 
 function buildPolicyDescriptor() {
   return freezeDeep({
     schemaVersion: CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION,
     contractVersion: CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION,
     policyVersion: CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION,
-    artifactType: CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE,
-    policyType: CALIBRATION_MEASUREMENT_POLICY_POLICY_TYPE,
-    authorityClass: CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS,
-    sliceId: CALIBRATION_MEASUREMENT_POLICY_SLICE_ID,
-    ownershipRole: CALIBRATION_MEASUREMENT_POLICY_OWNERSHIP_ROLE,
-    isSourceOfTruth: CALIBRATION_MEASUREMENT_POLICY_IS_SOURCE_OF_TRUTH,
-    writer: CALIBRATION_MEASUREMENT_POLICY_WRITER,
-    stage: CALIBRATION_MEASUREMENT_POLICY_STAGE,
-    methodKey: CALIBRATION_MEASUREMENT_POLICY_METHOD_KEY,
     implementationVersion: CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION,
-    targetEvent: CALIBRATION_TARGET_EVENT_V1,
-    targetEventSemantics: CALIBRATION_TARGET_EVENT_V1_SEMANTICS,
-    measurementScope: V1_CALIBRATION_SCOPE,
-    measurementDomain: MEASUREMENT_DOMAIN,
-    measurementDomainBounds: MEASUREMENT_DOMAIN_BOUNDS,
-    allowedPredictiveKinds: Object.values(ALLOWED_PREDICTIVE_KINDS),
-    nonMeasurementProbabilityKinds: Object.values(NON_MEASUREMENT_PROBABILITY_KINDS),
-    confidenceTargetSemantics: CONFIDENCE_TARGET_SEMANTICS,
-    measuredKindIsCalibrationResult: MEASURED_KIND_IS_CALIBRATION_RESULT,
-    calibratedKindTitangoldVerified: CALIBRATED_KIND_TITANGOLD_VERIFIED,
-    calibratedKindSelfAttestationAllowed: CALIBRATED_KIND_SELF_ATTESTATION_ALLOWED,
-    correctnessMapping: BINARY_CORRECTNESS_MAPPING,
-    correctnessMappingScope: BINARY_CORRECTNESS_SCOPE,
-    correctnessMappingPolicyScopedOnly: BINARY_CORRECTNESS_POLICY_SCOPED_ONLY,
-    scaleNormalizationPolicy: SCALE_NORMALIZATION_POLICY,
-    unitIntervalNormalization: UNIT_INTERVAL_NORMALIZATION,
-    percent100Normalization: PERCENT_100_NORMALIZATION,
-    unknownScale: UNKNOWN_SCALE,
-    firstAllowedProperScore: FIRST_ALLOWED_PROPER_SCORE,
-    metricSemantics: {
-      BINARY_BRIER_SCORE: BINARY_BRIER_METRIC_SEMANTICS,
-    },
-    binaryBrierExecution: BINARY_BRIER_EXECUTION,
-    binaryBrierStandaloneCalibrationVerdict:
-      BINARY_BRIER_STANDALONE_CALIBRATION_VERDICT,
-    authorizedMeasurementMethods: AUTHORIZED_MEASUREMENT_METHODS,
+    artifactType: CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE,
+    policyType: CALIBRATION_MEASUREMENT_POLICY_TYPE,
+    authorityClass: CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS,
+    riskTier: CALIBRATION_MEASUREMENT_POLICY_RISK_TIER,
+    sliceId: CALIBRATION_MEASUREMENT_POLICY_SLICE_ID,
+    officialName: CALIBRATION_MEASUREMENT_POLICY_OFFICIAL_NAME,
+    isSourceOfTruth: false,
     methodRegistrationOwner: METHOD_REGISTRATION_OWNER,
     callerSelfRegistration: CALLER_SELF_REGISTRATION,
+
+    targetEvent: CALIBRATION_TARGET_EVENT_V1,
+    targetEventSemantics: CALIBRATION_TARGET_EVENT_V1_SEMANTICS,
+    targetSemanticsInferredFromKind: TARGET_SEMANTICS_INFERRED_FROM_KIND,
+    explicitProvenanceRequired: EXPLICIT_PROVENANCE_REQUIRED,
+
+    measurementScope: MEASUREMENT_SCOPE,
+    scalarSelectedClassConfidence: SCALAR_SELECTED_CLASS_CONFIDENCE,
+    fullClassProbabilityVector: FULL_CLASS_PROBABILITY_VECTOR,
+    multiclassCalibration: MULTICLASS_CALIBRATION,
+
+    authorizedMeasurementMethods: AUTHORIZED_MEASUREMENT_METHODS,
     currentProductionCalibrationEligibleProducers:
       CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
-    deferredCapabilities: DEFERRED_CAPABILITIES,
-    // Deferred statuses live under deferredCapabilities / exported constants.
-    // Do NOT expose ambiguous result keys: ece, reliabilityCurve, score, …
+
+    allowedPredictiveKinds: ALLOWED_PREDICTIVE_KIND_VALUES,
+    nonMeasurementProbabilityKinds: NON_MEASUREMENT_PROBABILITY_KIND_VALUES,
+    measuredKindIsCalibrationResult: MEASURED_KIND_IS_CALIBRATION_RESULT,
+    calibratedKindTitanGoldVerified: CALIBRATED_KIND_TITANGOLD_VERIFIED,
+    calibratedKindSelfAttestationAllowed: CALIBRATED_KIND_SELF_ATTESTATION_ALLOWED,
+
+    binaryCorrectnessMapping: BINARY_CORRECTNESS_MAPPING,
+    usableBinaryEvaluationStatuses: USABLE_BINARY_EVALUATION_STATUSES,
+
+    measurementDomain: MEASUREMENT_DOMAIN,
+    scaleNormalizationPolicy: SCALE_NORMALIZATION_POLICY,
+
+    firstAllowedProperScore: FIRST_ALLOWED_PROPER_SCORE,
+    metricSemantics: Object.freeze({
+      BINARY_BRIER_SCORE: BINARY_BRIER_SEMANTIC_DESCRIPTOR,
+    }),
+    binaryBrierExecution: BINARY_BRIER_EXECUTION,
+    binaryBrierStandaloneCalibrationVerdict: BINARY_BRIER_STANDALONE_CALIBRATION_VERDICT,
+    binaryBrierRole: BINARY_BRIER_ROLE,
+
     eceStatus: ECE,
     reliabilityCurveStatus: RELIABILITY_CURVE,
-    multiclassCalibration: MULTICLASS_CALIBRATION,
-    fullClassProbabilityVector: FULL_CLASS_PROBABILITY_VECTOR,
+    deferredMetricStatus: DEFERRED_METRIC_STATUS,
     binningPolicy: BINNING_POLICY,
     sampleSufficiencyPolicy: SAMPLE_SUFFICIENCY_POLICY,
+    promotionThreshold: PROMOTION_THRESHOLD,
+    demotionThreshold: DEMOTION_THRESHOLD,
     segmentedPerformancePolicy: SEGMENTED_PERFORMANCE_POLICY,
     globalAverageOnly: GLOBAL_AVERAGE_ONLY,
-    limitations: CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS,
-    sideEffects: ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS,
-    hardFlags: REQUIRED_HARD_FLAGS,
-    upstreamReadReference: Object.freeze({
-      confidenceCalibrationContractVersion: CONFIDENCE_CALIBRATION_CONTRACT_VERSION,
-      confidenceCalibrationArtifactType: CONFIDENCE_CALIBRATION_ARTIFACT_TYPE,
-      upstreamPredictiveKinds: Object.freeze({
-        MODEL_PROBABILITY: UPSTREAM_PREDICTIVE_CONFIDENCE_KINDS.MODEL_PROBABILITY,
-        CALIBRATED: UPSTREAM_PREDICTIVE_CONFIDENCE_KINDS.CALIBRATED,
-      }),
-    }),
+
+    hardFlags: { ...REQUIRED_HARD_FLAGS },
+    sideEffects: { ...ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS },
+    limitations: [...CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS],
+    upstreamReadReferenceOnly: { ...UPSTREAM_READ_REFERENCE_ONLY },
   });
 }
 
-/** Canonical immutable policy descriptor (built once). */
 export const CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR = buildPolicyDescriptor();
 
+const DESCRIPTOR_TOP_LEVEL_KEYS = Object.freeze(
+  Object.keys(CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR),
+);
+
+const HARD_FLAG_KEYS = Object.freeze(Object.keys(REQUIRED_HARD_FLAGS));
+const SIDE_EFFECT_KEYS = Object.freeze(
+  Object.keys(ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS),
+);
+
 /**
- * Returns the canonical deeply-immutable Calibration Measurement Policy descriptor.
- * Deterministic — no Date.now / random / wall-clock.
+ * Strict descriptor validation — full canonical shape.
+ * Does not merely freeze arbitrary caller data.
  */
+export function validateCalibrationMeasurementPolicyDescriptor(input) {
+  assertPlainObject(
+    input,
+    'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_INVALID',
+    'Descriptor must be a plain object',
+  );
+  assertNoForbiddenOrSecrets(
+    input,
+    'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_FORBIDDEN_FIELD',
+    { descriptorMode: true },
+  );
+  assertSizeBound(
+    input,
+    MAX_CALIBRATION_MEASUREMENT_POLICY_BYTES,
+    'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_SIZE_EXCEEDED',
+  );
+
+  const unknown = Object.keys(input).filter((k) => !DESCRIPTOR_TOP_LEVEL_KEYS.includes(k));
+  if (unknown.length > 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_UNKNOWN_FIELD',
+      'Unknown descriptor field',
+      { unknown },
+    );
+  }
+
+  for (const key of DESCRIPTOR_TOP_LEVEL_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(input, key)) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_MISSING_FIELD',
+        `Missing required descriptor field: ${key}`,
+        { field: key },
+      );
+    }
+  }
+
+  assertExactString(
+    input.schemaVersion,
+    CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION_MISMATCH',
+    'schemaVersion mismatch',
+  );
+  assertExactString(
+    input.contractVersion,
+    CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION_MISMATCH',
+    'contractVersion mismatch',
+  );
+  assertExactString(
+    input.policyVersion,
+    CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION_MISMATCH',
+    'policyVersion mismatch',
+  );
+  assertExactString(
+    input.implementationVersion,
+    CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION_MISMATCH',
+    'implementationVersion mismatch',
+  );
+  assertExactString(
+    input.artifactType,
+    CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE,
+    'CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE_MISMATCH',
+    'artifactType mismatch',
+  );
+  assertExactString(
+    input.policyType,
+    CALIBRATION_MEASUREMENT_POLICY_TYPE,
+    'CALIBRATION_MEASUREMENT_POLICY_TYPE_MISMATCH',
+    'policyType mismatch',
+  );
+  assertExactString(
+    input.authorityClass,
+    CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS,
+    'CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS_MISMATCH',
+    'authorityClass mismatch',
+  );
+  assertExactString(
+    input.sliceId,
+    CALIBRATION_MEASUREMENT_POLICY_SLICE_ID,
+    'CALIBRATION_MEASUREMENT_POLICY_SLICE_ID_MISMATCH',
+    'sliceId mismatch',
+  );
+  assertExactString(
+    input.officialName,
+    CALIBRATION_MEASUREMENT_POLICY_OFFICIAL_NAME,
+    'CALIBRATION_MEASUREMENT_POLICY_OFFICIAL_NAME_MISMATCH',
+    'officialName mismatch',
+  );
+  assertExactString(
+    input.riskTier,
+    CALIBRATION_MEASUREMENT_POLICY_RISK_TIER,
+    'CALIBRATION_MEASUREMENT_POLICY_RISK_TIER_MISMATCH',
+    'riskTier mismatch',
+  );
+
+  if (input.isSourceOfTruth !== false) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_IS_SOURCE_OF_TRUTH_FORBIDDEN',
+      'isSourceOfTruth must be false',
+    );
+  }
+  assertExactString(
+    input.methodRegistrationOwner,
+    METHOD_REGISTRATION_OWNER,
+    'CALIBRATION_MEASUREMENT_POLICY_METHOD_REGISTRATION_OWNER_MISMATCH',
+    'methodRegistrationOwner mismatch',
+  );
+  assertExactString(
+    input.callerSelfRegistration,
+    CALLER_SELF_REGISTRATION,
+    'CALIBRATION_MEASUREMENT_POLICY_CALLER_SELF_REGISTRATION_MISMATCH',
+    'callerSelfRegistration mismatch',
+  );
+
+  assertExactString(
+    input.targetEvent,
+    CALIBRATION_TARGET_EVENT_V1,
+    'CALIBRATION_MEASUREMENT_POLICY_TARGET_EVENT_MISMATCH',
+    'targetEvent mismatch',
+  );
+  if (input.targetSemanticsInferredFromKind !== false) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_TARGET_INFERENCE_FORBIDDEN',
+      'targetSemanticsInferredFromKind must be false',
+    );
+  }
+  if (input.explicitProvenanceRequired !== true) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_EXPLICIT_PROVENANCE_REQUIRED',
+      'explicitProvenanceRequired must be true',
+    );
+  }
+  assertExactString(
+    input.measurementScope,
+    MEASUREMENT_SCOPE,
+    'CALIBRATION_MEASUREMENT_POLICY_MEASUREMENT_SCOPE_MISMATCH',
+    'measurementScope mismatch',
+  );
+  assertExactString(
+    input.measurementDomain,
+    MEASUREMENT_DOMAIN,
+    'CALIBRATION_MEASUREMENT_POLICY_MEASUREMENT_DOMAIN_MISMATCH',
+    'measurementDomain mismatch',
+  );
+
+  if (!Array.isArray(input.authorizedMeasurementMethods)
+    || input.authorizedMeasurementMethods.length !== 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_AUTHORIZED_METHODS_MUST_BE_EMPTY',
+      'authorizedMeasurementMethods must be exactly empty for v1',
+    );
+  }
+
+  if (!Array.isArray(input.allowedPredictiveKinds)
+    || input.allowedPredictiveKinds.length !== ALLOWED_PREDICTIVE_KIND_VALUES.length
+    || !ALLOWED_PREDICTIVE_KIND_VALUES.every((k, i) => input.allowedPredictiveKinds[i] === k)) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_ALLOWED_PREDICTIVE_KINDS_MISMATCH',
+      'allowedPredictiveKinds must match canonical MODEL_PROBABILITY | CALIBRATED',
+    );
+  }
+
+  assertPlainObject(
+    input.binaryCorrectnessMapping,
+    'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_MAPPING_INVALID',
+    'binaryCorrectnessMapping must be a plain object',
+  );
+  if (input.binaryCorrectnessMapping.MATCH !== 1
+    || input.binaryCorrectnessMapping.MISMATCH !== 0
+    || input.binaryCorrectnessMapping.policyScopedOnly !== true) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_MAPPING_MISMATCH',
+      'binaryCorrectnessMapping must be MATCH=1 / MISMATCH=0 / policyScopedOnly',
+    );
+  }
+
+  assertPlainObject(
+    input.scaleNormalizationPolicy,
+    'CALIBRATION_MEASUREMENT_POLICY_SCALE_POLICY_INVALID',
+    'scaleNormalizationPolicy must be a plain object',
+  );
+  assertExactString(
+    input.scaleNormalizationPolicy.measurementDomain,
+    MEASUREMENT_DOMAIN,
+    'CALIBRATION_MEASUREMENT_POLICY_SCALE_DOMAIN_MISMATCH',
+    'scaleNormalizationPolicy.measurementDomain mismatch',
+  );
+  assertExactString(
+    input.scaleNormalizationPolicy.unit_interval,
+    UNIT_INTERVAL_NORMALIZATION,
+    'CALIBRATION_MEASUREMENT_POLICY_UNIT_INTERVAL_NORMALIZATION_MISMATCH',
+    'unit_interval normalization mismatch',
+  );
+  assertExactString(
+    input.scaleNormalizationPolicy.percent_100,
+    PERCENT_100_NORMALIZATION,
+    'CALIBRATION_MEASUREMENT_POLICY_PERCENT_100_NORMALIZATION_MISMATCH',
+    'percent_100 normalization mismatch',
+  );
+  assertExactString(
+    input.scaleNormalizationPolicy.unknown,
+    UNKNOWN_SCALE_POLICY,
+    'CALIBRATION_MEASUREMENT_POLICY_UNKNOWN_SCALE_POLICY_MISMATCH',
+    'unknown scale policy mismatch',
+  );
+
+  assertExactString(
+    input.firstAllowedProperScore,
+    FIRST_ALLOWED_PROPER_SCORE,
+    'CALIBRATION_MEASUREMENT_POLICY_FIRST_PROPER_SCORE_MISMATCH',
+    'firstAllowedProperScore mismatch',
+  );
+  if (input.binaryBrierExecution !== false) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_BINARY_BRIER_EXECUTION_FORBIDDEN',
+      'binaryBrierExecution must be false',
+    );
+  }
+
+  assertPlainObject(
+    input.metricSemantics,
+    'CALIBRATION_MEASUREMENT_POLICY_METRIC_SEMANTICS_INVALID',
+    'metricSemantics must be a plain object',
+  );
+  const metricKeys = Object.keys(input.metricSemantics);
+  if (metricKeys.length !== 1 || metricKeys[0] !== 'BINARY_BRIER_SCORE') {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_METRIC_SEMANTICS_MISMATCH',
+      'metricSemantics must contain exactly BINARY_BRIER_SCORE',
+    );
+  }
+  assertPlainObject(
+    input.metricSemantics.BINARY_BRIER_SCORE,
+    'CALIBRATION_MEASUREMENT_POLICY_BRIER_DESCRIPTOR_INVALID',
+    'BINARY_BRIER_SCORE descriptor must be a plain object',
+  );
+  const brier = input.metricSemantics.BINARY_BRIER_SCORE;
+  assertExactString(
+    brier.metricIdentity,
+    BINARY_BRIER_SCORE,
+    'CALIBRATION_MEASUREMENT_POLICY_BRIER_IDENTITY_MISMATCH',
+    'BINARY_BRIER_SCORE.metricIdentity mismatch',
+  );
+  assertExactString(
+    brier.formulaIdentity,
+    BINARY_BRIER_FORMULA_SEMANTICS,
+    'CALIBRATION_MEASUREMENT_POLICY_BRIER_FORMULA_MISMATCH',
+    'BINARY_BRIER_SCORE.formulaIdentity mismatch',
+  );
+  if (brier.executionAuthorized !== false || brier.aggregateAuthorized !== false) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_BRIER_EXECUTION_FLAG_FORBIDDEN',
+      'BINARY_BRIER_SCORE execution/aggregate flags must be false',
+    );
+  }
+
+  // Hard flags — complete, all false, no unknown
+  assertPlainObject(
+    input.hardFlags,
+    'CALIBRATION_MEASUREMENT_POLICY_HARD_FLAGS_INVALID',
+    'hardFlags must be a plain object',
+  );
+  const hardUnknown = Object.keys(input.hardFlags).filter((k) => !HARD_FLAG_KEYS.includes(k));
+  if (hardUnknown.length > 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_HARD_FLAGS_UNKNOWN',
+      'Unknown hardFlags key',
+      { unknown: hardUnknown },
+    );
+  }
+  for (const key of HARD_FLAG_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(input.hardFlags, key)) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_HARD_FLAGS_MISSING',
+        `Missing hardFlags.${key}`,
+        { field: key },
+      );
+    }
+    if (input.hardFlags[key] !== false) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_HARD_FLAGS_MUST_BE_FALSE',
+        `hardFlags.${key} must be false`,
+        { field: key, value: input.hardFlags[key] },
+      );
+    }
+  }
+
+  // Side-effect ledger — complete, all numeric zero, no unknown
+  assertPlainObject(
+    input.sideEffects,
+    'CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS_INVALID',
+    'sideEffects must be a plain object',
+  );
+  const seUnknown = Object.keys(input.sideEffects).filter((k) => !SIDE_EFFECT_KEYS.includes(k));
+  if (seUnknown.length > 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS_UNKNOWN',
+      'Unknown sideEffects key',
+      { unknown: seUnknown },
+    );
+  }
+  for (const key of SIDE_EFFECT_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(input.sideEffects, key)) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS_MISSING',
+        `Missing sideEffects.${key}`,
+        { field: key },
+      );
+    }
+    if (input.sideEffects[key] !== 0) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS_NONZERO',
+        `sideEffects.${key} must be numeric zero`,
+        { field: key, value: input.sideEffects[key] },
+      );
+    }
+  }
+
+  if (!Array.isArray(input.limitations) || input.limitations.length === 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS_INVALID',
+      'limitations must be a non-empty array',
+    );
+  }
+
+  assertPlainObject(
+    input.upstreamReadReferenceOnly,
+    'CALIBRATION_MEASUREMENT_POLICY_UPSTREAM_REF_INVALID',
+    'upstreamReadReferenceOnly must be a plain object',
+  );
+  for (const [k, v] of Object.entries(UPSTREAM_READ_REFERENCE_ONLY)) {
+    if (input.upstreamReadReferenceOnly[k] !== v) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_UPSTREAM_REF_MISMATCH',
+        `upstreamReadReferenceOnly.${k} mismatch`,
+      );
+    }
+  }
+
+  // Canonical equality vs frozen descriptor (fail-closed against mutated authority)
+  if (stableStringify(input) !== stableStringify(CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR)) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_NOT_CANONICAL',
+      'Descriptor must equal the canonical frozen policy descriptor',
+    );
+  }
+
+  return CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR;
+}
+
 export function getCalibrationMeasurementPolicyDescriptor() {
   return CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR;
 }
 
-export function validateCalibrationMeasurementPolicyDescriptor(descriptor = {}) {
-  assertPlainObject(
-    descriptor,
-    'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_INVALID',
-    'descriptor must be object',
-  );
-  assertNoForbiddenOrSecrets(descriptor);
-  if (descriptor.schemaVersion !== CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION_MISMATCH', 'schemaVersion mismatch');
-  }
-  if (descriptor.contractVersion !== CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION_MISMATCH', 'contractVersion mismatch');
-  }
-  if (descriptor.policyVersion !== CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION_MISMATCH', 'policyVersion mismatch');
-  }
-  if (descriptor.targetEvent !== CALIBRATION_TARGET_EVENT_V1) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_TARGET_EVENT_MISMATCH', 'targetEvent mismatch');
-  }
-  if (descriptor.firstAllowedProperScore !== FIRST_ALLOWED_PROPER_SCORE) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_PROPER_SCORE_MISMATCH', 'proper score mismatch');
-  }
-  if (descriptor.binaryBrierExecution !== false) {
-    fail('CALIBRATION_MEASUREMENT_POLICY_BRIER_EXECUTION_FORBIDDEN', 'Brier execution must be false');
-  }
-  if (!Array.isArray(descriptor.authorizedMeasurementMethods)
-    || descriptor.authorizedMeasurementMethods.length !== 0) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_METHODS_NOT_EMPTY',
-      'authorizedMeasurementMethods must be empty for v1',
-    );
-  }
-  const bytes = utf8ByteLength(JSON.stringify(descriptor));
-  if (bytes > MAX_POLICY_DESCRIPTOR_UTF8_BYTES) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR_TOO_LARGE',
-      'descriptor exceeds max size',
-      { bytes, max: MAX_POLICY_DESCRIPTOR_UTF8_BYTES },
-    );
-  }
-  return freezeDeep(descriptor);
-}
+// ─── Scale normalization (pure semantic helper — NOT metric execution) ───────
 
-// ---------------------------------------------------------------------------
-// Scale normalization helper (pure; does not mutate source)
-// ---------------------------------------------------------------------------
-
-/**
- * Project a valid source probability into the canonical UNIT_INTERVAL domain.
- * Does NOT mutate the source artifact. Fail-closed on unknown/out-of-range.
- *
- * @param {number} rawValue
- * @param {string} scale — CONFIDENCE_SCALE.UNIT_INTERVAL | PERCENT_100
- * @returns {{ normalized: number, sourceScale: string, sourceRawValue: number, measurementDomain: string }}
- */
-export function normalizeCalibrationProbability(rawValue, scale) {
-  if (scale == null || scale === '' || scale === CONFIDENCE_SCALE.UNKNOWN) {
+export function normalizeConfidenceToUnitInterval(value, scale) {
+  if (scale === CONFIDENCE_SCALE.UNKNOWN || scale === 'unknown') {
     fail(
-      'CALIBRATION_MEASUREMENT_POLICY_UNKNOWN_SCALE',
-      'source scale must be explicit and known',
-      { scale },
+      'CALIBRATION_MEASUREMENT_POLICY_UNKNOWN_SCALE_REJECTED',
+      'UNKNOWN_SCALE must be rejected',
     );
   }
-  if (!CONFIDENCE_SCALE_SET.has(scale) || scale === CONFIDENCE_SCALE.UNKNOWN) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_UNKNOWN_SCALE',
-      'source scale rejected',
-      { scale },
-    );
-  }
-  if (!isFiniteNumber(rawValue)) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_VALUE_NOT_FINITE',
-      'raw value must be a finite number',
-      { rawValue },
-    );
-  }
+  assertFiniteNumber(value, 'CALIBRATION_MEASUREMENT_POLICY_VALUE_INVALID', 'value must be finite');
 
   let normalized;
-  if (scale === CONFIDENCE_SCALE.UNIT_INTERVAL) {
-    if (rawValue < 0 || rawValue > 1) {
-      fail(
-        'CALIBRATION_MEASUREMENT_POLICY_UNIT_INTERVAL_OUT_OF_RANGE',
-        'unit_interval value must be in [0,1]',
-        { rawValue },
-      );
-    }
-    normalized = rawValue; // IDENTITY
-  } else if (scale === CONFIDENCE_SCALE.PERCENT_100) {
-    if (rawValue < 0 || rawValue > 100) {
-      fail(
-        'CALIBRATION_MEASUREMENT_POLICY_PERCENT_100_OUT_OF_RANGE',
-        'percent_100 value must be in [0,100]',
-        { rawValue },
-      );
-    }
-    normalized = rawValue / 100; // DIVIDE_BY_100
+  if (scale === CONFIDENCE_SCALE.UNIT_INTERVAL || scale === 'unit_interval') {
+    normalized = value;
+  } else if (scale === CONFIDENCE_SCALE.PERCENT_100 || scale === 'percent_100') {
+    normalized = value / 100;
   } else {
     fail(
-      'CALIBRATION_MEASUREMENT_POLICY_UNKNOWN_SCALE',
-      'unsupported scale',
+      'CALIBRATION_MEASUREMENT_POLICY_SCALE_REJECTED',
+      'Unsupported or unknown confidence scale',
       { scale },
     );
   }
 
-  if (!isFiniteNumber(normalized) || normalized < 0 || normalized > 1) {
+  if (!(normalized >= 0 && normalized <= 1)) {
     fail(
-      'CALIBRATION_MEASUREMENT_POLICY_NORMALIZED_OUT_OF_RANGE',
-      'normalized probability must be finite in [0,1]',
-      { normalized },
+      'CALIBRATION_MEASUREMENT_POLICY_NORMALIZED_OUT_OF_UNIT_INTERVAL',
+      'Normalized confidence must lie in [0,1]',
+      { value, scale, normalized },
     );
   }
-
-  return freezeDeep({
-    normalized,
-    sourceScale: scale,
-    sourceRawValue: rawValue,
-    measurementDomain: MEASUREMENT_DOMAIN,
-    normalization:
-      scale === CONFIDENCE_SCALE.PERCENT_100
-        ? PERCENT_100_NORMALIZATION
-        : UNIT_INTERVAL_NORMALIZATION,
-  });
+  return normalized;
 }
 
-// ---------------------------------------------------------------------------
-// Binary correctness mapping helper (pure)
-// ---------------------------------------------------------------------------
+// ─── Binary correctness mapping (policy-scoped semantic helper) ──────────────
 
-/**
- * Map MATCH → 1, MISMATCH → 0 within TOP_LABEL_DIRECTIONAL_CORRECTNESS policy.
- * Fail-closed on other evaluation statuses / missing / arbitrary strings.
- * Does not manufacture observed truth.
- *
- * @param {string} evaluationStatus
- * @returns {{ y: 0|1, evaluationStatus: string, targetEvent: string }}
- */
 export function mapBinaryCorrectnessTarget(evaluationStatus) {
-  if (evaluationStatus == null || evaluationStatus === '') {
+  if (evaluationStatus == null) {
     fail(
       'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_STATUS_MISSING',
-      'evaluationStatus required',
+      'evaluationStatus is required for binary correctness mapping',
     );
   }
   if (typeof evaluationStatus !== 'string') {
     fail(
       'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_STATUS_INVALID',
       'evaluationStatus must be a string',
-      { evaluationStatus },
     );
   }
-  if (!USABLE_BINARY_EVALUATION_STATUS_SET.has(evaluationStatus)) {
+  if (evaluationStatus === EVALUATION_STATUS.MATCH) return MATCH_NUMERIC;
+  if (evaluationStatus === EVALUATION_STATUS.MISMATCH) return MISMATCH_NUMERIC;
+  if (!isUsableBinaryEvaluationStatus(evaluationStatus)) {
     fail(
       'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_STATUS_REJECTED',
-      'evaluationStatus not usable for binary calibration measurement',
+      'Only MATCH/MISMATCH may map to binary correctness; unavailable-class statuses are not zero',
       { evaluationStatus },
     );
   }
-  const y = BINARY_CORRECTNESS_MAPPING[evaluationStatus];
+  fail(
+    'CALIBRATION_MEASUREMENT_POLICY_CORRECTNESS_STATUS_REJECTED',
+    'evaluationStatus rejected for binary correctness mapping',
+    { evaluationStatus },
+  );
+}
+
+// ─── Eligibility assessment (non-executing) ──────────────────────────────────
+
+const ELIGIBILITY_INPUT_ALLOWLIST = Object.freeze([
+  'confidenceKind',
+  'kind',
+  'value',
+  'scale',
+  'availability',
+  'confidence',
+  'predictiveClaimRef',
+  'calibrationObservationRef',
+  'methodKey',
+  'provenance',
+  'targetEvent',
+  'targetSemantics',
+  'note',
+]);
+
+const CONFIDENCE_OBJECT_ALLOWLIST = Object.freeze([
+  'kind',
+  'value',
+  'scale',
+  'availability',
+  'methodKey',
+  'provenance',
+  'note',
+]);
+
+const PROVENANCE_ALLOWLIST = Object.freeze([
+  'writer',
+  'methodKey',
+  'source',
+  'producer',
+  'policyVersion',
+  'implementationVersion',
+  'note',
+]);
+
+const PREDICTIVE_CLAIM_REF_ALLOWLIST = Object.freeze([
+  'kind',
+  'value',
+  'scale',
+  'availability',
+  'methodKey',
+  'provenance',
+  'confidence',
+  'note',
+]);
+
+/** Thin observation reference — NOT a full Confidence Calibration artifact. */
+const OBSERVATION_REF_ALLOWLIST = Object.freeze([
+  'calibrationObservationId',
+  'artifactType',
+  'contractVersion',
+  'schemaVersion',
+]);
+
+function assertAllowlist(obj, allowlist, code) {
+  const unknown = Object.keys(obj).filter((k) => !allowlist.includes(k));
+  if (unknown.length > 0) {
+    fail(code, 'Unknown field(s)', { unknown });
+  }
+}
+
+function validateProvenanceObject(prov, codePrefix) {
+  assertPlainObject(prov, `${codePrefix}_INVALID`, 'provenance must be a plain object');
+  assertAllowlist(prov, PROVENANCE_ALLOWLIST, `${codePrefix}_UNKNOWN_FIELD`);
+  if (prov.methodKey != null && typeof prov.methodKey !== 'string') {
+    fail(`${codePrefix}_METHOD_KEY_INVALID`, 'provenance.methodKey must be a string');
+  }
+  if (prov.writer != null && typeof prov.writer !== 'string') {
+    fail(`${codePrefix}_WRITER_INVALID`, 'provenance.writer must be a string');
+  }
+  if (prov.source != null && typeof prov.source !== 'string') {
+    fail(`${codePrefix}_SOURCE_INVALID`, 'provenance.source must be a string');
+  }
+  if (prov.producer != null && typeof prov.producer !== 'string') {
+    fail(`${codePrefix}_PRODUCER_INVALID`, 'provenance.producer must be a string');
+  }
+  return freezeDeep({ ...prov });
+}
+
+/**
+ * Nested canonical-style confidence object.
+ * availability must be `available` before structurally predictive.
+ */
+function validateNestedConfidence(confidence) {
+  assertPlainObject(
+    confidence,
+    'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_INVALID',
+    'confidence must be a plain object',
+  );
+  assertAllowlist(
+    confidence,
+    CONFIDENCE_OBJECT_ALLOWLIST,
+    'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_UNKNOWN_FIELD',
+  );
+
+  if (confidence.kind != null && typeof confidence.kind !== 'string') {
+    fail('CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_KIND_INVALID', 'confidence.kind must be a string');
+  }
+  if (confidence.value != null) {
+    assertFiniteNumber(
+      confidence.value,
+      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_VALUE_INVALID',
+      'confidence.value must be finite',
+    );
+  }
+  if (confidence.scale != null) {
+    if (typeof confidence.scale !== 'string' || !isKnownConfidenceScale(confidence.scale)) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_SCALE_INVALID',
+        'confidence.scale must be a known confidence scale',
+        { scale: confidence.scale },
+      );
+    }
+  }
+  if (confidence.availability != null && typeof confidence.availability !== 'string') {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_AVAILABILITY_INVALID',
+      'confidence.availability must be a string',
+    );
+  }
+  if (confidence.methodKey != null && typeof confidence.methodKey !== 'string') {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_METHOD_KEY_INVALID',
+      'confidence.methodKey must be a string',
+    );
+  }
+
+  let provenance = undefined;
+  if (confidence.provenance != null) {
+    provenance = validateProvenanceObject(
+      confidence.provenance,
+      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_PROVENANCE',
+    );
+  }
+
   return freezeDeep({
-    y,
-    evaluationStatus,
-    targetEvent: CALIBRATION_TARGET_EVENT_V1,
-    policyScopedOnly: true,
+    kind: confidence.kind,
+    value: confidence.value,
+    scale: confidence.scale,
+    availability: confidence.availability,
+    methodKey: confidence.methodKey,
+    provenance,
+    note: confidence.note,
   });
 }
 
-// ---------------------------------------------------------------------------
-// Eligibility assessment — structurally predictive vs measurement eligible
-// ---------------------------------------------------------------------------
+/**
+ * Fail-closed thin Calibration Observation reference.
+ * Requires canonical identity fields — not merely calibrationObservationId.
+ */
+function validateCalibrationObservationRef(ref) {
+  assertPlainObject(
+    ref,
+    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_REF_INVALID',
+    'calibrationObservationRef must be a plain object',
+  );
+  assertAllowlist(
+    ref,
+    OBSERVATION_REF_ALLOWLIST,
+    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_REF_UNKNOWN_FIELD',
+  );
+
+  if (ref.calibrationObservationId == null) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_ID_MISSING',
+      'calibrationObservationRef.calibrationObservationId is required',
+    );
+  }
+  if (typeof ref.calibrationObservationId !== 'string'
+    || !isCanonicalUuid(ref.calibrationObservationId)) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_ID_INVALID',
+      'calibrationObservationRef.calibrationObservationId must be a canonical UUID',
+    );
+  }
+
+  if (ref.artifactType == null) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_ARTIFACT_TYPE_MISSING',
+      'calibrationObservationRef.artifactType is required',
+    );
+  }
+  assertExactString(
+    ref.artifactType,
+    CONFIDENCE_CALIBRATION_ARTIFACT_TYPE,
+    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_ARTIFACT_TYPE_MISMATCH',
+    'calibrationObservationRef.artifactType mismatch',
+  );
+
+  if (ref.contractVersion == null) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_CONTRACT_VERSION_MISSING',
+      'calibrationObservationRef.contractVersion is required',
+    );
+  }
+  assertExactString(
+    ref.contractVersion,
+    CONFIDENCE_CALIBRATION_CONTRACT_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_CONTRACT_VERSION_MISMATCH',
+    'calibrationObservationRef.contractVersion mismatch',
+  );
+
+  if (ref.schemaVersion == null) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_SCHEMA_VERSION_MISSING',
+      'calibrationObservationRef.schemaVersion is required',
+    );
+  }
+  assertExactString(
+    ref.schemaVersion,
+    CONFIDENCE_CALIBRATION_SCHEMA_VERSION,
+    'CALIBRATION_MEASUREMENT_POLICY_OBSERVATION_SCHEMA_VERSION_MISMATCH',
+    'calibrationObservationRef.schemaVersion mismatch',
+  );
+
+  return freezeDeep({
+    calibrationObservationId: String(ref.calibrationObservationId).trim().toLowerCase(),
+    artifactType: ref.artifactType,
+    contractVersion: ref.contractVersion,
+    schemaVersion: ref.schemaVersion,
+  });
+}
 
 /**
- * Assess whether an input confidence claim is structurally predictive and/or
- * measurement-eligible under the v1 Calibration Measurement Policy.
- *
- * MODEL_PROBABILITY / CALIBRATED + valid numeric + valid scale ⇒
- *   structurallyPredictive = true
- * Without a canonically registered methodKey in AUTHORIZED_MEASUREMENT_METHODS
- * (empty for v1) ⇒ measurementEligible = false.
- *
- * Ineligibility is NOT a zero score.
- *
- * @param {object} input
- * @returns {object} frozen eligibility assessment
+ * Collect claim values from multiple representations; fail closed on conflict.
  */
-export function assessCalibrationMeasurementEligibility(input = {}) {
+function resolveUniqueClaim(candidates, fieldName) {
+  const present = candidates.filter((c) => c !== undefined && c !== null);
+  if (present.length === 0) return undefined;
+  const first = present[0];
+  for (let i = 1; i < present.length; i += 1) {
+    if (present[i] !== first) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+        `Conflicting ${fieldName} across claim sources`,
+        { field: fieldName, values: present },
+      );
+    }
+  }
+  return first;
+}
+
+function resolveUniqueProvenance(candidates) {
+  const present = candidates.filter((c) => c !== undefined && c !== null);
+  if (present.length === 0) return undefined;
+  if (present.length === 1) return present[0];
+  const firstKey = present[0].methodKey;
+  for (let i = 1; i < present.length; i += 1) {
+    if (present[i].methodKey !== firstKey) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+        'Conflicting provenance.methodKey across claim sources',
+        { values: present.map((p) => p.methodKey) },
+      );
+    }
+  }
+  return present[0];
+}
+
+/**
+ * Assess whether a predictive confidence claim is structurally compatible with
+ * this measurement policy. Does NOT execute metrics. Does NOT authorize methods
+ * outside the empty immutable registry. Does NOT reclassify producers.
+ *
+ * Honest API: accepts thin `calibrationObservationRef` only (not a full artifact).
+ */
+export function assessCalibrationMeasurementEligibility(input) {
   assertPlainObject(
     input,
     'CALIBRATION_MEASUREMENT_POLICY_ELIGIBILITY_INPUT_INVALID',
-    'eligibility input must be object',
+    'Eligibility input must be a plain object',
+  );
+  assertNoForbiddenOrSecrets(input, 'CALIBRATION_MEASUREMENT_POLICY_FORBIDDEN_FIELD');
+  assertSizeBound(
+    input,
+    MAX_CALIBRATION_MEASUREMENT_POLICY_BYTES,
+    'CALIBRATION_MEASUREMENT_POLICY_ELIGIBILITY_SIZE_EXCEEDED',
   );
   assertAllowlist(
     input,
     ELIGIBILITY_INPUT_ALLOWLIST,
-    'CALIBRATION_MEASUREMENT_POLICY_ELIGIBILITY',
+    'CALIBRATION_MEASUREMENT_POLICY_ELIGIBILITY_UNKNOWN_FIELD',
   );
-  assertNoForbiddenOrSecrets(input);
 
   if (input.note != null) {
-    assertString('note', input.note, 'CALIBRATION_MEASUREMENT_POLICY_NOTE_INVALID', {
-      max: MAX_NOTE_CHARS,
-      required: false,
-    });
+    if (typeof input.note !== 'string') {
+      fail('CALIBRATION_MEASUREMENT_POLICY_NOTE_INVALID', 'note must be a string');
+    }
+    if (input.note.length > MAX_CALIBRATION_MEASUREMENT_POLICY_NOTE_CHARS) {
+      fail('CALIBRATION_MEASUREMENT_POLICY_NOTE_INVALID', 'note exceeds max length');
+    }
   }
-  if (input.provenance != null) {
-    assertPlainObject(
-      input.provenance,
-      'CALIBRATION_MEASUREMENT_POLICY_PROVENANCE_INVALID',
-      'provenance must be object',
-    );
-    assertAllowlist(input.provenance, PROVENANCE_ALLOWLIST, 'CALIBRATION_MEASUREMENT_POLICY_PROVENANCE');
-  }
+
+  // Reject misleading full-artifact key if caller still supplies it.
+  // (Not on allowlist — caught as unknown — but document fail-closed intent.)
+
+  let nestedConfidence = undefined;
   if (input.confidence != null) {
-    validateNestedConfidence(input.confidence, 'CALIBRATION_MEASUREMENT_POLICY');
+    nestedConfidence = validateNestedConfidence(input.confidence);
   }
+
+  let predictiveClaimRef = undefined;
   if (input.predictiveClaimRef != null) {
     assertPlainObject(
       input.predictiveClaimRef,
-      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF_INVALID',
-      'predictiveClaimRef must be object',
+      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_CLAIM_REF_INVALID',
+      'predictiveClaimRef must be a plain object',
     );
     assertAllowlist(
       input.predictiveClaimRef,
       PREDICTIVE_CLAIM_REF_ALLOWLIST,
-      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF',
+      'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_CLAIM_REF_UNKNOWN_FIELD',
     );
+    let claimConfidence = undefined;
     if (input.predictiveClaimRef.confidence != null) {
-      validateNestedConfidence(
-        input.predictiveClaimRef.confidence,
-        'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_REF',
+      claimConfidence = validateNestedConfidence(input.predictiveClaimRef.confidence);
+    }
+    let claimProv = undefined;
+    if (input.predictiveClaimRef.provenance != null) {
+      claimProv = validateProvenanceObject(
+        input.predictiveClaimRef.provenance,
+        'CALIBRATION_MEASUREMENT_POLICY_PREDICTIVE_CLAIM_PROVENANCE',
       );
     }
-  }
-  if (input.calibrationObservation != null) {
-    validateCalibrationObservationBinding(input.calibrationObservation);
-  }
-  if (input.calibrationObservationRef != null) {
-    validateCalibrationObservationBinding(input.calibrationObservationRef);
+    predictiveClaimRef = freezeDeep({
+      kind: input.predictiveClaimRef.kind,
+      value: input.predictiveClaimRef.value,
+      scale: input.predictiveClaimRef.scale,
+      availability: input.predictiveClaimRef.availability,
+      methodKey: input.predictiveClaimRef.methodKey,
+      provenance: claimProv,
+      confidence: claimConfidence,
+      note: input.predictiveClaimRef.note,
+    });
   }
 
-  // Reject caller self-registration of arbitrary method+target as eligibility.
-  if (
-    input.targetSemantics != null
-    && typeof input.targetSemantics === 'object'
-    && !Array.isArray(input.targetSemantics)
-  ) {
-    // Caller-supplied targetSemantics cannot authorize a method.
-    assertAllowlist(
-      input.targetSemantics,
-      Object.freeze(['targetEvent', 'description', 'note']),
-      'CALIBRATION_MEASUREMENT_POLICY_TARGET_SEMANTICS',
+  let calibrationObservationRef = undefined;
+  if (input.calibrationObservationRef != null) {
+    calibrationObservationRef = validateCalibrationObservationRef(
+      input.calibrationObservationRef,
     );
   }
 
-  const reasonCodes = [];
-  const kind = resolveKind(input);
-  const value = resolveValue(input);
-  const scale = resolveScale(input);
-  const methodKey = resolveMethodKey(input);
-  const targetEvent = resolveTargetEvent(input);
-  const provenance = resolveProvenance(input);
+  let topProvenance = undefined;
+  if (input.provenance != null) {
+    topProvenance = validateProvenanceObject(
+      input.provenance,
+      'CALIBRATION_MEASUREMENT_POLICY_PROVENANCE',
+    );
+  }
 
-  let structurallyPredictive = false;
-  let measurementEligible = false;
+  // ── Source-conflict fail-closed resolution ──
+  const kind = resolveUniqueClaim([
+    input.confidenceKind,
+    input.kind,
+    nestedConfidence?.kind,
+    predictiveClaimRef?.kind,
+    predictiveClaimRef?.confidence?.kind,
+  ], 'kind');
+
+  const value = resolveUniqueClaim([
+    input.value,
+    nestedConfidence?.value,
+    predictiveClaimRef?.value,
+    predictiveClaimRef?.confidence?.value,
+  ], 'value');
+
+  const scale = resolveUniqueClaim([
+    input.scale,
+    nestedConfidence?.scale,
+    predictiveClaimRef?.scale,
+    predictiveClaimRef?.confidence?.scale,
+  ], 'scale');
+
+  const availability = resolveUniqueClaim([
+    input.availability,
+    nestedConfidence?.availability,
+    predictiveClaimRef?.availability,
+    predictiveClaimRef?.confidence?.availability,
+  ], 'availability');
+
+  // Canonical provenance method identity (does NOT include bare top-level methodKey)
+  const provenance = resolveUniqueProvenance([
+    topProvenance,
+    nestedConfidence?.provenance,
+    predictiveClaimRef?.provenance,
+    predictiveClaimRef?.confidence?.provenance,
+  ]);
+
+  const topLevelMethodKey = resolveUniqueClaim([
+    input.methodKey,
+    nestedConfidence?.methodKey,
+    predictiveClaimRef?.methodKey,
+    predictiveClaimRef?.confidence?.methodKey,
+  ], 'methodKey');
+
+  // Top-level / nested methodKey must agree with provenance.methodKey when both present.
+  if (topLevelMethodKey != null && provenance?.methodKey != null
+    && topLevelMethodKey !== provenance.methodKey) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+      'methodKey conflicts with provenance.methodKey',
+      { methodKey: topLevelMethodKey, provenanceMethodKey: provenance.methodKey },
+    );
+  }
+
+  // Canonical method identity for eligibility = provenance.methodKey only.
+  // Top-level methodKey alone NEVER substitutes for missing provenance.methodKey.
+  const canonicalMethodKey = provenance?.methodKey;
+
+  const targetEvent = resolveUniqueClaim([
+    input.targetEvent,
+    input.targetSemantics,
+  ], 'targetEvent');
+
+  // Caller targetEvent / targetSemantics are claims only — NEVER authorize a method.
+  if (targetEvent != null && targetEvent !== CALIBRATION_TARGET_EVENT_V1) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_TARGET_EVENT_REJECTED',
+      'Caller targetEvent/targetSemantics must equal TOP_LABEL_DIRECTIONAL_CORRECTNESS when supplied',
+      { targetEvent },
+    );
+  }
+
+  const reasons = [];
+  let structurallyPredictive = true;
+
+  // Nested confidence availability gate
+  if (nestedConfidence != null || predictiveClaimRef?.confidence != null
+    || availability != null) {
+    const effectiveAvailability = availability;
+    if (effectiveAvailability != null && effectiveAvailability !== AVAILABILITY.AVAILABLE) {
+      structurallyPredictive = false;
+      reasons.push('NESTED_CONFIDENCE_UNAVAILABLE');
+    }
+  }
 
   if (kind == null) {
-    reasonCodes.push('CONFIDENCE_KIND_MISSING');
-  } else if (NON_MEASUREMENT_PROBABILITY_KIND_SET.has(kind)) {
-    reasonCodes.push('CONFIDENCE_KIND_NOT_MEASUREMENT_PROBABILITY');
-    if (kind === CONFIDENCE_KIND.MEASURED) {
-      reasonCodes.push('MEASURED_KIND_IS_NOT_CALIBRATION_RESULT');
-    }
-    if (kind === CONFIDENCE_KIND.HEURISTIC) {
-      reasonCodes.push('HEURISTIC_NOT_PROBABILITY');
-    }
-  } else if (!ALLOWED_PREDICTIVE_KIND_SET.has(kind)) {
-    reasonCodes.push('CONFIDENCE_KIND_NOT_ALLOWED_PREDICTIVE');
-  } else {
-    // Kind is necessary (MODEL_PROBABILITY | CALIBRATED).
-    if (kind === CONFIDENCE_KIND.CALIBRATED) {
-      reasonCodes.push('CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED');
-      // Informational — does not by itself make ineligible beyond method rules.
-    }
-
-    if (value === undefined || value === null) {
-      reasonCodes.push('CONFIDENCE_VALUE_MISSING');
-    } else if (!isFiniteNumber(value)) {
-      reasonCodes.push('CONFIDENCE_VALUE_NOT_FINITE');
-    } else if (scale == null || scale === CONFIDENCE_SCALE.UNKNOWN) {
-      reasonCodes.push('CONFIDENCE_SCALE_MISSING_OR_UNKNOWN');
-    } else if (!CONFIDENCE_SCALE_SET.has(scale)) {
-      reasonCodes.push('CONFIDENCE_SCALE_UNKNOWN');
+    structurallyPredictive = false;
+    reasons.push('CONFIDENCE_KIND_MISSING');
+  } else if (!isAllowedPredictiveKind(kind)) {
+    structurallyPredictive = false;
+    if (isNonMeasurementProbabilityKind(kind)) {
+      reasons.push('NON_MEASUREMENT_PROBABILITY_KIND');
     } else {
-      // Validate domain bounds without mutating source.
-      try {
-        normalizeCalibrationProbability(value, scale);
-        structurallyPredictive = true;
-      } catch (err) {
-        reasonCodes.push(err.code || 'CONFIDENCE_VALUE_SCALE_REJECTED');
-      }
+      reasons.push('CONFIDENCE_KIND_NOT_PREDICTIVE');
+    }
+    if (kind === CONFIDENCE_KIND.MEASURED) {
+      reasons.push('MEASURED_KIND_IS_NOT_CALIBRATION_RESULT');
     }
   }
 
-  // Provenance / method registration — required for measurement eligibility.
-  if (provenance == null) {
-    reasonCodes.push('PROVENANCE_MISSING');
-  }
-  if (methodKey == null || methodKey === '') {
-    reasonCodes.push('METHOD_KEY_MISSING');
-  } else if (!isMethodAuthorized(methodKey)) {
-    reasonCodes.push('METHOD_KEY_NOT_AUTHORIZED');
-    // Explicit: caller cannot self-register.
-    if (
-      targetEvent === CALIBRATION_TARGET_EVENT_V1
-      || (input.targetSemantics
-        && input.targetSemantics.targetEvent === CALIBRATION_TARGET_EVENT_V1)
-    ) {
-      reasonCodes.push('CALLER_SELF_REGISTRATION_REJECTED');
-    }
+  if (value == null) {
+    structurallyPredictive = false;
+    reasons.push('CONFIDENCE_VALUE_MISSING');
+  } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+    structurallyPredictive = false;
+    reasons.push('CONFIDENCE_VALUE_INVALID');
   }
 
-  if (targetEvent != null && targetEvent !== CALIBRATION_TARGET_EVENT_V1) {
-    reasonCodes.push('TARGET_EVENT_NOT_V1');
+  if (scale == null) {
+    structurallyPredictive = false;
+    reasons.push('CONFIDENCE_SCALE_MISSING');
+  } else if (scale === CONFIDENCE_SCALE.UNKNOWN || scale === 'unknown') {
+    structurallyPredictive = false;
+    reasons.push('UNKNOWN_SCALE_REJECTED');
+  } else if (!isKnownConfidenceScale(scale)
+    && scale !== 'unit_interval'
+    && scale !== 'percent_100') {
+    structurallyPredictive = false;
+    reasons.push('CONFIDENCE_SCALE_REJECTED');
   }
 
-  // Kind alone never establishes measurement eligibility.
-  if (structurallyPredictive) {
-    reasonCodes.push('KIND_NECESSARY_NOT_SUFFICIENT');
-  }
-
-  // v1 registry empty ⇒ no path to measurementEligible=true.
+  let normalizedUnitInterval = undefined;
   if (
     structurallyPredictive
-    && isMethodAuthorized(methodKey)
-    && (targetEvent == null || targetEvent === CALIBRATION_TARGET_EVENT_V1)
-    && provenance != null
+    && typeof value === 'number'
+    && Number.isFinite(value)
+    && scale != null
+    && scale !== CONFIDENCE_SCALE.UNKNOWN
   ) {
-    // Defensive: if a future version populates the registry, this path opens.
-    measurementEligible = true;
-    // Remove the "not sufficient" reason when fully authorized.
-    const idx = reasonCodes.indexOf('KIND_NECESSARY_NOT_SUFFICIENT');
-    if (idx >= 0) reasonCodes.splice(idx, 1);
-    const idx2 = reasonCodes.indexOf('METHOD_KEY_NOT_AUTHORIZED');
-    if (idx2 >= 0) reasonCodes.splice(idx2, 1);
-    const idx3 = reasonCodes.indexOf('CALLER_SELF_REGISTRATION_REJECTED');
-    if (idx3 >= 0) reasonCodes.splice(idx3, 1);
-    const idx4 = reasonCodes.indexOf('CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED');
-    // CALIBRATED still never means TitanGold-verified; keep informational flag.
-    void idx4;
+    try {
+      normalizedUnitInterval = normalizeConfidenceToUnitInterval(value, scale);
+    } catch (err) {
+      structurallyPredictive = false;
+      reasons.push(err?.code || 'NORMALIZE_FAILED');
+    }
   }
 
-  // Deduplicate reason codes; bound count.
-  const uniqueReasons = [...new Set(reasonCodes)].slice(0, MAX_REASON_CODES);
+  // Provenance method authority — top-level methodKey alone is insufficient.
+  if (canonicalMethodKey == null || canonicalMethodKey === '') {
+    reasons.push('PROVENANCE_METHOD_KEY_MISSING');
+  } else if (topLevelMethodKey != null && provenance == null) {
+    // Explicit: top-level methodKey without provenance object cannot authorize.
+    reasons.push('PROVENANCE_METHOD_KEY_MISSING');
+  }
 
-  const assessment = freezeDeep({
+  // Method authorization — empty immutable registry; caller cannot self-register.
+  // Future: registry entries must canonically bind methodKey → TOP_LABEL_DIRECTIONAL_CORRECTNESS.
+  // Caller-supplied targetEvent NEVER opens eligibility.
+  const methodAuthorized = canonicalMethodKey != null
+    && isAuthorizedMeasurementMethod(canonicalMethodKey);
+
+  if (!methodAuthorized) {
+    reasons.push('METHOD_NOT_AUTHORIZED');
+  }
+
+  // Encode fail-closed structure: even a registered method would require
+  // canonical policy-registry binding to TOP_LABEL_DIRECTIONAL_CORRECTNESS.
+  // v1 registry is empty, so this path is unreachable for eligibility=true,
+  // but the structure rejects caller target self-registration explicitly.
+  if (methodAuthorized && targetEvent != null && targetEvent !== CALIBRATION_TARGET_EVENT_V1) {
+    reasons.push('TARGET_EVENT_NOT_BOUND_BY_REGISTRY');
+  }
+
+  if (kind === CONFIDENCE_KIND.CALIBRATED) {
+    reasons.push('CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED');
+  }
+
+  // v1 empty immutable registry ⇒ measurementEligible is always false.
+  // Future eligibility requires: structurallyPredictive AND registry membership
+  // AND canonical provenance.methodKey AND registry-bound target-event semantics.
+  // Caller targetEvent NEVER opens eligibility. CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED
+  // is informational and does not alone decide eligibility.
+  const measurementEligible = structurallyPredictive
+    && methodAuthorized
+    && canonicalMethodKey != null
+    && (targetEvent == null || targetEvent === CALIBRATION_TARGET_EVENT_V1)
+    && AUTHORIZED_MEASUREMENT_METHODS.length > 0;
+
+  if (!measurementEligible && structurallyPredictive) {
+    if (!reasons.includes('METHOD_NOT_AUTHORIZED')) {
+      reasons.push('METHOD_NOT_AUTHORIZED');
+    }
+    if (!reasons.includes('KIND_NECESSARY_NOT_SUFFICIENT')) {
+      reasons.push('KIND_NECESSARY_NOT_SUFFICIENT');
+    }
+  }
+
+  return freezeDeep({
     schemaVersion: CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION,
     contractVersion: CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION,
     policyVersion: CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION,
-    artifactType: 'ARTEMIS_CALIBRATION_MEASUREMENT_ELIGIBILITY_ASSESSMENT',
+    artifactType: CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE,
     authorityClass: CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS,
-    sliceId: CALIBRATION_MEASUREMENT_POLICY_SLICE_ID,
-    implementationVersion: CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION,
     targetEvent: CALIBRATION_TARGET_EVENT_V1,
-    confidenceKind: kind,
-    scale,
-    methodKey,
-    claimedTargetEvent: targetEvent,
     structurallyPredictive,
     measurementEligible,
     ineligibilityIsNotZeroScore: true,
-    calibratedKindTitangoldVerified: CALIBRATED_KIND_TITANGOLD_VERIFIED,
+    confidenceKind: kind ?? null,
+    scale: scale ?? null,
+    normalizedUnitInterval: normalizedUnitInterval ?? null,
+    methodKey: canonicalMethodKey ?? null,
+    callerMethodKey: topLevelMethodKey ?? null,
+    methodAuthorized,
+    calibratedKindTitanGoldVerified: CALIBRATED_KIND_TITANGOLD_VERIFIED,
     measuredKindIsCalibrationResult: MEASURED_KIND_IS_CALIBRATION_RESULT,
-    authorizedMeasurementMethodsEmpty: AUTHORIZED_MEASUREMENT_METHODS.length === 0,
+    authorizedMeasurementMethods: AUTHORIZED_MEASUREMENT_METHODS,
     currentProductionCalibrationEligibleProducers:
       CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
-    reasonCodes: Object.freeze(uniqueReasons),
-    sideEffects: ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS,
-    hardFlags: REQUIRED_HARD_FLAGS,
-    // Explicitly absent: no numeric score fields.
+    binaryBrierExecution: BINARY_BRIER_EXECUTION,
+    reasons: Object.freeze([...reasons]),
+    calibrationObservationRef: calibrationObservationRef ?? null,
+    hardFlags: Object.freeze({
+      calibrationExecution: false,
+      aggregateMeasurement: false,
+      binaryBrierExecution: false,
+      trustMutation: false,
+      weightMutation: false,
+      promotionExecution: false,
+      demotionExecution: false,
+      selfRegistration: false,
+      metricInvention: false,
+    }),
   });
-
-  const bytes = utf8ByteLength(JSON.stringify(assessment));
-  if (bytes > MAX_ELIGIBILITY_ASSESSMENT_UTF8_BYTES) {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_ELIGIBILITY_TOO_LARGE',
-      'eligibility assessment exceeds max size',
-      { bytes, max: MAX_ELIGIBILITY_ASSESSMENT_UTF8_BYTES },
-    );
-  }
-  return assessment;
 }
 
-/**
- * Convenience: true only when assessment.measurementEligible === true.
- * Does not compute scores.
- */
-export function isCalibrationMeasurementEligible(input = {}) {
+export function isMeasurementEligiblePredictiveClaim(input) {
   return assessCalibrationMeasurementEligibility(input).measurementEligible === true;
 }
 
-/**
- * Convenience: true when assessment.structurallyPredictive === true.
- * Does not imply measurement eligibility.
- */
-export function isStructurallyPredictiveConfidence(input = {}) {
-  return assessCalibrationMeasurementEligibility(input).structurallyPredictive === true;
-}
+// ─── Public API surface ──────────────────────────────────────────────────────
+// Intentionally ABSENT (no execution-shaped stubs):
+//   computeBrierScore, calculateBrier, scoreObservation, aggregateBrier, meanBrier
+// Absence of an execution API is stronger than a throwing execution API.
 
-// ---------------------------------------------------------------------------
-// Explicit non-execution guards (fail-closed if called)
-// ---------------------------------------------------------------------------
-
-export function computeBrierScore() {
-  fail(
-    'CALIBRATION_MEASUREMENT_POLICY_BRIER_EXECUTION_FORBIDDEN',
-    'BINARY_BRIER_SCORE numeric execution is not authorized in this slice',
-  );
-}
-
-export function calculateBrier() {
-  fail(
-    'CALIBRATION_MEASUREMENT_POLICY_BRIER_EXECUTION_FORBIDDEN',
-    'BINARY_BRIER_SCORE numeric execution is not authorized in this slice',
-  );
-}
-
-export function scoreObservation() {
-  fail(
-    'CALIBRATION_MEASUREMENT_POLICY_SCORE_EXECUTION_FORBIDDEN',
-    'Observation scoring is not authorized in this slice',
-  );
-}
-
-export function aggregateBrier() {
-  fail(
-    'CALIBRATION_MEASUREMENT_POLICY_AGGREGATE_FORBIDDEN',
-    'Aggregate Brier measurement is not authorized in this slice',
-  );
-}
-
-export function meanBrier() {
-  fail(
-    'CALIBRATION_MEASUREMENT_POLICY_AGGREGATE_FORBIDDEN',
-    'Mean Brier measurement is not authorized in this slice',
-  );
-}
-
-// Re-export scale/kind enums for test convenience (read-reference).
-export { CONFIDENCE_KIND, CONFIDENCE_SCALE, EVALUATION_STATUS };
+export default Object.freeze({
+  CALIBRATION_MEASUREMENT_POLICY_CONTRACT_VERSION,
+  CALIBRATION_MEASUREMENT_POLICY_SCHEMA_VERSION,
+  CALIBRATION_MEASUREMENT_POLICY_POLICY_VERSION,
+  CALIBRATION_MEASUREMENT_POLICY_IMPLEMENTATION_VERSION,
+  CALIBRATION_MEASUREMENT_POLICY_ARTIFACT_TYPE,
+  CALIBRATION_MEASUREMENT_POLICY_TYPE,
+  CALIBRATION_MEASUREMENT_POLICY_AUTHORITY_CLASS,
+  CALIBRATION_MEASUREMENT_POLICY_SLICE_ID,
+  CALIBRATION_MEASUREMENT_POLICY_OFFICIAL_NAME,
+  CALIBRATION_MEASUREMENT_POLICY_RISK_TIER,
+  METHOD_REGISTRATION_OWNER,
+  CALLER_SELF_REGISTRATION,
+  CALIBRATION_TARGET_EVENT_V1,
+  CALIBRATION_TARGET_EVENT_V1_SEMANTICS,
+  TARGET_SEMANTICS_INFERRED_FROM_KIND,
+  EXPLICIT_PROVENANCE_REQUIRED,
+  AUTHORIZED_MEASUREMENT_METHODS,
+  CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
+  ALLOWED_PREDICTIVE_KINDS,
+  ALLOWED_PREDICTIVE_KIND_VALUES,
+  NON_MEASUREMENT_PROBABILITY_KINDS,
+  NON_MEASUREMENT_PROBABILITY_KIND_VALUES,
+  MEASURED_KIND_IS_CALIBRATION_RESULT,
+  CALIBRATED_KIND_TITANGOLD_VERIFIED,
+  BINARY_CORRECTNESS_MAPPING,
+  MATCH_NUMERIC,
+  MISMATCH_NUMERIC,
+  USABLE_BINARY_EVALUATION_STATUSES,
+  MEASUREMENT_DOMAIN,
+  SCALE_NORMALIZATION_POLICY,
+  CONFIDENCE_SCALE_VALUES,
+  FIRST_ALLOWED_PROPER_SCORE,
+  BINARY_BRIER_SCORE,
+  BINARY_BRIER_FORMULA_SEMANTICS,
+  BINARY_BRIER_EXECUTION,
+  BINARY_BRIER_STANDALONE_CALIBRATION_VERDICT,
+  BINARY_BRIER_SEMANTIC_DESCRIPTOR,
+  ECE,
+  RELIABILITY_CURVE,
+  MULTICLASS_CALIBRATION,
+  DEFERRED_METRIC_STATUS,
+  REQUIRED_HARD_FLAGS,
+  ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS,
+  CALIBRATION_MEASUREMENT_POLICY_DESCRIPTOR,
+  CalibrationMeasurementPolicyContractError,
+  getCalibrationMeasurementPolicyDescriptor,
+  validateCalibrationMeasurementPolicyDescriptor,
+  normalizeConfidenceToUnitInterval,
+  mapBinaryCorrectnessTarget,
+  assessCalibrationMeasurementEligibility,
+  isMeasurementEligiblePredictiveClaim,
+});
