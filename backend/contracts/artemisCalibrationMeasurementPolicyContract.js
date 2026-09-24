@@ -485,11 +485,13 @@ export function findCanonicalMeasurementMethodRegistration(methodKey) {
 }
 
 /**
- * A registration is measurement-authorizing only when the registry-owned
- * semantic binding matches governed v1 target/scope. Caller metadata cannot
- * satisfy this check.
+ * INTERNAL ONLY — shape/semantic check for a registry entry already returned
+ * by findCanonicalMeasurementMethodRegistration.
+ *
+ * MUST NOT be exported. Caller-fabricated registration objects must never be
+ * certified as authorized merely because their fields look canonical.
  */
-export function isSemanticallyBoundMeasurementRegistration(registration) {
+function isSemanticallyBoundMeasurementRegistration(registration) {
   return registration != null
     && typeof registration === 'object'
     && typeof registration.methodKey === 'string'
@@ -501,10 +503,20 @@ export function isSemanticallyBoundMeasurementRegistration(registration) {
 }
 
 /**
- * Authorization is registry-semantic only.
- * FORBIDDEN: AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey) alone.
+ * Public authorization helper — registry lookup ONLY.
+ * Returns true ONLY when:
+ *   1. methodKey exists in AUTHORIZED_MEASUREMENT_METHOD_REGISTRY
+ *   2. registry entry targetEvent matches governed V1 target
+ *   3. registry entry measurementScope matches governed scope
+ *   4. registry entry policyVersion is a non-empty string
+ *
+ * FORBIDDEN:
+ *   - AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey) alone
+ *   - certifying arbitrary caller-owned registration objects
+ *
+ * v1 empty registry ⇒ always false for every real caller.
  */
-function isAuthorizedMeasurementMethod(methodKey) {
+export function isAuthorizedMeasurementMethod(methodKey) {
   const registration = findCanonicalMeasurementMethodRegistration(methodKey);
   return isSemanticallyBoundMeasurementRegistration(registration);
 }
@@ -1786,7 +1798,7 @@ export function assessCalibrationMeasurementEligibility(input) {
   // FORBIDDEN: string-only AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey)
   // Caller-supplied targetEvent NEVER opens eligibility / never substitutes for registry binding.
   const registration = findCanonicalMeasurementMethodRegistration(canonicalMethodKey);
-  const methodAuthorized = isSemanticallyBoundMeasurementRegistration(registration);
+  const methodAuthorized = isAuthorizedMeasurementMethod(canonicalMethodKey);
 
   if (!methodAuthorized) {
     reasons.push('METHOD_NOT_AUTHORIZED');
@@ -1926,7 +1938,7 @@ export default Object.freeze({
   normalizeConfidenceToUnitInterval,
   mapBinaryCorrectnessTarget,
   findCanonicalMeasurementMethodRegistration,
-  isSemanticallyBoundMeasurementRegistration,
+  isAuthorizedMeasurementMethod,
   assessCalibrationMeasurementEligibility,
   isMeasurementEligiblePredictiveClaim,
 });

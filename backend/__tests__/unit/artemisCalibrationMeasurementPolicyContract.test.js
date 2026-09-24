@@ -64,7 +64,7 @@ import {
   normalizeConfidenceToUnitInterval,
   mapBinaryCorrectnessTarget,
   findCanonicalMeasurementMethodRegistration,
-  isSemanticallyBoundMeasurementRegistration,
+  isAuthorizedMeasurementMethod,
   assessCalibrationMeasurementEligibility,
   isMeasurementEligiblePredictiveClaim,
   default as policyDefault,
@@ -116,7 +116,7 @@ describe('artemisCalibrationMeasurementPolicyContract — governed semantics', (
       'writer', 'methodKey', 'source', 'producer', 'policyVersion', 'implementationVersion',
     ]));
     expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
-    expect(isSemanticallyBoundMeasurementRegistration(null)).toBe(false);
+    expect(isAuthorizedMeasurementMethod('evil.method')).toBe(false);
     expect(CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS).toBe('NONE / NOT PROVEN');
     expect(ALLOWED_PREDICTIVE_KINDS.MODEL_PROBABILITY).toBe(CONFIDENCE_KIND.MODEL_PROBABILITY);
     expect(ALLOWED_PREDICTIVE_KINDS.CALIBRATED).toBe(CONFIDENCE_KIND.CALIBRATED);
@@ -789,12 +789,7 @@ describe('final fail-closed hardening A–L', () => {
       });
     }).toThrow();
     expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
-    expect(isSemanticallyBoundMeasurementRegistration({
-      methodKey: 'evil.method',
-      targetEvent: CALIBRATION_TARGET_EVENT_V1,
-      measurementScope: MEASUREMENT_SCOPE,
-      policyVersion: '1.0.0',
-    })).toBe(true); // shape-valid, but not in registry
+    expect(isAuthorizedMeasurementMethod('evil.method')).toBe(false);
     // Authorization path still requires registry lookup:
     const result = assessCalibrationMeasurementEligibility(predictiveBase({
       provenance: { writer: 'x', methodKey: 'evil.method' },
@@ -826,32 +821,61 @@ describe('final fail-closed hardening A–L', () => {
       'policyVersion',
     ]);
     expect(d.measurementScope).toBe(MEASUREMENT_SCOPE);
-    // Incomplete registration is not semantically bound
-    expect(isSemanticallyBoundMeasurementRegistration({
-      methodKey: 'm',
-      targetEvent: CALIBRATION_TARGET_EVENT_V1,
-    })).toBe(false);
-    expect(isSemanticallyBoundMeasurementRegistration({
-      methodKey: 'm',
-      targetEvent: 'WRONG_EVENT',
-      measurementScope: MEASUREMENT_SCOPE,
-      policyVersion: '1.0.0',
-    })).toBe(false);
+    // Fabricated incomplete / wrong-target objects cannot become authorized
+    expect(isAuthorizedMeasurementMethod('m')).toBe(false);
+    expect(findCanonicalMeasurementMethodRegistration('m')).toBeNull();
   });
 
-  // K — no string-only method authorization mechanism exists
+  // K — no string-only method authorization; public auth API is registry-only
   test('K: no string-only method authorization mechanism exists', () => {
-    expect(policyDefault.isAuthorizedMeasurementMethod).toBeUndefined();
+    expect(typeof isAuthorizedMeasurementMethod).toBe('function');
+    expect(policyDefault.isAuthorizedMeasurementMethod).toBe(isAuthorizedMeasurementMethod);
     expect(AUTHORIZED_MEASUREMENT_METHODS.includes).toEqual(expect.any(Function));
     // Includes alone must NOT authorize — registry is empty and semantic path is required
     expect(AUTHORIZED_MEASUREMENT_METHODS.includes('evil.method')).toBe(false);
     expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
+    expect(isAuthorizedMeasurementMethod('evil.method')).toBe(false);
     // Source must not expose a Set-like membership surface for method auth
     expect(policyDefault.AUTHORIZED_MEASUREMENT_METHOD_SET).toBeUndefined();
+    // Semantic-shape helper must NOT be a public authorization-shaped API
+    expect(policyDefault.isSemanticallyBoundMeasurementRegistration).toBeUndefined();
     expect(Object.prototype.hasOwnProperty.call(
       getCalibrationMeasurementPolicyDescriptor(),
       'authorizedMeasurementMethodRegistry',
     )).toBe(true);
+  });
+
+  // Public authority surface — fabricated registration cannot receive authorization
+  test('public authority: fabricated semantic registration cannot receive authorization', () => {
+    const fabricated = {
+      methodKey: 'evil.method',
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+      measurementScope: MEASUREMENT_SCOPE,
+      policyVersion: 'attacker',
+    };
+    // Shape helper is not public — cannot certify fabricated objects
+    expect(policyDefault.isSemanticallyBoundMeasurementRegistration).toBeUndefined();
+    // Registry lookup ignores caller-owned objects
+    expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
+    expect(findCanonicalMeasurementMethodRegistration(fabricated.methodKey)).toBeNull();
+    // Public auth API is methodKey-only and registry-backed
+    expect(isAuthorizedMeasurementMethod('evil.method')).toBe(false);
+    expect(isAuthorizedMeasurementMethod(fabricated.methodKey)).toBe(false);
+    expect(isAuthorizedMeasurementMethod('')).toBe(false);
+    expect(isAuthorizedMeasurementMethod(null)).toBe(false);
+    // No exported function accepts a caller-created registration object for auth
+    expect(policyDefault.findCanonicalMeasurementMethodRegistration.length).toBe(1);
+    expect(policyDefault.isAuthorizedMeasurementMethod.length).toBe(1);
+    const result = assessCalibrationMeasurementEligibility(predictiveBase({
+      availability: AVAILABILITY.AVAILABLE,
+      provenance: {
+        writer: 'attacker',
+        methodKey: fabricated.methodKey,
+      },
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+    }));
+    expect(result.methodAuthorized).toBe(false);
+    expect(result.measurementEligible).toBe(false);
   });
 
   // L — MODEL_PROBABILITY + correct caller targetEvent + provenance still ineligible
