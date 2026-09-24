@@ -1567,4 +1567,49 @@ describe('S10-CONFIDENCE-CALIBRATION-CONTRACT — Confidence Calibration Boundar
       );
     });
   });
+
+  describe('evaluation attestation hardening', () => {
+    it('111. evaluation decisionRef contract version mismatch rejected', () => {
+      const evalArt = cloneArtifact(buildValidEvaluation());
+      evalArt.decisionRef.contractVersion = 'artemis-decision-spoofed';
+      expectFail(
+        () => buildValidObservation({ evaluationArtifact: evalArt }),
+        'CALIBRATION_EVALUATION_DECISION_CONTRACT_VERSION_MISMATCH',
+      );
+    });
+
+    it('112. evaluation outcomeRef contract version mismatch rejected', () => {
+      const evalArt = cloneArtifact(buildValidEvaluation());
+      evalArt.outcomeRef.contractVersion = 'artemis-observed-outcome-spoofed';
+      expectFail(
+        () => buildValidObservation({ evaluationArtifact: evalArt }),
+        'CALIBRATION_EVALUATION_OUTCOME_CONTRACT_VERSION_MISMATCH',
+      );
+    });
+
+    it('113. missing evaluation hard flag rejected', () => {
+      const evalArt = cloneArtifact(buildValidEvaluation());
+      delete evalArt.persistenceEnabled;
+      expectFail(
+        () => buildValidObservation({ evaluationArtifact: evalArt }),
+        'CALIBRATION_EVALUATION_HARD_FLAG_MISSING',
+      );
+    });
+
+    it('114. nonzero evaluation side effect rejected', () => {
+      const evalArt = cloneArtifact(buildValidEvaluation());
+      evalArt.sideEffects.dbWriteCount = 1;
+      expectFail(
+        () => buildValidObservation({ evaluationArtifact: evalArt }),
+        'CALIBRATION_EVALUATION_SIDE_EFFECT_NONZERO',
+      );
+    });
+
+    it('115. calibration recordedAt before evaluation recordedAt rejected', () => {
+      expectFail(
+        () => buildValidObservation({ recordedAt: '2026-09-22T11:00:01.500Z' }),
+        'CALIBRATION_TEMPORAL_RECORDED_AT_VIOLATION',
+      );
+    });
+  });
 });
