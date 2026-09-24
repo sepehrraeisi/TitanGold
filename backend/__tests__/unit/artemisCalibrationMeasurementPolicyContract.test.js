@@ -21,6 +21,12 @@ import { EVALUATION_STATUS } from '../../contracts/artemisObservedOutcomeEvaluat
 
 import {
   AUTHORIZED_MEASUREMENT_METHODS,
+  AUTHORIZED_MEASUREMENT_METHOD_REGISTRY,
+  MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS,
+  MEASUREMENT_METHOD_REGISTRATION_SHAPE,
+  MEASUREMENT_SCOPE,
+  PROVENANCE_AUTHORITY_FIELDS,
+  PROVENANCE_NOTE_IS_AUTHORITY,
   ALLOWED_PREDICTIVE_KIND_VALUES,
   USABLE_BINARY_EVALUATION_STATUSES,
   CONFIDENCE_SCALE_VALUES,
@@ -57,6 +63,8 @@ import {
   validateCalibrationMeasurementPolicyDescriptor,
   normalizeConfidenceToUnitInterval,
   mapBinaryCorrectnessTarget,
+  findCanonicalMeasurementMethodRegistration,
+  isSemanticallyBoundMeasurementRegistration,
   assessCalibrationMeasurementEligibility,
   isMeasurementEligiblePredictiveClaim,
   default as policyDefault,
@@ -95,6 +103,20 @@ describe('artemisCalibrationMeasurementPolicyContract — governed semantics', (
     expect(EXPLICIT_PROVENANCE_REQUIRED).toBe(true);
     expect(AUTHORIZED_MEASUREMENT_METHODS).toEqual([]);
     expect(Object.isFrozen(AUTHORIZED_MEASUREMENT_METHODS)).toBe(true);
+    expect(AUTHORIZED_MEASUREMENT_METHOD_REGISTRY).toEqual([]);
+    expect(Object.isFrozen(AUTHORIZED_MEASUREMENT_METHOD_REGISTRY)).toBe(true);
+    expect(MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS).toEqual([
+      'methodKey',
+      'targetEvent',
+      'measurementScope',
+      'policyVersion',
+    ]);
+    expect(PROVENANCE_NOTE_IS_AUTHORITY).toBe(false);
+    expect(PROVENANCE_AUTHORITY_FIELDS).toEqual(expect.arrayContaining([
+      'writer', 'methodKey', 'source', 'producer', 'policyVersion', 'implementationVersion',
+    ]));
+    expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
+    expect(isSemanticallyBoundMeasurementRegistration(null)).toBe(false);
     expect(CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS).toBe('NONE / NOT PROVEN');
     expect(ALLOWED_PREDICTIVE_KINDS.MODEL_PROBABILITY).toBe(CONFIDENCE_KIND.MODEL_PROBABILITY);
     expect(ALLOWED_PREDICTIVE_KINDS.CALIBRATED).toBe(CONFIDENCE_KIND.CALIBRATED);
@@ -603,5 +625,278 @@ describe('descriptor completeness — hardFlags / sideEffects', () => {
     expect(() => validateCalibrationMeasurementPolicyDescriptor(d)).toThrow(
       CalibrationMeasurementPolicyContractError,
     );
+  });
+});
+
+describe('final fail-closed hardening A–L', () => {
+  // A — nested confidence missing availability cannot become structurally predictive
+  test('A: nested confidence missing availability ⇒ structurallyPredictive=false', () => {
+    const result = assessCalibrationMeasurementEligibility({
+      confidence: {
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: { writer: 'producer-A', methodKey: 'm' },
+      },
+    });
+    expect(result.structurallyPredictive).toBe(false);
+    expect(result.measurementEligible).toBe(false);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining(['NESTED_CONFIDENCE_AVAILABILITY_MISSING']),
+    );
+  });
+
+  // B — predictiveClaimRef.confidence missing availability
+  test('B: predictiveClaimRef.confidence missing availability ⇒ structurallyPredictive=false', () => {
+    const result = assessCalibrationMeasurementEligibility({
+      predictiveClaimRef: {
+        confidence: {
+          kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+          value: 0.8,
+          scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+          provenance: { writer: 'producer-A', methodKey: 'm' },
+        },
+      },
+    });
+    expect(result.structurallyPredictive).toBe(false);
+    expect(result.measurementEligible).toBe(false);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining(['NESTED_CONFIDENCE_AVAILABILITY_MISSING']),
+    );
+  });
+
+  // C — availability=UNAVAILABLE
+  test('C: availability=UNAVAILABLE ⇒ structurallyPredictive=false', () => {
+    const result = assessCalibrationMeasurementEligibility({
+      confidence: {
+        availability: AVAILABILITY.UNAVAILABLE,
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: { writer: 'x', methodKey: 'm' },
+      },
+    });
+    expect(result.structurallyPredictive).toBe(false);
+    expect(result.measurementEligible).toBe(false);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining(['NESTED_CONFIDENCE_UNAVAILABLE']),
+    );
+  });
+
+  // D — arbitrary availability string rejected
+  test('D: arbitrary availability string rejected', () => {
+    expect(() => assessCalibrationMeasurementEligibility({
+      confidence: {
+        availability: 'pretty_sure',
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: { writer: 'x', methodKey: 'm' },
+      },
+    })).toThrow(expect.objectContaining({
+      code: 'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_AVAILABILITY_INVALID',
+    }));
+  });
+
+  // E — same methodKey + different provenance.writer ⇒ SOURCE_CONFLICT
+  test('E: same methodKey + different provenance.writer ⇒ SOURCE_CONFLICT', () => {
+    expect(() => assessCalibrationMeasurementEligibility({
+      kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+      value: 0.8,
+      scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+      provenance: { writer: 'producer-A', methodKey: 'm' },
+      confidence: {
+        availability: AVAILABILITY.AVAILABLE,
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: { writer: 'producer-B', methodKey: 'm' },
+      },
+    })).toThrow(expect.objectContaining({
+      code: 'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+    }));
+  });
+
+  // F — same methodKey + different policyVersion ⇒ SOURCE_CONFLICT
+  test('F: same methodKey + different provenance.policyVersion ⇒ SOURCE_CONFLICT', () => {
+    expect(() => assessCalibrationMeasurementEligibility({
+      kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+      value: 0.8,
+      scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+      provenance: { writer: 'producer-A', methodKey: 'm', policyVersion: '1.0.0' },
+      confidence: {
+        availability: AVAILABILITY.AVAILABLE,
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: { writer: 'producer-A', methodKey: 'm', policyVersion: '9.9.9' },
+      },
+    })).toThrow(expect.objectContaining({
+      code: 'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+    }));
+  });
+
+  // G — same methodKey + different implementationVersion ⇒ SOURCE_CONFLICT
+  test('G: same methodKey + different provenance.implementationVersion ⇒ SOURCE_CONFLICT', () => {
+    expect(() => assessCalibrationMeasurementEligibility({
+      kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+      value: 0.8,
+      scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+      provenance: {
+        writer: 'producer-A',
+        methodKey: 'm',
+        implementationVersion: '1.0.0',
+      },
+      confidence: {
+        availability: AVAILABILITY.AVAILABLE,
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: {
+          writer: 'producer-A',
+          methodKey: 'm',
+          implementationVersion: '2.0.0',
+        },
+      },
+    })).toThrow(expect.objectContaining({
+      code: 'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+    }));
+  });
+
+  // H — caller targetEvent cannot compensate for missing registry registration
+  test('H: caller targetEvent cannot compensate for missing registry registration', () => {
+    const result = assessCalibrationMeasurementEligibility(predictiveBase({
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+      availability: AVAILABILITY.AVAILABLE,
+      provenance: { writer: 'attacker', methodKey: 'self.registered' },
+    }));
+    expect(result.measurementEligible).toBe(false);
+    expect(result.methodAuthorized).toBe(false);
+    expect(result.reasons).toEqual(expect.arrayContaining(['METHOD_NOT_AUTHORIZED']));
+    expect(findCanonicalMeasurementMethodRegistration('self.registered')).toBeNull();
+  });
+
+  // I — empty registry means no method can become authorized
+  test('I: empty registry means no method can become authorized', () => {
+    expect(AUTHORIZED_MEASUREMENT_METHOD_REGISTRY).toEqual([]);
+    expect(Object.isFrozen(AUTHORIZED_MEASUREMENT_METHOD_REGISTRY)).toBe(true);
+    expect(() => {
+      AUTHORIZED_MEASUREMENT_METHOD_REGISTRY.push({
+        methodKey: 'evil.method',
+        targetEvent: CALIBRATION_TARGET_EVENT_V1,
+        measurementScope: MEASUREMENT_SCOPE,
+        policyVersion: '1.0.0',
+      });
+    }).toThrow();
+    expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
+    expect(isSemanticallyBoundMeasurementRegistration({
+      methodKey: 'evil.method',
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+      measurementScope: MEASUREMENT_SCOPE,
+      policyVersion: '1.0.0',
+    })).toBe(true); // shape-valid, but not in registry
+    // Authorization path still requires registry lookup:
+    const result = assessCalibrationMeasurementEligibility(predictiveBase({
+      provenance: { writer: 'x', methodKey: 'evil.method' },
+    }));
+    expect(result.methodAuthorized).toBe(false);
+    expect(result.measurementEligible).toBe(false);
+  });
+
+  // J — registry authority shape binds methodKey + targetEvent + measurementScope
+  test('J: registry shape binds methodKey + targetEvent + measurementScope semantically', () => {
+    expect(MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS).toEqual([
+      'methodKey',
+      'targetEvent',
+      'measurementScope',
+      'policyVersion',
+    ]);
+    expect(MEASUREMENT_METHOD_REGISTRATION_SHAPE).toEqual(expect.objectContaining({
+      methodKey: expect.any(String),
+      targetEvent: expect.any(String),
+      measurementScope: expect.any(String),
+      policyVersion: expect.any(String),
+    }));
+    const d = getCalibrationMeasurementPolicyDescriptor();
+    expect(d.authorizedMeasurementMethodRegistry).toEqual([]);
+    expect(d.measurementMethodRegistrationRequiredFields).toEqual([
+      'methodKey',
+      'targetEvent',
+      'measurementScope',
+      'policyVersion',
+    ]);
+    expect(d.measurementScope).toBe(MEASUREMENT_SCOPE);
+    // Incomplete registration is not semantically bound
+    expect(isSemanticallyBoundMeasurementRegistration({
+      methodKey: 'm',
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+    })).toBe(false);
+    expect(isSemanticallyBoundMeasurementRegistration({
+      methodKey: 'm',
+      targetEvent: 'WRONG_EVENT',
+      measurementScope: MEASUREMENT_SCOPE,
+      policyVersion: '1.0.0',
+    })).toBe(false);
+  });
+
+  // K — no string-only method authorization mechanism exists
+  test('K: no string-only method authorization mechanism exists', () => {
+    expect(policyDefault.isAuthorizedMeasurementMethod).toBeUndefined();
+    expect(AUTHORIZED_MEASUREMENT_METHODS.includes).toEqual(expect.any(Function));
+    // Includes alone must NOT authorize — registry is empty and semantic path is required
+    expect(AUTHORIZED_MEASUREMENT_METHODS.includes('evil.method')).toBe(false);
+    expect(findCanonicalMeasurementMethodRegistration('evil.method')).toBeNull();
+    // Source must not expose a Set-like membership surface for method auth
+    expect(policyDefault.AUTHORIZED_MEASUREMENT_METHOD_SET).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(
+      getCalibrationMeasurementPolicyDescriptor(),
+      'authorizedMeasurementMethodRegistry',
+    )).toBe(true);
+  });
+
+  // L — MODEL_PROBABILITY + correct caller targetEvent + provenance still ineligible
+  test('L: MODEL_PROBABILITY + caller targetEvent + methodKey still measurementEligible=false', () => {
+    const result = assessCalibrationMeasurementEligibility({
+      kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+      value: 0.81,
+      scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+      availability: AVAILABILITY.AVAILABLE,
+      targetEvent: CALIBRATION_TARGET_EVENT_V1,
+      provenance: { writer: 'honest-producer', methodKey: 'legit.looking.method' },
+      calibrationObservationRef: thinObsRef(),
+    });
+    expect(result.structurallyPredictive).toBe(true);
+    expect(result.methodAuthorized).toBe(false);
+    expect(result.measurementEligible).toBe(false);
+    expect(result.authorizedMeasurementMethodRegistry).toEqual([]);
+    expect(result.reasons).toEqual(expect.arrayContaining(['METHOD_NOT_AUTHORIZED']));
+  });
+
+  // Bonus: note is non-authoritative — differing notes alone do NOT conflict
+  test('provenance note difference alone does not SOURCE_CONFLICT (note non-authoritative)', () => {
+    const result = assessCalibrationMeasurementEligibility({
+      kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+      value: 0.8,
+      scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+      availability: AVAILABILITY.AVAILABLE,
+      provenance: {
+        writer: 'producer-A',
+        methodKey: 'm',
+        note: 'note-one',
+      },
+      confidence: {
+        availability: AVAILABILITY.AVAILABLE,
+        kind: CONFIDENCE_KIND.MODEL_PROBABILITY,
+        value: 0.8,
+        scale: CONFIDENCE_SCALE.UNIT_INTERVAL,
+        provenance: {
+          writer: 'producer-A',
+          methodKey: 'm',
+          note: 'note-two',
+        },
+      },
+    });
+    expect(result.structurallyPredictive).toBe(true);
+    expect(result.measurementEligible).toBe(false);
   });
 });

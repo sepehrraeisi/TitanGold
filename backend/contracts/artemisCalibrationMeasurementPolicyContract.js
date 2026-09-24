@@ -8,7 +8,8 @@
  * Governed v1 semantics (COMPLETE):
  * - TARGET_EVENT = TOP_LABEL_DIRECTIONAL_CORRECTNESS
  * - EXPLICIT_PROVENANCE_REQUIRED = YES · NOT_INFERRED_FROM_KIND
- * - AUTHORIZED_MEASUREMENT_METHODS = EMPTY (immutable frozen array)
+ * - AUTHORIZED_MEASUREMENT_METHOD_REGISTRY = EMPTY (immutable; semantically bound shape)
+ * - AUTHORIZED_MEASUREMENT_METHODS = EMPTY (immutable frozen array of methodKeys; v1 empty)
  * - FIRST_ALLOWED_PROPER_SCORE = BINARY_BRIER_SCORE ((p−y)² semantics only)
  * - BINARY_BRIER_EXECUTION = NO · AGGREGATE_MEASUREMENT = NO
  * - CALIBRATION_EXECUTION = NO · TRUST/WEIGHT/PROMOTION/DEMOTION = NO
@@ -18,7 +19,9 @@
  * - Thin observation ref only (calibrationObservationRef)
  * - Strict descriptor allowlist + complete hardFlags/sideEffects
  * - Deep freeze recurses into already-frozen parents
- * - Source-conflict fail-closed · provenance method authority
+ * - Source-conflict fail-closed · full provenance authority-field identity
+ * - Nested confidence requires canonical AVAILABILITY.AVAILABLE
+ * - Method authority via semantic registry (NOT string-only membership)
  * - No execution-shaped Brier API surface
  */
 
@@ -82,14 +85,62 @@ export const SCALAR_SELECTED_CLASS_CONFIDENCE = true;
 export const FULL_CLASS_PROBABILITY_VECTOR = false;
 export const MULTICLASS_CALIBRATION = 'DEFERRED';
 
-// ─── Authorized measurement methods — EMPTY immutable array (v1) ─────────────
+// ─── Authorized measurement method registry — EMPTY / semantically bound (v1) ─
 // Object.freeze(new Set(...)) is NOT an immutable Set — .add() still mutates.
-// Authority surface is a frozen empty array only. No mutable Set is exported.
+// Authority is an immutable registry of semantic registrations, NOT a string list.
+// Future entries MUST bind methodKey → targetEvent + measurementScope + policyVersion.
+// String-only membership (e.g. METHODS.includes(methodKey)) is FORBIDDEN as authorization.
 
+/**
+ * Canonical registration shape for future registry entries.
+ * The policy owner — not caller metadata — owns the method→target binding.
+ */
+export const MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS = Object.freeze([
+  'methodKey',
+  'targetEvent',
+  'measurementScope',
+  'policyVersion',
+]);
+
+export const MEASUREMENT_METHOD_REGISTRATION_SHAPE = Object.freeze({
+  methodKey: 'string — canonical measurement method identity',
+  targetEvent: 'must equal TOP_LABEL_DIRECTIONAL_CORRECTNESS for v1 eligibility',
+  measurementScope: 'must equal TOP_LABEL_SELECTED_DIRECTION_SCALAR for v1 eligibility',
+  policyVersion: 'string — registration policy version owned by this contract',
+});
+
+/**
+ * Immutable empty semantic registry. v1: no method is registered / eligible.
+ * Entry shape (future): { methodKey, targetEvent, measurementScope, policyVersion }
+ */
+export const AUTHORIZED_MEASUREMENT_METHOD_REGISTRY = Object.freeze([]);
+
+/**
+ * Derived empty methodKey list — NEVER an independent authorization surface.
+ * Kept for descriptor/backward-compat reporting only. Authorization uses the registry.
+ */
 export const AUTHORIZED_MEASUREMENT_METHODS = Object.freeze([]);
 
 export const CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS =
   'NONE / NOT PROVEN';
+
+/** Canonical AVAILABILITY vocabulary values (immutable). */
+export const AVAILABILITY_VALUES = Object.freeze(Object.values(AVAILABILITY));
+
+/**
+ * Provenance authority fields compared for source-conflict identity.
+ * `note` is explicitly excluded as non-authoritative annotation.
+ */
+export const PROVENANCE_AUTHORITY_FIELDS = Object.freeze([
+  'writer',
+  'methodKey',
+  'source',
+  'producer',
+  'policyVersion',
+  'implementationVersion',
+]);
+
+export const PROVENANCE_NOTE_IS_AUTHORITY = false;
 
 export const ALLOWED_PREDICTIVE_KINDS = Object.freeze({
   MODEL_PROBABILITY: CONFIDENCE_KIND.MODEL_PROBABILITY,
@@ -294,7 +345,10 @@ export const ZERO_CALIBRATION_MEASUREMENT_POLICY_SIDE_EFFECTS = Object.freeze({
 });
 
 export const CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS = Object.freeze([
-  'AUTHORIZED_MEASUREMENT_METHODS is EMPTY for v1 — no method is measurement-eligible',
+  'AUTHORIZED_MEASUREMENT_METHOD_REGISTRY is EMPTY for v1 — no method is measurement-eligible',
+  'AUTHORIZED_MEASUREMENT_METHODS is EMPTY for v1 — reporting list only; not an authorization surface',
+  'Method authorization requires registry-owned semantic binding (methodKey + targetEvent + measurementScope + policyVersion)',
+  'String-only methodKey membership is FORBIDDEN as authorization',
   'CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS = NONE / NOT PROVEN',
   'BINARY_BRIER_SCORE semantics only — execution of (p−y)² is NOT authorized',
   'BINARY_BRIER_SCORE is NOT a standalone calibration verdict',
@@ -303,6 +357,8 @@ export const CALIBRATION_MEASUREMENT_POLICY_LIMITATIONS = Object.freeze([
   'MEASURED kind is NOT a calibration result',
   'Caller targetEvent / targetSemantics NEVER authorize a method',
   'Top-level methodKey NEVER substitutes for canonical provenance.methodKey',
+  'Nested confidence without availability=available is not structurally predictive',
+  'Provenance note is non-authoritative annotation (PROVENANCE_NOTE_IS_AUTHORITY=false)',
   'Only thin calibrationObservationRef is accepted — not a full observation artifact',
   'No Calibration SoT / table / migration / service / runtime / persistence',
   'No trust / weight / promotion / demotion mutation',
@@ -405,10 +461,52 @@ function assertSizeBound(value, maxBytes, code) {
 
 // ─── Immutable membership helpers (no exported mutable Sets) ─────────────────
 
+function isCanonicalAvailability(value) {
+  return typeof value === 'string' && AVAILABILITY_VALUES.includes(value);
+}
+
+/**
+ * Look up a canonical measurement-method registration by methodKey.
+ * v1 registry is empty ⇒ always returns null for real callers.
+ * Does NOT authorize via string membership alone.
+ */
+export function findCanonicalMeasurementMethodRegistration(methodKey) {
+  if (typeof methodKey !== 'string' || methodKey.length === 0) {
+    return null;
+  }
+  for (const entry of AUTHORIZED_MEASUREMENT_METHOD_REGISTRY) {
+    if (entry != null
+      && typeof entry === 'object'
+      && entry.methodKey === methodKey) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+/**
+ * A registration is measurement-authorizing only when the registry-owned
+ * semantic binding matches governed v1 target/scope. Caller metadata cannot
+ * satisfy this check.
+ */
+export function isSemanticallyBoundMeasurementRegistration(registration) {
+  return registration != null
+    && typeof registration === 'object'
+    && typeof registration.methodKey === 'string'
+    && registration.methodKey.length > 0
+    && registration.targetEvent === CALIBRATION_TARGET_EVENT_V1
+    && registration.measurementScope === MEASUREMENT_SCOPE
+    && typeof registration.policyVersion === 'string'
+    && registration.policyVersion.length > 0;
+}
+
+/**
+ * Authorization is registry-semantic only.
+ * FORBIDDEN: AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey) alone.
+ */
 function isAuthorizedMeasurementMethod(methodKey) {
-  return typeof methodKey === 'string'
-    && methodKey.length > 0
-    && AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey);
+  const registration = findCanonicalMeasurementMethodRegistration(methodKey);
+  return isSemanticallyBoundMeasurementRegistration(registration);
 }
 
 function isAllowedPredictiveKind(kind) {
@@ -627,6 +725,12 @@ function buildPolicyDescriptor() {
     multiclassCalibration: MULTICLASS_CALIBRATION,
 
     authorizedMeasurementMethods: AUTHORIZED_MEASUREMENT_METHODS,
+    authorizedMeasurementMethodRegistry: AUTHORIZED_MEASUREMENT_METHOD_REGISTRY,
+    measurementMethodRegistrationRequiredFields:
+      MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS,
+    measurementMethodRegistrationShape: MEASUREMENT_METHOD_REGISTRATION_SHAPE,
+    provenanceAuthorityFields: PROVENANCE_AUTHORITY_FIELDS,
+    provenanceNoteIsAuthority: PROVENANCE_NOTE_IS_AUTHORITY,
     currentProductionCalibrationEligibleProducers:
       CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
 
@@ -834,6 +938,26 @@ export function validateCalibrationMeasurementPolicyDescriptor(input) {
     fail(
       'CALIBRATION_MEASUREMENT_POLICY_AUTHORIZED_METHODS_MUST_BE_EMPTY',
       'authorizedMeasurementMethods must be exactly empty for v1',
+    );
+  }
+
+  if (!Array.isArray(input.authorizedMeasurementMethodRegistry)
+    || input.authorizedMeasurementMethodRegistry.length !== 0) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_AUTHORIZED_REGISTRY_MUST_BE_EMPTY',
+      'authorizedMeasurementMethodRegistry must be exactly empty for v1',
+    );
+  }
+
+  if (!Array.isArray(input.measurementMethodRegistrationRequiredFields)
+    || input.measurementMethodRegistrationRequiredFields.length
+      !== MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS.length
+    || !MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS.every(
+      (k, i) => input.measurementMethodRegistrationRequiredFields[i] === k,
+    )) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_REGISTRATION_FIELDS_MISMATCH',
+      'measurementMethodRegistrationRequiredFields must match canonical shape',
     );
   }
 
@@ -1220,11 +1344,15 @@ function validateNestedConfidence(confidence) {
       );
     }
   }
-  if (confidence.availability != null && typeof confidence.availability !== 'string') {
-    fail(
-      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_AVAILABILITY_INVALID',
-      'confidence.availability must be a string',
-    );
+  if (confidence.availability != null) {
+    if (typeof confidence.availability !== 'string'
+      || !isCanonicalAvailability(confidence.availability)) {
+      fail(
+        'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_AVAILABILITY_INVALID',
+        'confidence.availability must be a canonical AVAILABILITY value',
+        { availability: confidence.availability },
+      );
+    }
   }
   if (confidence.methodKey != null && typeof confidence.methodKey !== 'string') {
     fail(
@@ -1352,16 +1480,47 @@ function resolveUniqueProvenance(candidates) {
   const present = candidates.filter((c) => c !== undefined && c !== null);
   if (present.length === 0) return undefined;
   if (present.length === 1) return present[0];
-  const firstKey = present[0].methodKey;
-  for (let i = 1; i < present.length; i += 1) {
-    if (present[i].methodKey !== firstKey) {
+
+  // Semantic identity across all authority fields (note excluded — non-authoritative).
+  // Defined-values-must-agree: any authority field present on any candidate must
+  // match on every other candidate that also defines it; presence asymmetry fails closed.
+  const snapshots = present.map((prov) => {
+    const snap = {};
+    for (const field of PROVENANCE_AUTHORITY_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(prov, field) && prov[field] != null) {
+        snap[field] = prov[field];
+      }
+    }
+    return snap;
+  });
+
+  const unionKeys = new Set();
+  for (const snap of snapshots) {
+    for (const k of Object.keys(snap)) unionKeys.add(k);
+  }
+
+  for (const field of unionKeys) {
+    const values = snapshots.map((s) => s[field]);
+    const defined = values.filter((v) => v !== undefined);
+    if (defined.length !== snapshots.length) {
       fail(
         'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
-        'Conflicting provenance.methodKey across claim sources',
-        { values: present.map((p) => p.methodKey) },
+        `Conflicting provenance.${field} presence across claim sources`,
+        { field, values },
       );
     }
+    const first = defined[0];
+    for (let i = 1; i < defined.length; i += 1) {
+      if (defined[i] !== first) {
+        fail(
+          'CALIBRATION_MEASUREMENT_POLICY_SOURCE_CONFLICT',
+          `Conflicting provenance.${field} across claim sources`,
+          { field, values: defined },
+        );
+      }
+    }
   }
+
   return present[0];
 }
 
@@ -1487,6 +1646,14 @@ export function assessCalibrationMeasurementEligibility(input) {
     predictiveClaimRef?.confidence?.availability,
   ], 'availability');
 
+  if (availability != null && !isCanonicalAvailability(availability)) {
+    fail(
+      'CALIBRATION_MEASUREMENT_POLICY_CONFIDENCE_AVAILABILITY_INVALID',
+      'availability must be a canonical AVAILABILITY value',
+      { availability },
+    );
+  }
+
   // Canonical provenance method identity (does NOT include bare top-level methodKey)
   const provenance = resolveUniqueProvenance([
     topProvenance,
@@ -1533,14 +1700,21 @@ export function assessCalibrationMeasurementEligibility(input) {
   const reasons = [];
   let structurallyPredictive = true;
 
-  // Nested confidence availability gate
-  if (nestedConfidence != null || predictiveClaimRef?.confidence != null
-    || availability != null) {
-    const effectiveAvailability = availability;
-    if (effectiveAvailability != null && effectiveAvailability !== AVAILABILITY.AVAILABLE) {
+  // Nested confidence availability gate — missing/unavailable cannot be structurally predictive.
+  // Do NOT infer availability from value/kind/scale.
+  const nestedConfidencePresent = nestedConfidence != null
+    || (predictiveClaimRef != null && predictiveClaimRef.confidence != null);
+  if (nestedConfidencePresent) {
+    if (availability == null) {
+      structurallyPredictive = false;
+      reasons.push('NESTED_CONFIDENCE_AVAILABILITY_MISSING');
+    } else if (availability !== AVAILABILITY.AVAILABLE) {
       structurallyPredictive = false;
       reasons.push('NESTED_CONFIDENCE_UNAVAILABLE');
     }
+  } else if (availability != null && availability !== AVAILABILITY.AVAILABLE) {
+    structurallyPredictive = false;
+    reasons.push('NESTED_CONFIDENCE_UNAVAILABLE');
   }
 
   if (kind == null) {
@@ -1603,21 +1777,25 @@ export function assessCalibrationMeasurementEligibility(input) {
     reasons.push('PROVENANCE_METHOD_KEY_MISSING');
   }
 
-  // Method authorization — empty immutable registry; caller cannot self-register.
-  // Future: registry entries must canonically bind methodKey → TOP_LABEL_DIRECTIONAL_CORRECTNESS.
-  // Caller-supplied targetEvent NEVER opens eligibility.
-  const methodAuthorized = canonicalMethodKey != null
-    && isAuthorizedMeasurementMethod(canonicalMethodKey);
+  // Method authorization — empty immutable semantic registry; caller cannot self-register.
+  // Future eligibility:
+  //   registration = findCanonicalMeasurementMethodRegistration(canonicalMethodKey)
+  //   && registration.targetEvent === TOP_LABEL_DIRECTIONAL_CORRECTNESS
+  //   && registration.measurementScope === governed scope
+  //   && caller target claim (if supplied) does not conflict
+  // FORBIDDEN: string-only AUTHORIZED_MEASUREMENT_METHODS.includes(methodKey)
+  // Caller-supplied targetEvent NEVER opens eligibility / never substitutes for registry binding.
+  const registration = findCanonicalMeasurementMethodRegistration(canonicalMethodKey);
+  const methodAuthorized = isSemanticallyBoundMeasurementRegistration(registration);
 
   if (!methodAuthorized) {
     reasons.push('METHOD_NOT_AUTHORIZED');
   }
 
-  // Encode fail-closed structure: even a registered method would require
-  // canonical policy-registry binding to TOP_LABEL_DIRECTIONAL_CORRECTNESS.
-  // v1 registry is empty, so this path is unreachable for eligibility=true,
-  // but the structure rejects caller target self-registration explicitly.
-  if (methodAuthorized && targetEvent != null && targetEvent !== CALIBRATION_TARGET_EVENT_V1) {
+  if (methodAuthorized
+    && registration != null
+    && targetEvent != null
+    && targetEvent !== registration.targetEvent) {
     reasons.push('TARGET_EVENT_NOT_BOUND_BY_REGISTRY');
   }
 
@@ -1625,16 +1803,14 @@ export function assessCalibrationMeasurementEligibility(input) {
     reasons.push('CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED');
   }
 
-  // v1 empty immutable registry ⇒ measurementEligible is always false.
-  // Future eligibility requires: structurallyPredictive AND registry membership
-  // AND canonical provenance.methodKey AND registry-bound target-event semantics.
-  // Caller targetEvent NEVER opens eligibility. CALIBRATED_KIND_NOT_TITANGOLD_VERIFIED
-  // is informational and does not alone decide eligibility.
+  // v1 empty immutable registry ⇒ registration=null ⇒ measurementEligible always false.
+  // Future-safe form binds registry-owned target/scope — not caller self-registration.
   const measurementEligible = structurallyPredictive
     && methodAuthorized
-    && canonicalMethodKey != null
-    && (targetEvent == null || targetEvent === CALIBRATION_TARGET_EVENT_V1)
-    && AUTHORIZED_MEASUREMENT_METHODS.length > 0;
+    && registration != null
+    && registration.targetEvent === CALIBRATION_TARGET_EVENT_V1
+    && registration.measurementScope === MEASUREMENT_SCOPE
+    && (targetEvent == null || targetEvent === registration.targetEvent);
 
   if (!measurementEligible && structurallyPredictive) {
     if (!reasons.includes('METHOD_NOT_AUTHORIZED')) {
@@ -1664,6 +1840,7 @@ export function assessCalibrationMeasurementEligibility(input) {
     calibratedKindTitanGoldVerified: CALIBRATED_KIND_TITANGOLD_VERIFIED,
     measuredKindIsCalibrationResult: MEASURED_KIND_IS_CALIBRATION_RESULT,
     authorizedMeasurementMethods: AUTHORIZED_MEASUREMENT_METHODS,
+    authorizedMeasurementMethodRegistry: AUTHORIZED_MEASUREMENT_METHOD_REGISTRY,
     currentProductionCalibrationEligibleProducers:
       CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
     binaryBrierExecution: BINARY_BRIER_EXECUTION,
@@ -1710,6 +1887,12 @@ export default Object.freeze({
   TARGET_SEMANTICS_INFERRED_FROM_KIND,
   EXPLICIT_PROVENANCE_REQUIRED,
   AUTHORIZED_MEASUREMENT_METHODS,
+  AUTHORIZED_MEASUREMENT_METHOD_REGISTRY,
+  MEASUREMENT_METHOD_REGISTRATION_REQUIRED_FIELDS,
+  MEASUREMENT_METHOD_REGISTRATION_SHAPE,
+  AVAILABILITY_VALUES,
+  PROVENANCE_AUTHORITY_FIELDS,
+  PROVENANCE_NOTE_IS_AUTHORITY,
   CURRENT_PRODUCTION_CALIBRATION_ELIGIBLE_PRODUCERS,
   ALLOWED_PREDICTIVE_KINDS,
   ALLOWED_PREDICTIVE_KIND_VALUES,
@@ -1742,6 +1925,8 @@ export default Object.freeze({
   validateCalibrationMeasurementPolicyDescriptor,
   normalizeConfidenceToUnitInterval,
   mapBinaryCorrectnessTarget,
+  findCanonicalMeasurementMethodRegistration,
+  isSemanticallyBoundMeasurementRegistration,
   assessCalibrationMeasurementEligibility,
   isMeasurementEligiblePredictiveClaim,
 });
