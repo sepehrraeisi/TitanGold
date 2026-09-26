@@ -973,4 +973,226 @@ describe('artemisSegmentedPerformancePolicyContract — adversarial', () => {
       'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_DIMENSION_INVALID',
     );
   });
+
+  // ─── Hardening H1: computeCanonicalSegmentId public-input FAIL_CLOSED ───
+
+  test('H1a. computeCanonicalSegmentId rejects regime (unsupported)', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ regime: 'bull' })),
+      'SEGMENTED_PERFORMANCE_POLICY_UNSUPPORTED_DIMENSION',
+    );
+  });
+
+  test('H1b. computeCanonicalSegmentId rejects analysisHorizon', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ analysisHorizon: '1d' })),
+      'SEGMENTED_PERFORMANCE_POLICY_UNSUPPORTED_DIMENSION',
+    );
+  });
+
+  test('H1c. computeCanonicalSegmentId rejects unknown field', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ fancyDim: 'x' })),
+      'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_UNKNOWN_FIELD',
+    );
+  });
+
+  test('H1d. computeCanonicalSegmentId rejects trust field', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ trustScore: 0.9 })),
+      'SEGMENTED_PERFORMANCE_POLICY_TRUST_PROMOTION_FORBIDDEN',
+    );
+  });
+
+  test('H1e. computeCanonicalSegmentId rejects sample sufficiency field', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ minSampleSize: 30 })),
+      'SEGMENTED_PERFORMANCE_POLICY_SAMPLE_SUFFICIENCY_FORBIDDEN',
+    );
+  });
+
+  test('H1f. computeCanonicalSegmentId rejects calibration field', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ brierScore: 0.1 })),
+      'SEGMENTED_PERFORMANCE_POLICY_CALIBRATION_METRIC_FORBIDDEN',
+    );
+  });
+
+  test('H1g. computeCanonicalSegmentId rejects raw market payload', () => {
+    expectFail(
+      () => computeCanonicalSegmentId(baseSegment({ ohlcv: [[1, 2, 3, 4]] })),
+      'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_UNKNOWN_FIELD',
+    );
+  });
+
+  // ─── Hardening H2: claim allowlist + dual segment source ───
+
+  test('H2a. unknown claim field rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        ...baseSegment(),
+        arbitraryClaimField: true,
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_UNKNOWN_FIELD',
+    );
+  });
+
+  test('H2b. arbitrary metadata field rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        ...baseSegment(),
+        metadata: { note: 'x' },
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_UNKNOWN_FIELD',
+    );
+  });
+
+  test('H2c. segment + venue dual source rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        segment: baseSegment(),
+        venue: 'mexc',
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+    );
+  });
+
+  test('H2d. segment + marketType dual source rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        segment: baseSegment(),
+        marketType: 'spot',
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+    );
+  });
+
+  test('H2e. segment + symbol dual source rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        segment: baseSegment(),
+        symbol: 'BTC/USDT',
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+    );
+  });
+
+  test('H2f. segment + timeframe dual source rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        segment: baseSegment(),
+        timeframe: '1h',
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+    );
+  });
+
+  test('H2g. segment + segmentId dual source rejected', () => {
+    expectFail(
+      () => assertNotGlobalAverageOnlyBypass({
+        segmented: true,
+        segment: baseSegment(),
+        segmentId: computeCanonicalSegmentId(baseSegment()),
+      }),
+      'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+    );
+  });
+
+  // ─── Hardening H3: unavailable homogeneous cohort FAIL_CLOSED ───
+
+  test('H3a. all four dimensions null → cohort assertion rejected', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([{
+        venue: null,
+        marketType: null,
+        symbol: null,
+        timeframe: null,
+      }]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+  });
+
+  test('H3b. venue null → cohort assertion rejected', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([baseSegment({ venue: null })]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+  });
+
+  test('H3c. marketType null → cohort assertion rejected', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([baseSegment({ marketType: null })]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+  });
+
+  test('H3d. symbol null → cohort assertion rejected', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([baseSegment({ symbol: null })]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+  });
+
+  test('H3e. timeframe null → cohort assertion rejected', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([baseSegment({ timeframe: null })]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+  });
+
+  test('H3f. unavailable cohort cannot become global', () => {
+    try {
+      assertHomogeneousSegmentCohort([{
+        venue: null,
+        marketType: null,
+        symbol: null,
+        timeframe: null,
+      }]);
+      throw new Error('Expected unavailable cohort rejection');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SegmentedPerformancePolicyContractError);
+      expect(err.code).toBe(
+        'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+      );
+      expect(err.code).not.toMatch(/GLOBAL/);
+      expect(err.details?.segmentScope).toBe(SEGMENT_SCOPE.UNAVAILABLE);
+    }
+    // Descriptor-level UNAVAILABLE representation remains available.
+    const desc = validateCohortDescriptor({
+      venue: null,
+      marketType: null,
+      symbol: null,
+      timeframe: null,
+    });
+    expect(desc.venue).toBeNull();
+    expect(desc.marketType).toBeNull();
+    expect(desc.symbol).toBeNull();
+    expect(desc.timeframe).toBeNull();
+  });
+
+  test('H3g. unavailable cohort cannot produce valid segmented evidence', () => {
+    expectFail(
+      () => assertHomogeneousSegmentCohort([
+        baseSegment({ venue: null }),
+        baseSegment({ venue: null }),
+      ]),
+      'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+    );
+    // Identity-level UNAVAILABLE still works; cohort assertion must not mint
+    // a usable homogeneous segmented evidence result from unavailable dims.
+    const identity = validateCanonicalSegmentIdentity({
+      venue: null,
+      marketType: null,
+      symbol: null,
+      timeframe: null,
+    });
+    expect(identity.segmentIdentityStatus).toBe(SEGMENT_IDENTITY_STATUS.UNAVAILABLE);
+    expect(identity.homogeneous).toBeUndefined();
+  });
 });

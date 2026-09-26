@@ -99,6 +99,45 @@ export const SEGMENT_IDENTITY_ALLOWLIST = Object.freeze([
   'segmentId',
 ]);
 
+/**
+ * Public input allowlist for computeCanonicalSegmentId().
+ * Validates BEFORE thinning to four canonical dimensions so unsupported /
+ * unknown / forbidden fields cannot be silently discarded.
+ */
+export const COMPUTE_CANONICAL_SEGMENT_ID_ALLOWLIST = Object.freeze([
+  ...AUTHORIZED_CANONICAL_SEGMENT_DIMENSIONS,
+  'segmentId',
+  ...CANONICAL_VERSION_BINDING_FIELDS,
+]);
+
+/**
+ * Strict top-level allowlist for assertNotGlobalAverageOnlyBypass() claims.
+ * No metadata bag; unknown claim fields FAIL_CLOSED.
+ */
+export const CLAIM_PUBLIC_ALLOWLIST = Object.freeze([
+  'segmentScope',
+  'claimType',
+  'segmented',
+  'globalAverageOnly',
+  'scope',
+  'requiresSegmented',
+  'segment',
+  'venue',
+  'marketType',
+  'symbol',
+  'timeframe',
+  'segmentId',
+]);
+
+/** Top-level claim fields that compete with nested `segment` as identity source. */
+export const CLAIM_TOP_LEVEL_SEGMENT_SOURCE_FIELDS = Object.freeze([
+  'venue',
+  'marketType',
+  'symbol',
+  'timeframe',
+  'segmentId',
+]);
+
 export const REGIME_IDENTITY_CANONICAL = false;
 export const REGIME_CLASSIFIER = false;
 export const REGIME_CREATION = false;
@@ -616,14 +655,7 @@ function normalizeSegmentDimensionValue(value, field) {
   return value;
 }
 
-function extractSegmentDimensions(input) {
-  assertPlainObject(
-    input,
-    'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_INVALID',
-    'Segment identity input must be a plain object',
-  );
-
-  // Reject unsupported / forbidden keys first (before allowlist so codes are precise).
+function assertNoUnsupportedOrAuthorityFields(input) {
   for (const key of Object.keys(input)) {
     if (UNSUPPORTED_SEGMENTATION_DIMENSIONS.includes(key)) {
       fail(
@@ -661,6 +693,17 @@ function extractSegmentDimensions(input) {
       );
     }
   }
+}
+
+function extractSegmentDimensions(input) {
+  assertPlainObject(
+    input,
+    'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_INVALID',
+    'Segment identity input must be a plain object',
+  );
+
+  // Reject unsupported / forbidden keys first (before allowlist so codes are precise).
+  assertNoUnsupportedOrAuthorityFields(input);
 
   assertAllowlist(
     input,
@@ -706,8 +749,27 @@ export function computeCanonicalSegmentId(segmentDimensions) {
     );
   }
 
+  // FAIL_CLOSED on public input BEFORE thinning — unsupported / unknown /
+  // forbidden fields must never be silently discarded.
+  assertSizeBound(
+    segmentDimensions,
+    MAX_SEGMENTED_PERFORMANCE_POLICY_BYTES,
+    'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_SIZE_EXCEEDED',
+  );
+  assertNoUnsupportedOrAuthorityFields(segmentDimensions);
+  assertAllowlist(
+    segmentDimensions,
+    COMPUTE_CANONICAL_SEGMENT_ID_ALLOWLIST,
+    'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_UNKNOWN_FIELD',
+    'computeCanonicalSegmentId',
+  );
+  assertNoForbiddenOrSecrets(
+    segmentDimensions,
+    'SEGMENTED_PERFORMANCE_POLICY_SEGMENT_FORBIDDEN_FIELD',
+  );
+
   // Accept either a thin segment object or an Aggregate-compatible cohort.
-  // Strip non-segment keys before segment allowlist validation.
+  // Thin ONLY after public validation so identity algorithm stays unchanged.
   const thin = {};
   for (const dim of AUTHORIZED_CANONICAL_SEGMENT_DIMENSIONS) {
     if (Object.prototype.hasOwnProperty.call(segmentDimensions, dim)) {
@@ -842,10 +904,36 @@ export function assertNotGlobalAverageOnlyBypass(claim) {
     'SEGMENTED_PERFORMANCE_POLICY_CLAIM_INVALID',
     'Performance claim must be a plain object',
   );
+  assertSizeBound(
+    claim,
+    MAX_SEGMENTED_PERFORMANCE_POLICY_BYTES,
+    'SEGMENTED_PERFORMANCE_POLICY_CLAIM_SIZE_EXCEEDED',
+  );
+  // Forbidden codes first so existing CLAIM_FORBIDDEN_FIELD regressions stay precise.
   assertNoForbiddenOrSecrets(
     claim,
     'SEGMENTED_PERFORMANCE_POLICY_CLAIM_FORBIDDEN_FIELD',
   );
+  assertAllowlist(
+    claim,
+    CLAIM_PUBLIC_ALLOWLIST,
+    'SEGMENTED_PERFORMANCE_POLICY_CLAIM_UNKNOWN_FIELD',
+    'performanceClaim',
+  );
+
+  // Dual representation: nested `segment` XOR top-level dims/segmentId — never merge.
+  if (isPlainObjectSafe(claim.segment)) {
+    const competing = CLAIM_TOP_LEVEL_SEGMENT_SOURCE_FIELDS.filter((field) => (
+      Object.prototype.hasOwnProperty.call(claim, field)
+    ));
+    if (competing.length > 0) {
+      fail(
+        'SEGMENTED_PERFORMANCE_POLICY_CLAIM_AMBIGUOUS_SEGMENT_SOURCE',
+        'Claim must not supply both nested segment and top-level segment identity fields',
+        { competing },
+      );
+    }
+  }
 
   const scope = claim.segmentScope;
   const claimType = claim.claimType;
@@ -1069,6 +1157,19 @@ export function assertHomogeneousSegmentCohort(cohortList) {
           { index: i, field: dim, expected: first[dim], actual: next[dim] },
         );
       }
+    }
+  }
+
+  // Homogeneous UNAVAILABLE dimensions must not yield a usable segmented identity.
+  // validateCohortDescriptor may still represent explicit null as UNAVAILABLE;
+  // this assertion rejects unavailable cohorts as segmented performance evidence.
+  for (const dim of AUTHORIZED_CANONICAL_SEGMENT_DIMENSIONS) {
+    if (first[dim] === null) {
+      fail(
+        'SEGMENTED_PERFORMANCE_POLICY_UNAVAILABLE_SEGMENT_NOT_ELIGIBLE',
+        'Unavailable canonical segment cannot be used as a valid segmented performance cohort',
+        { field: dim, segmentScope: SEGMENT_SCOPE.UNAVAILABLE },
+      );
     }
   }
 
@@ -1461,6 +1562,9 @@ export default Object.freeze({
   CANONICAL_VERSION_BINDING_FIELDS,
   COHORT_DESCRIPTOR_ALLOWLIST,
   SEGMENT_IDENTITY_ALLOWLIST,
+  COMPUTE_CANONICAL_SEGMENT_ID_ALLOWLIST,
+  CLAIM_PUBLIC_ALLOWLIST,
+  CLAIM_TOP_LEVEL_SEGMENT_SOURCE_FIELDS,
   REGIME_IDENTITY_CANONICAL,
   REGIME_CLASSIFIER,
   REGIME_CREATION,
