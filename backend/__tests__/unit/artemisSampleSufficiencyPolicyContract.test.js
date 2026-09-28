@@ -2,9 +2,11 @@
  * Artemis Sample Sufficiency Policy Contract — dedicated unit tests
  * Stage 10 S10-SAMPLE-SUFFICIENCY-POLICY-CONTRACT
  *
- * Covers UNDEFINED/DEFERRED policy, UNDEFINED/NOT_AUTHORIZED threshold,
- * no sufficiency verdict invention, fail-closed threshold/verdict authority,
- * regime rejection, GLOBAL_AVERAGE_ONLY bypass closed, deep immutability,
+ * Stage 10 S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT
+ *
+ * Covers COUNT_ONLY threshold policy (MIN=50), SUFFICIENT/INSUFFICIENT/UNAVAILABLE
+ * verdicts, eligibility observation counting, fail-closed caller threshold/verdict
+ * authority, regime rejection, GLOBAL_AVERAGE_ONLY bypass closed, deep immutability,
  * deterministic identity, hard flags, zero side effects, import hygiene.
  */
 
@@ -22,6 +24,11 @@ import {
   SAMPLE_SUFFICIENCY_POLICY,
   SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
   SUFFICIENCY_VERDICT,
+  MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+  SUFFICIENCY_SCOPE,
+  SUFFICIENCY_METHOD,
+  CALIBRATION_SUFFICIENCY,
+  COMPARABLE_DIRECTIONS,
   SAMPLE_SUFFICIENCY_OWNER,
   THRESHOLD_INVENTION,
   SAMPLE_SIZE_INVENTION,
@@ -125,11 +132,15 @@ describe('artemisSampleSufficiencyPolicyContract — governed semantics', () => 
     expect(d.officialName).toBe(SAMPLE_SUFFICIENCY_POLICY_OFFICIAL_NAME);
     expect(d.ownershipRole).toBe(SAMPLE_SUFFICIENCY_POLICY_OWNERSHIP_ROLE);
     expect(d.isSourceOfTruth).toBe(false);
-    expect(d.sampleSufficiencyPolicy).toBe('UNDEFINED / DEFERRED');
+    expect(d.sampleSufficiencyPolicy).toBe('DEFINED / COUNT_ONLY');
     expect(d.sampleSufficiencyThresholdPolicy).toBe(
-      'UNDEFINED / NOT_AUTHORIZED',
+      'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED',
     );
     expect(d.sufficiencyVerdict).toBe('UNDEFINED / DEFERRED');
+    expect(d.minEligibleObservationsPerCohort).toBe(50);
+    expect(d.sufficiencyScope).toBe('PER_HOMOGENEOUS_CANONICAL_COHORT');
+    expect(d.sufficiencyMethod).toBe('COUNT_ONLY');
+    expect(d.calibrationSufficiency).toBe('DORMANT / SEPARATE');
     expect(d.thresholdInvention).toBe('FORBIDDEN');
     expect(d.sampleSizeInvention).toBe('FORBIDDEN');
     expect(d.authorizedCanonicalSegmentDimensions).toEqual([
@@ -209,22 +220,35 @@ describe('artemisSampleSufficiencyPolicyContract — governed semantics', () => 
     expect(d.binaryBrierExecution).toBe(false);
   });
 
-  test('9. threshold policy remains undefined/not authorized', () => {
+  test('9. threshold policy is COUNT_ONLY MIN=50 authorized', () => {
     expect(SAMPLE_SUFFICIENCY_THRESHOLD_POLICY).toBe(
-      'UNDEFINED / NOT_AUTHORIZED',
+      'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED',
     );
-    expect(SAMPLE_SUFFICIENCY_POLICY).toBe('UNDEFINED / DEFERRED');
+    expect(SAMPLE_SUFFICIENCY_POLICY).toBe('DEFINED / COUNT_ONLY');
+    expect(MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT).toBe(50);
+    expect(SUFFICIENCY_SCOPE).toBe('PER_HOMOGENEOUS_CANONICAL_COHORT');
+    expect(SUFFICIENCY_METHOD).toBe('COUNT_ONLY');
+    expect(CALIBRATION_SUFFICIENCY).toBe('DORMANT / SEPARATE');
     expect(SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED).toBe('UNDEFINED / DEFERRED');
+    expect(SUFFICIENCY_VERDICT.SUFFICIENT).toBe('SUFFICIENT');
+    expect(SUFFICIENCY_VERDICT.INSUFFICIENT).toBe('INSUFFICIENT');
+    expect(SUFFICIENCY_VERDICT.UNAVAILABLE).toBe('UNAVAILABLE');
     expect(THRESHOLD_INVENTION).toBe('FORBIDDEN');
     expect(SAMPLE_SIZE_INVENTION).toBe('FORBIDDEN');
     const artifact = buildSampleSufficiencyPolicyArtifact({
       cohort: baseCohort(),
       segmentScope: SEGMENT_SCOPE.SEGMENTED,
     });
+    expect(artifact.sampleSufficiencyPolicy).toBe('DEFINED / COUNT_ONLY');
     expect(artifact.sampleSufficiencyThresholdPolicy).toBe(
-      'UNDEFINED / NOT_AUTHORIZED',
+      'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED',
     );
-    expect(artifact.sufficiencyVerdict).toBe('UNDEFINED / DEFERRED');
+    expect(artifact.minEligibleObservationsPerCohort).toBe(50);
+    expect(artifact.sufficiencyMethod).toBe('COUNT_ONLY');
+    expect(artifact.sufficiencyScope).toBe('PER_HOMOGENEOUS_CANONICAL_COHORT');
+    expect(artifact.calibrationSufficiency).toBe('DORMANT / SEPARATE');
+    expect(artifact.eligibleObservationCount).toBe(null);
+    expect(artifact.sufficiencyVerdict).toBe('UNAVAILABLE');
   });
 
   test('10. caller-supplied minimumN rejected', () => {
@@ -512,13 +536,14 @@ describe('artemisSampleSufficiencyPolicyContract — governed semantics', () => 
     expect(validated).toBe(SAMPLE_SUFFICIENCY_POLICY_DESCRIPTOR);
   });
 
-  test('empty artifact still UNDEFINED / DEFERRED', () => {
+  test('empty artifact is DEFINED/COUNT_ONLY with UNAVAILABLE verdict', () => {
     const artifact = buildSampleSufficiencyPolicyArtifact({});
-    expect(artifact.sufficiencyVerdict).toBe('UNDEFINED / DEFERRED');
-    expect(artifact.sampleSufficiencyPolicy).toBe('UNDEFINED / DEFERRED');
+    expect(artifact.sampleSufficiencyPolicy).toBe('DEFINED / COUNT_ONLY');
     expect(artifact.sampleSufficiencyThresholdPolicy).toBe(
-      'UNDEFINED / NOT_AUTHORIZED',
+      'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED',
     );
+    expect(artifact.eligibleObservationCount).toBe(null);
+    expect(artifact.sufficiencyVerdict).toBe('UNAVAILABLE');
     expect(artifact.segmentScope).toBe(SEGMENT_SCOPE.MISSING);
   });
 
@@ -610,13 +635,16 @@ describe('artemisSampleSufficiencyPolicyContract — governed semantics', () => 
     expect(FORBIDDEN_TRUST_PROMOTION_FIELDS).toContain('promotionEligible');
   });
 
-  test('canonical limitations include threshold deferral', () => {
+  test('canonical limitations include COUNT_ONLY threshold policy', () => {
     for (const needed of [
-      'sample_sufficiency_policy_undefined_deferred',
-      'sample_sufficiency_threshold_policy_undefined_not_authorized',
+      'sample_sufficiency_threshold_policy_count_only_min_50_authorized',
+      'sufficiency_method_count_only',
+      'caller_threshold_authority_forbidden_fail_closed',
       'threshold_invention_forbidden',
       'global_average_only_bypass_closed',
       'regime_identity_canonical_no',
+      'no_statistical_significance_logic',
+      'calibration_sufficiency_dormant_separate',
     ]) {
       expect(SAMPLE_SUFFICIENCY_POLICY_LIMITATIONS).toContain(needed);
     }
@@ -658,7 +686,7 @@ describe('artemisSampleSufficiencyPolicyContract — governed semantics', () => 
     };
     expectFail(
       () => validateSampleSufficiencyPolicyArtifact(tampered),
-      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_MISMATCH',
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_COUNT_INCONSISTENT',
     );
   });
 
@@ -1061,15 +1089,515 @@ describe('artemisSampleSufficiencyPolicyContract — Stage 10 hardening', () => 
     expect(artifact.segmentedPerformancePolicyRef).not.toHaveProperty('counts');
   });
 
-  test('AH. threshold and verdict remain undefined/deferred after canonical validation', () => {
+  test('AH. threshold policy COUNT_ONLY and UNAVAILABLE without eligibilityObservations', () => {
     const validated = validateSampleSufficiencyPolicyArtifact(baseArtifactForHardening());
-    expect(validated.sampleSufficiencyPolicy).toBe('UNDEFINED / DEFERRED');
+    expect(validated.sampleSufficiencyPolicy).toBe('DEFINED / COUNT_ONLY');
     expect(validated.sampleSufficiencyThresholdPolicy).toBe(
-      'UNDEFINED / NOT_AUTHORIZED',
+      'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED',
     );
-    expect(validated.sufficiencyVerdict).toBe('UNDEFINED / DEFERRED');
+    expect(validated.minEligibleObservationsPerCohort).toBe(50);
+    expect(validated.sufficiencyMethod).toBe('COUNT_ONLY');
+    expect(validated.eligibleObservationCount).toBe(null);
+    expect(validated.sufficiencyVerdict).toBe('UNAVAILABLE');
     expect(validated.thresholdInvention).toBe('FORBIDDEN');
     expect(validated.sampleSizeInvention).toBe('FORBIDDEN');
+    expect(validated.calibrationSufficiency).toBe('DORMANT / SEPARATE');
+  });
+});
+
+// ─── Stage 10 Threshold Policy — Owner-approved COUNT_ONLY MIN=50 ────────────
+
+function eligibleObservation(overrides = {}) {
+  return {
+    evaluationStatus: 'MATCH',
+    observationClass: 'OBSERVED_AND_EVALUABLE',
+    decisionId: 'dec-eligible-001',
+    comparisonClaims: {
+      decisionDirection: 'bullish',
+      observedDirection: 'bullish',
+    },
+    dataQuality: {
+      availability: 'available',
+      freshnessStatus: 'fresh',
+    },
+    ...overrides,
+  };
+}
+
+function makeEligibleObservations(n, factory = eligibleObservation) {
+  return Array.from({ length: n }, (_, i) =>
+    factory({
+      decisionId: `dec-eligible-${String(i + 1).padStart(4, '0')}`,
+    }),
+  );
+}
+
+function buildWithEligibility(observations, extra = {}) {
+  return buildSampleSufficiencyPolicyArtifact({
+    cohort: baseCohort(),
+    segmentScope: SEGMENT_SCOPE.SEGMENTED,
+    aggregateRef: baseAggregateRef(),
+    segmentedPerformancePolicyRef: baseSegmentedRef(),
+    eligibilityObservations: observations,
+    ...extra,
+  });
+}
+
+describe('artemisSampleSufficiencyPolicyContract — threshold policy COUNT_ONLY', () => {
+  test('TP1. eligible count = 50 → SUFFICIENT', () => {
+    const artifact = buildWithEligibility(makeEligibleObservations(50));
+    expect(artifact.eligibleObservationCount).toBe(50);
+    expect(artifact.sufficiencyVerdict).toBe('SUFFICIENT');
+    expect(artifact.minEligibleObservationsPerCohort).toBe(50);
+    const validated = validateSampleSufficiencyPolicyArtifact({
+      artifact,
+      eligibilityObservations: makeEligibleObservations(50),
+    });
+    expect(validated.sufficiencyVerdict).toBe('SUFFICIENT');
+    expect(validated.policyId).toBe(artifact.policyId);
+  });
+
+  test('TP2. eligible count > 50 → SUFFICIENT', () => {
+    const observations = makeEligibleObservations(51);
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(51);
+    expect(artifact.sufficiencyVerdict).toBe('SUFFICIENT');
+  });
+
+  test('TP3. eligible count = 49 → INSUFFICIENT', () => {
+    const artifact = buildWithEligibility(makeEligibleObservations(49));
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP4. eligible count = 1 → INSUFFICIENT', () => {
+    const artifact = buildWithEligibility(makeEligibleObservations(1));
+    expect(artifact.eligibleObservationCount).toBe(1);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP5. missing/unavailable count → UNAVAILABLE', () => {
+    const artifact = buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+    });
+    expect(artifact.eligibleObservationCount).toBe(null);
+    expect(artifact.sufficiencyVerdict).toBe('UNAVAILABLE');
+    const emptyKnown = buildWithEligibility([]);
+    expect(emptyKnown.eligibleObservationCount).toBe(0);
+    expect(emptyKnown.sufficiencyVerdict).toBe('UNAVAILABLE');
+  });
+
+  test('TP6. missing required cohort identity → fail-closed', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        eligibilityObservations: makeEligibleObservations(50),
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_COHORT_REQUIRED',
+    );
+    const { venue, ...rest } = baseCohort();
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: rest,
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        eligibilityObservations: makeEligibleObservations(50),
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_SEGMENT_DIMENSION_MISSING',
+    );
+  });
+
+  test('TP7. MATCH counts', () => {
+    const observations = makeEligibleObservations(3, () =>
+      eligibleObservation({
+        evaluationStatus: 'MATCH',
+        comparisonClaims: {
+          decisionDirection: 'bullish',
+          observedDirection: 'bullish',
+        },
+      }),
+    );
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(3);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP8. MISMATCH counts', () => {
+    const observations = makeEligibleObservations(3, () =>
+      eligibleObservation({
+        evaluationStatus: 'MISMATCH',
+        comparisonClaims: {
+          decisionDirection: 'bullish',
+          observedDirection: 'bearish',
+        },
+      }),
+    );
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(3);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP9. BLOCKED does not count', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        evaluationStatus: 'BLOCKED',
+        decisionId: 'dec-blocked',
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP10. UNAVAILABLE evaluationStatus does not count', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        evaluationStatus: 'UNAVAILABLE',
+        decisionId: 'dec-unavail',
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP11. INSUFFICIENT_DATA does not count', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        evaluationStatus: 'INSUFFICIENT_DATA',
+        decisionId: 'dec-insuff-data',
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP12. NOT_OBSERVED does not count', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        observationClass: 'NOT_OBSERVED',
+        decisionId: 'dec-not-obs',
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP13. OBSERVED_BUT_UNAVAILABLE does not count', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        observationClass: 'OBSERVED_BUT_UNAVAILABLE',
+        decisionId: 'dec-obs-unavail',
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP14. AVAILABLE + FRESH eligible', () => {
+    const observations = makeEligibleObservations(50, () =>
+      eligibleObservation({
+        dataQuality: {
+          availability: 'available',
+          freshnessStatus: 'fresh',
+        },
+      }),
+    );
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(50);
+    expect(artifact.sufficiencyVerdict).toBe('SUFFICIENT');
+  });
+
+  test('TP15. AVAILABLE + AGED eligible', () => {
+    const observations = makeEligibleObservations(50, () =>
+      eligibleObservation({
+        dataQuality: {
+          availability: 'available',
+          freshnessStatus: 'aged',
+        },
+      }),
+    );
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(50);
+    expect(artifact.sufficiencyVerdict).toBe('SUFFICIENT');
+  });
+
+  test('TP16. STALE not eligible', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        decisionId: 'dec-stale',
+        dataQuality: {
+          availability: 'available',
+          freshnessStatus: 'stale',
+        },
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP17. EXPIRED not eligible', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        decisionId: 'dec-expired',
+        dataQuality: {
+          availability: 'available',
+          freshnessStatus: 'expired',
+        },
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP18. UNKNOWN freshness not eligible', () => {
+    const observations = [
+      ...makeEligibleObservations(49),
+      eligibleObservation({
+        decisionId: 'dec-unknown-fresh',
+        dataQuality: {
+          availability: 'available',
+          freshnessStatus: 'unknown',
+        },
+      }),
+    ];
+    const artifact = buildWithEligibility(observations);
+    expect(artifact.eligibleObservationCount).toBe(49);
+    expect(artifact.sufficiencyVerdict).toBe('INSUFFICIENT');
+  });
+
+  test('TP19. caller-supplied minimumN rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        minimumN: 30,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+  });
+
+  test('TP20. caller-supplied threshold rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        threshold: 50,
+        sufficiencyThreshold: 50,
+        sampleThreshold: 50,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+  });
+
+  test('TP21. caller-supplied sufficient/insufficient/verdict rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        sufficient: true,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        insufficient: true,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        sufficiencyVerdict: 'SUFFICIENT',
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: baseCohort(),
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        verdict: 'SUFFICIENT',
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_INPUT_UNKNOWN_FIELD',
+    );
+  });
+
+  test('TP22. global-average-only bypass rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        segmentScope: SEGMENT_SCOPE.GLOBAL_AVERAGE_ONLY,
+        eligibilityObservations: makeEligibleObservations(50),
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_GLOBAL_AVERAGE_NOT_SUFFICIENT',
+    );
+  });
+
+  test('TP23. unsupported regime segmentation rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: { ...baseCohort(), regime: 'bull' },
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+        eligibilityObservations: makeEligibleObservations(50),
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_UNSUPPORTED_DIMENSION',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: { ...baseCohort(), marketRegime: 'volatile' },
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_UNSUPPORTED_DIMENSION',
+    );
+  });
+
+  test('TP24. unsupported agentId/agentRole/analysisHorizon rejected', () => {
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: { ...baseCohort(), agentId: 'technical' },
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_UNSUPPORTED_DIMENSION',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: { ...baseCohort(), agentRole: 'evidence' },
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_UNSUPPORTED_DIMENSION',
+    );
+    expectFail(
+      () => buildSampleSufficiencyPolicyArtifact({
+        cohort: { ...baseCohort(), analysisHorizon: '1d' },
+        segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_UNSUPPORTED_DIMENSION',
+    );
+  });
+
+  test('TP25. no statistical-significance logic introduced', () => {
+    // Forbidden vocabulary may appear only as ABSENT/forbidden documentation —
+    // never as executable measurement APIs or exported computation functions.
+    expect(typeof policyDefault.computePValue).toBe('undefined');
+    expect(typeof policyDefault.computePower).toBe('undefined');
+    expect(typeof policyDefault.computeConfidenceInterval).toBe('undefined');
+    expect(typeof policyDefault.computeSampleSize).toBe('undefined');
+    expect(typeof policyDefault.setMinimumN).toBe('undefined');
+    expect(typeof policyDefault.setThreshold).toBe('undefined');
+    expect(SAMPLE_SUFFICIENCY_POLICY_LIMITATIONS).toContain(
+      'no_statistical_significance_logic',
+    );
+    expect(SAMPLE_SUFFICIENCY_POLICY_LIMITATIONS).toContain(
+      'no_p_value_confidence_interval_power_criterion',
+    );
+    expect(FORBIDDEN_THRESHOLD_FIELDS).toEqual(
+      expect.arrayContaining(['minimumN', 'sampleThreshold', 'sufficiencyThreshold']),
+    );
+  });
+
+  test('TP26. no calibration execution', () => {
+    expect(CALIBRATION_EXECUTION).toBe(false);
+    expect(CALIBRATION_SUFFICIENCY).toBe('DORMANT / SEPARATE');
+    const artifact = buildWithEligibility(makeEligibleObservations(50));
+    expect(artifact.calibrationExecution).toBe(false);
+    expect(artifact.calibrationSufficiency).toBe('DORMANT / SEPARATE');
+    expect(artifact.hardFlags.calibrationExecution).toBe(false);
+    expect(artifact.downstreamGating.calibrationExecution).toBe('NOT_AUTHORIZED');
+  });
+
+  test('TP27. no trust/weight mutation', () => {
+    expect(TRUST_WEIGHTING).toBe('NOT_AUTHORIZED');
+    const artifact = buildWithEligibility(makeEligibleObservations(50));
+    expect(artifact.trustWeighting).toBe('NOT_AUTHORIZED');
+    expect(artifact.hardFlags.trustMutation).toBe(false);
+    expect(artifact.hardFlags.weightMutation).toBe(false);
+    expect(artifact.downstreamGating.trustWeighting).toBe('NOT_AUTHORIZED');
+    expect(artifact.sideEffects.trustMutationCount).toBe(0);
+    expect(artifact.sideEffects.weightMutationCount).toBe(0);
+  });
+
+  test('TP28. no promotion/demotion execution', () => {
+    expect(PROMOTION).toBe('NOT_AUTHORIZED');
+    expect(DEMOTION).toBe('NOT_AUTHORIZED');
+    const artifact = buildWithEligibility(makeEligibleObservations(50));
+    expect(artifact.promotion).toBe('NOT_AUTHORIZED');
+    expect(artifact.demotion).toBe('NOT_AUTHORIZED');
+    expect(artifact.hardFlags.promotionExecution).toBe(false);
+    expect(artifact.hardFlags.demotionExecution).toBe(false);
+    expect(artifact.downstreamGating.promotion).toBe('NOT_AUTHORIZED');
+    expect(artifact.downstreamGating.demotion).toBe('NOT_AUTHORIZED');
+    expect(artifact.sideEffects.promotionCount).toBe(0);
+    expect(artifact.sideEffects.demotionCount).toBe(0);
+  });
+
+  test('TP29. zero side-effect ledger preserved', () => {
+    const artifact = buildWithEligibility(makeEligibleObservations(50));
+    for (const key of Object.keys(ZERO_SAMPLE_SUFFICIENCY_POLICY_SIDE_EFFECTS)) {
+      expect(artifact.sideEffects[key]).toBe(0);
+    }
+    expect(BINARY_BRIER_EXECUTION).toBe(false);
+    expect(artifact.binaryBrierExecution).toBe(false);
+  });
+
+  test('TP30. artifact rebuild / deterministic Path B validation still passes', () => {
+    const observations = makeEligibleObservations(50);
+    const a = buildWithEligibility(observations);
+    const b = buildWithEligibility(observations);
+    expect(a.policyId).toBe(b.policyId);
+    expect(a.eligibleObservationCount).toBe(50);
+    expect(a.sufficiencyVerdict).toBe('SUFFICIENT');
+    const validated = validateSampleSufficiencyPolicyArtifact({
+      artifact: a,
+      eligibilityObservations: observations,
+    });
+    expect(validated.policyId).toBe(a.policyId);
+    expect(validated.sufficiencyVerdict).toBe('SUFFICIENT');
+    expect(validated.eligibleObservationCount).toBe(50);
+    expect(Object.isFrozen(validated)).toBe(true);
+    // Path B count mismatch fails closed
+    expectFail(
+      () => validateSampleSufficiencyPolicyArtifact({
+        artifact: a,
+        eligibilityObservations: makeEligibleObservations(49),
+      }),
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IDENTITY_MISMATCH',
+    );
+    // Missing DQ on an otherwise eligible observation fails closed
+    expectFail(
+      () => buildWithEligibility([
+        {
+          evaluationStatus: 'MATCH',
+          observationClass: 'OBSERVED_AND_EVALUABLE',
+          decisionId: 'dec-no-dq',
+          comparisonClaims: {
+            decisionDirection: 'bullish',
+            observedDirection: 'bullish',
+          },
+        },
+      ]),
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DATA_QUALITY_REQUIRED',
+    );
+    // COMPARABLE_DIRECTIONS is a frozen enum object (not a Set)
+    expect(COMPARABLE_DIRECTIONS.BULLISH).toBe('bullish');
+    expect(COMPARABLE_DIRECTIONS.BEARISH).toBe('bearish');
+    expect(Object.values(COMPARABLE_DIRECTIONS)).toEqual(
+      expect.arrayContaining(['bullish', 'bearish', 'sideways', 'neutral']),
+    );
+    expect(Object.isFrozen(COMPARABLE_DIRECTIONS)).toBe(true);
   });
 });
 
