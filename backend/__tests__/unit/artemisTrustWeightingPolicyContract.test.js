@@ -111,6 +111,10 @@ function baseInput(overrides = {}) {
     sampleSufficiencyPolicyRef: baseSampleSufficiencyRef(),
     cohort: baseCohort(),
     segmentScope: SEGMENT_SCOPE.SEGMENTED,
+    dataQualityEligibilityState: {
+      availability: AVAILABILITY.AVAILABLE,
+      freshnessStatus: FRESHNESS_STATUS.FRESH,
+    },
     recordedAt: '2026-09-28T12:00:00.000Z',
     ...overrides,
   };
@@ -530,8 +534,8 @@ describe('artemisTrustWeightingPolicyContract', () => {
     });
   });
 
-  describe('DQ optional binding', () => {
-    test('optional dataQualityEligibilityState AVAILABLE+FRESH accepted', () => {
+  describe('DQ required binding', () => {
+    test('required dataQualityEligibilityState AVAILABLE+FRESH accepted', () => {
       const artifact = buildTrustWeightingPolicyArtifact(baseInput({
         dataQualityEligibilityState: {
           availability: AVAILABILITY.AVAILABLE,
@@ -540,6 +544,15 @@ describe('artemisTrustWeightingPolicyContract', () => {
       }));
       expect(artifact.dataQualityEligibilityState.availability).toBe(
         AVAILABILITY.AVAILABLE,
+      );
+    });
+
+    test('missing DQ → fail closed', () => {
+      const input = baseInput();
+      delete input.dataQualityEligibilityState;
+      expectFail(
+        () => buildTrustWeightingPolicyArtifact(input),
+        'TRUST_WEIGHTING_POLICY_DQ_REQUIRED',
       );
     });
 
