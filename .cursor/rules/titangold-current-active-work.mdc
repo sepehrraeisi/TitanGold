@@ -27,16 +27,16 @@ alwaysApply: true
 
 **REMAINING_STAGES = 6**
 
-**NEXT_GATE = STAGE10_TRUST_WEIGHTING_POLICY_CONTRACT_AUTHORIZATION**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE = STAGE10_TRUST_WEIGHTING_POLICY_CONTRACT_IMPLEMENTATION_AND_HUMAN_QA**
+**NEXT_GATE_STATUS = AUTHORIZED / EXACT_SLICE_ONLY**
 **NEXT_GATE_ONLY = YES**
 **S10_POST_THRESHOLD_POLICY_NEXT_DEPENDENCY_DISCOVERY = COMPLETE**
 **S10_NEXT_MINIMUM_DEPENDENCY = S10-TRUST-WEIGHTING-POLICY-CONTRACT**
 **S10_NEXT_MINIMUM_DEPENDENCY_OFFICIAL_NAME = ARTEMIS_TRUST_WEIGHTING_POLICY_CONTRACT**
 **S10_NEXT_MINIMUM_DEPENDENCY_AUTHORITY_CLASS = OUTCOME_EVALUATION**
 **S10_NEXT_MINIMUM_DEPENDENCY_RISK_TIER = Tier 3**
-**S10_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = NO**
-**S10_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = NO**
+**S10_NEXT_MINIMUM_DEPENDENCY_AUTHORIZED = YES / EXACT_SLICE_ONLY**
+**S10_NEXT_MINIMUM_DEPENDENCY_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY**
 **S10_TRUST_WEIGHTING_POLICY_OWNER = DEDICATED_LIBRARY_ONLY_CONTRACT / OWNER_DECIDED**
 **S10_TRUST_WEIGHTING_OWNER_DECISION = RECORDED**
 **S10_TRUST_WEIGHTING_OWNER_DECISION_OD_TW_001 = APPROVED / DEDICATED_LIBRARY_ONLY_POLICY_CONTRACT**
@@ -79,8 +79,8 @@ alwaysApply: true
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_POST_MERGE = VERIFIED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTH_FINALIZE_PR = #151 / MERGED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_BASE_MAIN_SHA = `a5a55962689f5dbd5da7c88441022c39180a9947`**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
+**AUTHORIZED_SLICE = S10-TRUST-WEIGHTING-POLICY-CONTRACT / EXACT_SLICE_ONLY**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
 **AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = NO / CONSUMED**
 **DO_NOT_IMPLEMENT_BEFORE_GOVERNANCE_PR_MERGE = NO / CONSUMED**
@@ -166,10 +166,10 @@ alwaysApply: true
 **ARTEMIS_CORE_STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
 **STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
 **STAGE10_STARTED = YES**
-**STAGE10_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**STAGE10_AUTHORIZATION = NO / NO_ACTIVE_SLICE**
-**STAGE10_ACTIVE_AUTHORIZATION = NONE**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
+**STAGE10_IMPLEMENTATION_AUTHORIZED = YES / S10-TRUST-WEIGHTING-POLICY-CONTRACT ONLY**
+**STAGE10_AUTHORIZATION = YES / S10-TRUST-WEIGHTING-POLICY-CONTRACT ONLY**
+**STAGE10_ACTIVE_AUTHORIZATION = S10-TRUST-WEIGHTING-POLICY-CONTRACT**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = S10-TRUST-WEIGHTING-POLICY-CONTRACT / EXACT_SLICE_ONLY**
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
@@ -1632,6 +1632,106 @@ Stage 7 Control Chain Execution Intent
 Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED / NOT STARTED`, `C6_AUTHORIZATION = YES — EXACT SLICE ONLY`, `C6_IMPLEMENTATION_STATUS = AUTHORIZED / NOT_STARTED`) are **SUPERSEDED** by this C.6 closeout.
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
+
+### Active Work Package — Artemis Core Stage 10 Trust / Weighting Policy CONTRACT IMPLEMENTATION
+
+**AUTHORIZED_SLICE = S10-TRUST-WEIGHTING-POLICY-CONTRACT / EXACT_SLICE_ONLY**
+**SLICE_ID = S10-TRUST-WEIGHTING-POLICY-CONTRACT**
+**OFFICIAL_NAME = ARTEMIS_TRUST_WEIGHTING_POLICY_CONTRACT**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = OUTCOME_EVALUATION**
+**IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY**
+**AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = YES**
+
+**PRIMARY_OUTCOME =**
+Implement a deterministic, library-only Trust / Weighting Policy Contract that produces explainable binary evidence eligibility from canonical Stage 10 evidence without numeric weights, persistence, trust mutation, Promotion, Demotion, Calibration execution or runtime behavior.
+
+**EXPECTED_CONTRACT_OWNER = `backend/contracts/artemisTrustWeightingPolicyContract.js`**
+**EXPECTED_TEST_OWNER = `backend/__tests__/unit/artemisTrustWeightingPolicyContract.test.js`**
+**NEW_DEDICATED_CONTRACT = YES / OWNER_DECIDED**
+**NEW_SOT = NO**
+**NEW_TABLE = NO**
+**NEW_MIGRATION = NO**
+**NEW_SERVICE = NO**
+**RUNTIME = NO**
+**PERSISTENCE = NO**
+**DB = NO**
+**REDIS = NO**
+**NETWORK = NO**
+**PROVIDER = NO**
+**LLM = NO**
+**WORKER = NO**
+**SCHEDULER = NO**
+
+**V1_MODEL = BINARY_EVIDENCE_ELIGIBILITY**
+**V1_NUMERIC_WEIGHT = NONE / NOT_AUTHORIZED**
+**V1_SCOPE = PER_HOMOGENEOUS_CANONICAL_COHORT**
+**V1_CANONICAL_COHORT_DIMENSIONS = venue · marketType · symbol · timeframe**
+**V1_REQUIRED_INPUTS = Aggregate Performance + Segmented Performance + Sample Sufficiency + canonical cohort/version identity + DQ eligibility gate**
+**V1_CALIBRATION_REQUIRED = NO / CURRENT_NON_PREDICTIVE_PATH**
+**V1_AGENT_LEVEL_TRUST = DEFERRED**
+**V1_REGIME_IDENTITY = NOT_AUTHORIZED**
+**V1_PERSISTENT_WEIGHT_STATE = NO**
+
+**V1_OUTPUT_SEMANTICS =**
+SUFFICIENT → TRUST_ELIGIBLE
+INSUFFICIENT → NOT_TRUST_ELIGIBLE
+UNAVAILABLE / missing / malformed → TRUST_UNAVAILABLE / FAIL_CLOSED
+
+**FORBIDDEN V1 =**
+numeric trustScore · numeric weight · agentWeight · confidenceWeight · reliabilityWeight · performanceWeight · equal-weight hardcoding · base/min/max weight · negative weight · normalization · decay · smoothing · caps/floors · hysteresis · recovery windows · numeric multipliers · regime · agentId · agentRole
+
+**CALLER_AUTHORITY = FAIL_CLOSED**
+Caller may not inject trustScore, weight, agentWeight, trustEligible, weightEligible, promotionEligible, demotionEligible, policyVersion, contractVersion, implementationVersion, authorityClass or sliceId.
+
+**UPSTREAM OWNERS = READ_REFERENCE_ONLY**
+artemisEvaluationPerformanceAggregateContract
+artemisSegmentedPerformancePolicyContract
+artemisSampleSufficiencyPolicyContract
+Observed Outcome Evaluation / Stage 9 Lineage / Replay owners
+
+**DOWNSTREAM BOUNDARIES =**
+TRUST_WEIGHT_MUTATION_AUTHORIZED = NO
+PROMOTION_EXECUTION_AUTHORIZED = NO
+DEMOTION_EXECUTION_AUTHORIZED = NO
+CALIBRATION_EXECUTION = NO
+BINARY_BRIER_EXECUTION = NO
+STAGE_11_PAPER = NOT_AUTHORIZED
+LIVE = NOT_AUTHORIZED
+
+**ACCEPTANCE_CRITERIA =**
+1. Dedicated contract exists at expected owner path unless repository collision requires STOP.
+2. Contract is deterministic, library-only, isSourceOfTruth=false.
+3. No numeric weight is emitted.
+4. SUFFICIENT evidence maps to TRUST_ELIGIBLE.
+5. INSUFFICIENT maps to NOT_TRUST_ELIGIBLE.
+6. UNAVAILABLE/missing/malformed evidence maps to TRUST_UNAVAILABLE or fail-closed as appropriate.
+7. GLOBAL_AVERAGE_ONLY cannot satisfy segmented/cohort evidence requirements.
+8. Canonical cohort dimensions only: venue, marketType, symbol, timeframe.
+9. Canonical upstream version identity is validated fail-closed.
+10. DQ degraded/unsupported state cannot silently become TRUST_ELIGIBLE.
+11. Caller trust/weight/lifecycle authority is rejected.
+12. No agent-level or regime trust identity is introduced.
+13. No persistence/runtime/DB/Redis/network/provider/worker/scheduler effect.
+14. No Promotion/Demotion/Calibration execution.
+15. Dedicated tests plus relevant Stage 10 regression pass.
+16. No unrelated source changes.
+
+**STOP_CONDITIONS =**
+- existing canonical Trust/Weighting owner is discovered that conflicts with dedicated owner decision
+- persistent weight state becomes necessary
+- new SOT/table/migration/runtime is required
+- numeric weighting becomes necessary
+- Promotion/Demotion implementation is required
+- Calibration execution becomes necessary
+- Stage 8/9 closed owner must be modified
+- fail-closed semantics cannot be preserved
+- additional owner policy is required
+
+**NEXT_APPROVED_TRANSITION = POST_MERGE_CLOSEOUT_AND_NEXT_DEPENDENCY_DISCOVERY**
+**NEXT_GATE = STAGE10_TRUST_WEIGHTING_POLICY_CONTRACT_IMPLEMENTATION_AND_HUMAN_QA**
+**NEXT_GATE_STATUS = AUTHORIZED / EXACT_SLICE_ONLY**
+**NEXT_GATE_ONLY = YES**
 
 ### Active Work Package — Artemis Core Stage 10 Trust / Weighting Policy OWNER DECISION (GOVERNANCE ONLY)
 
