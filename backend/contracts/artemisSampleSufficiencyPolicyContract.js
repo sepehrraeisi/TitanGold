@@ -9,18 +9,21 @@
  * Canonical owner for future sample-sufficiency semantics required before
  * Trust/Weighting and Promotion/Demotion.
  *
- * CRITICAL: There is currently NO authorized canonical sample-size threshold.
- * SAMPLE_SUFFICIENCY_THRESHOLD_POLICY = UNDEFINED / NOT_AUTHORIZED
- * SAMPLE_SUFFICIENCY_POLICY = UNDEFINED / DEFERRED
- * SUFFICIENCY_VERDICT = UNDEFINED / DEFERRED
+ * Owner-authorized Sample Sufficiency Threshold Policy (COUNT_ONLY).
+ * SAMPLE_SUFFICIENCY_THRESHOLD_POLICY =
+ *   COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED
+ * SAMPLE_SUFFICIENCY_POLICY = DEFINED / COUNT_ONLY
+ * SUFFICIENCY_SCOPE = PER_HOMOGENEOUS_CANONICAL_COHORT
+ * SUFFICIENCY_METHOD = COUNT_ONLY
+ * MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT = 50 (Owner governance - not caller configurable)
  *
- * Do NOT invent N=10/20/30/50/100/200 or any equivalent numeric rule.
- * Do NOT declare SUFFICIENT or INSUFFICIENT while threshold policy is undefined.
  * Caller-supplied sufficient/insufficient/minimumN/threshold authority FAIL_CLOSED.
+ * Threshold 50 is canonical Owner governance - NOT invention.
  *
  * NOT Source of Truth. No regime classifier. No trust/weight/promotion/demotion.
  * No calibration / Brier execution. No Aggregate performance computation.
  * GLOBAL_AVERAGE_ONLY presented as segmented evidence = FAIL_CLOSED.
+ * CALIBRATION_SUFFICIENCY = DORMANT / SEPARATE.
  */
 
 import { hashToUuid } from './artemisReplayContract.js';
@@ -34,15 +37,23 @@ import {
   SEGMENTED_PERFORMANCE_POLICY_POLICY_VERSION,
   SEGMENTED_PERFORMANCE_POLICY_IMPLEMENTATION_VERSION,
 } from './artemisSegmentedPerformancePolicyContract.js';
+import {
+  EVALUATION_STATUS,
+  OBSERVATION_CLASS,
+} from './artemisObservedOutcomeEvaluationContract.js';
+import {
+  AVAILABILITY,
+  FRESHNESS_STATUS,
+} from './artemisEvidenceContract.js';
 
 // ─── Canonical identity ──────────────────────────────────────────────────────
 
-export const SAMPLE_SUFFICIENCY_POLICY_SCHEMA_VERSION = '1.0.0';
+export const SAMPLE_SUFFICIENCY_POLICY_SCHEMA_VERSION = '1.1.0';
 export const SAMPLE_SUFFICIENCY_POLICY_CONTRACT_VERSION =
-  'artemis-sample-sufficiency-policy-1.0.0';
+  'artemis-sample-sufficiency-policy-1.1.0';
 export const SAMPLE_SUFFICIENCY_POLICY_POLICY_VERSION =
-  'artemis-sample-sufficiency-policy-policy-1.0.0';
-export const SAMPLE_SUFFICIENCY_POLICY_IMPLEMENTATION_VERSION = '1.0.0';
+  'artemis-sample-sufficiency-policy-policy-1.1.0';
+export const SAMPLE_SUFFICIENCY_POLICY_IMPLEMENTATION_VERSION = '1.1.0';
 export const SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TYPE =
   'ARTEMIS_SAMPLE_SUFFICIENCY_POLICY';
 export const SAMPLE_SUFFICIENCY_POLICY_TYPE = 'SAMPLE_SUFFICIENCY_POLICY';
@@ -66,30 +77,52 @@ export const METHOD_REGISTRATION_OWNER = 'NONE';
 /** Max UTF-8 bytes for a validated descriptor / policy artifact. */
 export const MAX_SAMPLE_SUFFICIENCY_POLICY_BYTES = 65536;
 
-// ─── Policy state (canonical — no threshold inventing) ───────────────────────
+// ─── Policy state (Owner-authorized COUNT_ONLY threshold) ────────────────────
 
 /**
  * Canonical sample-sufficiency policy state.
- * Until a later Owner-authorized threshold policy exists, this remains deferred.
+ * Owner-authorized COUNT_ONLY threshold policy is now DEFINED.
  */
-export const SAMPLE_SUFFICIENCY_POLICY =
-  'UNDEFINED / DEFERRED';
+export const SAMPLE_SUFFICIENCY_POLICY = 'DEFINED / COUNT_ONLY';
 
 /**
- * Canonical threshold-policy state.
- * There is currently NO authorized numeric threshold.
+ * Canonical threshold-policy state (Owner OD-SS-TP).
+ * MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 is Owner governance - not invention.
  */
 export const SAMPLE_SUFFICIENCY_THRESHOLD_POLICY =
-  'UNDEFINED / NOT_AUTHORIZED';
+  'COUNT_ONLY / MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50 / AUTHORIZED';
+
+/** Owner-approved minimum eligible observations per homogeneous canonical cohort. */
+export const MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT = 50;
+
+/** Sufficiency is evaluated per homogeneous canonical cohort only. */
+export const SUFFICIENCY_SCOPE = 'PER_HOMOGENEOUS_CANONICAL_COHORT';
+
+/** V1 sufficiency method - count eligible observations only. */
+export const SUFFICIENCY_METHOD = 'COUNT_ONLY';
 
 /**
- * Canonical sufficiency verdict while threshold policy is undefined.
- * NEVER coerce to SUFFICIENT or INSUFFICIENT.
+ * Calibration sample sufficiency remains dormant / separate from this COUNT_ONLY
+ * directional-performance threshold policy.
+ */
+export const CALIBRATION_SUFFICIENCY = 'DORMANT / SEPARATE';
+
+/**
+ * Canonical sufficiency verdicts for COUNT_ONLY threshold policy.
+ * SUFFICIENT = eligible count >= 50
+ * INSUFFICIENT = known eligible count > 0 and < 50
+ * UNAVAILABLE = required count/identity/evidence unavailable
+ * UNDEFINED_DEFERRED reserved for absent-policy semantic (not used while policy DEFINED)
  */
 export const SUFFICIENCY_VERDICT = Object.freeze({
-  UNDEFINED_DEFERRED: 'UNDEFINED / DEFERRED',
+  SUFFICIENT: 'SUFFICIENT',
+  INSUFFICIENT: 'INSUFFICIENT',
   UNAVAILABLE: 'UNAVAILABLE',
+  UNDEFINED_DEFERRED: 'UNDEFINED / DEFERRED',
 });
+export const SUFFICIENCY_VERDICT_VALUES = Object.freeze(
+  Object.values(SUFFICIENCY_VERDICT),
+);
 
 export const SAMPLE_SUFFICIENCY_OWNER =
   'artemisSampleSufficiencyPolicyContract';
@@ -147,10 +180,12 @@ export const SEGMENT_SCOPE = Object.freeze({
 });
 
 export const DOWNSTREAM_GATING = Object.freeze({
-  trustWeighting: 'BLOCKED_UNTIL_THRESHOLD_POLICY_AUTHORIZED',
-  promotion: 'BLOCKED_UNTIL_THRESHOLD_POLICY_AUTHORIZED',
-  demotion: 'BLOCKED_UNTIL_THRESHOLD_POLICY_AUTHORIZED',
+  trustWeighting: 'NOT_AUTHORIZED',
+  promotion: 'NOT_AUTHORIZED',
+  demotion: 'NOT_AUTHORIZED',
   calibrationExecution: 'NOT_AUTHORIZED',
+  reason:
+    'SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_AUTHORIZED_TRUST_PROMOTION_DEMOTION_NOT_AUTHORIZED',
 });
 
 // ─── Forbidden vocabularies ──────────────────────────────────────────────────
@@ -429,12 +464,18 @@ export const ZERO_SAMPLE_SUFFICIENCY_POLICY_SIDE_EFFECTS = Object.freeze({
 });
 
 export const SAMPLE_SUFFICIENCY_POLICY_LIMITATIONS = Object.freeze([
-  'sample_sufficiency_policy_undefined_deferred',
-  'sample_sufficiency_threshold_policy_undefined_not_authorized',
-  'sufficiency_verdict_undefined_deferred_until_threshold_policy',
+  'sample_sufficiency_threshold_policy_count_only_min_50_authorized',
+  'sufficiency_scope_per_homogeneous_canonical_cohort',
+  'sufficiency_method_count_only',
+  'calibration_sufficiency_dormant_separate',
   'threshold_invention_forbidden',
   'sample_size_invention_forbidden',
-  'no_sufficient_or_insufficient_verdict_without_threshold',
+  'caller_threshold_authority_forbidden_fail_closed',
+  'caller_sufficiency_verdict_authority_forbidden_fail_closed',
+  'eligible_count_derived_not_caller_supplied',
+  'blocked_unavailable_insufficient_data_not_observed_observed_but_unavailable_do_not_count',
+  'data_quality_available_plus_fresh_or_aged_required',
+  'stale_expired_unknown_unavailable_freshness_not_eligible',
   'canonical_segment_dimensions_only_venue_marketType_symbol_timeframe',
   'regime_identity_canonical_no',
   'regime_classifier_no',
@@ -442,20 +483,24 @@ export const SAMPLE_SUFFICIENCY_POLICY_LIMITATIONS = Object.freeze([
   'global_average_only_not_sufficient_for_stage10',
   'global_average_only_bypass_closed',
   'global_average_cannot_become_segmented_evidence',
+  'no_statistical_significance_logic',
+  'no_p_value_confidence_interval_power_criterion',
+  'no_brier_ece_log_loss_reliability_threshold',
   'no_trust_mutation',
   'no_weight_mutation',
   'no_promotion_execution',
   'no_demotion_execution',
   'no_calibration_execution',
   'no_binary_brier_execution',
+  'trust_weighting_not_authorized',
+  'promotion_not_authorized',
+  'demotion_not_authorized',
   'library_only',
   'validation_boundary_not_sot',
   'is_source_of_truth_false',
   'no_runtime_activation',
   'no_persistence',
   'no_network_provider_llm_worker_scheduler',
-  'caller_supplied_threshold_authority_forbidden',
-  'caller_supplied_sufficiency_verdict_authority_forbidden',
   'thin_refs_only_no_embedded_upstream_artifacts',
 ]);
 
@@ -496,7 +541,41 @@ export const POLICY_ARTIFACT_INPUT_ALLOWLIST = Object.freeze([
   'cohort',
   'segmentScope',
   'recordedAt',
+  'eligibilityObservations',
 ]);
+
+/** Thin eligibility observation allowlist (derived count only — never caller authority). */
+export const ELIGIBILITY_OBSERVATION_ALLOWLIST = Object.freeze([
+  'evaluationStatus',
+  'observationClass',
+  'comparisonClaims',
+  'dataQuality',
+  'decisionId',
+]);
+
+export const ELIGIBILITY_COMPARISON_CLAIMS_ALLOWLIST = Object.freeze([
+  'decisionDirection',
+  'observedDirection',
+]);
+
+export const ELIGIBILITY_DATA_QUALITY_ALLOWLIST = Object.freeze([
+  'availability',
+  'freshnessStatus',
+]);
+
+/** Comparable directional labels (READ_REFERENCE Aggregate/Decision vocabulary). */
+export const COMPARABLE_DIRECTIONS = Object.freeze({
+  BULLISH: 'bullish',
+  BEARISH: 'bearish',
+  SIDEWAYS: 'sideways',
+  NEUTRAL: 'neutral',
+});
+export const COMPARABLE_DIRECTION_VALUES = Object.freeze(
+  Object.values(COMPARABLE_DIRECTIONS),
+);
+
+/** Hard upper bound on eligibilityObservations array length (fail-closed). */
+export const MAX_ELIGIBILITY_OBSERVATIONS = 10000;
 
 // ─── Fail-closed error ───────────────────────────────────────────────────────
 
@@ -989,6 +1068,10 @@ function buildPolicyDescriptor() {
 
     sampleSufficiencyPolicy: SAMPLE_SUFFICIENCY_POLICY,
     sampleSufficiencyThresholdPolicy: SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
+    minEligibleObservationsPerCohort: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+    sufficiencyScope: SUFFICIENCY_SCOPE,
+    sufficiencyMethod: SUFFICIENCY_METHOD,
+    calibrationSufficiency: CALIBRATION_SUFFICIENCY,
     sufficiencyVerdict: SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
     thresholdInvention: THRESHOLD_INVENTION,
     sampleSizeInvention: SAMPLE_SIZE_INVENTION,
@@ -1212,7 +1295,35 @@ export function validateSampleSufficiencyPolicyDescriptor(input) {
     input.sufficiencyVerdict,
     SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
     'SAMPLE_SUFFICIENCY_VERDICT_MISMATCH',
-    'sufficiencyVerdict must remain UNDEFINED / DEFERRED',
+    'descriptor sufficiencyVerdict must remain UNDEFINED / DEFERRED',
+  );
+  if (input.minEligibleObservationsPerCohort !== MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT) {
+    fail(
+      'SAMPLE_SUFFICIENCY_MIN_ELIGIBLE_OBSERVATIONS_MISMATCH',
+      'minEligibleObservationsPerCohort must equal Owner-approved MIN=50',
+      {
+        expected: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+        actual: input.minEligibleObservationsPerCohort,
+      },
+    );
+  }
+  assertExactString(
+    input.sufficiencyScope,
+    SUFFICIENCY_SCOPE,
+    'SAMPLE_SUFFICIENCY_SCOPE_MISMATCH',
+    'sufficiencyScope mismatch',
+  );
+  assertExactString(
+    input.sufficiencyMethod,
+    SUFFICIENCY_METHOD,
+    'SAMPLE_SUFFICIENCY_METHOD_MISMATCH',
+    'sufficiencyMethod mismatch',
+  );
+  assertExactString(
+    input.calibrationSufficiency,
+    CALIBRATION_SUFFICIENCY,
+    'SAMPLE_SUFFICIENCY_CALIBRATION_SUFFICIENCY_MISMATCH',
+    'calibrationSufficiency must remain DORMANT / SEPARATE',
   );
   assertExactString(
     input.thresholdInvention,
@@ -1336,11 +1447,307 @@ export function validateSampleSufficiencyPolicyDescriptor(input) {
   return getSampleSufficiencyPolicyDescriptor();
 }
 
+
+// ─── Eligibility observation derivation (COUNT_ONLY / Owner MIN=50) ──────────
+
+function assertExactEnumString(actual, allowedValues, code, message) {
+  if (typeof actual !== 'string' || !allowedValues.includes(actual)) {
+    fail(code, message, { actual, allowed: allowedValues });
+  }
+}
+
+function assertBoundDecisionIdentity(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DECISION_ID_INVALID',
+      'Eligible observation requires a non-empty bound decisionId',
+      { decisionId: value },
+    );
+  }
+  return value.trim();
+}
+
+function assertEligibilityDataQuality(dq) {
+  assertPlainObject(
+    dq,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DATA_QUALITY_INVALID',
+    'dataQuality must be a plain object',
+  );
+  assertAllowlist(
+    dq,
+    ELIGIBILITY_DATA_QUALITY_ALLOWLIST,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DATA_QUALITY_UNKNOWN_FIELD',
+    'dataQuality',
+  );
+  if (!Object.prototype.hasOwnProperty.call(dq, 'availability')
+    || !Object.prototype.hasOwnProperty.call(dq, 'freshnessStatus')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DATA_QUALITY_INCOMPLETE',
+      'dataQuality requires availability and freshnessStatus',
+    );
+  }
+  if (typeof dq.availability !== 'string') {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_AVAILABILITY_INVALID',
+      'dataQuality.availability must be a string',
+    );
+  }
+  if (typeof dq.freshnessStatus !== 'string') {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_FRESHNESS_INVALID',
+      'dataQuality.freshnessStatus must be a string',
+    );
+  }
+  const allowedAvailability = Object.values(AVAILABILITY);
+  if (!allowedAvailability.includes(dq.availability)) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_AVAILABILITY_UNSUPPORTED',
+      'Unsupported dataQuality.availability',
+      { availability: dq.availability },
+    );
+  }
+  const allowedFreshness = Object.values(FRESHNESS_STATUS);
+  if (!allowedFreshness.includes(dq.freshnessStatus)) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_FRESHNESS_UNSUPPORTED',
+      'Unsupported dataQuality.freshnessStatus',
+      { freshnessStatus: dq.freshnessStatus },
+    );
+  }
+  return Object.freeze({
+    availability: dq.availability,
+    freshnessStatus: dq.freshnessStatus,
+  });
+}
+
+function isDataQualityEligible(dq) {
+  return dq.availability === AVAILABILITY.AVAILABLE
+    && (dq.freshnessStatus === FRESHNESS_STATUS.FRESH
+      || dq.freshnessStatus === FRESHNESS_STATUS.AGED);
+}
+
+function assertEligibilityComparisonClaims(claims, evaluationStatus) {
+  assertPlainObject(
+    claims,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_COMPARISON_CLAIMS_INVALID',
+    'comparisonClaims must be a plain object',
+  );
+  assertAllowlist(
+    claims,
+    ELIGIBILITY_COMPARISON_CLAIMS_ALLOWLIST,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_COMPARISON_CLAIMS_UNKNOWN_FIELD',
+    'comparisonClaims',
+  );
+  if (!Object.prototype.hasOwnProperty.call(claims, 'decisionDirection')
+    || !Object.prototype.hasOwnProperty.call(claims, 'observedDirection')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_COMPARISON_CLAIMS_INCOMPLETE',
+      'comparisonClaims requires explicit decisionDirection and observedDirection',
+    );
+  }
+  assertExactEnumString(
+    claims.decisionDirection,
+    COMPARABLE_DIRECTION_VALUES,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DECISION_DIRECTION_INVALID',
+    'decisionDirection must be a comparable canonical direction',
+  );
+  assertExactEnumString(
+    claims.observedDirection,
+    COMPARABLE_DIRECTION_VALUES,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVED_DIRECTION_INVALID',
+    'observedDirection must be a comparable canonical direction',
+  );
+  const directionsMatch = claims.decisionDirection === claims.observedDirection;
+  if (evaluationStatus === EVALUATION_STATUS.MATCH && !directionsMatch) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_MATCH_DIRECTION_INCONSISTENT',
+      'MATCH requires decisionDirection === observedDirection',
+      {
+        decisionDirection: claims.decisionDirection,
+        observedDirection: claims.observedDirection,
+      },
+    );
+  }
+  if (evaluationStatus === EVALUATION_STATUS.MISMATCH && directionsMatch) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_MISMATCH_DIRECTION_INCONSISTENT',
+      'MISMATCH requires decisionDirection !== observedDirection',
+      {
+        decisionDirection: claims.decisionDirection,
+        observedDirection: claims.observedDirection,
+      },
+    );
+  }
+  return Object.freeze({
+    decisionDirection: claims.decisionDirection,
+    observedDirection: claims.observedDirection,
+  });
+}
+
+/**
+ * Returns true when the observation is COUNT_ONLY eligible.
+ * Non-count statuses/classes return false (skip).
+ * Missing/malformed DQ or required identity/claims on candidate rows FAIL CLOSED.
+ */
+function isEligibleObservation(obs) {
+  assertPlainObject(
+    obs,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATION_INVALID',
+    'eligibilityObservations[] entry must be a plain object',
+  );
+  assertAllowlist(
+    obs,
+    ELIGIBILITY_OBSERVATION_ALLOWLIST,
+    'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATION_UNKNOWN_FIELD',
+    'eligibilityObservation',
+  );
+
+  if (!Object.prototype.hasOwnProperty.call(obs, 'evaluationStatus')
+    || !Object.prototype.hasOwnProperty.call(obs, 'observationClass')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATION_INCOMPLETE',
+      'eligibilityObservations[] requires evaluationStatus and observationClass',
+    );
+  }
+
+  const allowedStatuses = Object.values(EVALUATION_STATUS);
+  if (typeof obs.evaluationStatus !== 'string'
+    || !allowedStatuses.includes(obs.evaluationStatus)) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_EVALUATION_STATUS_INVALID',
+      'Unsupported evaluationStatus',
+      { evaluationStatus: obs.evaluationStatus },
+    );
+  }
+  const allowedClasses = Object.values(OBSERVATION_CLASS);
+  if (typeof obs.observationClass !== 'string'
+    || !allowedClasses.includes(obs.observationClass)) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATION_CLASS_INVALID',
+      'Unsupported observationClass',
+      { observationClass: obs.observationClass },
+    );
+  }
+
+  // Non-count statuses: skip without throw
+  if (obs.evaluationStatus === EVALUATION_STATUS.BLOCKED
+    || obs.evaluationStatus === EVALUATION_STATUS.UNAVAILABLE
+    || obs.evaluationStatus === EVALUATION_STATUS.INSUFFICIENT_DATA) {
+    return false;
+  }
+  // Non-count observation classes: skip without throw
+  if (obs.observationClass === OBSERVATION_CLASS.NOT_OBSERVED
+    || obs.observationClass === OBSERVATION_CLASS.OBSERVED_BUT_UNAVAILABLE) {
+    return false;
+  }
+
+  // Candidate eligibility path requires MATCH|MISMATCH + OBSERVED_AND_EVALUABLE
+  if (obs.observationClass !== OBSERVATION_CLASS.OBSERVED_AND_EVALUABLE) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATION_CLASS_INCONSISTENT',
+      'MATCH/MISMATCH eligibility requires OBSERVED_AND_EVALUABLE',
+      {
+        evaluationStatus: obs.evaluationStatus,
+        observationClass: obs.observationClass,
+      },
+    );
+  }
+  if (obs.evaluationStatus !== EVALUATION_STATUS.MATCH
+    && obs.evaluationStatus !== EVALUATION_STATUS.MISMATCH) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_EVALUATION_STATUS_INCONSISTENT',
+      'OBSERVED_AND_EVALUABLE eligibility requires MATCH or MISMATCH',
+      { evaluationStatus: obs.evaluationStatus },
+    );
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(obs, 'decisionId')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DECISION_ID_REQUIRED',
+      'Eligible observation requires bound decisionId',
+    );
+  }
+  assertBoundDecisionIdentity(obs.decisionId);
+
+  if (!Object.prototype.hasOwnProperty.call(obs, 'comparisonClaims')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_COMPARISON_CLAIMS_REQUIRED',
+      'Eligible observation requires explicit comparisonClaims',
+    );
+  }
+  assertEligibilityComparisonClaims(obs.comparisonClaims, obs.evaluationStatus);
+
+  // DQ: missing/malformed FAIL CLOSED; STALE/EXPIRED/UNKNOWN/UNAVAILABLE → not eligible
+  if (!Object.prototype.hasOwnProperty.call(obs, 'dataQuality')) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_DATA_QUALITY_REQUIRED',
+      'Eligible observation requires dataQuality; cannot establish DQ eligibility',
+    );
+  }
+  const dq = assertEligibilityDataQuality(obs.dataQuality);
+  return isDataQualityEligible(dq);
+}
+
+/**
+ * Derive eligibleObservationCount from caller-supplied thin observations.
+ * Omitted → null (UNAVAILABLE). Array → non-negative integer (never coerce null→0).
+ */
+function deriveEligibleObservationCount(input) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'eligibilityObservations')) {
+    return null;
+  }
+  const observations = input.eligibilityObservations;
+  if (!Array.isArray(observations)) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATIONS_INVALID',
+      'eligibilityObservations must be an array when present',
+    );
+  }
+  if (observations.length > MAX_ELIGIBILITY_OBSERVATIONS) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATIONS_SIZE_EXCEEDED',
+      `eligibilityObservations exceeds bound (${observations.length} > ${MAX_ELIGIBILITY_OBSERVATIONS})`,
+      { length: observations.length, max: MAX_ELIGIBILITY_OBSERVATIONS },
+    );
+  }
+  let count = 0;
+  for (let i = 0; i < observations.length; i += 1) {
+    if (isEligibleObservation(observations[i])) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function deriveSufficiencyVerdict(eligibleObservationCount) {
+  if (eligibleObservationCount === null || eligibleObservationCount === undefined) {
+    return SUFFICIENCY_VERDICT.UNAVAILABLE;
+  }
+  if (typeof eligibleObservationCount !== 'number'
+    || !Number.isInteger(eligibleObservationCount)
+    || eligibleObservationCount < 0) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBLE_COUNT_INVALID',
+      'eligibleObservationCount must be null or a non-negative integer',
+      { eligibleObservationCount },
+    );
+  }
+  // Known count 0 → UNAVAILABLE (not INSUFFICIENT; never coerce unknown→0)
+  if (eligibleObservationCount === 0) {
+    return SUFFICIENCY_VERDICT.UNAVAILABLE;
+  }
+  if (eligibleObservationCount < MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT) {
+    return SUFFICIENCY_VERDICT.INSUFFICIENT;
+  }
+  return SUFFICIENCY_VERDICT.SUFFICIENT;
+}
+
 /**
  * Build a library-only Sample Sufficiency Policy artifact.
  *
- * Always emits sufficiencyVerdict = UNDEFINED / DEFERRED.
- * Does NOT invent thresholds. Does NOT declare sufficient/insufficient.
+ * COUNT_ONLY Owner threshold: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50.
+ * Derives eligibleObservationCount + sufficiencyVerdict (SUFFICIENT|INSUFFICIENT|UNAVAILABLE).
+ * Does NOT invent thresholds. Caller threshold/verdict authority FAIL_CLOSED.
  * Thin refs only — never embeds upstream Aggregate/Segmented artifacts.
  */
 export function buildSampleSufficiencyPolicyArtifact(input = {}) {
@@ -1449,6 +1856,9 @@ export function buildSampleSufficiencyPolicyArtifact(input = {}) {
     recordedAt = input.recordedAt.trim();
   }
 
+  const eligibleObservationCount = deriveEligibleObservationCount(input);
+  const sufficiencyVerdict = deriveSufficiencyVerdict(eligibleObservationCount);
+
   // Semantic identity excludes recordedAt (bookkeeping only).
   const identityPayload = {
     schemaVersion: SAMPLE_SUFFICIENCY_POLICY_SCHEMA_VERSION,
@@ -1458,7 +1868,12 @@ export function buildSampleSufficiencyPolicyArtifact(input = {}) {
     sliceId: SAMPLE_SUFFICIENCY_POLICY_SLICE_ID,
     sampleSufficiencyPolicy: SAMPLE_SUFFICIENCY_POLICY,
     sampleSufficiencyThresholdPolicy: SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
-    sufficiencyVerdict: SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
+    minEligibleObservationsPerCohort: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+    sufficiencyScope: SUFFICIENCY_SCOPE,
+    sufficiencyMethod: SUFFICIENCY_METHOD,
+    calibrationSufficiency: CALIBRATION_SUFFICIENCY,
+    eligibleObservationCount,
+    sufficiencyVerdict,
     segmentScope,
     cohort,
     aggregateRef,
@@ -1489,7 +1904,12 @@ export function buildSampleSufficiencyPolicyArtifact(input = {}) {
     segmentedPerformancePolicyRef,
     sampleSufficiencyPolicy: SAMPLE_SUFFICIENCY_POLICY,
     sampleSufficiencyThresholdPolicy: SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
-    sufficiencyVerdict: SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
+    minEligibleObservationsPerCohort: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+    sufficiencyScope: SUFFICIENCY_SCOPE,
+    sufficiencyMethod: SUFFICIENCY_METHOD,
+    calibrationSufficiency: CALIBRATION_SUFFICIENCY,
+    eligibleObservationCount,
+    sufficiencyVerdict,
     thresholdInvention: THRESHOLD_INVENTION,
     sampleSizeInvention: SAMPLE_SIZE_INVENTION,
     regimeIdentityCanonical: REGIME_IDENTITY_CANONICAL,
@@ -1539,6 +1959,11 @@ const SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TOP_LEVEL_KEYS = Object.freeze([
   'segmentedPerformancePolicyRef',
   'sampleSufficiencyPolicy',
   'sampleSufficiencyThresholdPolicy',
+  'minEligibleObservationsPerCohort',
+  'sufficiencyScope',
+  'sufficiencyMethod',
+  'calibrationSufficiency',
+  'eligibleObservationCount',
   'sufficiencyVerdict',
   'thresholdInvention',
   'sampleSizeInvention',
@@ -1629,8 +2054,53 @@ function assertCanonicalArtifactShape(artifact) {
     'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_STATE_MISMATCH', 'sampleSufficiencyPolicy mismatch');
   assertExactString(artifact.sampleSufficiencyThresholdPolicy, SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
     'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_THRESHOLD_STATE_MISMATCH', 'sampleSufficiencyThresholdPolicy mismatch');
-  assertExactString(artifact.sufficiencyVerdict, SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_MISMATCH', 'sufficiencyVerdict must remain UNDEFINED / DEFERRED');
+  if (artifact.minEligibleObservationsPerCohort !== MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_MIN_ELIGIBLE_MISMATCH',
+      'minEligibleObservationsPerCohort must equal Owner-approved MIN=50',
+      {
+        expected: MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+        actual: artifact.minEligibleObservationsPerCohort,
+      },
+    );
+  }
+  assertExactString(artifact.sufficiencyScope, SUFFICIENCY_SCOPE,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SCOPE_MISMATCH', 'sufficiencyScope mismatch');
+  assertExactString(artifact.sufficiencyMethod, SUFFICIENCY_METHOD,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_METHOD_MISMATCH', 'sufficiencyMethod mismatch');
+  assertExactString(artifact.calibrationSufficiency, CALIBRATION_SUFFICIENCY,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CALIBRATION_SUFFICIENCY_MISMATCH',
+    'calibrationSufficiency must remain DORMANT / SEPARATE');
+  if (artifact.eligibleObservationCount !== null) {
+    if (!Number.isInteger(artifact.eligibleObservationCount)
+      || artifact.eligibleObservationCount < 0
+      || Object.is(artifact.eligibleObservationCount, -0)) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_ELIGIBLE_COUNT_INVALID',
+        'eligibleObservationCount must be null or a non-negative integer',
+        { actual: artifact.eligibleObservationCount },
+      );
+    }
+  }
+  if (typeof artifact.sufficiencyVerdict !== 'string'
+    || !SUFFICIENCY_VERDICT_VALUES.includes(artifact.sufficiencyVerdict)
+    || artifact.sufficiencyVerdict === SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_MISMATCH',
+      'sufficiencyVerdict must be SUFFICIENT, INSUFFICIENT, or UNAVAILABLE',
+      { actual: artifact.sufficiencyVerdict },
+    );
+  }
+  if (deriveSufficiencyVerdict(artifact.eligibleObservationCount) !== artifact.sufficiencyVerdict) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_COUNT_INCONSISTENT',
+      'sufficiencyVerdict must match derived eligibleObservationCount',
+      {
+        eligibleObservationCount: artifact.eligibleObservationCount,
+        sufficiencyVerdict: artifact.sufficiencyVerdict,
+      },
+    );
+  }
   assertExactString(artifact.thresholdInvention, THRESHOLD_INVENTION,
     'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_THRESHOLD_INVENTION_MISMATCH', 'thresholdInvention mismatch');
   assertExactString(artifact.sampleSizeInvention, SAMPLE_SIZE_INVENTION,
@@ -1756,15 +2226,7 @@ function assertCanonicalArtifactEqualsRebuild(artifact, rebuilt) {
   }
 }
 
-export function validateSampleSufficiencyPolicyArtifact(artifact) {
-  assertPlainObject(
-    artifact,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_INVALID',
-    'Artifact must be a plain object',
-  );
-
-  assertCanonicalArtifactShape(artifact);
-
+function assertValidatedArtifactAuthoritySurface(artifact) {
   // Caller-controlled threshold/verdict/secret/runtime fields remain forbidden.
   for (const key of FORBIDDEN_THRESHOLD_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(artifact, key)) {
@@ -1794,7 +2256,9 @@ export function validateSampleSufficiencyPolicyArtifact(artifact) {
     MAX_SAMPLE_SUFFICIENCY_POLICY_BYTES,
     'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SIZE_EXCEEDED',
   );
+}
 
+function buildInputFromArtifact(artifact, eligibilityObservations) {
   const input = {
     segmentScope: artifact.segmentScope,
   };
@@ -1804,8 +2268,102 @@ export function validateSampleSufficiencyPolicyArtifact(artifact) {
     input.segmentedPerformancePolicyRef = artifact.segmentedPerformancePolicyRef;
   }
   if (artifact.recordedAt !== null) input.recordedAt = artifact.recordedAt;
+  if (eligibilityObservations !== undefined) {
+    input.eligibilityObservations = eligibilityObservations;
+  }
+  return input;
+}
 
-  const rebuilt = buildSampleSufficiencyPolicyArtifact(input);
+/**
+ * Validate a built Sample Sufficiency Policy artifact.
+ *
+ * Path A: artifact alone — allowed only when eligibleObservationCount === null
+ *         (no eligibility observations were supplied at build time).
+ * Path B: { artifact, eligibilityObservations } — required whenever a known
+ *         eligibleObservationCount is claimed (including 0). Caller counts /
+ *         verdicts are never authoritative; rebuild equality is required.
+ */
+export function validateSampleSufficiencyPolicyArtifact(input) {
+  assertPlainObject(
+    input,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_INVALID',
+    'Artifact must be a plain object',
+  );
+
+  // Path B: { artifact, eligibilityObservations? }
+  if (Object.prototype.hasOwnProperty.call(input, 'artifact')) {
+    const pathBKeys = Reflect.ownKeys(input).filter((key) => typeof key === 'string');
+    const unknownPathB = pathBKeys.filter(
+      (key) => key !== 'artifact' && key !== 'eligibilityObservations',
+    );
+    if (unknownPathB.length > 0) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_VALIDATE_UNKNOWN_FIELD',
+        'Unknown field(s) on validate Path B input',
+        { unknown: unknownPathB },
+      );
+    }
+    if (pathBKeys.includes('eligibilityObservations') === false && pathBKeys.length !== 1) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_VALIDATE_UNKNOWN_FIELD',
+        'Path B input must contain only artifact and optional eligibilityObservations',
+        { keys: pathBKeys },
+      );
+    }
+
+    const artifact = input.artifact;
+    assertPlainObject(
+      artifact,
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_INVALID',
+      'Path B artifact must be a plain object',
+    );
+    assertCanonicalArtifactShape(artifact);
+    assertValidatedArtifactAuthoritySurface(artifact);
+
+    if (artifact.eligibleObservationCount !== null
+      && !Object.prototype.hasOwnProperty.call(input, 'eligibilityObservations')) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATIONS_REQUIRED',
+        'Validation of a known eligibleObservationCount requires eligibilityObservations',
+        { eligibleObservationCount: artifact.eligibleObservationCount },
+      );
+    }
+
+    const rebuilt = buildSampleSufficiencyPolicyArtifact(
+      buildInputFromArtifact(
+        artifact,
+        Object.prototype.hasOwnProperty.call(input, 'eligibilityObservations')
+          ? input.eligibilityObservations
+          : undefined,
+      ),
+    );
+
+    if (rebuilt.policyId !== artifact.policyId) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IDENTITY_MISMATCH',
+        'policyId does not match canonical re-derivation',
+        { claimed: artifact.policyId, expected: rebuilt.policyId },
+      );
+    }
+
+    assertCanonicalArtifactEqualsRebuild(artifact, rebuilt);
+    return rebuilt;
+  }
+
+  // Path A: artifact alone — only when eligibleObservationCount is null.
+  const artifact = input;
+  assertCanonicalArtifactShape(artifact);
+  assertValidatedArtifactAuthoritySurface(artifact);
+
+  if (artifact.eligibleObservationCount !== null) {
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ELIGIBILITY_OBSERVATIONS_REQUIRED',
+      'Validation of a known eligibleObservationCount requires Path B eligibilityObservations',
+      { eligibleObservationCount: artifact.eligibleObservationCount },
+    );
+  }
+
+  const rebuilt = buildSampleSufficiencyPolicyArtifact(buildInputFromArtifact(artifact));
 
   if (rebuilt.policyId !== artifact.policyId) {
     fail(
@@ -1843,6 +2401,10 @@ export default Object.freeze({
   SAMPLE_SUFFICIENCY_POLICY_STAGE,
   SAMPLE_SUFFICIENCY_POLICY,
   SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
+  MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT,
+  SUFFICIENCY_SCOPE,
+  SUFFICIENCY_METHOD,
+  CALIBRATION_SUFFICIENCY,
   SUFFICIENCY_VERDICT,
   SAMPLE_SUFFICIENCY_OWNER,
   THRESHOLD_INVENTION,
