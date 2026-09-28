@@ -25,14 +25,14 @@ alwaysApply: true
 
 **REMAINING_STAGES = 6**
 
-**NEXT_GATE = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTHORIZATION**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**NEXT_GATE = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_IMPLEMENTATION_AND_HUMAN_QA**
+**NEXT_GATE_STATUS = AUTHORIZED / EXACT_SLICE_ONLY**
 **NEXT_GATE_ONLY = YES**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_PR = #147 / MERGED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_MERGE_SHA = `e347d6f41850677dd8ff74163bdea74ba6991c2b`**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_POST_MERGE = VERIFIED**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = NO**
+**AUTHORIZED_SLICE = S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT / EXACT_SLICE_ONLY**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
 **AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = NO / CONSUMED**
 **DO_NOT_IMPLEMENT_BEFORE_GOVERNANCE_PR_MERGE = NO / CONSUMED**
@@ -118,7 +118,7 @@ alwaysApply: true
 **ARTEMIS_CORE_STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
 **STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
 **STAGE10_STARTED = YES**
-**STAGE10_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
+**STAGE10_IMPLEMENTATION_AUTHORIZED = YES / S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT ONLY**
 **STAGE10_AUTHORIZATION = NO / NO_ACTIVE_SLICE**
 **STAGE10_ACTIVE_AUTHORIZATION = NONE**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
@@ -423,7 +423,7 @@ alwaysApply: true
 **S10_SAMPLE_SUFFICIENCY_DATA_QUALITY = AVAILABLE + (FRESH OR AGED)**
 **S10_SAMPLE_SUFFICIENCY_VERDICT = SUFFICIENT_IF_COUNT_GE_50 / INSUFFICIENT_IF_KNOWN_COUNT_LT_50 / UNAVAILABLE_IF_COUNT_OR_REQUIRED_IDENTITY_UNAVAILABLE / UNDEFINED_IF_POLICY_MISSING**
 **S10_CALIBRATION_SUFFICIENCY = DORMANT / SEPARATE**
-**S10_THRESHOLD_POLICY_IMPLEMENTATION_AUTHORIZED = NO**
+**S10_THRESHOLD_POLICY_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY**
 **S10_TRUST_WEIGHTING_AUTHORIZED = NO**
 **S10_PROMOTION_AUTHORIZED = NO**
 **S10_DEMOTION_AUTHORIZED = NO**
@@ -1571,100 +1571,109 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — Artemis Core Stage 10 Sample Sufficiency Threshold Policy OWNER DECISION (GOVERNANCE DECISION ONLY — NO IMPLEMENTATION)
+### Active Work Package — Artemis Core Stage 10 Sample Sufficiency Threshold Policy CONTRACT IMPLEMENTATION
 
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**PRIOR_SLICE = STAGE10_POST_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_DEPENDENCY_RESOLUTION**
-**SLICE_ID = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_OWNER_DECISION**
-**OFFICIAL_NAME = ARTEMIS_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_GOVERNANCE**
-**DEPENDENCY = S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-GOVERNANCE**
+**AUTHORIZED_SLICE = S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT / EXACT_SLICE_ONLY**
+**SLICE_ID = S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT**
+**OFFICIAL_NAME = ARTEMIS_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT**
 **STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
-**ARTEMIS_CORE_STAGE_10_OFFICIAL_NAME = Calibration and Promotion Framework**
 **RISK_TIER = Tier 3**
 **AUTHORITY_CLASS = OUTCOME_EVALUATION**
-**IMPLEMENTATION_AUTHORIZED = NO / GOVERNANCE_DECISION_ONLY**
-**PRODUCTION_CODE_CHANGED = NO**
-**TESTS_CHANGED = NO**
-**RUNTIME_CHANGED = NO**
-**RULE02_CHANGED = YES — OWNER POLICY DECISION ONLY**
-**NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
+**IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY**
+**AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = YES**
+**BASE_MAIN_SHA = `b823ff9c8cf3cecacda94029dccfd0a0d267d7ef`**
 
-**PURPOSE =**
-Record Owner-approved Sample Sufficiency Threshold Policy decisions (OD-SS-TP-001 through OD-SS-TP-008) as governance state only. Establishes MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT=50, COUNT_ONLY method, PER_HOMOGENEOUS_CANONICAL_COHORT scope, eligibility/DQ/verdict semantics, and keeps Calibration sufficiency DORMANT/SEPARATE. Does NOT implement a Threshold Policy Contract, invent additional thresholds beyond the Owner-supplied 50, authorize Trust/Weighting/Promotion/Demotion, execute calibration/Brier, create SoT/table/migration/service, create PR, merge, or deploy.
+**PRIMARY_OUTCOME =**
+Implement the Owner-approved Sample Sufficiency Threshold Policy inside the existing canonical Sample Sufficiency owner so Artemis can deterministically classify sample sufficiency per homogeneous canonical cohort without enabling Trust/Weighting, Promotion, Demotion, Calibration execution, runtime, persistence, provider/network activity or financial behavior.
 
-**BASE_MAIN_SHA = `8734e88d3e4f4addd042f84222200a7d88022507`**
-**MAIN_GIT_SHA = `8734e88d3e4f4addd042f84222200a7d88022507`**
-**DEPENDENCY_RESOLUTION_PR = #146**
-**DEPENDENCY_RESOLUTION_MERGE = `8734e88d3e4f4addd042f84222200a7d88022507`**
-**FEATURE_BRANCH = `chore/artemis-stage10-sample-sufficiency-threshold-owner-decision`**
-**DEPLOY_REQUIRED = NO**
-**DEPLOY_STATUS = NOT_REQUIRED**
-**RUNTIME_VERIFIED = NOT_APPLICABLE**
-**SERVER_DRIFT = NONE**
-**PROGRESS_BLOCKER = NONE**
+**CANONICAL_OWNER = `backend/contracts/artemisSampleSufficiencyPolicyContract.js`**
+**CANONICAL_TEST_OWNER = `backend/__tests__/unit/artemisSampleSufficiencyPolicyContract.test.js`**
+**NEW_THRESHOLD_CONTRACT_FILE = NO**
+**NEW_SOT = NO**
+**NEW_TABLE = NO**
+**NEW_MIGRATION = NO**
+**NEW_SERVICE = NO**
+**RUNTIME = NO**
+**PERSISTENCE = NO**
+**DB = NO**
+**REDIS = NO**
+**NETWORK = NO**
+**PROVIDER = NO**
+**LLM = NO**
+**WORKER = NO**
+**SCHEDULER = NO**
 
-**OWNER_DECISION_STATUS = RECORDED**
-**OD-SS-TP-001 = APPROVED** — Threshold Policy is explicit prerequisite for Trust/Weighting · Promotion · Demotion; no downstream execution authorized by this decision
-**OD-SS-TP-002 = APPROVED** — SUFFICIENCY_SCOPE = PER_HOMOGENEOUS_CANONICAL_COHORT · COHORT_DIMENSIONS = venue · marketType · symbol · timeframe · VERSION_BINDINGS = preserve repository-proven canonical version bindings · NO regime/agentRole/agentId/analysisHorizon
-**OD-SS-TP-003 = APPROVED** — MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT = 50 · MINIMUM_SAMPLE_COUNT = 50 · Owner governance threshold only · NOT statistical significance/CI/power/calibration/probability/quality guarantee · one semantic minimum only
-**OD-SS-TP-004 = APPROVED** — SUFFICIENCY_METHOD = COUNT_ONLY · V1 does NOT use significance/p-value/CI/power/proportion/multi-condition/Brier/ECE/log-loss/reliability · those remain UNDEFINED/DEFERRED
-**OD-SS-TP-005 = APPROVED** — ELIGIBLE_EVALUATION = ONLY OBSERVED_AND_EVALUABLE + MATCH|MISMATCH + explicit decisionDirection/observedDirection + semantically valid + internally consistent + bound decision identity + compatible cohort/version · MATCH and MISMATCH BOTH count · do not count BLOCKED/UNAVAILABLE/INSUFFICIENT_DATA/NOT_OBSERVED/OBSERVED_BUT_UNAVAILABLE · do not use MATCH rate as sample size
-**OD-SS-TP-006 = APPROVED** — DATA_QUALITY_ELIGIBILITY = availability MUST be AVAILABLE · freshnessStatus MAY be FRESH|AGED · STALE|EXPIRED|UNKNOWN|UNAVAILABLE not eligible · if DQ eligibility cannot be established FAIL CLOSED · no new quality score/threshold
-**OD-SS-TP-007 = APPROVED** — VERDICT: SUFFICIENT if eligible count >= 50 · INSUFFICIENT if known count > 0 and < 50 · UNAVAILABLE if count/identity/evidence unavailable · no policy → UNDEFINED/DEFERRED · malformed/caller-supplied minimumN/threshold/sufficient/insufficient/verdict → FAIL_CLOSED · no silent repair · no coerce unavailable to zero-success
-**OD-SS-TP-008 = DORMANT / DEFERRED** — Calibration observations do NOT share this directional sufficiency policy · Calibration remains NOT_CURRENTLY_TRIGGERED · AUTHORIZED_MEASUREMENT_METHOD_REGISTRY=EMPTY · no calibration sample policy here
+**OWNER_APPROVED_POLICY =**
+MIN_ELIGIBLE_OBSERVATIONS_PER_COHORT = 50
+SUFFICIENCY_SCOPE = PER_HOMOGENEOUS_CANONICAL_COHORT
+CANONICAL_SEGMENT_DIMENSIONS = venue · marketType · symbol · timeframe
+SUFFICIENCY_METHOD = COUNT_ONLY
+ELIGIBLE_EVALUATION = OBSERVED_AND_EVALUABLE + MATCH/MISMATCH + EXPLICIT_DIRECTION_PAIR + VALID_COHORT_VERSION_BINDING
+DATA_QUALITY_ELIGIBILITY = availability AVAILABLE + freshness FRESH|AGED
+VERDICT = SUFFICIENT if eligible count >= 50
+VERDICT = INSUFFICIENT if known eligible count > 0 and < 50
+VERDICT = UNAVAILABLE if required count / identity / evidence is unavailable
+VERDICT = UNDEFINED / DEFERRED if policy is absent
+CALIBRATION_SUFFICIENCY = DORMANT / SEPARATE
 
-**CANONICAL_POLICY_INVARIANTS =**
-GLOBAL_AVERAGE_ONLY_BYPASS = CLOSED
-REGIME_IDENTITY_CANONICAL = NO
-THRESHOLD_INVENTION = FORBIDDEN (Owner-supplied 50 is explicit governance, not invention)
-SAMPLE_SIZE_INVENTION = FORBIDDEN
-VERSIONING_OWNER = artemisSampleSufficiencyPolicyContract
-USE_EXISTING_POLICY_VERSIONING = YES
-NEW_THRESHOLD_POLICY_VERSION_FIELD = NO
+**REQUIRED IMPLEMENTATION BOUNDARIES =**
+- Extend the existing Sample Sufficiency owner; do not create a parallel Threshold Policy owner.
+- Preserve existing canonical versioning pattern unless a proven compatibility requirement forces a version increment.
+- Caller-supplied threshold/minimumN/sufficient/insufficient/verdict authority remains forbidden and fail-closed.
+- MATCH and MISMATCH both count when otherwise eligible.
+- BLOCKED / UNAVAILABLE / INSUFFICIENT_DATA / NOT_OBSERVED / OBSERVED_BUT_UNAVAILABLE do not count.
+- STALE / EXPIRED / UNKNOWN / UNAVAILABLE data-quality freshness/availability is not eligible.
+- GLOBAL_AVERAGE_ONLY_BYPASS remains CLOSED.
+- REGIME_IDENTITY_CANONICAL remains NO.
+- No significance / p-value / CI / power / proportion / Brier / ECE / log-loss threshold is authorized.
+- Do not infer missing count or identity as zero-success.
+- Do not silently repair malformed caller input.
 
-**RECORDED_POLICY_FIELDS =**
-S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY = OWNER_DECIDED / NOT_YET_IMPLEMENTED
-S10_SAMPLE_SUFFICIENCY_MIN_ELIGIBLE_OBSERVATIONS = 50
-S10_SAMPLE_SUFFICIENCY_SCOPE = PER_HOMOGENEOUS_CANONICAL_COHORT
-S10_SAMPLE_SUFFICIENCY_METHOD = COUNT_ONLY
-S10_SAMPLE_SUFFICIENCY_ELIGIBILITY = OBSERVED_AND_EVALUABLE + MATCH/MISMATCH + EXPLICIT_DIRECTION_PAIR + VALID_COHORT_VERSION_BINDING
-S10_SAMPLE_SUFFICIENCY_DATA_QUALITY = AVAILABLE + (FRESH OR AGED)
-S10_SAMPLE_SUFFICIENCY_VERDICT = SUFFICIENT_IF_COUNT_GE_50 / INSUFFICIENT_IF_KNOWN_COUNT_LT_50 / UNAVAILABLE_IF_COUNT_OR_REQUIRED_IDENTITY_UNAVAILABLE / UNDEFINED_IF_POLICY_MISSING
-S10_CALIBRATION_SUFFICIENCY = DORMANT / SEPARATE
-S10_THRESHOLD_POLICY_IMPLEMENTATION_AUTHORIZED = NO
-S10_TRUST_WEIGHTING_AUTHORIZED = NO
-S10_PROMOTION_AUTHORIZED = NO
-S10_DEMOTION_AUTHORIZED = NO
-
-**DOWNSTREAM_STATE =**
-TRUST_WEIGHTING = NOT_AUTHORIZED
-PROMOTION = NOT_AUTHORIZED
-DEMOTION = NOT_AUTHORIZED
+**DOWNSTREAM BOUNDARIES =**
+TRUST_WEIGHTING_AUTHORIZED = NO
+TRUST_WEIGHT_MUTATION = NO
+PROMOTION_AUTHORIZED = NO
+PROMOTION_EXECUTION = NO
+DEMOTION_AUTHORIZED = NO
+DEMOTION_EXECUTION = NO
 CALIBRATION_EXECUTION = NO
 BINARY_BRIER_EXECUTION = NO
-RUNTIME = NO
-PERSISTENCE = NO
-NEW_SOT = NO
-NEW_TABLE = NO
-NEW_MIGRATION = NO
-SERVICE = NO
+STAGE_11_PAPER = NOT_AUTHORIZED
+LIVE = NOT_AUTHORIZED
 
-**SIDE_EFFECT_LEDGER =**
-NETWORK=0 · PROVIDER=0 · DB_WRITES=0 · REDIS_WRITES=0 · LLM_CALLS=0 · WORKER=0 · SCHEDULER=0 · TRUST_WEIGHT_MUTATION=0 · PROMOTION_EXECUTION=0 · DEMOTION_EXECUTION=0 · CALIBRATION_EXECUTION=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · THRESHOLD_INVENTION=0 · SAMPLE_SIZE_INVENTION=0 · REGIME_INVENTION=0
+**ACCEPTANCE_CRITERIA =**
+1. Existing canonical contract exposes the Owner-approved threshold-policy semantics deterministically.
+2. Per-cohort eligible observation counting is deterministic and uses only canonical cohort/version identity.
+3. Exactly 50 eligible observations returns SUFFICIENT.
+4. Known eligible count 1..49 returns INSUFFICIENT.
+5. Missing/unavailable count or required identity returns UNAVAILABLE.
+6. Policy-absent semantics remain representable as UNDEFINED / DEFERRED where applicable.
+7. Caller attempts to inject minimumN/threshold/verdict authority fail closed.
+8. Global-average-only evidence cannot bypass segmented/cohort requirements.
+9. Unsupported segmentation dimensions, including regime and agent identity dimensions, remain rejected.
+10. Side-effect ledger remains zero for DB/Redis/network/provider/LLM/runtime/worker/scheduler/trust/promotion/demotion/calibration/financial effects.
+11. Dedicated Sample Sufficiency tests pass.
+12. Relevant Stage 10 regressions pass, including Segmented Performance, Aggregate Performance, Observed Outcome Evaluation, Confidence Calibration and Replay.
+13. No unrelated file changes.
+14. Human-QA/audit confirms the threshold is governance-supplied 50 and no downstream authorization was introduced.
 
-**DO_NOT_AUTHORIZE_IN_THIS_TRANSACTION =**
-S10-SAMPLE-SUFFICIENCY-THRESHOLD-POLICY-CONTRACT implementation · Trust/Weighting · Promotion · Demotion · Calibration execution · Binary Brier · regime classifier · Stage 11 Paper · Live · deployment · PR · merge
+**STOP_CONDITIONS =**
+- A new SOT/table/migration/service becomes necessary.
+- Existing owner cannot safely express the approved policy without a new architecture owner.
+- Runtime/persistence/provider/network behavior becomes necessary.
+- Trust/Weighting, Promotion, Demotion or Calibration execution would need to change.
+- A closed Stage 8/9 owner must be modified rather than read-referenced.
+- Repository state or provenance becomes uncertain.
+- Any requirement conflicts with fail-closed behavior.
+- Implementation would require inventing any additional numeric/statistical threshold.
 
-**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES**
-**STAGE10_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_SLICE**
-**STAGE10_AUTHORIZATION = NO / NO_ACTIVE_SLICE**
-**STAGE10_ACTIVE_AUTHORIZATION = NONE**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NONE**
-**HUMAN_QA_MILESTONE = STAGE_10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_OWNER_DECISION_COMPLETE**
-**NEXT_APPROVED_TRANSITION = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTHORIZATION**
-**NEXT_GATE = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTHORIZATION**
-**NEXT_GATE_STATUS = NOT_AUTHORIZED**
+**PROTECTED / READ_REFERENCE_ONLY =**
+Stage 8 and Stage 9 closed owners; Aggregate Performance; Segmented Performance; Observed Outcome Evaluation; Confidence Calibration; Calibration Measurement Policy; Replay/Replay Result; Decision Lineage. Do not modify unless a reproduced defect proves a separate Foundation Work Package is required.
+
+**HUMAN_QA_MILESTONE = STAGE_10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_BOUNDARY**
+**NEXT_APPROVED_TRANSITION = POST_MERGE_CLOSEOUT_AND_NEXT_DEPENDENCY_DISCOVERY**
+**NEXT_GATE = STAGE10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_IMPLEMENTATION_AND_HUMAN_QA**
+**NEXT_GATE_STATUS = AUTHORIZED / EXACT_SLICE_ONLY**
 **NEXT_GATE_ONLY = YES**
 **PROGRESS_BLOCKER = NONE**
 **DEPLOY = NO**
