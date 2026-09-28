@@ -35,7 +35,7 @@ docker exec "$CONTAINER" pg_isready -U postgres
 echo "▶ Applying base schema"
 node "$BACKEND/scripts/ci_apply_base_schema.js"
 
-echo "▶ Registering migrations"
+echo "▶ Creating migration ledger (no mark-without-execute)"
 (cd "$BACKEND" && npm run migrate:setup >/dev/null)
 (cd "$BACKEND" && npm run migrate:up)
 

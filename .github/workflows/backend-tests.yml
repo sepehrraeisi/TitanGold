@@ -63,13 +63,11 @@ jobs:
         DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
         DB_SSL: 'false'
       run: |
-        # Base product schema for disposable CI DB, then register migration history.
+        # Base product schema + ledger-only setup (R4: no mark-without-execute).
         cd backend
         node scripts/ci_apply_base_schema.js
         npm run migrate:setup
-        # setup_migrations.js records only *.sql; 052.js remains pending.
-        # Minimal disposable telegram_messages so migrate:up can apply C2.
-        # Not production C2 execution.
+        # schema.sql includes telegram_messages; IF NOT EXISTS stub remains safe.
         psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
           CREATE TABLE IF NOT EXISTS telegram_messages (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

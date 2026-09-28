@@ -1,8 +1,9 @@
 -- TitanGold Professional Database Schema
 -- PostgreSQL 14+
 
--- Enable UUID extension
+-- Enable UUID extensions (uuid-ossp for uuid_generate_v4; pgcrypto for gen_random_uuid)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Enable pgcrypto for password hashing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -285,16 +286,37 @@ CREATE TABLE alerts (
 -- ============================================================================
 -- FAVORITES & WATCHLISTS
 -- ============================================================================
+-- Canonical favorites model (aligned with 004_create_favorites_tables.sql /
+-- Production): SERIAL id + asset_id. Stale UUID-only favorites representation
+-- is NOT authoritative.
 
 CREATE TABLE favorites (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id SERIAL PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    symbol VARCHAR(50) NOT NULL,
-    name VARCHAR(255),
-    type VARCHAR(50), -- crypto, stock, etc.
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, symbol)
+    asset_id VARCHAR(50) NOT NULL,
+    symbol VARCHAR(20) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    view_count INTEGER DEFAULT 0,
+    UNIQUE (user_id, asset_id)
+);
+
+CREATE TABLE favorite_alerts (
+    id SERIAL PRIMARY KEY,
+    favorite_id INTEGER NOT NULL REFERENCES favorites(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    condition VARCHAR(10) NOT NULL CHECK (condition IN ('above', 'below')),
+    target_price DECIMAL(20, 8) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    triggered_at TIMESTAMP,
+    triggered_price DECIMAL(20, 8),
+    notify_telegram BOOLEAN DEFAULT true,
+    notify_browser BOOLEAN DEFAULT true,
+    notify_email BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT valid_target_price CHECK (target_price > 0)
 );
 
 CREATE TABLE watchlists (
@@ -478,9 +500,14 @@ CREATE INDEX idx_alerts_user_id ON alerts(user_id);
 CREATE INDEX idx_alerts_symbol ON alerts(symbol);
 CREATE INDEX idx_alerts_is_active ON alerts(is_active);
 
--- Favorites & Watchlists
+-- Favorites & Watchlists (aligned with 004 + Production)
 CREATE INDEX idx_favorites_user_id ON favorites(user_id);
+CREATE INDEX idx_favorites_asset_id ON favorites(asset_id);
+CREATE INDEX idx_favorites_user_asset ON favorites(user_id, asset_id);
 CREATE INDEX idx_favorites_symbol ON favorites(symbol);
+CREATE INDEX idx_alerts_favorite_id ON favorite_alerts(favorite_id);
+CREATE INDEX idx_alerts_active ON favorite_alerts(is_active) WHERE is_active = true;
+CREATE INDEX idx_favorite_alerts_user_id ON favorite_alerts(user_id);
 CREATE INDEX idx_watchlists_user_id ON watchlists(user_id);
 CREATE INDEX idx_watchlist_items_watchlist_id ON watchlist_items(watchlist_id);
 
@@ -528,6 +555,198 @@ CREATE TRIGGER update_wallet_connections_updated_at BEFORE UPDATE ON wallet_conn
 CREATE TRIGGER update_defi_positions_updated_at BEFORE UPDATE ON defi_positions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- TELEGRAM PIPELINE CORE TABLES
+-- ============================================================================
+-- Canonical CREATE provenance historically lived OUTSIDE the runner-discovered
+-- path `backend/database/migrations/`:
+--   - backend/migrations/20251227_create_ai_missing_tables.sql
+--       (telegram_channels, telegram_messages)
+--   - database/migrations/telegram_data_pipeline_schema.sql
+--       (processed_telegram_messages)
+--   - database/migrations/telegram_enhanced_pipeline_v2.sql
+--       (telegram_agent_impacts, telegram_news_events)
+-- Numbered migrations 035/037/040/044/045/047/052 are INDEX-ONLY and require
+-- these tables. Included here so schema.sql bootstrap + migrate:up can execute
+-- those index migrations without inventing a new migration identity during R4.
+-- Later runner migration 20260216_add_priority_error_tracking.sql adds
+-- priority/error columns to telegram_channels (after 055 by numeric order).
+-- Production-only account_id (orphan 20260213_add_telegram_accounts.sql) is
+-- NOT bootstrapped here — not required by 035–055 and remains OUT_OF_SCOPE.
+
+CREATE TABLE telegram_channels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    channel_id BIGINT UNIQUE NOT NULL,
+    username VARCHAR(200),
+    title VARCHAR(500),
+    description TEXT,
+    category VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    is_verified BOOLEAN DEFAULT false,
+    subscriber_count INTEGER,
+    quality_score INTEGER DEFAULT 50,
+    config JSONB,
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_telegram_channels_active ON telegram_channels(is_active, quality_score DESC);
+
+CREATE TABLE telegram_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id BIGINT NOT NULL,
+    channel_id UUID REFERENCES telegram_channels(id) ON DELETE CASCADE,
+    sender_id BIGINT,
+    sender_username VARCHAR(200),
+    message_text TEXT,
+    message_type VARCHAR(50) DEFAULT 'text',
+    has_media BOOLEAN DEFAULT false,
+    media_url TEXT,
+    extracted_signals JSONB,
+    sentiment_score DECIMAL(5, 2),
+    is_processed BOOLEAN DEFAULT false,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    telegram_created_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_telegram_messages_channel ON telegram_messages(channel_id, telegram_created_at DESC);
+CREATE INDEX idx_telegram_messages_processed ON telegram_messages(is_processed);
+CREATE UNIQUE INDEX idx_telegram_messages_unique ON telegram_messages(message_id, channel_id);
+
+CREATE TABLE processed_telegram_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    raw_message_id UUID NOT NULL REFERENCES telegram_messages(id) ON DELETE CASCADE,
+    channel_id UUID NOT NULL REFERENCES telegram_channels(id),
+    language VARCHAR(10),
+    cleaned_text TEXT,
+    keywords TEXT[],
+    hashtags TEXT[],
+    urls TEXT[],
+    mentioned_assets TEXT[],
+    mentioned_currencies TEXT[],
+    extracted_prices JSONB,
+    extracted_dates TIMESTAMP[],
+    extracted_numbers DECIMAL[],
+    sentiment VARCHAR(20),
+    sentiment_score DECIMAL(3,2),
+    confidence_score DECIMAL(3,2),
+    emotion_tags TEXT[],
+    news_type VARCHAR(50),
+    news_category VARCHAR(50),
+    importance_level VARCHAR(20),
+    is_actionable BOOLEAN DEFAULT false,
+    signal_type VARCHAR(30),
+    signal_strength DECIMAL(3,2),
+    target_assets TEXT[],
+    risk_level VARCHAR(20),
+    readability_score DECIMAL(3,2),
+    spam_probability DECIMAL(3,2),
+    is_duplicate BOOLEAN DEFAULT false,
+    quality_flags TEXT[],
+    processing_status VARCHAR(30) DEFAULT 'pending',
+    processing_started_at TIMESTAMP,
+    processing_completed_at TIMESTAMP,
+    processing_duration_ms INTEGER,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Enhanced categorization columns (telegram_enhanced_pipeline_v2)
+    event_category VARCHAR(50),
+    event_sub_category VARCHAR(50),
+    geopolitical_relevance BOOLEAN DEFAULT false,
+    market_impact_level VARCHAR(20),
+    affected_agents TEXT[],
+    agent_impact_summary JSONB
+);
+
+CREATE INDEX idx_processed_messages_channel ON processed_telegram_messages(channel_id);
+CREATE INDEX idx_processed_messages_status ON processed_telegram_messages(processing_status);
+CREATE INDEX idx_processed_messages_created ON processed_telegram_messages(created_at DESC);
+
+CREATE TABLE telegram_agent_impacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    processed_message_id UUID NOT NULL REFERENCES processed_telegram_messages(id) ON DELETE CASCADE,
+    agent_key VARCHAR(50) NOT NULL,
+    agent_name VARCHAR(100),
+    impact_score DECIMAL(3,2) NOT NULL,
+    impact_type VARCHAR(30),
+    confidence DECIMAL(3,2),
+    relevance_reasons TEXT[],
+    extracted_signals JSONB,
+    priority_level VARCHAR(20),
+    requires_action BOOLEAN DEFAULT false,
+    action_type VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_by_agent_at TIMESTAMP,
+    CONSTRAINT unique_message_agent UNIQUE(processed_message_id, agent_key)
+);
+
+CREATE INDEX idx_agent_impacts_agent_key ON telegram_agent_impacts(agent_key);
+CREATE INDEX idx_agent_impacts_created ON telegram_agent_impacts(created_at DESC);
+
+CREATE TABLE telegram_news_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    processed_message_id UUID NOT NULL REFERENCES processed_telegram_messages(id) ON DELETE CASCADE,
+    primary_category VARCHAR(50) NOT NULL,
+    sub_category VARCHAR(50),
+    event_type VARCHAR(50),
+    countries TEXT[],
+    regions TEXT[],
+    cities TEXT[],
+    people_mentioned TEXT[],
+    organizations TEXT[],
+    events_referenced TEXT[],
+    affected_markets TEXT[],
+    affected_assets TEXT[],
+    market_impact_level VARCHAR(20),
+    is_breaking BOOLEAN DEFAULT false,
+    is_developing BOOLEAN DEFAULT false,
+    event_urgency VARCHAR(20),
+    source_reliability DECIMAL(3,2),
+    is_verified BOOLEAN DEFAULT false,
+    verification_sources TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_news_events_primary_cat ON telegram_news_events(primary_category);
+CREATE INDEX idx_news_events_created ON telegram_news_events(created_at DESC);
+
+-- ============================================================================
+-- MONITORING LOG TABLES
+-- ============================================================================
+-- Canonical DDL provenance: backend/setup_monitoring_tables.mjs
+-- (operational IF NOT EXISTS setup). These tables are NOT created by
+-- numbered migrations 001–055. Included here so schema.sql bootstrap
+-- + migrate:up can reproduce monitoring surfaces without inventing a
+-- new migration identity during R4.
+
+CREATE TABLE request_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_request_logs_created_at ON request_logs(created_at DESC);
+CREATE INDEX idx_request_logs_status ON request_logs(status);
+CREATE INDEX idx_request_logs_path ON request_logs(path);
+
+CREATE TABLE error_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    context TEXT NOT NULL,
+    message TEXT NOT NULL,
+    stack TEXT,
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_error_logs_created_at ON error_logs(created_at DESC);
+
+-- ============================================================================
 -- INITIAL DATA
 -- ============================================================================
 
@@ -541,4 +760,13 @@ INSERT INTO system_settings (key, value, description) VALUES
 ('max_trades_per_day', '100'::jsonb, 'Maximum trades per user per day'),
 ('default_trading_fee', '0.001'::jsonb, 'Default trading fee percentage');
 
-COMMENT ON DATABASE titangold_db IS 'TitanGold Professional Trading Autopilot Database';
+-- Comment current database only (do not hardcode titangold_db — that would
+-- mutate Production catalog when applied from a disposable DB session).
+DO $$
+BEGIN
+  EXECUTE format(
+    'COMMENT ON DATABASE %I IS %L',
+    current_database(),
+    'TitanGold Professional Trading Autopilot Database'
+  );
+END $$;

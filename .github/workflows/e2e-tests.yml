@@ -97,7 +97,7 @@ jobs:
           cd backend
           node scripts/ci_apply_base_schema.js
           npm run migrate:setup
-          # setup_migrations.js records only *.sql; 052.js remains pending.
+          # R4: migrate:setup is ledger-only; migrate:up executes pending migrations including 052.js.
           # Minimal disposable telegram_messages so migrate:up can apply C2.
           # Not production C2 execution.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "

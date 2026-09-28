@@ -36,8 +36,8 @@ jobs:
   #
   # Runner-local disposable Postgres only.
   # Uses ci_apply_base_schema.js + migrate:setup + migrate:up.
-  # migrate:setup marks migrations as applied and therefore this PG15 bootstrap
-  # job must NOT be treated as exact execution proof of migration 051.
+  # migrate:setup creates pgmigrations ledger ONLY (R4: no mark-without-execute).
+  # Actual SQL execution happens via migrate:up.
   # -------------------------------------------------------------------------
   disposable_schema_regression_pg15:
     name: Disposable Schema Regression (PG15)
@@ -81,9 +81,8 @@ jobs:
           DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
           DB_SSL: 'false'
         run: |
-          # Apply base schema, then register migration history (CI design of
-          # migrate:setup). Do not rewrite migration files or touch Staging/Prod.
-          # NOTE: migrate:setup marks migrations as applied — not exact 051 proof.
+          # Apply base schema, then create pgmigrations ledger only (R4).
+          # migrate:setup does NOT mark migrations applied. migrate:up executes SQL.
           cd backend
           node scripts/ci_apply_base_schema.js
           npm run migrate:setup
@@ -93,11 +92,8 @@ jobs:
           DATABASE_URL: postgresql://postgres@localhost:5432/titangold_test?sslmode=disable
           DB_SSL: 'false'
         run: |
-          # setup_migrations.js records only *.sql basenames.
-          # 052 is a JS migration, so it remains pending after migrate:setup.
-          # Create a minimal telegram_messages table on this disposable PG15
-          # database so npm run migrate:up still PASSES. This is not production
-          # C2 execution and does not authorize 050/051.
+          # schema.sql now includes telegram_messages (R4). Keep IF NOT EXISTS stub
+          # as a harmless disposable safety net for older schema snapshots.
           set -euo pipefail
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
             CREATE TABLE IF NOT EXISTS telegram_messages (
