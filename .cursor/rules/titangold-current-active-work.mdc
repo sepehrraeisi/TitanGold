@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — MASTER RECONCILIATION R2.5 GOVERNANCE PREPARATION; R2_PRODUCTION_PRESERVATION_IMPORT=COMPLETED/VERIFIED at RECON_HEAD cd6a5657fe1f6a9e51896a623e434f22ab70a569; AUTHORIZED_SLICE=R3_ARTEMIS_SEMANTIC_RECONCILIATION; R3_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R3_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R4_MIGRATION_RECONCILIATION=NOT_AUTHORIZED; PRODUCTION_MUTATION=NOT_AUTHORIZED; DEPLOYMENT=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R3 IMPLEMENTATION YET; NO PRODUCTION MUTATION; DEPLOY=NO
+description: TitanGold Rule 02 — MASTER RECONCILIATION R3.5 GOVERNANCE PREPARATION; R2=COMPLETED_VERIFIED; R3_ARTEMIS_SEMANTIC_RECONCILIATION=COMPLETED_VERIFIED at RECON_HEAD 65c12a4376db3de0fbf4fac46a64256ee9a589ba; AUTHORIZED_SLICE=R4_MIGRATION_BOOTSTRAP_RECONCILIATION; R4_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R4_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R5_STATUS=NOT_AUTHORIZED; PRODUCTION_MUTATION=NOT_AUTHORIZED; DATABASE_MUTATION=NOT_AUTHORIZED; DEPLOYMENT=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R4 IMPLEMENTATION YET; NO MIGRATION MUTATION; NO DB MUTATION; NO PRODUCTION MUTATION; DEPLOY=NO
 alwaysApply: true
 ---
 
@@ -27,19 +27,23 @@ alwaysApply: true
 
 **REMAINING_STAGES = 6**
 
-**CURRENT_PHASE = R2_5_GOVERNANCE_PREPARATION**
+**CURRENT_PHASE = R3_5_GOVERNANCE_PREPARATION**
 **CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
 **R2_STATUS = COMPLETED_VERIFIED**
 **R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
 **R2_FINAL_RECONCILIATION_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
-**AUTHORIZED_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
-**R3_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R3_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R3_ARTEMIS_SEMANTIC_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED**
+**R3_STATUS = COMPLETED_VERIFIED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
+**R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R4_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R5_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
+**DATABASE_MUTATION = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
-**NEXT_GATE = R3_ARTEMIS_SEMANTIC_RECONCILIATION_OWNER_START**
+**NEXT_GATE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION_OWNER_START**
 **NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
 **NEXT_GATE_ONLY = YES**
 **STAGE10_ARTEMIS_SLICES = PRESERVED / READ_REFERENCE_ONLY / NOT_REOPENED_BY_RECONCILIATION_GOVERNANCE**
@@ -138,23 +142,30 @@ alwaysApply: true
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_POST_MERGE = VERIFIED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTH_FINALIZE_PR = #151 / MERGED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_BASE_MAIN_SHA = `a5a55962689f5dbd5da7c88441022c39180a9947`**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R3_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
-**AUTHORIZED_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R4_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
 **NO_OTHER_RECONCILIATION_SLICE_AUTHORIZED = YES**
 **R2_STATUS = COMPLETED_VERIFIED**
 **R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
 **R2_FINAL_RECONCILIATION_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
-**R3_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
-**R3_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R3_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED**
+**R3_STATUS = COMPLETED_VERIFIED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
+**R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**R3_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / CONSUMED**
+**R3_EXECUTION_STATUS = COMPLETED_VERIFIED**
+**R3_EXECUTION_AUTHORIZED = NO / CONSUMED**
+**R4_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
+**R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R4_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R5_STATUS = NOT_AUTHORIZED**
 **FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
 **PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
 **RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
 **RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
-**RECON_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
+**RECON_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
 **RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
 **AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = NO / CONSUMED**
 **DO_NOT_IMPLEMENT_BEFORE_GOVERNANCE_PR_MERGE = NO / CONSUMED**
@@ -1710,13 +1721,143 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — TitanGold Master Reconciliation R2.5 / R3 Artemis Semantic Governance Authorization (GOVERNANCE ONLY — R3 EXECUTION NOT STARTED)
+### Active Work Package — TitanGold Master Reconciliation R3.5 / R4 Migration Bootstrap Governance Authorization (GOVERNANCE ONLY — R4 EXECUTION NOT STARTED)
+
+**AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**PRIOR_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
+**SLICE_ID = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**CURRENT_PHASE = R3_5_GOVERNANCE_PREPARATION**
+**CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = RECONCILIATION_MIGRATION_BOOTSTRAP**
+**RULE02_CHANGED = YES — R3.5 GOVERNANCE AUTHORIZATION FOR R4 MIGRATION / BOOTSTRAP RECONCILIATION ONLY**
+**PRODUCTION_CODE_CHANGED = NO**
+**TESTS_CHANGED = NO**
+**RUNTIME_CHANGED = NO**
+**MIGRATIONS_MODIFIED = 0**
+**BOOTSTRAP_MODIFIED = 0**
+**SCHEMA_MODIFIED = 0**
+**R4_EXECUTION_STARTED = NO**
+
+**PURPOSE =**
+Close completed R3 Artemis Semantic Reconciliation as COMPLETED_VERIFIED and establish explicit, narrow Active Work governance authority for the NEXT Master Reconciliation phase: R4 = Migration / Bootstrap Reconciliation inside the isolated reconciliation workspace. This transaction does NOT execute R4. It only authorizes the slice so a subsequent explicit Owner start instruction may begin R4. R4 reconciles repository migration/bootstrap reproducibility only. R4 is NOT permission to mutate Production DB, repair Production pgmigrations ledger, execute migrations against Production, or deploy.
+
+**FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
+**PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
+**ACTIVE_RUNTIME = `/home/ubuntu/releases/titangold-runtime-TCMC-20260831T143017Z`**
+**RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
+**RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
+**RECON_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**R2_FINAL_RECONCILIATION_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
+**RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
+
+**R2_STATUS = COMPLETED_VERIFIED**
+**R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
+
+**R3_STATUS = COMPLETED_VERIFIED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
+**R3_CLOSEOUT =**
+- R3 final reconciliation HEAD before this governance commit = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`
+- exact 8 Artemis files remained within authorized scope
+- only `backend/services/artemisEvidenceOnReadService.js` required production-source semantic merge
+- 3 narrow Artemis test files changed
+- narrow tests: 48 PASS
+- ingestion tests: 36 PASS
+- orchestration/stage3/compatibility tests: 102 PASS
+- migrations unchanged
+- Production unchanged
+- TCMC unchanged
+- Recovery unchanged
+- no remote push
+
+**R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R4_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R4_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**R5_STATUS = NOT_AUTHORIZED**
+**PRODUCTION_MUTATION = NOT_AUTHORIZED**
+**DATABASE_MUTATION = NOT_AUTHORIZED**
+**DEPLOYMENT = NOT_AUTHORIZED**
+
+**R4_PURPOSE_WHEN_SEPARATELY_STARTED =**
+Reconcile repository migration/bootstrap truth so a future clean environment can be reproduced from canonical repository state. Repository-first reconciliation. Preserve both valid 051 semantic histories. Never execute an APPLIED_WITHOUT_LEDGER migration blindly. Migration number/order changes require proof of runner semantics first. Clean-room reproducibility is the target. Production ledger truth and repository canonical history are separate concerns and must not be silently conflated. Existing Production DB state is evidence, not the migration source of truth. No invention of missing schema behavior. Any destructive migration behavior requires explicit review.
+
+**R4_KNOWN_EVIDENCE_CONTEXT = PRESERVED / NOT AUTHORIZATION TO MUTATE PRODUCTION =**
+- 049: Production ledger indicates applied; no known reconciliation action currently required merely because it is ledgered
+- 050 (`backend/database/migrations/050_mexc_capability_snapshots_rollback.sql`): APPLIED_WITHOUT_LEDGER — expected Production DB objects exist; pgmigrations ledger row absent; R4 must NOT blindly execute 050; R4 must NOT repair Production ledger without a later explicit Owner-approved DB mutation gate
+- 051 COLLISION: (A) Production-only `051_data_retention_60d_telegram.sql` = RETENTION_051_APPLIED_WITHOUT_LEDGER; (B) GitHub canonical `051_artemis_b10_decision_persistence.sql` not applied in Production / B10 tables absent. R4 must preserve BOTH semantic histories. Do NOT overwrite B10 051 with retention 051. Do NOT solve by deleting either semantic migration
+- 052: expected index/effect live; ledger indicates 052; file/path history mismatch requires canonical review before change
+- 053 / 054 / 055: not applied in Production — do NOT infer they should be applied to Production during R4; repository/bootstrap ordering only
+- Bootstrap/runner findings: stale/incomplete `database/schema.sql`; `migrate:setup` observed marking .sql migrations applied without executing them; multiple migration directories; canonical runner may not cover all locations; `request_logs` / `error_logs` exist in Production without proven official canonical DDL; historical favorites schema conflict (stale schema.sql UUID vs migration/runtime SERIAL + asset_id)
+
+**R4_ALLOWED_SCOPE_WHEN_SEPARATELY_STARTED =**
+READ:
+- repository migration files · migration runners · bootstrap/schema definitions · migration-related package scripts · migration-related tests
+- Production DB schema/ledger in READ-ONLY mode
+- Production migration files in READ-ONLY mode
+- TCMC migration/bootstrap state in READ-ONLY mode
+
+MUTATE, only inside isolated reconciliation worktree:
+- migration files when required for canonicalization
+- migration runner/bootstrap code
+- schema/bootstrap definitions
+- narrowly related migration tests
+- narrowly related package scripts/configuration if required for reproducible migration/bootstrap behavior
+- preservation/canonicalization of the Production-only retention migration
+
+Any modification outside migration/bootstrap/reproducibility scope: STOP.
+
+**R4_HARD_PROHIBITIONS_EVEN_AFTER_OWNER_START =**
+- Production DB writes · INSERT/UPDATE/DELETE against Production · CREATE/ALTER/DROP against Production
+- migration execution against Production
+- Production pgmigrations ledger repair
+- manually marking 050 or retention migration as applied
+- Production worktree modification · TCMC modification · Recovery modification
+- PM2/nginx changes · deploy/restart/reload
+- GitHub push/merge · main mutation
+- live trading/execution changes · secrets/env mutation · destructive cleanup
+
+If R4 determines a Production DB change will eventually be necessary: STOP and create a separate future Owner decision/gate.
+
+**R4_EXPLICITLY_FORBIDDEN_IN_THIS_GOVERNANCE_TRANSACTION =**
+- starting R4
+- migration mutation / renumbering / 051 collision resolution
+- schema/bootstrap repair
+- package.json mutation
+- Artemis file mutation
+- test mutation
+- Production / TCMC / Recovery mutation
+- DB mutation / migration execution
+- deploy / push / merge
+
+**STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
+
+**HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R3_5_R4_GOVERNANCE_AUTHORIZATION_COMPLETE**
+**NEXT_APPROVED_TRANSITION = R4_MIGRATION_BOOTSTRAP_RECONCILIATION_OWNER_START**
+**NEXT_GATE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION_OWNER_START**
+**NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**NEXT_GATE_ONLY = YES**
+**PROGRESS_BLOCKER = NONE**
+**DEPLOY = NO**
+**PR = NONE**
+**MERGE = NO**
+**PUSH = NO**
+
+Side-effect ledger (this governance transaction):
+R4_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · MIGRATIONS_MODIFIED=0 · BOOTSTRAP_MODIFIED=0 · SCHEMA_MODIFIED=0 · PACKAGE_MODIFIED=0 · ARTEMIS_MODIFIED=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · PM2=0 · NGINX=0 · DEPLOY=0 · GITHUB_PUSH=0 · SECRETS_IMPORTED=0 · PRODUCTION_LEDGER_REPAIR=0
+
+This governance transaction authorizes **only** the exact future slice R4_MIGRATION_BOOTSTRAP_RECONCILIATION. It does **not** start R4, modify migrations/schema/bootstrap/runners/package/tests/Artemis, mutate Production/TCMC/Recovery/DB, deploy, or push.
+
+### Historical — TitanGold Master Reconciliation R2.5 / R3 Artemis Semantic Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R3.5 R4 GOVERNANCE AUTHORIZATION)
 
 **AUTHORIZED_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
 **PRIOR_SLICE = R2_PRODUCTION_PRESERVATION_IMPORT**
 **SLICE_ID = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
 **OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R3_ARTEMIS_SEMANTIC_RECONCILIATION**
-**CURRENT_PHASE = R2_5_GOVERNANCE_PREPARATION**
+**CURRENT_PHASE = R2_5_GOVERNANCE_PREPARATION (HISTORICAL)**
 **CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
 **RISK_TIER = Tier 3**
 **AUTHORITY_CLASS = RECONCILIATION_ARTEMIS_SEMANTIC**
@@ -1724,9 +1865,9 @@ Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 **PRODUCTION_CODE_CHANGED = NO**
 **TESTS_CHANGED = NO**
 **RUNTIME_CHANGED = NO**
-**R3_EXECUTION_STARTED = NO**
-**ARTEMIS_8_MODIFIED = 0**
-**ARTEMIS_TESTS_MODIFIED = 0**
+**R3_EXECUTION_STARTED = YES / COMPLETED_VERIFIED (HISTORICAL — R3 later executed and closed at HEAD 65c12a4376db3de0fbf4fac46a64256ee9a589ba)**
+**ARTEMIS_8_MODIFIED = HISTORICAL_R3_SCOPE**
+**ARTEMIS_TESTS_MODIFIED = HISTORICAL_R3_SCOPE**
 **MIGRATIONS_MODIFIED = 0**
 
 **PURPOSE =**
@@ -1752,11 +1893,11 @@ Close completed R2 Production Preservation Import as COMPLETED / VERIFIED and es
 - No Artemis 8 semantic reconciliation occurred in R2
 - No migration reconciliation occurred in R2
 
-**R3_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R3_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R3_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**R3_EXECUTION_STATUS = COMPLETED_VERIFIED (HISTORICAL — SUPERSEDED BY R3.5 ACTIVE AUTHORITY)**
+**R3_EXECUTION_AUTHORIZED = NO / CONSUMED**
+**IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / SUPERSEDED_BY_R3_5**
 
 **R3_EXACT_8_FILES_WHEN_SEPARATELY_STARTED =**
 1. `backend/contracts/artemisEvidenceContract.js`
@@ -1798,7 +1939,7 @@ Close completed R2 Production Preservation Import as COMPLETED / VERIFIED and es
 - enabling live trading / execution
 - Tier 4 actions
 
-**R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED**
+**R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED (HISTORICAL AT R2.5 — SUPERSEDED BY R3.5 AUTHORIZED_SLICE)**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
 **STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
@@ -1806,7 +1947,7 @@ Close completed R2 Production Preservation Import as COMPLETED / VERIFIED and es
 **HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R2_5_R3_GOVERNANCE_AUTHORIZATION_COMPLETE**
 **NEXT_APPROVED_TRANSITION = R3_ARTEMIS_SEMANTIC_RECONCILIATION_OWNER_START**
 **NEXT_GATE = R3_ARTEMIS_SEMANTIC_RECONCILIATION_OWNER_START**
-**NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START (HISTORICAL — SUPERSEDED BY R3.5)**
 **NEXT_GATE_ONLY = YES**
 **PROGRESS_BLOCKER = NONE**
 **DEPLOY = NO**
@@ -1819,7 +1960,9 @@ R3_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · ARTEMIS_8_MO
 
 This governance transaction authorizes **only** the exact future slice R3_ARTEMIS_SEMANTIC_RECONCILIATION. It does **not** start R3, modify any of the exact 8 Artemis files, modify tests, reconcile migrations, mutate Production/TCMC/Recovery, deploy, or push.
 
-### Historical — TitanGold Master Reconciliation R1.5 / R2 Preservation Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R2.5 R3 GOVERNANCE AUTHORIZATION)
+Historical Active Work Package fields that once said `AUTHORIZED_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION`, `R3_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START`, `R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED`, or `NEXT_GATE = R3_ARTEMIS_SEMANTIC_RECONCILIATION_OWNER_START` as the active authority state are **SUPERSEDED** by the R3.5 / R4 Migration Bootstrap Governance Authorization Active Work Package above. R3 completion evidence at RECON_HEAD `65c12a4376db3de0fbf4fac46a64256ee9a589ba` remains PRESERVED.
+
+### Historical — TitanGold Master Reconciliation R1.5 / R2 Preservation Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R3.5 R4 GOVERNANCE AUTHORIZATION)
 
 **AUTHORIZED_SLICE = R2_PRODUCTION_PRESERVATION_IMPORT**
 **PRIOR_SLICE = R1_ISOLATED_WORKSPACE_VERIFIED**
@@ -1839,7 +1982,7 @@ This governance transaction authorizes **only** the exact future slice R3_ARTEMI
 **R2_ARTIFACTS_IMPORTED = SELECTED_PRESERVATION_ONLY (ENN V2 · ops · ArbitrageAgentControl)**
 
 **PURPOSE =**
-Establish explicit, narrow Active Work governance authority for R2 = preservation/import and classification of approved Production-only artifacts into the isolated reconciliation workspace. This historical transaction did NOT execute R2 itself; R2 was later Owner-started, completed, and verified at RECON_HEAD `cd6a5657fe1f6a9e51896a623e434f22ab70a569`. Active authority for the next slice is the R2.5 / R3 governance Active Work Package above.
+Establish explicit, narrow Active Work governance authority for R2 = preservation/import and classification of approved Production-only artifacts into the isolated reconciliation workspace. This historical transaction did NOT execute R2 itself; R2 was later Owner-started, completed, and verified at RECON_HEAD `cd6a5657fe1f6a9e51896a623e434f22ab70a569`. Active authority is now the R3.5 / R4 Migration Bootstrap Governance Authorization Active Work Package above (R3 COMPLETED_VERIFIED; R4 AWAITING_EXPLICIT_OWNER_START).
 
 **FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
 **PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
@@ -1849,20 +1992,20 @@ Establish explicit, narrow Active Work governance authority for R2 = preservatio
 **R1_STATUS = R1_ISOLATED_WORKSPACE_VERIFIED**
 
 **R2_EXECUTION_STATUS = COMPLETED_VERIFIED (HISTORICAL)**
-**R3_ARTEMIS_SEMANTIC_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED (see Active R2.5 AWP)**
-**R4_MIGRATION_RECONCILIATION = NOT_AUTHORIZED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED (see Active R3.5 AWP)**
+**R4_MIGRATION_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED (see Active R3.5 AWP)**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
 **STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
 
 **HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R1_5_R2_GOVERNANCE_AUTHORIZATION_COMPLETE**
-**NEXT_GATE = SUPERSEDED_BY_R2_5_R3_GOVERNANCE**
+**NEXT_GATE = SUPERSEDED_BY_R3_5_R4_GOVERNANCE**
 **DEPLOY = NO**
 **PR = NONE**
 **MERGE = NO**
 **PUSH = NO**
 
-Historical R1.5 Active Work Package fields that once said `AUTHORIZED_SLICE = R2_PRODUCTION_PRESERVATION_IMPORT`, `R2_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START`, `R3_ARTEMIS_SEMANTIC_RECONCILIATION = NOT_AUTHORIZED`, or `NEXT_GATE = R2_PRODUCTION_PRESERVATION_IMPORT_OWNER_START` as the active authority state are **SUPERSEDED** by the R2.5 / R3 Artemis Semantic Governance Authorization Active Work Package above. R2 completion evidence at RECON_HEAD `cd6a5657fe1f6a9e51896a623e434f22ab70a569` remains PRESERVED.
+Historical R1.5 Active Work Package fields that once said `AUTHORIZED_SLICE = R2_PRODUCTION_PRESERVATION_IMPORT`, `R2_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START`, `R3_ARTEMIS_SEMANTIC_RECONCILIATION = NOT_AUTHORIZED`, or `NEXT_GATE = R2_PRODUCTION_PRESERVATION_IMPORT_OWNER_START` as the active authority state are **SUPERSEDED** by the R3.5 / R4 Migration Bootstrap Governance Authorization Active Work Package above. R2 completion evidence at RECON_HEAD `cd6a5657fe1f6a9e51896a623e434f22ab70a569` and R3 completion evidence at RECON_HEAD `65c12a4376db3de0fbf4fac46a64256ee9a589ba` remain PRESERVED.
 
 ### Historical — Artemis Core Stage 10 Post-Trust Data Quality / Regression / Degradation Dependency Discovery (SUPERSEDED AS ACTIVE AUTHORITY BY MASTER RECONCILIATION R1.5 R2 GOVERNANCE AUTHORIZATION)
 
