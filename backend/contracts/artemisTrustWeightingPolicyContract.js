@@ -1071,10 +1071,14 @@ export function buildTrustWeightingPolicyArtifact(input) {
   );
   const cohort = extractCohort(input.cohort);
   const segmentScope = assertSegmentScope(input.segmentScope);
+  if (!Object.prototype.hasOwnProperty.call(input, 'dataQualityEligibilityState')) {
+    fail(
+      'TRUST_WEIGHTING_POLICY_DQ_REQUIRED',
+      'dataQualityEligibilityState is required for Trust eligibility',
+    );
+  }
   const dataQualityEligibilityState = validateOptionalDataQualityEligibilityState(
-    Object.prototype.hasOwnProperty.call(input, 'dataQualityEligibilityState')
-      ? input.dataQualityEligibilityState
-      : undefined,
+    input.dataQualityEligibilityState,
   );
 
   let recordedAt = null;
@@ -1578,9 +1582,13 @@ export function validateTrustWeightingPolicyArtifact(input) {
     );
   }
 
-  if (artifact.dataQualityEligibilityState !== null) {
-    validateOptionalDataQualityEligibilityState(artifact.dataQualityEligibilityState);
+  if (artifact.dataQualityEligibilityState === null) {
+    fail(
+      'TRUST_WEIGHTING_POLICY_DQ_REQUIRED',
+      'dataQualityEligibilityState is required for Trust eligibility',
+    );
   }
+  validateOptionalDataQualityEligibilityState(artifact.dataQualityEligibilityState);
 
   const rebuilt = buildTrustWeightingPolicyArtifact(buildInputFromArtifact(artifact));
 
