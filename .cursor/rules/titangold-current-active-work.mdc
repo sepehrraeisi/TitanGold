@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — MASTER RECONCILIATION R3.5 GOVERNANCE PREPARATION; R2=COMPLETED_VERIFIED; R3_ARTEMIS_SEMANTIC_RECONCILIATION=COMPLETED_VERIFIED at RECON_HEAD 65c12a4376db3de0fbf4fac46a64256ee9a589ba; AUTHORIZED_SLICE=R4_MIGRATION_BOOTSTRAP_RECONCILIATION; R4_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R4_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R5_STATUS=NOT_AUTHORIZED; PRODUCTION_MUTATION=NOT_AUTHORIZED; DATABASE_MUTATION=NOT_AUTHORIZED; DEPLOYMENT=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R4 IMPLEMENTATION YET; NO MIGRATION MUTATION; NO DB MUTATION; NO PRODUCTION MUTATION; DEPLOY=NO
+description: TitanGold Rule 02 — MASTER RECONCILIATION R4.5 GOVERNANCE PREPARATION; R2=COMPLETED_VERIFIED; R3_ARTEMIS_SEMANTIC_RECONCILIATION=COMPLETED_VERIFIED; R4_MIGRATION_BOOTSTRAP_RECONCILIATION=COMPLETED_VERIFIED at RECON_HEAD 493a737934cd35f14065c23de76c86c71617920d; AUTHORIZED_SLICE=R5_REPOSITORY_INTEGRATION_VALIDATION; R5_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R5_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R6_STATUS=NOT_AUTHORIZED; PRODUCTION_MUTATION=NOT_AUTHORIZED; DATABASE_MUTATION=NOT_AUTHORIZED; GITHUB_REMOTE_MUTATION=NOT_AUTHORIZED; DEPLOYMENT=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R5 EXECUTION YET; NO SOURCE MUTATION; NO DB MUTATION; NO PRODUCTION MUTATION; DEPLOY=NO
 alwaysApply: true
 ---
 
@@ -27,7 +27,7 @@ alwaysApply: true
 
 **REMAINING_STAGES = 6**
 
-**CURRENT_PHASE = R3_5_GOVERNANCE_PREPARATION**
+**CURRENT_PHASE = R4_5_GOVERNANCE_PREPARATION**
 **CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
 **R2_STATUS = COMPLETED_VERIFIED**
 **R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
@@ -35,15 +35,19 @@ alwaysApply: true
 **R3_STATUS = COMPLETED_VERIFIED**
 **R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
 **R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
-**AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
-**R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R4_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R5_STATUS = NOT_AUTHORIZED**
+**R4_STATUS = COMPLETED_VERIFIED**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = COMPLETED_VERIFIED**
+**R4_FINAL_RECONCILIATION_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
+**AUTHORIZED_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
+**R5_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R5_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R5_REPOSITORY_INTEGRATION_VALIDATION = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R6_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
 **DATABASE_MUTATION = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
-**NEXT_GATE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION_OWNER_START**
+**NEXT_GATE = R5_REPOSITORY_INTEGRATION_VALIDATION_OWNER_START**
 **NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
 **NEXT_GATE_ONLY = YES**
 **STAGE10_ARTEMIS_SLICES = PRESERVED / READ_REFERENCE_ONLY / NOT_REOPENED_BY_RECONCILIATION_GOVERNANCE**
@@ -142,8 +146,8 @@ alwaysApply: true
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_POST_MERGE = VERIFIED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTH_FINALIZE_PR = #151 / MERGED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_BASE_MAIN_SHA = `a5a55962689f5dbd5da7c88441022c39180a9947`**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R4_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
-**AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R5_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**AUTHORIZED_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
 **NO_OTHER_RECONCILIATION_SLICE_AUTHORIZED = YES**
@@ -156,16 +160,22 @@ alwaysApply: true
 **R3_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / CONSUMED**
 **R3_EXECUTION_STATUS = COMPLETED_VERIFIED**
 **R3_EXECUTION_AUTHORIZED = NO / CONSUMED**
-**R4_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
-**R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R4_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R5_STATUS = NOT_AUTHORIZED**
+**R4_STATUS = COMPLETED_VERIFIED**
+**R4_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / CONSUMED**
+**R4_EXECUTION_STATUS = COMPLETED_VERIFIED**
+**R4_EXECUTION_AUTHORIZED = NO / CONSUMED**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = COMPLETED_VERIFIED**
+**R4_FINAL_RECONCILIATION_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
+**R5_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
+**R5_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R5_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R5_REPOSITORY_INTEGRATION_VALIDATION = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R6_STATUS = NOT_AUTHORIZED**
 **FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
 **PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
 **RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
 **RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
-**RECON_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**RECON_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
 **RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
 **AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = NO / CONSUMED**
 **DO_NOT_IMPLEMENT_BEFORE_GOVERNANCE_PR_MERGE = NO / CONSUMED**
@@ -1721,7 +1731,155 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — TitanGold Master Reconciliation R3.5 / R4 Migration Bootstrap Governance Authorization (GOVERNANCE ONLY — R4 EXECUTION NOT STARTED)
+### Active Work Package — TitanGold Master Reconciliation R4.5 / R5 Repository Integration Validation Governance Authorization (GOVERNANCE ONLY — R5 EXECUTION NOT STARTED)
+
+**AUTHORIZED_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
+**PRIOR_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
+**SLICE_ID = R5_REPOSITORY_INTEGRATION_VALIDATION**
+**OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R5_REPOSITORY_INTEGRATION_VALIDATION**
+**CURRENT_PHASE = R4_5_GOVERNANCE_PREPARATION**
+**CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = RECONCILIATION_INTEGRATION_VALIDATION**
+**RULE02_CHANGED = YES — R4.5 GOVERNANCE AUTHORIZATION FOR R5 REPOSITORY INTEGRATION VALIDATION ONLY**
+**PRODUCTION_CODE_CHANGED = NO**
+**TESTS_CHANGED = NO**
+**RUNTIME_CHANGED = NO**
+**MIGRATIONS_MODIFIED = 0**
+**BOOTSTRAP_MODIFIED = 0**
+**SCHEMA_MODIFIED = 0**
+**SOURCE_MODIFIED = 0**
+**R5_EXECUTION_STARTED = NO**
+
+**PURPOSE =**
+Close completed R4 Migration / Bootstrap Reconciliation as COMPLETED_VERIFIED and establish explicit, narrow Active Work governance authority for the NEXT Master Reconciliation phase: R5 = Repository Integration Validation over the complete reconciliation result produced by R2 + R3 + R4 inside the isolated reconciliation workspace. This transaction does NOT execute R5. It only authorizes the slice so a subsequent explicit Owner start instruction may begin R5. R5 is primarily a validation gate, NOT a new implementation phase. R5 is NOT permission to mutate Production, mutate Production DB, repair Production ledger, push/merge to GitHub, deploy, or silently repair source because a test fails.
+
+**FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
+**PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
+**ACTIVE_RUNTIME = `/home/ubuntu/releases/titangold-runtime-TCMC-20260831T143017Z`**
+**RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
+**RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
+**RECON_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
+**R4_FINAL_RECONCILIATION_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
+**R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**R2_FINAL_RECONCILIATION_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
+**RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
+
+**R2_STATUS = COMPLETED_VERIFIED**
+**R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
+
+**R3_STATUS = COMPLETED_VERIFIED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
+
+**R4_STATUS = COMPLETED_VERIFIED**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = COMPLETED_VERIFIED**
+**R4_CLOSEOUT =**
+- R4 final reconciliation HEAD before this governance commit = `493a737934cd35f14065c23de76c86c71617920d`
+- R4 implementation commits: `b59616b` · `9bfeb56` · `493a737`
+- migration architecture discovered
+- migration identity = basename without extension
+- duplicate numeric prefix alone does not define ledger identity
+- both valid 051 histories preserved
+- 050 kept in repository; Production ledger repair deferred
+- migrate:setup no longer marks SQL migrations applied without execution
+- schema.sql classified as bootstrap base, not complete canonical SoT
+- favorites bootstrap reconciled to SERIAL + asset_id
+- request_logs/error_logs DDL provenance established
+- disposable clean DB migration test PASS
+- repeat migration run PASS
+- Production DB mutation count = 0
+- Production unchanged
+- Runtime unchanged
+- Recovery unchanged
+- no remote push
+
+**R4_KNOWN_DEFERRED_PRODUCTION_MATTERS = NOT AUTHORIZED FOR R5 MUTATION =**
+1. Production `telegram_channels.account_id`
+2. Production ledger reconciliation for:
+   - 050
+   - retention migration
+
+**R5_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R5_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R5_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**R6_STATUS = NOT_AUTHORIZED**
+**PRODUCTION_MUTATION = NOT_AUTHORIZED**
+**DATABASE_MUTATION = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION = NOT_AUTHORIZED**
+**DEPLOYMENT = NOT_AUTHORIZED**
+
+**R5_PURPOSE_WHEN_SEPARATELY_STARTED =**
+Integration/validation gate over the COMPLETE reconciliation result produced by R2 + R3 + R4. Determine whether the reconciliation branch is internally coherent before clean-room validation. R5 is primarily validation, NOT a new implementation phase. R5 success does NOT mean ready for Production, approved for merge, approved for deploy, or Production DB repaired. `MERGED != DEPLOYED != VERIFIED` remains in force.
+
+**R5_VALIDATION_BASELINE_WHEN_SEPARATELY_STARTED =**
+Validate the complete reconciliation lineage, including:
+- R2 preservation commits: `2a7aaf66e4babf8ca80d26e0074de6de6ea895e0` · `07f0c1af884c061fbc88bbdb40a486b03deb38d2` · `cd6a5657fe1f6a9e51896a623e434f22ab70a569`
+- R3 semantic reconciliation: `65c12a4376db3de0fbf4fac46a64256ee9a589ba`
+- R4 migration/bootstrap: `b59616b` · `9bfeb56` · `493a737`
+- plus governance commits in the reconciliation branch
+Do not treat an individual phase passing as proof that the integrated repository passes.
+
+**R5_ALLOWED_SCOPE_WHEN_SEPARATELY_STARTED =**
+Default mode: READ / TEST / BUILD ONLY.
+Allowed after separate Owner START:
+- read repository · inspect git history/diff
+- install/use dependencies without changing tracked dependency manifests
+- run repository / backend / frontend tests · lint/static analysis · builds
+- run migration/bootstrap tests · create disposable local DBs for validation · delete those disposable DBs after validation
+- inspect CI workflow commands · compare reconciliation changes against frozen baseline
+- perform secret/generated-artifact checks · collect validation evidence
+
+Generated temporary test/build output may exist outside tracked source as normal tooling behavior, but must not be committed.
+
+**R5_MUTATION_POLICY =**
+No source mutation should occur merely because a test fails.
+If a failure is caused by reconciliation work and a repair is clearly needed: DO NOT silently fix it.
+First classify `R5_RECONCILIATION_REGRESSION` and identify failing command · failing test/build · owning path · likely originating reconciliation phase · smallest proposed repair scope.
+Then STOP if repair would require source mutation not explicitly authorized by a later Owner gate.
+R5 may NOT modify tracked source/config/tests/governance.
+If tracked files become modified as a side effect: restore only if clearly generated/tool-side and restoration is safe; otherwise STOP and report.
+
+**R5_EXPECTED_CLASSIFICATION =**
+PASS · R5_RECONCILIATION_REGRESSION · PRE_EXISTING_BASELINE_FAILURE · ENVIRONMENTAL_FAILURE · OPTIONAL_TOOLING_FAILURE · OUT_OF_SCOPE_PRODUCTION_DRIFT · OWNER_DECISION_REQUIRED · INSUFFICIENT_EVIDENCE
+Do not call a failure PRE_EXISTING without evidence. Do not repair failures during R5.
+
+**R5_HARD_PROHIBITIONS_EVEN_AFTER_OWNER_START =**
+- Production writes · Production DB writes · Production migration execution · Production ledger repair
+- TCMC mutation · Recovery mutation
+- source-code repair · migration repair · Rule02 edit during R5 execution
+- dependency manifest edit · package-lock rewrite intended for commit
+- GitHub push/merge · main mutation · deployment · PM2/nginx mutation
+- live trading/execution · secrets exposure
+
+**R5_EXPLICITLY_FORBIDDEN_IN_THIS_GOVERNANCE_TRANSACTION =**
+- starting R5 validation
+- modifying anything except Rule02
+- Production mutation · DB mutation · migration execution against Production · ledger repair
+- source/test repair · TCMC mutation · Recovery mutation
+- GitHub push/merge · deploy/restart/reload · PM2/nginx mutation
+- exposing secrets
+
+**STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
+
+**HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R4_5_R5_GOVERNANCE_AUTHORIZATION_COMPLETE**
+**NEXT_APPROVED_TRANSITION = R5_REPOSITORY_INTEGRATION_VALIDATION_OWNER_START**
+**NEXT_GATE = R5_REPOSITORY_INTEGRATION_VALIDATION_OWNER_START**
+**NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**NEXT_GATE_ONLY = YES**
+**PROGRESS_BLOCKER = NONE**
+**DEPLOY = NO**
+**PR = NONE**
+**MERGE = NO**
+**PUSH = NO**
+
+Side-effect ledger (this governance transaction):
+R5_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · MIGRATIONS_MODIFIED=0 · BOOTSTRAP_MODIFIED=0 · SCHEMA_MODIFIED=0 · PACKAGE_MODIFIED=0 · SOURCE_MODIFIED=0 · ARTEMIS_MODIFIED=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · PM2=0 · NGINX=0 · DEPLOY=0 · GITHUB_PUSH=0 · SECRETS_IMPORTED=0 · PRODUCTION_LEDGER_REPAIR=0
+
+This governance transaction authorizes **only** the exact future slice R5_REPOSITORY_INTEGRATION_VALIDATION. It does **not** start R5, modify source/tests/migrations/schema/bootstrap/runners/package/CI/Artemis, mutate Production/TCMC/Recovery/DB, deploy, or push.
+
+### Historical — TitanGold Master Reconciliation R3.5 / R4 Migration Bootstrap Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R4.5 R5 GOVERNANCE AUTHORIZATION)
 
 **AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
 **PRIOR_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
@@ -1851,7 +2009,9 @@ R4_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · MIGRATIONS_M
 
 This governance transaction authorizes **only** the exact future slice R4_MIGRATION_BOOTSTRAP_RECONCILIATION. It does **not** start R4, modify migrations/schema/bootstrap/runners/package/tests/Artemis, mutate Production/TCMC/Recovery/DB, deploy, or push.
 
-### Historical — TitanGold Master Reconciliation R2.5 / R3 Artemis Semantic Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R3.5 R4 GOVERNANCE AUTHORIZATION)
+Historical Active Work Package fields that once said `AUTHORIZED_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION`, `R4_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START`, `R5_STATUS = NOT_AUTHORIZED`, or `NEXT_GATE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION_OWNER_START` as the active authority state are **SUPERSEDED** by the R4.5 / R5 Repository Integration Validation Governance Authorization Active Work Package above. R4 completion evidence at RECON_HEAD `493a737934cd35f14065c23de76c86c71617920d` remains PRESERVED.
+
+### Historical — TitanGold Master Reconciliation R2.5 / R3 Artemis Semantic Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R3.5 R4 GOVERNANCE AUTHORIZATION — FURTHER SUPERSEDED BY R4.5 R5 GOVERNANCE)
 
 **AUTHORIZED_SLICE = R3_ARTEMIS_SEMANTIC_RECONCILIATION**
 **PRIOR_SLICE = R2_PRODUCTION_PRESERVATION_IMPORT**
