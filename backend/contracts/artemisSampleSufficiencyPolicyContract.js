@@ -24,6 +24,16 @@
  */
 
 import { hashToUuid } from './artemisReplayContract.js';
+import {
+  EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
+  EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
+  EVALUATION_PERFORMANCE_AGGREGATE_IMPLEMENTATION_VERSION,
+} from './artemisEvaluationPerformanceAggregateContract.js';
+import {
+  SEGMENTED_PERFORMANCE_POLICY_CONTRACT_VERSION,
+  SEGMENTED_PERFORMANCE_POLICY_POLICY_VERSION,
+  SEGMENTED_PERFORMANCE_POLICY_IMPLEMENTATION_VERSION,
+} from './artemisSegmentedPerformancePolicyContract.js';
 
 // ─── Canonical identity ──────────────────────────────────────────────────────
 
@@ -812,6 +822,26 @@ function validateThinAggregateRef(ref) {
       );
     }
   }
+
+  assertExactString(
+    ref.contractVersion.trim(),
+    EVALUATION_PERFORMANCE_AGGREGATE_CONTRACT_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_AGGREGATE_REF_CONTRACT_VERSION_MISMATCH',
+    'aggregateRef.contractVersion is not the canonical Aggregate contract version',
+  );
+  assertExactString(
+    ref.policyVersion.trim(),
+    EVALUATION_PERFORMANCE_AGGREGATE_POLICY_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_AGGREGATE_REF_POLICY_VERSION_MISMATCH',
+    'aggregateRef.policyVersion is not the canonical Aggregate policy version',
+  );
+  assertExactString(
+    ref.implementationVersion.trim(),
+    EVALUATION_PERFORMANCE_AGGREGATE_IMPLEMENTATION_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_AGGREGATE_REF_IMPLEMENTATION_VERSION_MISMATCH',
+    'aggregateRef.implementationVersion is not the canonical Aggregate implementation version',
+  );
+
   return {
     aggregateId: ref.aggregateId.trim(),
     contractVersion: ref.contractVersion.trim(),
@@ -859,6 +889,26 @@ function validateThinSegmentedPolicyRef(ref) {
       { actual: ref.sliceId },
     );
   }
+
+  assertExactString(
+    ref.contractVersion.trim(),
+    SEGMENTED_PERFORMANCE_POLICY_CONTRACT_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_SEGMENTED_REF_CONTRACT_VERSION_MISMATCH',
+    'segmentedPerformancePolicyRef.contractVersion is not the canonical Segmented Performance Policy contract version',
+  );
+  assertExactString(
+    ref.policyVersion.trim(),
+    SEGMENTED_PERFORMANCE_POLICY_POLICY_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_SEGMENTED_REF_POLICY_VERSION_MISMATCH',
+    'segmentedPerformancePolicyRef.policyVersion is not the canonical Segmented Performance Policy policy version',
+  );
+  assertExactString(
+    ref.implementationVersion.trim(),
+    SEGMENTED_PERFORMANCE_POLICY_IMPLEMENTATION_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_SEGMENTED_REF_IMPLEMENTATION_VERSION_MISMATCH',
+    'segmentedPerformancePolicyRef.implementationVersion is not the canonical Segmented Performance Policy implementation version',
+  );
+
   return {
     policyId: ref.policyId.trim(),
     contractVersion: ref.contractVersion.trim(),
@@ -1467,6 +1517,245 @@ export function buildSampleSufficiencyPolicyArtifact(input = {}) {
  * Validate a previously built Sample Sufficiency Policy artifact.
  * Re-derives policyId and rejects caller-supplied authority / verdicts.
  */
+const SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TOP_LEVEL_KEYS = Object.freeze([
+  'schemaVersion',
+  'contractVersion',
+  'policyVersion',
+  'implementationVersion',
+  'artifactType',
+  'policyType',
+  'authorityClass',
+  'riskTier',
+  'sliceId',
+  'officialName',
+  'ownershipRole',
+  'isSourceOfTruth',
+  'sampleSufficiencyOwner',
+  'policyId',
+  'recordedAt',
+  'segmentScope',
+  'cohort',
+  'aggregateRef',
+  'segmentedPerformancePolicyRef',
+  'sampleSufficiencyPolicy',
+  'sampleSufficiencyThresholdPolicy',
+  'sufficiencyVerdict',
+  'thresholdInvention',
+  'sampleSizeInvention',
+  'regimeIdentityCanonical',
+  'globalAverageOnly',
+  'globalAverageOnlyBypass',
+  'trustWeighting',
+  'promotion',
+  'demotion',
+  'calibrationExecution',
+  'binaryBrierExecution',
+  'downstreamGating',
+  'hardFlags',
+  'sideEffects',
+  'limitations',
+  'provenance',
+]);
+
+function assertExactOwnKeys(obj, expected, unknownCode, missingCode, context) {
+  const ownKeys = Reflect.ownKeys(obj);
+  const symbolKeys = ownKeys.filter((key) => typeof key === 'symbol');
+  if (symbolKeys.length > 0) {
+    fail(
+      unknownCode,
+      `Unknown symbol field(s) on ${context}`,
+      { context, symbolCount: symbolKeys.length },
+    );
+  }
+  const actual = ownKeys.filter((key) => typeof key === 'string');
+  const unknown = actual.filter((key) => !expected.includes(key));
+  if (unknown.length > 0) {
+    fail(unknownCode, `Unknown field(s) on ${context}`, { context, unknown });
+  }
+  const missing = expected.filter(
+    (key) => !Object.prototype.hasOwnProperty.call(obj, key),
+  );
+  if (missing.length > 0) {
+    fail(missingCode, `Missing required field(s) on ${context}`, { context, missing });
+  }
+}
+
+function assertExactArrayKeys(array, context) {
+  assertExactOwnKeys(
+    array,
+    ['length', ...Array.from({ length: array.length }, (_, i) => String(i))],
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+    context,
+  );
+}
+
+function assertCanonicalArtifactShape(artifact) {
+  assertExactOwnKeys(
+    artifact,
+    SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TOP_LEVEL_KEYS,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_MISSING_FIELD',
+    'artifact',
+  );
+
+  assertExactString(artifact.schemaVersion, SAMPLE_SUFFICIENCY_POLICY_SCHEMA_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SCHEMA_VERSION_MISMATCH', 'schemaVersion mismatch');
+  assertExactString(artifact.contractVersion, SAMPLE_SUFFICIENCY_POLICY_CONTRACT_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CONTRACT_VERSION_MISMATCH', 'contractVersion mismatch');
+  assertExactString(artifact.policyVersion, SAMPLE_SUFFICIENCY_POLICY_POLICY_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_POLICY_VERSION_MISMATCH', 'policyVersion mismatch');
+  assertExactString(artifact.implementationVersion, SAMPLE_SUFFICIENCY_POLICY_IMPLEMENTATION_VERSION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IMPLEMENTATION_VERSION_MISMATCH', 'implementationVersion mismatch');
+  assertExactString(artifact.artifactType, SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TYPE,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_ARTIFACT_TYPE_MISMATCH', 'artifactType mismatch');
+  assertExactString(artifact.policyType, SAMPLE_SUFFICIENCY_POLICY_TYPE,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_POLICY_TYPE_MISMATCH', 'policyType mismatch');
+  assertExactString(artifact.authorityClass, SAMPLE_SUFFICIENCY_POLICY_AUTHORITY_CLASS,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_AUTHORITY_CLASS_MISMATCH', 'authorityClass mismatch');
+  assertExactString(artifact.riskTier, SAMPLE_SUFFICIENCY_POLICY_RISK_TIER,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_RISK_TIER_MISMATCH', 'riskTier mismatch');
+  assertExactString(artifact.sliceId, SAMPLE_SUFFICIENCY_POLICY_SLICE_ID,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SLICE_ID_MISMATCH', 'sliceId mismatch');
+  assertExactString(artifact.officialName, SAMPLE_SUFFICIENCY_POLICY_OFFICIAL_NAME,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_OFFICIAL_NAME_MISMATCH', 'officialName mismatch');
+  assertExactString(artifact.ownershipRole, SAMPLE_SUFFICIENCY_POLICY_OWNERSHIP_ROLE,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_OWNERSHIP_ROLE_MISMATCH', 'ownershipRole mismatch');
+  assertExactBoolean(artifact.isSourceOfTruth, false,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IS_SOT_MISMATCH', 'isSourceOfTruth must be false');
+  assertExactString(artifact.sampleSufficiencyOwner, SAMPLE_SUFFICIENCY_OWNER,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_OWNER_MISMATCH', 'sampleSufficiencyOwner mismatch');
+  assertExactString(artifact.sampleSufficiencyPolicy, SAMPLE_SUFFICIENCY_POLICY,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_STATE_MISMATCH', 'sampleSufficiencyPolicy mismatch');
+  assertExactString(artifact.sampleSufficiencyThresholdPolicy, SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_THRESHOLD_STATE_MISMATCH', 'sampleSufficiencyThresholdPolicy mismatch');
+  assertExactString(artifact.sufficiencyVerdict, SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_MISMATCH', 'sufficiencyVerdict must remain UNDEFINED / DEFERRED');
+  assertExactString(artifact.thresholdInvention, THRESHOLD_INVENTION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_THRESHOLD_INVENTION_MISMATCH', 'thresholdInvention mismatch');
+  assertExactString(artifact.sampleSizeInvention, SAMPLE_SIZE_INVENTION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SAMPLE_SIZE_INVENTION_MISMATCH', 'sampleSizeInvention mismatch');
+  assertExactBoolean(artifact.regimeIdentityCanonical, false,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_REGIME_IDENTITY_MISMATCH', 'regimeIdentityCanonical must be false');
+  assertExactString(artifact.globalAverageOnly, GLOBAL_AVERAGE_ONLY,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_GLOBAL_AVERAGE_MISMATCH', 'globalAverageOnly mismatch');
+  assertExactString(artifact.globalAverageOnlyBypass, GLOBAL_AVERAGE_ONLY_BYPASS,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_GLOBAL_AVERAGE_BYPASS_MISMATCH', 'globalAverageOnlyBypass mismatch');
+  assertExactString(artifact.trustWeighting, TRUST_WEIGHTING,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TRUST_WEIGHTING_MISMATCH', 'trustWeighting mismatch');
+  assertExactString(artifact.promotion, PROMOTION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_PROMOTION_MISMATCH', 'promotion mismatch');
+  assertExactString(artifact.demotion, DEMOTION,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_DEMOTION_MISMATCH', 'demotion mismatch');
+  assertExactBoolean(artifact.calibrationExecution, false,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CALIBRATION_EXECUTION_MISMATCH', 'calibrationExecution must be false');
+  assertExactBoolean(artifact.binaryBrierExecution, false,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_BINARY_BRIER_EXECUTION_MISMATCH', 'binaryBrierExecution must be false');
+
+  if (typeof artifact.policyId !== 'string' || artifact.policyId.trim().length === 0) {
+    fail('SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_POLICY_ID_INVALID', 'policyId must be a non-empty string');
+  }
+  if (artifact.recordedAt !== null
+    && (typeof artifact.recordedAt !== 'string' || artifact.recordedAt.trim().length === 0)) {
+    fail('SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_RECORDED_AT_INVALID', 'recordedAt must be null or a non-empty string');
+  }
+  if (typeof artifact.segmentScope !== 'string' || !Object.values(SEGMENT_SCOPE).includes(artifact.segmentScope)) {
+    fail('SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SEGMENT_SCOPE_INVALID', 'segmentScope must be a canonical SEGMENT_SCOPE value');
+  }
+
+  if (artifact.cohort !== null) {
+    assertPlainObject(
+      artifact.cohort,
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_COHORT_INVALID',
+      'artifact.cohort must be a plain object or null',
+    );
+    const allowedCohortKeys = [
+      ...AUTHORIZED_CANONICAL_SEGMENT_DIMENSIONS,
+      ...CANONICAL_VERSION_BINDING_FIELDS,
+    ];
+    const cohortKeys = Reflect.ownKeys(artifact.cohort);
+    if (cohortKeys.some((key) => typeof key === 'symbol')) {
+      fail('SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD', 'artifact.cohort contains symbol fields');
+    }
+    const unknown = cohortKeys.filter(
+      (key) => typeof key === 'string' && !allowedCohortKeys.includes(key),
+    );
+    if (unknown.length > 0) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+        'artifact.cohort contains unknown fields',
+        { unknown },
+      );
+    }
+    for (const dim of AUTHORIZED_CANONICAL_SEGMENT_DIMENSIONS) {
+      if (!Object.prototype.hasOwnProperty.call(artifact.cohort, dim)) {
+        fail(
+          'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+          `artifact.cohort missing canonical dimension: ${dim}`,
+        );
+      }
+    }
+    const normalizedCohort = extractCohort(artifact.cohort);
+    if (stableJson(normalizedCohort) !== stableJson(artifact.cohort)) {
+      fail(
+        'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_COHORT_CANONICAL_MISMATCH',
+        'artifact.cohort diverges from canonical normalization',
+      );
+    }
+  }
+
+  if (artifact.aggregateRef !== null) validateThinAggregateRef(artifact.aggregateRef);
+  if (artifact.segmentedPerformancePolicyRef !== null) {
+    validateThinSegmentedPolicyRef(artifact.segmentedPerformancePolicyRef);
+  }
+
+  assertExactOwnKeys(
+    artifact.downstreamGating,
+    Object.keys(DOWNSTREAM_GATING),
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+    'artifact.downstreamGating',
+  );
+  assertExactOwnKeys(
+    artifact.hardFlags,
+    Object.keys(REQUIRED_HARD_FLAGS),
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+    'artifact.hardFlags',
+  );
+  assertExactOwnKeys(
+    artifact.sideEffects,
+    Object.keys(ZERO_SAMPLE_SUFFICIENCY_POLICY_SIDE_EFFECTS),
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+    'artifact.sideEffects',
+  );
+  assertExactOwnKeys(
+    artifact.provenance,
+    ['writer', 'methodKey', 'stage', 'identityIncludesRecordedAt'],
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_UNKNOWN_FIELD',
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_SHAPE_MISSING_FIELD',
+    'artifact.provenance',
+  );
+  if (!Array.isArray(artifact.limitations)) {
+    fail('SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_LIMITATIONS_INVALID', 'limitations must be an array');
+  }
+  assertExactArrayKeys(artifact.limitations, 'artifact.limitations');
+}
+
+function assertCanonicalArtifactEqualsRebuild(artifact, rebuilt) {
+  if (stableJson(artifact) !== stableJson(rebuilt)) {
+    const mismatches = SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_TOP_LEVEL_KEYS.filter(
+      (key) => stableJson(artifact[key]) !== stableJson(rebuilt[key]),
+    );
+    fail(
+      'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CANONICAL_FIELD_MISMATCH',
+      'Artifact diverges from canonical rebuilt artifact',
+      { mismatches },
+    );
+  }
+}
+
 export function validateSampleSufficiencyPolicyArtifact(artifact) {
   assertPlainObject(
     artifact,
@@ -1474,9 +1763,9 @@ export function validateSampleSufficiencyPolicyArtifact(artifact) {
     'Artifact must be a plain object',
   );
 
-  // Inventing fields (minimumN / sufficient / …) remain forbidden on artifacts.
-  // Canonical `sufficiencyVerdict` / policy-state keys are validated exactly below
-  // — do NOT treat their presence as caller authority.
+  assertCanonicalArtifactShape(artifact);
+
+  // Caller-controlled threshold/verdict/secret/runtime fields remain forbidden.
   for (const key of FORBIDDEN_THRESHOLD_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(artifact, key)) {
       fail(
@@ -1500,66 +1789,24 @@ export function validateSampleSufficiencyPolicyArtifact(artifact) {
     artifact,
     'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_FORBIDDEN_FIELD',
   );
-
-  assertExactString(
-    artifact.contractVersion,
-    SAMPLE_SUFFICIENCY_POLICY_CONTRACT_VERSION,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_CONTRACT_VERSION_MISMATCH',
-    'contractVersion mismatch',
-  );
-  assertExactString(
-    artifact.policyVersion,
-    SAMPLE_SUFFICIENCY_POLICY_POLICY_VERSION,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_POLICY_VERSION_MISMATCH',
-    'policyVersion mismatch',
-  );
-  assertExactString(
-    artifact.authorityClass,
-    SAMPLE_SUFFICIENCY_POLICY_AUTHORITY_CLASS,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_AUTHORITY_CLASS_MISMATCH',
-    'authorityClass mismatch',
-  );
-  assertExactString(
-    artifact.sliceId,
-    SAMPLE_SUFFICIENCY_POLICY_SLICE_ID,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SLICE_ID_MISMATCH',
-    'sliceId mismatch',
-  );
-  assertExactBoolean(
-    artifact.isSourceOfTruth,
-    false,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IS_SOT_MISMATCH',
-    'isSourceOfTruth must be false',
-  );
-  assertExactString(
-    artifact.sampleSufficiencyPolicy,
-    SAMPLE_SUFFICIENCY_POLICY,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_STATE_MISMATCH',
-    'sampleSufficiencyPolicy mismatch',
-  );
-  assertExactString(
-    artifact.sampleSufficiencyThresholdPolicy,
-    SAMPLE_SUFFICIENCY_THRESHOLD_POLICY,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_THRESHOLD_STATE_MISMATCH',
-    'sampleSufficiencyThresholdPolicy mismatch',
-  );
-  assertExactString(
-    artifact.sufficiencyVerdict,
-    SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
-    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_VERDICT_MISMATCH',
-    'sufficiencyVerdict must remain UNDEFINED / DEFERRED',
+  assertSizeBound(
+    artifact,
+    MAX_SAMPLE_SUFFICIENCY_POLICY_BYTES,
+    'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_SIZE_EXCEEDED',
   );
 
-  const input = {};
-  if (artifact.cohort != null) input.cohort = artifact.cohort;
-  if (artifact.aggregateRef != null) input.aggregateRef = artifact.aggregateRef;
-  if (artifact.segmentedPerformancePolicyRef != null) {
+  const input = {
+    segmentScope: artifact.segmentScope,
+  };
+  if (artifact.cohort !== null) input.cohort = artifact.cohort;
+  if (artifact.aggregateRef !== null) input.aggregateRef = artifact.aggregateRef;
+  if (artifact.segmentedPerformancePolicyRef !== null) {
     input.segmentedPerformancePolicyRef = artifact.segmentedPerformancePolicyRef;
   }
-  if (artifact.segmentScope != null) input.segmentScope = artifact.segmentScope;
-  if (artifact.recordedAt != null) input.recordedAt = artifact.recordedAt;
+  if (artifact.recordedAt !== null) input.recordedAt = artifact.recordedAt;
 
   const rebuilt = buildSampleSufficiencyPolicyArtifact(input);
+
   if (rebuilt.policyId !== artifact.policyId) {
     fail(
       'SAMPLE_SUFFICIENCY_POLICY_ARTIFACT_IDENTITY_MISMATCH',
@@ -1567,6 +1814,8 @@ export function validateSampleSufficiencyPolicyArtifact(artifact) {
       { claimed: artifact.policyId, expected: rebuilt.policyId },
     );
   }
+
+  assertCanonicalArtifactEqualsRebuild(artifact, rebuilt);
   return rebuilt;
 }
 
