@@ -895,6 +895,184 @@ describe('artemisSampleSufficiencyPolicyContract — adversarial', () => {
   });
 });
 
+
+// ─── Stage 10 hardening adversarial matrix ───────────────────────────────────
+
+function baseArtifactForHardening() {
+  return buildSampleSufficiencyPolicyArtifact({
+    cohort: baseCohort(),
+    segmentScope: SEGMENT_SCOPE.SEGMENTED,
+    aggregateRef: baseAggregateRef(),
+    segmentedPerformancePolicyRef: baseSegmentedRef(),
+    recordedAt: '2026-09-26T12:00:00.000Z',
+  });
+}
+
+function cloneArtifactForHardening() {
+  return structuredClone(baseArtifactForHardening());
+}
+
+function expectArtifactReject(fn) {
+  expect(() => fn()).toThrow(SampleSufficiencyPolicyContractError);
+}
+
+describe('artemisSampleSufficiencyPolicyContract — Stage 10 hardening', () => {
+  test('aggregate thin ref contractVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      aggregateRef: baseAggregateRef({
+        contractVersion: 'artemis-evaluation-performance-aggregate-9.9.9',
+      }),
+    }));
+  });
+
+  test('aggregate thin ref policyVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      aggregateRef: baseAggregateRef({
+        policyVersion: 'artemis-evaluation-performance-aggregate-policy-9.9.9',
+      }),
+    }));
+  });
+
+  test('aggregate thin ref implementationVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      aggregateRef: baseAggregateRef({
+        implementationVersion: '9.9.9',
+      }),
+    }));
+  });
+
+  test('segmented thin ref contractVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      segmentedPerformancePolicyRef: baseSegmentedRef({
+        contractVersion: 'artemis-segmented-performance-policy-9.9.9',
+      }),
+    }));
+  });
+
+  test('segmented thin ref policyVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      segmentedPerformancePolicyRef: baseSegmentedRef({
+        policyVersion: 'artemis-segmented-performance-policy-policy-9.9.9',
+      }),
+    }));
+  });
+
+  test('segmented thin ref implementationVersion must bind canonically', () => {
+    expectArtifactReject(() => buildSampleSufficiencyPolicyArtifact({
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      segmentedPerformancePolicyRef: baseSegmentedRef({
+        implementationVersion: '9.9.9',
+      }),
+    }));
+  });
+
+  const adversarialCases = [
+    ['A', 'schemaVersion', (a) => { a.schemaVersion = '9.9.9'; }],
+    ['B', 'artifactType', (a) => { a.artifactType = 'TAMPERED'; }],
+    ['C', 'policyType', (a) => { a.policyType = 'TAMPERED'; }],
+    ['D', 'authorityClass', (a) => { a.authorityClass = 'CALIBRATION'; }],
+    ['E', 'riskTier', (a) => { a.riskTier = 'Tier 4'; }],
+    ['F', 'officialName', (a) => { a.officialName = 'TAMPERED'; }],
+    ['G', 'ownershipRole', (a) => { a.ownershipRole = 'SOURCE_OF_TRUTH'; }],
+    ['H', 'sampleSufficiencyOwner', (a) => { a.sampleSufficiencyOwner = 'attacker'; }],
+    ['I', 'isSourceOfTruth', (a) => { a.isSourceOfTruth = true; }],
+    ['J', 'sampleSufficiencyPolicy', (a) => { a.sampleSufficiencyPolicy = 'AUTHORIZED'; }],
+    ['K', 'sampleSufficiencyThresholdPolicy', (a) => { a.sampleSufficiencyThresholdPolicy = 'N=30'; }],
+    ['L', 'sufficiencyVerdict', (a) => { a.sufficiencyVerdict = 'SUFFICIENT'; }],
+    ['M', 'thresholdInvention', (a) => { a.thresholdInvention = 'ALLOWED'; }],
+    ['N', 'sampleSizeInvention', (a) => { a.sampleSizeInvention = 'ALLOWED'; }],
+    ['O', 'regimeIdentityCanonical', (a) => { a.regimeIdentityCanonical = true; }],
+    ['P', 'globalAverageOnly', (a) => { a.globalAverageOnly = 'AUTHORIZED'; }],
+    ['Q', 'globalAverageOnlyBypass', (a) => { a.globalAverageOnlyBypass = 'OPEN'; }],
+    ['R', 'trustWeighting', (a) => { a.trustWeighting = 'AUTHORIZED'; }],
+    ['S', 'promotion', (a) => { a.promotion = 'AUTHORIZED'; }],
+    ['T', 'demotion', (a) => { a.demotion = 'AUTHORIZED'; }],
+    ['U', 'calibrationExecution', (a) => { a.calibrationExecution = true; }],
+    ['V', 'binaryBrierExecution', (a) => { a.binaryBrierExecution = true; }],
+    ['W', 'downstreamGating', (a) => { a.downstreamGating = { ...a.downstreamGating, promotion: 'OPEN' }; }],
+    ['X', 'hardFlags', (a) => { a.hardFlags = { ...a.hardFlags, trustMutation: true }; }],
+    ['Y', 'sideEffects', (a) => { a.sideEffects = { ...a.sideEffects, dbWriteCount: 1 }; }],
+    ['Z', 'limitations', (a) => { a.limitations = [...a.limitations, 'attacker']; }],
+    ['AA', 'provenance', (a) => { a.provenance = { ...a.provenance, writer: 'attacker' }; }],
+    ['AB', 'unknown top-level field', (a) => { a.extra = 'attacker'; }],
+    ['AC', 'missing top-level field', (a) => { delete a.provenance; }],
+    ['AD', 'unknown nested field', (a) => { a.hardFlags = { ...a.hardFlags, sneaky: false }; }],
+  ];
+
+  test.each(adversarialCases)('%s. %s tampering fails closed', (_id, _label, mutate) => {
+    const artifact = cloneArtifactForHardening();
+    mutate(artifact);
+    expectArtifactReject(() => validateSampleSufficiencyPolicyArtifact(artifact));
+  });
+
+  test('AE. policyId tampering fails canonical re-derivation', () => {
+    const artifact = cloneArtifactForHardening();
+    artifact.policyId = '00000000-0000-4000-8000-000000000000';
+    expectArtifactReject(() => validateSampleSufficiencyPolicyArtifact(artifact));
+  });
+
+  test('AF. recordedAt remains bookkeeping-only for identity', () => {
+    const base = {
+      cohort: baseCohort(),
+      segmentScope: SEGMENT_SCOPE.SEGMENTED,
+      aggregateRef: baseAggregateRef(),
+      segmentedPerformancePolicyRef: baseSegmentedRef(),
+    };
+    const a = buildSampleSufficiencyPolicyArtifact({
+      ...base,
+      recordedAt: '2026-09-26T12:00:00.000Z',
+    });
+    const b = buildSampleSufficiencyPolicyArtifact({
+      ...base,
+      recordedAt: '2026-09-27T12:00:00.000Z',
+    });
+    expect(a.policyId).toBe(b.policyId);
+    expect(validateSampleSufficiencyPolicyArtifact(a).policyId).toBe(a.policyId);
+    expect(validateSampleSufficiencyPolicyArtifact(b).policyId).toBe(b.policyId);
+  });
+
+  test('AG. canonical thin refs remain thin and are not embedded upstream artifacts', () => {
+    const artifact = baseArtifactForHardening();
+    expect(Object.keys(artifact.aggregateRef).sort()).toEqual([
+      'aggregateId',
+      'contractVersion',
+      'implementationVersion',
+      'policyVersion',
+    ]);
+    expect(Object.keys(artifact.segmentedPerformancePolicyRef).sort()).toEqual([
+      'contractVersion',
+      'implementationVersion',
+      'policyId',
+      'policyVersion',
+      'sliceId',
+    ]);
+    expect(artifact.aggregateRef).not.toHaveProperty('counts');
+    expect(artifact.segmentedPerformancePolicyRef).not.toHaveProperty('counts');
+  });
+
+  test('AH. threshold and verdict remain undefined/deferred after canonical validation', () => {
+    const validated = validateSampleSufficiencyPolicyArtifact(baseArtifactForHardening());
+    expect(validated.sampleSufficiencyPolicy).toBe('UNDEFINED / DEFERRED');
+    expect(validated.sampleSufficiencyThresholdPolicy).toBe(
+      'UNDEFINED / NOT_AUTHORIZED',
+    );
+    expect(validated.sufficiencyVerdict).toBe('UNDEFINED / DEFERRED');
+    expect(validated.thresholdInvention).toBe('FORBIDDEN');
+    expect(validated.sampleSizeInvention).toBe('FORBIDDEN');
+  });
+});
+
 function UPSTREAM_EXPORT_SAFE() {
   // Ensure we did not mutate Segmented / Aggregate exports by importing them.
   // This contract only imports hashToUuid from Replay.
