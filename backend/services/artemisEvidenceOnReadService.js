@@ -1,12 +1,20 @@
 /**
  * WP-B.1 on-read Artemis evidence projection.
  * Reads ai_decisions + ai_agents. No writes, no migration, no provider calls, no Agent execution.
+ *
+ * R3 reconciliation:
+ * - Stage-3 library adapters remain dispatchable for projection / Stage-4 ingestion
+ *   (mapped Stage-3 behavior — not invented from identity alone).
+ * - COMPATIBLE_ADAPTER_IDS is the WP-B.1 Production/TCMC on-read compatibility claim
+ *   set (trend, arbitrage, volume). Membership here drives readiness evidenceCompatible
+ *   and must NOT equal the full canonical 15.
+ * - Canonical identity resolution remains available for all Agent keys.
+ * - Identity / Stage-3 mapping ≠ runtime-ready / live-proven.
  */
 
 import { query } from '../database/db.js';
 import {
   ADAPTER_VERSIONS,
-  CANONICAL_AGENT_IDS,
   validateEvidenceEnvelope,
 } from '../contracts/artemisEvidenceContract.js';
 import { resolveArtemisAgentIdentity } from './artemisAgentIdentity.js';
@@ -30,8 +38,19 @@ import {
 } from './artemisEvidenceAdapters/index.js';
 import { parseJsonObject } from './artemisEvidenceAdapters/support.js';
 
-export const COMPATIBLE_ADAPTER_IDS = CANONICAL_AGENT_IDS;
+/**
+ * On-read evidence-compatible Agent set (WP-B.1 Production / TCMC surface).
+ * Distinct from CANONICAL_AGENT_IDS (identity vocabulary) and from Stage-3
+ * library adapter inventory used by projectDecisionRow / Stage-4 ingestion.
+ * Membership here does NOT equal proven live readiness.
+ */
+export const COMPATIBLE_ADAPTER_IDS = Object.freeze(['trend', 'arbitrage', 'volume']);
 
+/**
+ * Stage-3 mapped library adapters (projection capability).
+ * Broader than COMPATIBLE_ADAPTER_IDS; used for Stage-4 ingestion reconstruction.
+ * Presence of a mapper ≠ WP-B.1 on-read compatibility ≠ live readiness.
+ */
 const ADAPTERS = Object.freeze({
   technical: mapTechnicalPersistedRun,
   trend: mapTrendPersistedRun,
@@ -76,6 +95,10 @@ export function isAdapterCompatible(agentId) {
   return COMPATIBLE_ADAPTER_IDS.includes(agentId);
 }
 
+function wpB1Compatible(agentId) {
+  return COMPATIBLE_ADAPTER_IDS.includes(agentId);
+}
+
 export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = false } = {}) {
   const started = Date.now();
   const identity = resolveArtemisAgentIdentity(row.agent_key || row.agentKey || row.agentId);
@@ -102,6 +125,7 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
     };
   }
 
+  const compatible = wpB1Compatible(identity.agentId);
   const output = parseJsonObject(row.output ?? row.output_data);
   const input = parseJsonObject(row.input ?? row.input_data);
   const mapped = adapter({
@@ -116,7 +140,7 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
       ok: false,
       reason: mapped?.reason || 'adapter_failed',
       agentId: identity.agentId,
-      evidenceCompatible: true,
+      evidenceCompatible: compatible,
       evidenceAvailable: false,
       elapsedMs: Date.now() - started,
     };
@@ -129,7 +153,7 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
       reason: 'envelope_validation_failed',
       validation,
       agentId: identity.agentId,
-      evidenceCompatible: true,
+      evidenceCompatible: compatible,
       evidenceAvailable: false,
       elapsedMs: Date.now() - started,
     };
@@ -139,7 +163,7 @@ export function projectDecisionRow(row = {}, { nowMs, includeInternalEnvelope = 
   return {
     ok: true,
     agentId: identity.agentId,
-    evidenceCompatible: true,
+    evidenceCompatible: compatible,
     evidenceAvailable: mapped.envelope.availability === 'available',
     validation,
     product,

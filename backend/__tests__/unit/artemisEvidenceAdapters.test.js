@@ -171,3 +171,51 @@ describe('Volume read-only adapter', () => {
     expect(missing.envelope.confidence.availability).toBe('unavailable');
   });
 });
+
+describe('R3 timestamp fail-closed (WP-B.1 trio)', () => {
+  it('Trend does not invent wall-clock analysisTimestamp when source times are missing', () => {
+    const mapped = mapTrendPersistedRun({
+      nowMs: NOW,
+      row: { id: TREND_RUN_ID, agent_id: TREND_AGENT_RECORD_ID },
+      output: {
+        symbol: 'BTC/USDT',
+        timeframe: '1h',
+        trend: { direction: 'bullish', confidence: 72 },
+      },
+    });
+    expect(mapped.ok).toBe(false);
+    expect(mapped.reason).toBe('analysis_timestamp_unavailable');
+    expect(mapped.envelope).toBeUndefined();
+  });
+
+  it('Arbitrage does not invent wall-clock analysisTimestamp when source times are missing', () => {
+    const mapped = mapArbitragePersistedRun({
+      nowMs: NOW,
+      row: { id: ARB_RUN_ID, agent_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      output: {
+        candidates: [{ symbol: 'BTC/USDT', spreadPct: 0.8 }],
+        summary: { spreadCandidates: 1 },
+      },
+    });
+    expect(mapped.ok).toBe(false);
+    expect(mapped.reason).toBe('analysis_timestamp_unavailable');
+    expect(mapped.envelope).toBeUndefined();
+  });
+
+  it('Volume does not invent wall-clock analysisTimestamp when source times are missing', () => {
+    const mapped = mapVolumePersistedRun({
+      nowMs: NOW,
+      row: { id: VOL_RUN_ID },
+      output: {
+        symbol: 'BTC/USDT',
+        timeframe: '1h',
+        obv: { current: 12, trend: 'rising' },
+        vwap: { current: 101 },
+        trading_recommendation: { action: 'BUY', confidence: 68 },
+      },
+    });
+    expect(mapped.ok).toBe(false);
+    expect(mapped.reason).toBe('analysis_timestamp_unavailable');
+    expect(mapped.envelope).toBeUndefined();
+  });
+});

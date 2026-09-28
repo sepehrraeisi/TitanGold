@@ -13,6 +13,7 @@ const { CANONICAL_AGENT_IDS } = await import('../../contracts/artemisEvidenceCon
 const {
   AI_DECISIONS_EVIDENCE_READ_SQL,
   COMPATIBLE_ADAPTER_IDS,
+  isAdapterCompatible,
   projectDecisionRow,
   projectRecentEvidence,
 } = await import('../../services/artemisEvidenceOnReadService.js');
@@ -30,8 +31,20 @@ describe('Artemis WP-B.1 on-read projection', () => {
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).toMatch(/d\.output_data AS output/);
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).not.toMatch(/SELECT[^\n]*\bd\.input\b/);
     expect(AI_DECISIONS_EVIDENCE_READ_SQL).not.toMatch(/SELECT[^\n]*\bd\.output\b/);
-    expect(COMPATIBLE_ADAPTER_IDS).toEqual(CANONICAL_AGENT_IDS);
-    expect(COMPATIBLE_ADAPTER_IDS).toHaveLength(15);
+    // R3 SEMANTIC_MERGE:
+    // - COMPATIBLE_ADAPTER_IDS = WP-B.1 Production/TCMC trio (readiness claim)
+    // - Canonical identity vocabulary remains 15 and must not imply readiness
+    // - Stage-3 ADAPTERS remain broader for ingestion reconstruction (identity ≠ readiness)
+    expect(COMPATIBLE_ADAPTER_IDS).toEqual(['trend', 'arbitrage', 'volume']);
+    expect(COMPATIBLE_ADAPTER_IDS).toHaveLength(3);
+    expect(CANONICAL_AGENT_IDS).toHaveLength(15);
+    for (const agentId of COMPATIBLE_ADAPTER_IDS) {
+      expect(CANONICAL_AGENT_IDS).toContain(agentId);
+      expect(isAdapterCompatible(agentId)).toBe(true);
+    }
+    expect(isAdapterCompatible('technical')).toBe(false);
+    expect(isAdapterCompatible('pattern')).toBe(false);
+    expect(isAdapterCompatible('risk')).toBe(false);
 
     mockQuery.mockResolvedValue({ rows: [] });
     const result = await projectRecentEvidence({ limit: 200 });
@@ -74,7 +87,9 @@ describe('Artemis WP-B.1 on-read projection', () => {
     expect(JSON.stringify(projected.product)).not.toMatch(/output_data/);
   });
 
-  it('maps Pattern fail-closed and Optimization not_applicable without dropping compatibility', () => {
+  it('Stage-3 maps Pattern/Optimization without claiming WP-B.1 evidenceCompatible', () => {
+    // Pattern has a Stage-3 adapter (maps fail-closed mock/placeholder).
+    // Identity mapping succeeds; WP-B.1 evidenceCompatible remains false.
     const pattern = projectDecisionRow({
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000p1',
       agent_key: 'pattern',
@@ -82,11 +97,15 @@ describe('Artemis WP-B.1 on-read projection', () => {
       output: { symbol: 'ETH/USDT' },
     }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
     expect(pattern.ok).toBe(true);
-    expect(pattern.evidenceCompatible).toBe(true);
+    expect(pattern.agentId).toBe('pattern');
+    expect(pattern.evidenceCompatible).toBe(false);
     expect(pattern.evidenceAvailable).toBe(false);
+    expect(isAdapterCompatible('pattern')).toBe(false);
     expect(pattern.envelope.availability).toBe('unavailable');
     expect(pattern.envelope.unavailableReason).toBe('mock_or_placeholder_source');
 
+    // Optimization Stage-3 adapter normalizes to not_applicable.
+    // Must not invent BUY/SELL as control authority; evidenceCompatible stays false.
     const optimization = projectDecisionRow({
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000o1',
       agent_key: 'optimization',
@@ -94,11 +113,45 @@ describe('Artemis WP-B.1 on-read projection', () => {
       output: { score: 1, recommendation: 'BUY' },
     }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
     expect(optimization.ok).toBe(true);
-    expect(optimization.evidenceCompatible).toBe(true);
+    expect(optimization.agentId).toBe('optimization');
+    expect(optimization.evidenceCompatible).toBe(false);
     expect(optimization.evidenceAvailable).toBe(false);
+    expect(isAdapterCompatible('optimization')).toBe(false);
     expect(optimization.envelope.availability).toBe('not_applicable');
     expect(optimization.envelope.conclusion.direction).toBe('not_applicable');
     expect(JSON.stringify(optimization.envelope.conclusion)).not.toMatch(/BUY|SELL|EXECUTE/);
+  });
+
+  it('maps Technical via Stage-3 without promoting to WP-B.1 evidenceCompatible', () => {
+    // Technical is Stage-3 mapped (fail-closed without proven candle+provider)
+    // but is NOT in COMPATIBLE_ADAPTER_IDS. Identity ≠ readiness.
+    const technical = projectDecisionRow({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000t1',
+      agent_key: 'technical',
+      created_at: '2026-08-10T12:00:00.000Z',
+      output: { symbol: 'BTC/USDT', signal: 'BUY' },
+    }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
+    expect(technical.ok).toBe(true);
+    expect(technical.agentId).toBe('technical');
+    expect(technical.evidenceCompatible).toBe(false);
+    expect(technical.evidenceAvailable).toBe(false);
+    expect(isAdapterCompatible('technical')).toBe(false);
+    expect(technical.envelope.availability).toBe('unavailable');
+    expect(technical.envelope.unavailableReason).toBe('mock_or_placeholder_source');
+  });
+
+  it('fail-closes completely unknown Agent keys without inventing evidence success', () => {
+    const unknown = projectDecisionRow({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-0000000000xx',
+      agent_key: 'not_a_real_agent',
+      created_at: '2026-08-10T12:00:00.000Z',
+      output: { symbol: 'BTC/USDT' },
+    }, { includeInternalEnvelope: true, nowMs: Date.parse('2026-08-10T12:10:00.000Z') });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.evidenceCompatible).toBe(false);
+    expect(unknown.evidenceAvailable).toBe(false);
+    // Identity resolution fails first (before Stage-3 adapter dispatch).
+    expect(unknown.reason).toBe('unknown_identity');
   });
 
   it('product projection never copies confidence value or raw evidence items', () => {

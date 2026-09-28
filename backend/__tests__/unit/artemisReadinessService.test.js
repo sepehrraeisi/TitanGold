@@ -93,7 +93,10 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.executionEligible).toBe(false);
     expect(readiness.maturityStage).toBe('LEGACY_ADVISORY');
     expect(readiness.contract.implemented).toBe(true);
-    expect(readiness.contract.compatibleAgentCount).toBe(15);
+    // R3: on-read compatible set is WP-B.1 Production/TCMC trio only
+    // (trend, arbitrage, volume). Canonical identity remains 15 and must
+    // NOT inflate compatibleAgentCount / evidenceCompatible claims.
+    expect(readiness.contract.compatibleAgentCount).toBe(3);
     expect(readiness.contract.artemisConsumable).toBe(true);
     expect(readiness.contract.executionEligible).toBe(false);
     expect(readiness.contract.decisionEligible).toBe(false);
@@ -141,7 +144,9 @@ describe('Artemis WP-A readiness aggregation', () => {
     expect(readiness.catalog.agents.find((a) => a.key === 'pattern').limitationKey).toBe('artemis_pattern_source_provenance_blocked');
     expect(readiness.catalog.agents.find((a) => a.key === 'technical').readiness).toBe('CONTRACT_MAPPED');
     expect(readiness.catalog.agents.find((a) => a.key === 'technical').ingestionReadiness).toBe('ARTEMIS_CONSUMABLE');
-    expect(readiness.catalog.agents.find((a) => a.key === 'risk').evidenceCompatible).toBe(true);
+    // Control Agents may be catalogued/CONTROL_ELIGIBLE without being
+    // on-read evidence-compatible. Identity membership ≠ evidenceCompatible.
+    expect(readiness.catalog.agents.find((a) => a.key === 'risk').evidenceCompatible).toBe(false);
     expect(readiness.catalog.agents.find((a) => a.key === 'liquidity').readiness).toBe('BLOCKED');
     expect(readiness.catalog.agents.find((a) => a.key === 'liquidity').ingestionReadiness).toBe('BLOCKED');
     expect(readiness.catalog.agents.find((a) => a.key === 'order').readiness).toBe('NOT_EXECUTION_ELIGIBLE');
