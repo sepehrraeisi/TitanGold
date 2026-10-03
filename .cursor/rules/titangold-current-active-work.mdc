@@ -1,5 +1,5 @@
 ---
-description: TitanGold Rule 02 — MASTER RECONCILIATION R5.5 GOVERNANCE PREPARATION; R2=COMPLETED_VERIFIED; R3=COMPLETED_VERIFIED; R4=COMPLETED_VERIFIED; R5_REPOSITORY_INTEGRATION_VALIDATION=COMPLETED_VERIFIED at R5_FINAL_HEAD ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc; R5_RECONCILIATION_REGRESSION_COUNT=0; R5_GATE_AFTER=VERIFIED; R6_READINESS=READY; AUTHORIZED_SLICE=R6_CLEAN_ROOM_VALIDATION; R6_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R6_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R7_STATUS=NOT_AUTHORIZED; MERGE_STATUS=NOT_AUTHORIZED; PRODUCTION_MUTATION_STATUS=NOT_AUTHORIZED; PRODUCTION_DB_MUTATION_STATUS=NOT_AUTHORIZED; REMOTE_PUSH_STATUS=NOT_AUTHORIZED; DEPLOYMENT_STATUS=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R6 EXECUTION YET; NO SOURCE MUTATION; NO DB MUTATION; NO PRODUCTION MUTATION; DEPLOY=NO; PUSH=NO
+description: TitanGold Rule 02 — MASTER RECONCILIATION R6.5 GOVERNANCE PREPARATION; R2=COMPLETED_VERIFIED; R3=COMPLETED_VERIFIED; R4=COMPLETED_VERIFIED; R5_REPOSITORY_INTEGRATION_VALIDATION=COMPLETED_VERIFIED; R6_CLEAN_ROOM_VALIDATION=COMPLETED_VERIFIED at R6_FINAL_HEAD 8ae47cbd182249d1f87d31e38e08cccaa0969717; R6_REPRODUCIBILITY_REGRESSION_COUNT=0; R7_READINESS=READY; AUTHORIZED_SLICE=R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL; R7_EXECUTION_STATUS=AWAITING_EXPLICIT_OWNER_START; R7_EXECUTION_AUTHORIZED=NO / AWAITING_EXPLICIT_OWNER_START; R8_STATUS=NOT_AUTHORIZED; MERGE_STATUS=NOT_AUTHORIZED; PRODUCTION_MUTATION_STATUS=NOT_AUTHORIZED; PRODUCTION_DB_MUTATION_STATUS=NOT_AUTHORIZED; GITHUB_REMOTE_MUTATION_STATUS=NOT_AUTHORIZED; DEPLOYMENT_STATUS=NOT_AUTHORIZED; FROZEN_BASE_SHA=d3ba15c39527543886c46e3410a0d1570801c0d8; PRODUCTION_HEAD=3fc6a2a00aae329e9db999f8e31648e3ff14a725; RECON_WORKTREE=/home/ubuntu/worktrees/titangold-recon-20260928T145413Z; RECON_BRANCH=recon/master-reconciliation-20260928T145413Z; RECON_HEAD=8ae47cbd182249d1f87d31e38e08cccaa0969717; Stage 10 Artemis slices PRESERVED / READ_REFERENCE_ONLY / NOT REOPENED BY THIS GOVERNANCE; NO R7 EXECUTION YET; NO SOURCE MUTATION; NO DB MUTATION; NO PRODUCTION MUTATION; DEPLOY=NO; PUSH=NO
 alwaysApply: true
 ---
 
@@ -27,7 +27,7 @@ alwaysApply: true
 
 **REMAINING_STAGES = 6**
 
-**CURRENT_PHASE = R5_5_GOVERNANCE_PREPARATION**
+**CURRENT_PHASE = R6_5_GOVERNANCE_PREPARATION**
 **CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
 **R2_STATUS = COMPLETED_VERIFIED**
 **R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
@@ -44,22 +44,29 @@ alwaysApply: true
 **R5_FINAL_RECONCILIATION_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
 **R5_RECONCILIATION_REGRESSION_COUNT = 0**
 **R5_GATE_AFTER = VERIFIED**
-**R6_READINESS = READY**
-**AUTHORIZED_SLICE = R6_CLEAN_ROOM_VALIDATION**
-**R6_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R6_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R6_CLEAN_ROOM_VALIDATION = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R7_STATUS = NOT_AUTHORIZED**
+**R6_STATUS = COMPLETED_VERIFIED**
+**R6_CLEAN_ROOM_VALIDATION = COMPLETED_VERIFIED**
+**R6_FINAL_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_FINAL_RECONCILIATION_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_REPRODUCIBILITY_REGRESSION_COUNT = 0**
+**R6_GATE_AFTER = VERIFIED**
+**R7_READINESS = READY**
+**AUTHORIZED_SLICE = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
+**R7_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R7_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R8_STATUS = NOT_AUTHORIZED**
 **MERGE_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION_STATUS = NOT_AUTHORIZED**
 **DATABASE_MUTATION = NOT_AUTHORIZED**
 **PRODUCTION_DB_MUTATION_STATUS = NOT_AUTHORIZED**
 **GITHUB_REMOTE_MUTATION = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION_STATUS = NOT_AUTHORIZED**
 **REMOTE_PUSH_STATUS = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
 **DEPLOYMENT_STATUS = NOT_AUTHORIZED**
-**NEXT_GATE = R6_CLEAN_ROOM_VALIDATION_OWNER_START**
+**NEXT_GATE = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL_OWNER_START**
 **NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
 **NEXT_GATE_ONLY = YES**
 **STAGE10_ARTEMIS_SLICES = PRESERVED / READ_REFERENCE_ONLY / NOT_REOPENED_BY_RECONCILIATION_GOVERNANCE**
@@ -158,8 +165,8 @@ alwaysApply: true
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_OWNER_DECISION_POST_MERGE = VERIFIED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_AUTH_FINALIZE_PR = #151 / MERGED**
 **S10_SAMPLE_SUFFICIENCY_THRESHOLD_POLICY_CONTRACT_BASE_MAIN_SHA = `a5a55962689f5dbd5da7c88441022c39180a9947`**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R6_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
-**AUTHORIZED_SLICE = R6_CLEAN_ROOM_VALIDATION**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R7_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**AUTHORIZED_SLICE = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
 **NO_OTHER_STAGE10_SLICE_AUTHORIZED = YES**
 **NO_OTHER_RECONCILIATION_SLICE_AUTHORIZED = YES**
@@ -187,23 +194,33 @@ alwaysApply: true
 **R5_FINAL_RECONCILIATION_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
 **R5_RECONCILIATION_REGRESSION_COUNT = 0**
 **R5_GATE_AFTER = VERIFIED**
-**R6_READINESS = READY**
-**R6_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
-**R6_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R6_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**R6_CLEAN_ROOM_VALIDATION = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R6_STATUS = AUTHORIZED / EXECUTION_NOT_STARTED**
-**R7_STATUS = NOT_AUTHORIZED**
+**R6_STATUS = COMPLETED_VERIFIED**
+**R6_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / CONSUMED**
+**R6_EXECUTION_STATUS = COMPLETED_VERIFIED**
+**R6_EXECUTION_AUTHORIZED = NO / CONSUMED**
+**R6_CLEAN_ROOM_VALIDATION = COMPLETED_VERIFIED**
+**R6_FINAL_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_FINAL_RECONCILIATION_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_REPRODUCIBILITY_REGRESSION_COUNT = 0**
+**R6_GATE_AFTER = VERIFIED**
+**R7_READINESS = READY**
+**R6_5_GOVERNANCE_AUTHORIZED = YES — EXACT SLICE ONLY / EXECUTION NOT STARTED**
+**R7_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R7_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R7_STATUS = AUTHORIZED / EXECUTION_NOT_STARTED**
+**R8_STATUS = NOT_AUTHORIZED**
 **MERGE_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_DB_MUTATION_STATUS = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION_STATUS = NOT_AUTHORIZED**
 **REMOTE_PUSH_STATUS = NOT_AUTHORIZED**
 **DEPLOYMENT_STATUS = NOT_AUTHORIZED**
 **FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
 **PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
 **RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
 **RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
-**RECON_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
+**RECON_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
 **RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
 **AUTHORIZATION_EFFECTIVE_AFTER_GOVERNANCE_PR_MERGE = NO / CONSUMED**
 **DO_NOT_IMPLEMENT_BEFORE_GOVERNANCE_PR_MERGE = NO / CONSUMED**
@@ -1759,17 +1776,17 @@ Historical C.6 Active Work Package fields (`STAGE_7_3_2_C_6_STATUS = AUTHORIZED 
 
 Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 
-### Active Work Package — TitanGold Master Reconciliation R5.5 / R6 Clean-Room Validation Governance Authorization (GOVERNANCE ONLY — R6 EXECUTION NOT STARTED)
+### Active Work Package — TitanGold Master Reconciliation R6.5 / R7 Human Review Exact-SHA Approval Governance Authorization (GOVERNANCE ONLY — R7 EXECUTION NOT STARTED)
 
-**AUTHORIZED_SLICE = R6_CLEAN_ROOM_VALIDATION**
-**PRIOR_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
-**SLICE_ID = R6_CLEAN_ROOM_VALIDATION**
-**OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R6_CLEAN_ROOM_VALIDATION**
-**CURRENT_PHASE = R5_5_GOVERNANCE_PREPARATION**
+**AUTHORIZED_SLICE = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
+**PRIOR_SLICE = R6_CLEAN_ROOM_VALIDATION**
+**SLICE_ID = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
+**OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
+**CURRENT_PHASE = R6_5_GOVERNANCE_PREPARATION**
 **CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
 **RISK_TIER = Tier 3**
-**AUTHORITY_CLASS = RECONCILIATION_CLEAN_ROOM_VALIDATION**
-**RULE02_CHANGED = YES — R5.5 GOVERNANCE AUTHORIZATION FOR R6 CLEAN-ROOM VALIDATION ONLY**
+**AUTHORITY_CLASS = RECONCILIATION_HUMAN_REVIEW_EXACT_SHA_APPROVAL**
+**RULE02_CHANGED = YES — R6.5 GOVERNANCE AUTHORIZATION FOR R7 HUMAN REVIEW EXACT-SHA APPROVAL ONLY**
 **PRODUCTION_CODE_CHANGED = NO**
 **TESTS_CHANGED = NO**
 **RUNTIME_CHANGED = NO**
@@ -1778,17 +1795,20 @@ Do **not** reopen or modify C.6. Do **not** create `STAGE_7_3_2_C_7`.
 **SCHEMA_MODIFIED = 0**
 **SOURCE_MODIFIED = 0**
 **PACKAGE_MODIFIED = 0**
-**R6_EXECUTION_STARTED = NO**
+**CI_MODIFIED = 0**
+**R7_EXECUTION_STARTED = NO**
 
 **PURPOSE =**
-Close completed R5 Repository Integration Validation (including R5.1 orphan ArbitrageAgentControl disposition) as COMPLETED_VERIFIED and establish explicit, narrow Active Work governance authority for the NEXT Master Reconciliation phase: R6 = Clean-Room Validation of the reconciled repository from a fresh isolated environment. This transaction does NOT execute R6. It only authorizes the slice so a subsequent explicit Owner start instruction may begin R6. R6 validates whether the reconciled repository can reproduce successfully without relying on reconciliation worktree node_modules, borrowed backend node_modules, Production filesystem, Production runtime files, TCMC release files, hidden local artifacts, manually pre-created database state, untracked files, or environment-specific leftovers. R6 may use isolated disposable resources only. R6 MUST NOT mutate Production or Production DB. R6 MUST NOT deploy, merge, or push. R6 success does NOT mean ready for Production merge or deploy. `MERGED != DEPLOYED != VERIFIED` remains in force.
+Close completed R6 Clean-Room Validation as COMPLETED_VERIFIED and establish explicit, narrow Active Work governance authority for the NEXT Master Reconciliation phase: R7 = Human Review & Exact-SHA Approval of the reconciled candidate. This transaction does NOT execute R7. It only authorizes the slice so a subsequent explicit Owner start instruction may begin R7. R7 is a REVIEW / APPROVAL gate. R7 must not push, merge, mutate GitHub remote, deploy, mutate Production or Production DB, repair migration ledger, or change application code/tests/migrations/package manifests/runtime/Recovery. `MERGED != DEPLOYED != VERIFIED` remains in force.
 
 **FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
 **PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
 **ACTIVE_RUNTIME = `/home/ubuntu/releases/titangold-runtime-TCMC-20260831T143017Z`**
 **RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
 **RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
-**RECON_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
+**RECON_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_FINAL_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_FINAL_RECONCILIATION_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
 **R5_FINAL_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
 **R5_FINAL_RECONCILIATION_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
 **R4_FINAL_RECONCILIATION_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
@@ -1809,29 +1829,35 @@ Close completed R5 Repository Integration Validation (including R5.1 orphan Arbi
 **R5_REPOSITORY_INTEGRATION_VALIDATION = COMPLETED_VERIFIED**
 **R5_RECONCILIATION_REGRESSION_COUNT = 0**
 **R5_GATE_AFTER = VERIFIED**
-**R6_READINESS = READY**
-**R5_CLOSEOUT =**
-- R5 final reconciliation HEAD before this governance commit = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`
-- R5 integration validation completed over R2 + R3 + R4 lineage
-- R5.1 orphan ArbitrageAgentControl disposition COMPLETED_VERIFIED (REMOVE_ORPHAN)
-- R5_RECONCILIATION_REGRESSION_COUNT = 0
-- R5_GATE_AFTER = VERIFIED
-- R6_READINESS = READY
+
+**R6_STATUS = COMPLETED_VERIFIED**
+**R6_CLEAN_ROOM_VALIDATION = COMPLETED_VERIFIED**
+**R6_FINAL_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_REPRODUCIBILITY_REGRESSION_COUNT = 0**
+**R6_GATE_AFTER = VERIFIED**
+**R7_READINESS = READY**
+**R6_CLOSEOUT =**
+- R6 final reconciliation HEAD before this governance commit = `8ae47cbd182249d1f87d31e38e08cccaa0969717`
+- R6 clean-room validation COMPLETED_VERIFIED from fresh isolated checkout of authorized SHA
+- R6_REPRODUCIBILITY_REGRESSION_COUNT = 0
+- R6_GATE_AFTER = VERIFIED
+- R7_READINESS = READY
 - Production DB mutation count = 0
 - Production unchanged
 - Runtime unchanged
 - Recovery unchanged
 - no remote push
 
-**R6_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
-**R6_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
+**R7_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START**
+**R7_EXECUTION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
 **IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
 **SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / AWAITING_EXPLICIT_OWNER_START**
-**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R6_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
-**R7_STATUS = NOT_AUTHORIZED**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / R7_EXECUTION_AWAITING_EXPLICIT_OWNER_START**
+**R8_STATUS = NOT_AUTHORIZED**
 **MERGE_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_DB_MUTATION_STATUS = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION_STATUS = NOT_AUTHORIZED**
 **REMOTE_PUSH_STATUS = NOT_AUTHORIZED**
 **DEPLOYMENT_STATUS = NOT_AUTHORIZED**
 **PRODUCTION_MUTATION = NOT_AUTHORIZED**
@@ -1839,46 +1865,50 @@ Close completed R5 Repository Integration Validation (including R5.1 orphan Arbi
 **GITHUB_REMOTE_MUTATION = NOT_AUTHORIZED**
 **DEPLOYMENT = NOT_AUTHORIZED**
 
-**R6_PURPOSE_WHEN_SEPARATELY_STARTED =**
-Validate whether a fresh isolated checkout of the exact authorized reconciliation SHA (`ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`) can independently establish the required application environment using repository-owned instructions/mechanisms and pass the defined clean-room validation. R6 must not rely on reconciliation worktree node_modules, borrowed backend node_modules, Production filesystem, Production runtime files, TCMC release files, hidden local artifacts, manually pre-created database state, untracked files, or environment-specific leftovers. R6 may use isolated disposable resources only. Any dependency on hidden/local/Production-only state must be reported. Do not waive failures merely because R5 passed in the existing reconciliation environment. R6 success does NOT authorize merge, deploy, Production mutation, or Production DB mutation.
+**R7_PURPOSE_WHEN_SEPARATELY_STARTED =**
+R7 is a REVIEW / APPROVAL gate. After separate explicit Owner start, R7 may: inspect the complete reconciliation diff; inspect reconciliation commit history; summarize R2/R3/R4/R5/R6 evidence; produce final changed-path inventory; verify no unresolved reconciliation regression; verify known pre-existing failures remain correctly classified; identify remaining risks/deferred items; identify exact candidate SHA; prepare a human-review approval packet; compare candidate against frozen GitHub baseline; verify scope boundaries; verify no secret/environment artifact entered candidate history; verify migration/release implications; verify deployment prerequisites that would matter later.
 
-**R6_SUCCESS_GATE_WHEN_SEPARATELY_STARTED =**
-R6 is successful only if a fresh isolated checkout of the exact authorized reconciliation SHA can independently establish the required application environment using repository-owned instructions/mechanisms and pass the defined clean-room validation.
+**R7_MUST_NOT_WHEN_SEPARATELY_STARTED =**
+R7 MUST NOT itself: push; merge; mutate GitHub remote; deploy; mutate Production; mutate Production DB; repair migration ledger; change application code; change tests; change migrations; change package manifests; modify runtime; modify Recovery Point.
 
-**R6_ALLOWED_SCOPE_WHEN_SEPARATELY_STARTED =**
-Default mode: READ / TEST / BUILD inside an isolated clean-room checkout only.
+**R7_EXACT_SHA_APPROVAL_SEMANTICS =**
+R7 approval is SHA-specific. An approval, if later granted by Owner, applies ONLY to the exact candidate SHA reviewed during R7. Any source/test/migration/config/governance mutation after that review changes the SHA and invalidates the approval unless separately reviewed. R7 review completion does NOT itself authorize merge, push, or deploy. Those remain separate later gates. `MERGED != DEPLOYED != VERIFIED`.
+
+**R7_KNOWN_DEFERRED_NON_R6_BLOCKING_REVIEW_INPUTS =**
+Record as known review inputs, not silently resolved facts:
+- backend integration pre-existing failures / local 401 class
+- frontend pre-existing TypeScript debt
+- world-countries format/content issue
+- bootstrap documentation insufficient
+- operational scripts containing hard-coded Production path references
+- Production migration ledger reconciliation still separate from clean-room repository reproducibility
+- Production-only/runtime drift remains a later release/deployment concern
+Do not fix any of these in R6.5.
+
+**R7_OUTPUT_PACKET_EXPECTATION_WHEN_SEPARATELY_STARTED =**
+Future R7 must produce a review packet containing at minimum:
+CANDIDATE_SHA · FROZEN_BASE_SHA · COMPLETE_CHANGED_PATH_INVENTORY · COMMIT_LINEAGE · R2_SUMMARY · R3_SUMMARY · R4_SUMMARY · R5_SUMMARY · R6_SUMMARY · RECONCILIATION_REGRESSION_STATUS · PRE_EXISTING_FAILURES · DEFERRED_ITEMS · MIGRATION_RELEASE_NOTES · PRODUCTION_DRIFT_NOTES · SECURITY_HYGIENE_STATUS · CLEAN_ROOM_STATUS · EXACT_SHA_APPROVAL_RECOMMENDATION_INPUTS · OWNER_APPROVAL_REQUIRED=YES · R8_READINESS=NOT_READY until explicit Owner approval.
+R7 must not fabricate Owner approval.
+
+**R7_ALLOWED_SCOPE_WHEN_SEPARATELY_STARTED =**
+Default mode: READ / REVIEW / DOCUMENT inside the reconciliation workspace only.
 Allowed after separate Owner START:
-- create a fresh isolated checkout/clone of the exact authorized reconciliation SHA outside Production/TCMC/Recovery
-- install dependencies inside that isolated environment using repository-owned manifests/lockfiles
-- create disposable local databases for clean-room validation · delete those disposable DBs after validation
-- run repository / backend / frontend tests · lint/static analysis · builds · migration/bootstrap validation inside the clean-room
-- collect clean-room validation evidence
-- report any hidden/local/Production-only dependency discovered
+- inspect reconciliation git history and complete diff vs frozen baseline
+- summarize R2–R6 evidence ledgers
+- produce changed-path inventory and approval packet artifacts (non-runtime documentation only if separately authorized for that write)
+- classify pre-existing failures and deferred items without repairing them
 
-Generated temporary test/build/node_modules output may exist inside the disposable clean-room as normal tooling behavior, but must not be committed and must not touch Production/TCMC/Recovery.
-
-**R6_MUTATION_POLICY =**
-No Production mutation. No Production DB mutation. No TCMC mutation. No Recovery mutation.
-No tracked source/config/test/governance mutation inside the reconciliation worktree during R6 execution.
-No dependency manifest edit intended for commit.
-No GitHub push/merge. No deployment. No PM2/nginx mutation.
-If a clean-room failure requires source repair: STOP, classify as clean-room blocker / reconciliation regression, and request a later Owner gate. Do not silently repair.
-
-**R6_HARD_PROHIBITIONS_EVEN_AFTER_OWNER_START =**
+**R7_HARD_PROHIBITIONS_EVEN_AFTER_OWNER_START =**
 - Production writes · Production DB writes · Production migration execution · Production ledger repair
 - TCMC mutation · Recovery mutation
-- source-code repair · migration repair · Rule02 edit during R6 execution
-- dependency manifest edit · package-lock rewrite intended for commit
+- source-code repair · migration repair · test repair · package-lock rewrite intended for commit
 - GitHub push/merge · main mutation · deployment · PM2/nginx mutation
 - live trading/execution · secrets exposure
-- using Production/TCMC/Recovery/recon worktree node_modules as the clean-room environment
+- fabricating Owner approval · advancing R8 without explicit Owner approval
 
-**R6_EXPLICITLY_FORBIDDEN_IN_THIS_GOVERNANCE_TRANSACTION =**
-- starting R6 clean-room validation
-- creating a clean-room clone
-- installing dependencies
-- creating databases
-- running tests or builds
+**R7_EXPLICITLY_FORBIDDEN_IN_THIS_GOVERNANCE_TRANSACTION =**
+- starting R7 human review
+- creating clean-room clones · installing dependencies · creating databases · running tests or builds
 - modifying anything except Rule02
 - Production mutation · DB mutation · migration execution against Production · ledger repair
 - source/test repair · TCMC mutation · Recovery mutation
@@ -1887,9 +1917,9 @@ If a clean-room failure requires source repair: STOP, classify as clean-room blo
 
 **STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
 
-**HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R5_5_R6_GOVERNANCE_AUTHORIZATION_COMPLETE**
-**NEXT_APPROVED_TRANSITION = R6_CLEAN_ROOM_VALIDATION_OWNER_START**
-**NEXT_GATE = R6_CLEAN_ROOM_VALIDATION_OWNER_START**
+**HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R6_5_R7_GOVERNANCE_AUTHORIZATION_COMPLETE**
+**NEXT_APPROVED_TRANSITION = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL_OWNER_START**
+**NEXT_GATE = R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL_OWNER_START**
 **NEXT_GATE_STATUS = AWAITING_EXPLICIT_OWNER_START**
 **NEXT_GATE_ONLY = YES**
 **PROGRESS_BLOCKER = NONE**
@@ -1899,11 +1929,99 @@ If a clean-room failure requires source repair: STOP, classify as clean-room blo
 **PUSH = NO**
 
 Side-effect ledger (this governance transaction):
+R7_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · MIGRATIONS_MODIFIED=0 · BOOTSTRAP_MODIFIED=0 · SCHEMA_MODIFIED=0 · PACKAGE_MODIFIED=0 · SOURCE_MODIFIED=0 · CI_MODIFIED=0 · ARTEMIS_MODIFIED=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · PM2=0 · NGINX=0 · DEPLOY=0 · GITHUB_PUSH=0 · SECRETS_IMPORTED=0 · PRODUCTION_LEDGER_REPAIR=0 · CLEAN_ROOM_CLONE=0 · CLEAN_ROOM_INSTALL=0 · CLEAN_ROOM_DB=0 · CLEAN_ROOM_TEST=0 · CLEAN_ROOM_BUILD=0
+
+This governance transaction authorizes **only** the exact future slice R7_HUMAN_REVIEW_EXACT_SHA_APPROVAL. It does **not** start R7, create a clean-room clone, install dependencies, create databases, run tests/builds, modify source/tests/migrations/schema/bootstrap/runners/package/CI/Artemis, mutate Production/TCMC/Recovery/DB, deploy, push, merge, or fabricate Owner approval.
+
+### Historical — TitanGold Master Reconciliation R5.5 / R6 Clean-Room Validation Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R6.5 R7 GOVERNANCE AUTHORIZATION)
+
+**AUTHORIZED_SLICE = R6_CLEAN_ROOM_VALIDATION**
+**PRIOR_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
+**SLICE_ID = R6_CLEAN_ROOM_VALIDATION**
+**OFFICIAL_NAME = TITANGOLD_MASTER_RECONCILIATION_R6_CLEAN_ROOM_VALIDATION**
+**CURRENT_PHASE = R5_5_GOVERNANCE_PREPARATION (HISTORICAL)**
+**CURRENT_PROGRAM = TITANGOLD_MASTER_RECONCILIATION**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = RECONCILIATION_CLEAN_ROOM_VALIDATION**
+**RULE02_CHANGED = YES — R5.5 GOVERNANCE AUTHORIZATION FOR R6 CLEAN-ROOM VALIDATION ONLY**
+**PRODUCTION_CODE_CHANGED = NO**
+**TESTS_CHANGED = NO**
+**RUNTIME_CHANGED = NO**
+**MIGRATIONS_MODIFIED = 0**
+**BOOTSTRAP_MODIFIED = 0**
+**SCHEMA_MODIFIED = 0**
+**SOURCE_MODIFIED = 0**
+**PACKAGE_MODIFIED = 0**
+**R6_EXECUTION_STARTED = YES / COMPLETED_VERIFIED (HISTORICAL — R6 later executed and closed at HEAD 8ae47cbd182249d1f87d31e38e08cccaa0969717)**
+
+**PURPOSE =**
+Close completed R5 Repository Integration Validation (including R5.1 orphan ArbitrageAgentControl disposition) as COMPLETED_VERIFIED and establish explicit, narrow Active Work governance authority for the NEXT Master Reconciliation phase: R6 = Clean-Room Validation of the reconciled repository from a fresh isolated environment. This historical transaction did NOT execute R6 itself; R6 was later Owner-started, completed, and verified at RECON_HEAD `8ae47cbd182249d1f87d31e38e08cccaa0969717`. Active authority is now the R6.5 / R7 Human Review Exact-SHA Approval Governance Authorization Active Work Package above.
+
+**FROZEN_BASE_SHA = `d3ba15c39527543886c46e3410a0d1570801c0d8`**
+**PRODUCTION_HEAD = `3fc6a2a00aae329e9db999f8e31648e3ff14a725`**
+**ACTIVE_RUNTIME = `/home/ubuntu/releases/titangold-runtime-TCMC-20260831T143017Z`**
+**RECON_WORKTREE = `/home/ubuntu/worktrees/titangold-recon-20260928T145413Z`**
+**RECON_BRANCH = `recon/master-reconciliation-20260928T145413Z`**
+**RECON_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R6_FINAL_RECONCILIATION_HEAD = `8ae47cbd182249d1f87d31e38e08cccaa0969717`**
+**R5_FINAL_RECONCILIATION_HEAD = `ebea6e9d5a217de16bedffa5ec4bb7a3ed57afcc`**
+**R4_FINAL_RECONCILIATION_HEAD = `493a737934cd35f14065c23de76c86c71617920d`**
+**R3_FINAL_RECONCILIATION_HEAD = `65c12a4376db3de0fbf4fac46a64256ee9a589ba`**
+**R2_FINAL_RECONCILIATION_HEAD = `cd6a5657fe1f6a9e51896a623e434f22ab70a569`**
+**RECOVERY_POINT = `/home/ubuntu/TITANGOLD_RECOVERY/PRE_RECON_20260928T140724Z`**
+
+**R2_STATUS = COMPLETED_VERIFIED**
+**R2_PRODUCTION_PRESERVATION_IMPORT = COMPLETED / VERIFIED**
+
+**R3_STATUS = COMPLETED_VERIFIED**
+**R3_ARTEMIS_SEMANTIC_RECONCILIATION = COMPLETED_VERIFIED**
+
+**R4_STATUS = COMPLETED_VERIFIED**
+**R4_MIGRATION_BOOTSTRAP_RECONCILIATION = COMPLETED_VERIFIED**
+
+**R5_STATUS = COMPLETED_VERIFIED**
+**R5_REPOSITORY_INTEGRATION_VALIDATION = COMPLETED_VERIFIED**
+**R5_RECONCILIATION_REGRESSION_COUNT = 0**
+**R5_GATE_AFTER = VERIFIED**
+
+**R6_STATUS = COMPLETED_VERIFIED**
+**R6_CLEAN_ROOM_VALIDATION = COMPLETED_VERIFIED**
+**R6_REPRODUCIBILITY_REGRESSION_COUNT = 0**
+**R6_GATE_AFTER = VERIFIED**
+**R7_READINESS = READY**
+
+**R6_EXECUTION_STATUS = COMPLETED_VERIFIED (HISTORICAL — SUPERSEDED BY R6.5 ACTIVE AUTHORITY)**
+**R6_EXECUTION_AUTHORIZED = NO / CONSUMED**
+**IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**SLICE_LEVEL_IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
+**NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION = YES / SUPERSEDED_BY_R6_5**
+**R7_STATUS = AUTHORIZED / EXECUTION_NOT_STARTED (see Active R6.5 AWP)**
+**PRODUCTION_MUTATION = NOT_AUTHORIZED**
+**DATABASE_MUTATION = NOT_AUTHORIZED**
+**GITHUB_REMOTE_MUTATION = NOT_AUTHORIZED**
+**DEPLOYMENT = NOT_AUTHORIZED**
+
+**STAGE10_ARTEMIS_IMPLEMENTATION = NOT_REOPENED / READ_REFERENCE_ONLY**
+
+**HUMAN_QA_MILESTONE = MASTER_RECONCILIATION_R5_5_R6_GOVERNANCE_AUTHORIZATION_COMPLETE**
+**NEXT_APPROVED_TRANSITION = SUPERSEDED_BY_R6_5_R7_GOVERNANCE**
+**NEXT_GATE = SUPERSEDED_BY_R6_5_R7_GOVERNANCE**
+**NEXT_GATE_STATUS = SUPERSEDED**
+**NEXT_GATE_ONLY = YES**
+**PROGRESS_BLOCKER = NONE**
+**DEPLOY = NO**
+**PR = NONE**
+**MERGE = NO**
+**PUSH = NO**
+
+Side-effect ledger (this historical governance transaction):
 R6_IMPLEMENTATION=0 · PRODUCTION_CODE=0 · TESTS=0 · RUNTIME=0 · MIGRATIONS_MODIFIED=0 · BOOTSTRAP_MODIFIED=0 · SCHEMA_MODIFIED=0 · PACKAGE_MODIFIED=0 · SOURCE_MODIFIED=0 · ARTEMIS_MODIFIED=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · ORDERS=0 · WALLET=0 · FINANCIAL_EXECUTION=0 · RUNTIME_MUTATION=0 · PM2=0 · NGINX=0 · DEPLOY=0 · GITHUB_PUSH=0 · SECRETS_IMPORTED=0 · PRODUCTION_LEDGER_REPAIR=0 · CLEAN_ROOM_CLONE=0 · CLEAN_ROOM_INSTALL=0 · CLEAN_ROOM_DB=0 · CLEAN_ROOM_TEST=0 · CLEAN_ROOM_BUILD=0
 
-This governance transaction authorizes **only** the exact future slice R6_CLEAN_ROOM_VALIDATION. It does **not** start R6, create a clean-room clone, install dependencies, create databases, run tests/builds, modify source/tests/migrations/schema/bootstrap/runners/package/CI/Artemis, mutate Production/TCMC/Recovery/DB, deploy, or push.
+This historical governance transaction authorized **only** the exact future slice R6_CLEAN_ROOM_VALIDATION. Active authority is now the R6.5 / R7 Human Review Exact-SHA Approval Governance Authorization Active Work Package above. R6 completion evidence at RECON_HEAD `8ae47cbd182249d1f87d31e38e08cccaa0969717` remains PRESERVED.
 
-### Historical — TitanGold Master Reconciliation R4.5 / R5 Repository Integration Validation Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R5.5 R6 GOVERNANCE AUTHORIZATION)
+Historical Active Work Package fields that once said `AUTHORIZED_SLICE = R6_CLEAN_ROOM_VALIDATION`, `R6_EXECUTION_STATUS = AWAITING_EXPLICIT_OWNER_START`, `R7_STATUS = NOT_AUTHORIZED`, or `NEXT_GATE = R6_CLEAN_ROOM_VALIDATION_OWNER_START` as the active authority state are **SUPERSEDED** by the R6.5 / R7 Human Review Exact-SHA Approval Governance Authorization Active Work Package above. R6 completion evidence at RECON_HEAD `8ae47cbd182249d1f87d31e38e08cccaa0969717` remains PRESERVED.
+
+### Historical — TitanGold Master Reconciliation R4.5 / R5 Repository Integration Validation Governance Authorization (SUPERSEDED AS ACTIVE AUTHORITY BY R5.5 R6 GOVERNANCE AUTHORIZATION — FURTHER SUPERSEDED BY R6.5 R7 GOVERNANCE)
 
 **AUTHORIZED_SLICE = R5_REPOSITORY_INTEGRATION_VALIDATION**
 **PRIOR_SLICE = R4_MIGRATION_BOOTSTRAP_RECONCILIATION**
