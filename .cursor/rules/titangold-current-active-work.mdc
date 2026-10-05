@@ -2641,7 +2641,7 @@ This governance transaction closes E6 Controlled Production Cutover Second Retry
 **GOVERNANCE_PR = #167 MERGED**
 **GOVERNANCE_MERGE_COMMIT = `9fa14590a581dc9b4ab956ae71ee416720faab5b`**
 **PRE_HUMAN_QA_FIX_HEAD = `61bc3f96f89e6973aa3ec4b823948c3ccb9f1216`**
-**CURRENT_SLICE_HEAD = PENDING_QA_FIX_COMMIT**
+**CURRENT_SLICE_HEAD = 2e1f22c4e4a4c32bc3a0f1d439c86c942ff52ed1**
 
 **CONTRACT_OWNER = `backend/contracts/artemisPromotionPolicyContract.js`**
 **TEST_OWNER = `backend/__tests__/unit/artemisPromotionPolicyContract.test.js`**
