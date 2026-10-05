@@ -340,6 +340,7 @@ export const ARTIFACT_ALLOWLIST = Object.freeze([
   'referenceState',
   'comparisonPerformed',
   'comparisonUnavailableReason',
+  'reference',
   'degradationReasons',
   'cohort',
   'trustEligibilityStatus',
@@ -1042,6 +1043,10 @@ export function buildDataQualityRegressionDegradationPolicyArtifact(input) {
   let referenceState = null;
   let comparisonPerformed = false;
   let comparisonUnavailableReason = null;
+  // Thin canonical reference evidence preserved whenever extractReference succeeds,
+  // including comparison-unavailable mismatch paths, so validate can reconstruct
+  // the exact unavailable case (not silently collapse to REFERENCE_MISSING).
+  let preservedReference = null;
 
   if (comparisonRequested) {
     if (
@@ -1092,6 +1097,7 @@ export function buildDataQualityRegressionDegradationPolicyArtifact(input) {
       }
 
       if (reference !== null && reference !== undefined) {
+        preservedReference = reference;
         if (cohort === null) {
           policyState = POLICY_STATE.REGRESSION_UNAVAILABLE;
           comparisonUnavailableReason = 'CURRENT_COHORT_MISSING';
@@ -1155,6 +1161,7 @@ export function buildDataQualityRegressionDegradationPolicyArtifact(input) {
     referenceState,
     comparisonPerformed,
     comparisonUnavailableReason,
+    reference: preservedReference,
     degradationReasons: currentEval.degradationReasons,
     cohort,
     trustEligibilityStatus,
@@ -1232,23 +1239,46 @@ export function validateDataQualityRegressionDegradationPolicyArtifact(
   if (artifact.comparisonPerformed === true || artifact.comparisonUnavailableReason !== null) {
     rebuildInput.comparisonRequested = true;
   }
-  if (
+
+  // Prefer thin preserved reference evidence so COHORT_IDENTITY_MISMATCH /
+  // VERSION_INCOMPATIBLE rebuild identically (not as REFERENCE_MISSING).
+  // REFERENCE_MISSING keeps reference absent/null and remains REFERENCE_MISSING.
+  if (artifact.reference !== null && artifact.reference !== undefined) {
+    const preserved = artifact.reference;
+    if (
+      typeof preserved !== 'object' ||
+      Array.isArray(preserved) ||
+      preserved.cohort === null ||
+      preserved.cohort === undefined ||
+      typeof preserved.cohort !== 'object' ||
+      Array.isArray(preserved.cohort)
+    ) {
+      fail(
+        'DQ_REGRESSION_DEGRADATION_POLICY_ARTIFACT_REFERENCE_INVALID',
+        'artifact.reference must be a thin canonical reference object',
+      );
+    }
+    rebuildInput.reference = {
+      policyState: preserved.policyState,
+      cohort: { ...preserved.cohort },
+      contractVersion: preserved.contractVersion,
+      policyVersion: preserved.policyVersion,
+      implementationVersion: preserved.implementationVersion,
+    };
+  } else if (
     artifact.referenceState !== null &&
     artifact.referenceState !== undefined &&
-    artifact.cohort !== null
+    artifact.cohort !== null &&
+    artifact.comparisonPerformed === true
   ) {
-    // Rebuild reference from artifact cohort + referenceState when comparison
-    // was performed successfully. When unavailable, omit reference to reproduce
-    // REGRESSION_UNAVAILABLE paths.
-    if (artifact.comparisonPerformed === true) {
-      rebuildInput.reference = {
-        policyState: artifact.referenceState,
-        cohort: { ...artifact.cohort },
-        contractVersion: artifact.cohort.contractVersion,
-        policyVersion: artifact.cohort.policyVersion,
-        implementationVersion: artifact.cohort.implementationVersion,
-      };
-    }
+    // Legacy success-path fallback when thin reference was not persisted.
+    rebuildInput.reference = {
+      policyState: artifact.referenceState,
+      cohort: { ...artifact.cohort },
+      contractVersion: artifact.cohort.contractVersion,
+      policyVersion: artifact.cohort.policyVersion,
+      implementationVersion: artifact.cohort.implementationVersion,
+    };
   }
 
   const rebuilt = buildDataQualityRegressionDegradationPolicyArtifact(

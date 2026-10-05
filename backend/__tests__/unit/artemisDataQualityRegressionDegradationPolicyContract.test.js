@@ -548,4 +548,80 @@ describe('artemisDataQualityRegressionDegradationPolicyContract', () => {
       expect(validated.policyState).toBe(artifact.policyState);
     });
   });
+
+  describe('Human QA — unavailable comparison validation fidelity', () => {
+    test('A. COHORT_IDENTITY_MISMATCH validates with identical policyId and reason', () => {
+      const cohort = baseCohort();
+      const artifact = buildDataQualityRegressionDegradationPolicyArtifact(baseInput({
+        comparisonRequested: true,
+        cohort,
+        reference: {
+          policyState: POLICY_STATE.STABLE,
+          cohort: { ...cohort, symbol: 'ETH/USDT' },
+        },
+      }));
+
+      expect(artifact.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(artifact.comparisonUnavailableReason).toBe('COHORT_IDENTITY_MISMATCH');
+      expect(artifact.comparisonPerformed).toBe(false);
+      expect(artifact.reference).not.toBeNull();
+      expect(artifact.reference.cohort.symbol).toBe('ETH/USDT');
+
+      const validated = validateDataQualityRegressionDegradationPolicyArtifact(artifact);
+      expect(validated.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(validated.comparisonUnavailableReason).toBe('COHORT_IDENTITY_MISMATCH');
+      expect(validated.policyId).toBe(artifact.policyId);
+      expect(validated.comparisonPerformed).toBe(false);
+    });
+
+    test('B. VERSION_INCOMPATIBLE validates with identical policyId and reason', () => {
+      const cohort = baseCohort({
+        contractVersion: 'c1',
+        policyVersion: 'p1',
+        implementationVersion: 'i1',
+      });
+      const artifact = buildDataQualityRegressionDegradationPolicyArtifact(baseInput({
+        comparisonRequested: true,
+        cohort,
+        reference: {
+          policyState: POLICY_STATE.STABLE,
+          cohort: { ...cohort },
+          contractVersion: 'c2',
+          policyVersion: 'p1',
+          implementationVersion: 'i1',
+        },
+      }));
+
+      expect(artifact.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(artifact.comparisonUnavailableReason).toBe('VERSION_INCOMPATIBLE');
+      expect(artifact.comparisonPerformed).toBe(false);
+      expect(artifact.reference).not.toBeNull();
+      expect(artifact.reference.contractVersion).toBe('c2');
+
+      const validated = validateDataQualityRegressionDegradationPolicyArtifact(artifact);
+      expect(validated.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(validated.comparisonUnavailableReason).toBe('VERSION_INCOMPATIBLE');
+      expect(validated.policyId).toBe(artifact.policyId);
+      expect(validated.comparisonPerformed).toBe(false);
+    });
+
+    test('C. REFERENCE_MISSING still validates as REFERENCE_MISSING', () => {
+      const artifact = buildDataQualityRegressionDegradationPolicyArtifact(baseInput({
+        comparisonRequested: true,
+        cohort: baseCohort(),
+      }));
+
+      expect(artifact.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(artifact.comparisonUnavailableReason).toBe('REFERENCE_MISSING');
+      expect(artifact.reference).toBeNull();
+      expect(artifact.referenceState).toBeNull();
+
+      const validated = validateDataQualityRegressionDegradationPolicyArtifact(artifact);
+      expect(validated.policyState).toBe(POLICY_STATE.REGRESSION_UNAVAILABLE);
+      expect(validated.comparisonUnavailableReason).toBe('REFERENCE_MISSING');
+      expect(validated.policyId).toBe(artifact.policyId);
+      expect(validated.reference).toBeNull();
+      expect(validated.referenceState).toBeNull();
+    });
+  });
 });
