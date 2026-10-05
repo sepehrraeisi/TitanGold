@@ -291,103 +291,125 @@ describe('artemisPromotionPolicyContract', () => {
       expect(artifact.unavailableReason).toBe('REGRESSION_UNAVAILABLE');
     });
 
-    test('10. missing Trust → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          trustEligibilityStatus: undefined,
-        })),
-        'PROMOTION_POLICY_TRUST_MISSING',
-      );
+    test('10. missing Trust → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: undefined,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('11. malformed Trust → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          trustEligibilityStatus: 42,
-        })),
-        'PROMOTION_POLICY_TRUST_MALFORMED',
-      );
+    test('11. malformed Trust → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: 42,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_MALFORMED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('12. unsupported Trust status → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          trustEligibilityStatus: 'TRUST_MAYBE',
-        })),
-        'PROMOTION_POLICY_TRUST_UNSUPPORTED',
-      );
+    test('12. unsupported Trust status → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: 'TRUST_MAYBE',
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('13. missing Sample Sufficiency → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          sampleSufficiencyVerdict: undefined,
-        })),
-        'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_MISSING',
-      );
+    test('13. missing Sample Sufficiency → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        sampleSufficiencyVerdict: undefined,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('SAMPLE_SUFFICIENCY_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.sampleSufficiencyVerdict).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('14. unsupported Sample Sufficiency status → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          sampleSufficiencyVerdict: 'ALMOST_ENOUGH',
-        })),
-        'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_UNSUPPORTED',
-      );
+    test('14. unsupported Sample Sufficiency status → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        sampleSufficiencyVerdict: 'ALMOST_ENOUGH',
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('SAMPLE_SUFFICIENCY_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.sampleSufficiencyVerdict).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('14b. UNDEFINED_DEFERRED Sample Sufficiency → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          sampleSufficiencyVerdict: SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
-        })),
-        'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_UNSUPPORTED',
-      );
+    test('14b. UNDEFINED_DEFERRED Sample Sufficiency → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        sampleSufficiencyVerdict: SUFFICIENCY_VERDICT.UNDEFINED_DEFERRED,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('SAMPLE_SUFFICIENCY_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.sampleSufficiencyVerdict).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('15. missing DQ → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          dataQuality: null,
-        })),
-        'PROMOTION_POLICY_DQ_MISSING',
-      );
+    test('15. missing DQ → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        dataQuality: null,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DQ_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.dataQuality).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('16. malformed DQ → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          dataQuality: 'fresh',
-        })),
-        'PROMOTION_POLICY_DQ_MALFORMED',
-      );
+    test('16. malformed DQ → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        dataQuality: 'fresh',
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DQ_MALFORMED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.dataQuality).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('17. unsupported freshnessStatus → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          dataQuality: baseDataQuality({ freshnessStatus: 'VERY_FRESH' }),
-        })),
-        'PROMOTION_POLICY_DQ_FRESHNESS_UNSUPPORTED',
-      );
+    test('17. unsupported freshnessStatus → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        dataQuality: baseDataQuality({ freshnessStatus: 'VERY_FRESH' }),
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DQ_FRESHNESS_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.dataQuality).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('18. missing degradation evidence → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          degradationPolicyState: undefined,
-        })),
-        'PROMOTION_POLICY_DEGRADATION_MISSING',
-      );
+    test('18. missing degradation evidence → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        degradationPolicyState: undefined,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DEGRADATION_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.degradationPolicyState).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
-    test('19. unsupported degradation state → fail-closed throw', () => {
-      expectFail(
-        () => buildPromotionPolicyArtifact(baseInput({
-          degradationPolicyState: 'IMPROVING',
-        })),
-        'PROMOTION_POLICY_DEGRADATION_UNSUPPORTED',
-      );
+    test('19. unsupported degradation state → PROMOTION_UNAVAILABLE', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        degradationPolicyState: 'IMPROVING',
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DEGRADATION_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.degradationPolicyState).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
     test('20. missing Aggregate → PROMOTION_UNAVAILABLE', () => {
@@ -450,6 +472,9 @@ describe('artemisPromotionPolicyContract', () => {
       }));
       expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
       expect(artifact.unavailableReason).toBe('COHORT_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.cohort).toBeNull();
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
     });
 
     test('25. cohort mismatch → PROMOTION_UNAVAILABLE', () => {
@@ -521,6 +546,144 @@ describe('artemisPromotionPolicyContract', () => {
       }));
       expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
       expect(artifact.unavailableReason).toBe('VERSION_BINDING_MISMATCH');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(() => validatePromotionPolicyArtifact(artifact)).not.toThrow();
+    });
+  });
+
+  describe('Human QA regression — PROMOTION_UNAVAILABLE soft-map + validator round-trip', () => {
+    test('HQ1. missing Trust → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: undefined,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('TRUST_MISSING');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ2. malformed Trust → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: 42,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_MALFORMED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('TRUST_MALFORMED');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ3. unsupported Trust → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        trustEligibilityStatus: 'TRUST_PROMOTED',
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('TRUST_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.trustEligibilityStatus).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('TRUST_UNSUPPORTED');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ4. missing DQ → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        dataQuality: null,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DQ_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.dataQuality).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('DQ_MISSING');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ5. unsupported DQ freshness → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        dataQuality: {
+          availability: AVAILABILITY.AVAILABLE,
+          freshnessStatus: 'VERY_FRESH',
+        },
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DQ_FRESHNESS_UNSUPPORTED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.dataQuality).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('DQ_FRESHNESS_UNSUPPORTED');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ6. missing Degradation → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        degradationPolicyState: undefined,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('DEGRADATION_MISSING');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.degradationPolicyState).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('DEGRADATION_MISSING');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ7. malformed cohort → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        cohort: 42,
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('COHORT_MALFORMED');
+      expect(artifact.negativeGates).toEqual([]);
+      expect(artifact.cohort).toBeNull();
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('COHORT_MALFORMED');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ8. version mismatch → PROMOTION_UNAVAILABLE → validator PASS', () => {
+      const artifact = buildPromotionPolicyArtifact(baseInput({
+        cohort: baseCohort({
+          contractVersion: 'artemis-promotion-policy-0.0.1',
+        }),
+      }));
+      expect(artifact.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(artifact.unavailableReason).toBe('VERSION_BINDING_MISMATCH');
+      expect(artifact.negativeGates).toEqual([]);
+      const validated = validatePromotionPolicyArtifact(artifact);
+      expect(validated.promotionStatus).toBe(PROMOTION_STATUS.PROMOTION_UNAVAILABLE);
+      expect(validated.unavailableReason).toBe('VERSION_BINDING_MISMATCH');
+      expect(validated.policyId).toBe(artifact.policyId);
+    });
+
+    test('HQ9. forbidden promotionStatus still THROWS', () => {
+      expectFail(
+        () => buildPromotionPolicyArtifact(baseInput({
+          promotionStatus: PROMOTION_STATUS.PROMOTION_ELIGIBLE,
+        })),
+        'PROMOTION_POLICY_INPUT_UNKNOWN_FIELD',
+      );
+    });
+
+    test('HQ10. forbidden promotionScore still THROWS', () => {
+      expectFail(
+        () => buildPromotionPolicyArtifact(baseInput({
+          promotionScore: 0.95,
+        })),
+        'PROMOTION_POLICY_INPUT_UNKNOWN_FIELD',
+      );
     });
   });
 

@@ -679,6 +679,7 @@ function extractCohort(cohortInput) {
     'PROMOTION_POLICY_COHORT_INVALID',
     'cohort must be a plain object',
   );
+  // Unsupported segmentation / unknown fields remain hard-reject.
   assertNoUnsupportedSegmentation(cohortInput, 'cohort');
   assertAllowlist(
     cohortInput,
@@ -725,6 +726,52 @@ function extractCohort(cohortInput) {
   }
 
   return freezeDeep(cohort);
+}
+
+/**
+ * Soft cohort validation for required-evidence failures.
+ * Hard-rejects unsupported segmentation and unknown fields.
+ * Soft-maps missing/malformed cohort shape to COHORT_MALFORMED / COHORT_MISSING.
+ */
+function softValidateCohort(cohortInput) {
+  if (cohortInput === undefined || cohortInput === null) {
+    return { ok: false, value: null, reason: 'COHORT_MISSING' };
+  }
+  if (
+    typeof cohortInput !== 'object' ||
+    Array.isArray(cohortInput) ||
+    Object.getPrototypeOf(cohortInput) !== Object.prototype
+  ) {
+    return { ok: false, value: null, reason: 'COHORT_MALFORMED' };
+  }
+  // Hard-reject security/schema violations (unsupported dims / unknown fields).
+  assertNoUnsupportedSegmentation(cohortInput, 'cohort');
+  assertAllowlist(
+    cohortInput,
+    COHORT_DESCRIPTOR_ALLOWLIST,
+    'PROMOTION_POLICY_COHORT_UNKNOWN_FIELD',
+    'cohort',
+  );
+
+  try {
+    return { ok: true, value: extractCohort(cohortInput), reason: null };
+  } catch (err) {
+    if (err instanceof PromotionPolicyContractError) {
+      // Dimension / binding shape issues → soft UNAVAILABLE (no identity invention).
+      if (
+        err.code === 'PROMOTION_POLICY_COHORT_DIMENSION_MISSING' ||
+        err.code === 'PROMOTION_POLICY_COHORT_DIMENSION_INVALID' ||
+        err.code === 'PROMOTION_POLICY_COHORT_VERSION_BINDING_INVALID' ||
+        err.code === 'PROMOTION_POLICY_COHORT_INVALID'
+      ) {
+        return { ok: false, value: null, reason: 'COHORT_MALFORMED' };
+      }
+      // Unknown field / unsupported segmentation already asserted above;
+      // any remaining hard errors rethrow.
+      throw err;
+    }
+    throw err;
+  }
 }
 
 function classifyCohortCompatibility(cohort) {
@@ -785,89 +832,57 @@ function classifyCohortCompatibility(cohort) {
 
 // ─── Status validators (throw on missing/malformed/unsupported) ──────────────
 
-function validateTrustEligibilityStatus(status) {
+function softValidateTrustEligibilityStatus(status) {
   if (status === undefined || status === null) {
-    fail(
-      'PROMOTION_POLICY_TRUST_MISSING',
-      'trustEligibilityStatus is required',
-    );
+    return { ok: false, value: null, reason: 'TRUST_MISSING' };
   }
   if (typeof status !== 'string') {
-    fail(
-      'PROMOTION_POLICY_TRUST_MALFORMED',
-      'trustEligibilityStatus must be a string',
-    );
+    return { ok: false, value: null, reason: 'TRUST_MALFORMED' };
   }
   if (!AUTHORIZED_TRUST_ELIGIBILITY_STATUSES.includes(status)) {
-    fail(
-      'PROMOTION_POLICY_TRUST_UNSUPPORTED',
-      `Unsupported trustEligibilityStatus: ${status}`,
-      { trustEligibilityStatus: status },
-    );
+    return { ok: false, value: null, reason: 'TRUST_UNSUPPORTED' };
   }
-  return status;
+  return { ok: true, value: status, reason: null };
 }
 
-function validateSampleSufficiencyVerdict(verdict) {
+function softValidateSampleSufficiencyVerdict(verdict) {
   if (verdict === undefined || verdict === null) {
-    fail(
-      'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_MISSING',
-      'sampleSufficiencyVerdict is required',
-    );
+    return { ok: false, value: null, reason: 'SAMPLE_SUFFICIENCY_MISSING' };
   }
   if (typeof verdict !== 'string') {
-    fail(
-      'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_MALFORMED',
-      'sampleSufficiencyVerdict must be a string',
-    );
+    return { ok: false, value: null, reason: 'SAMPLE_SUFFICIENCY_MALFORMED' };
   }
   if (!AUTHORIZED_SAMPLE_SUFFICIENCY_VERDICTS.includes(verdict)) {
-    fail(
-      'PROMOTION_POLICY_SAMPLE_SUFFICIENCY_UNSUPPORTED',
-      `Unsupported sampleSufficiencyVerdict: ${verdict}`,
-      { sampleSufficiencyVerdict: verdict },
-    );
+    return { ok: false, value: null, reason: 'SAMPLE_SUFFICIENCY_UNSUPPORTED' };
   }
-  return verdict;
+  return { ok: true, value: verdict, reason: null };
 }
 
-function validateDegradationPolicyState(state) {
+function softValidateDegradationPolicyState(state) {
   if (state === undefined || state === null) {
-    fail(
-      'PROMOTION_POLICY_DEGRADATION_MISSING',
-      'degradationPolicyState is required',
-    );
+    return { ok: false, value: null, reason: 'DEGRADATION_MISSING' };
   }
   if (typeof state !== 'string') {
-    fail(
-      'PROMOTION_POLICY_DEGRADATION_MALFORMED',
-      'degradationPolicyState must be a string',
-    );
+    return { ok: false, value: null, reason: 'DEGRADATION_MALFORMED' };
   }
   if (!AUTHORIZED_DEGRADATION_POLICY_STATES.includes(state)) {
-    fail(
-      'PROMOTION_POLICY_DEGRADATION_UNSUPPORTED',
-      `Unsupported degradationPolicyState: ${state}`,
-      { degradationPolicyState: state },
-    );
+    return { ok: false, value: null, reason: 'DEGRADATION_UNSUPPORTED' };
   }
-  return state;
+  return { ok: true, value: state, reason: null };
 }
 
-function validateDataQuality(dq) {
+function softValidateDataQuality(dq) {
   if (dq === undefined || dq === null) {
-    fail('PROMOTION_POLICY_DQ_MISSING', 'dataQuality is required');
+    return { ok: false, value: null, reason: 'DQ_MISSING' };
   }
   if (
     typeof dq !== 'object' ||
     Array.isArray(dq) ||
     Object.getPrototypeOf(dq) !== Object.prototype
   ) {
-    fail(
-      'PROMOTION_POLICY_DQ_MALFORMED',
-      'dataQuality must be a plain object',
-    );
+    return { ok: false, value: null, reason: 'DQ_MALFORMED' };
   }
+  // Unknown DQ fields remain hard-reject (authority / allowlist surface).
   assertAllowlist(
     dq,
     DATA_QUALITY_ALLOWLIST,
@@ -876,52 +891,39 @@ function validateDataQuality(dq) {
   );
 
   if (!Object.prototype.hasOwnProperty.call(dq, 'availability')) {
-    fail(
-      'PROMOTION_POLICY_DQ_AVAILABILITY_MISSING',
-      'dataQuality.availability is required',
-    );
+    return { ok: false, value: null, reason: 'DQ_AVAILABILITY_MISSING' };
   }
   if (!Object.prototype.hasOwnProperty.call(dq, 'freshnessStatus')) {
-    fail(
-      'PROMOTION_POLICY_DQ_FRESHNESS_MISSING',
-      'dataQuality.freshnessStatus is required',
-    );
+    return { ok: false, value: null, reason: 'DQ_FRESHNESS_MISSING' };
   }
 
   const { availability, freshnessStatus } = dq;
 
   if (typeof availability !== 'string') {
-    fail(
-      'PROMOTION_POLICY_DQ_AVAILABILITY_MALFORMED',
-      'dataQuality.availability must be a string',
-    );
+    return { ok: false, value: null, reason: 'DQ_AVAILABILITY_MALFORMED' };
   }
   if (!AUTHORIZED_AVAILABILITY_VALUES.includes(availability)) {
-    fail(
-      'PROMOTION_POLICY_DQ_AVAILABILITY_UNSUPPORTED',
-      `Unsupported dataQuality.availability: ${availability}`,
-      { availability },
-    );
+    return { ok: false, value: null, reason: 'DQ_AVAILABILITY_UNSUPPORTED' };
   }
 
   if (typeof freshnessStatus !== 'string') {
-    fail(
-      'PROMOTION_POLICY_DQ_FRESHNESS_MALFORMED',
-      'dataQuality.freshnessStatus must be a string',
-    );
+    return { ok: false, value: null, reason: 'DQ_FRESHNESS_MALFORMED' };
   }
   if (!AUTHORIZED_FRESHNESS_VALUES.includes(freshnessStatus)) {
-    fail(
-      'PROMOTION_POLICY_DQ_FRESHNESS_UNSUPPORTED',
-      `Unsupported dataQuality.freshnessStatus: ${freshnessStatus}`,
-      { freshnessStatus },
-    );
+    return { ok: false, value: null, reason: 'DQ_FRESHNESS_UNSUPPORTED' };
   }
 
-  return Object.freeze({ availability, freshnessStatus });
+  return {
+    ok: true,
+    value: Object.freeze({ availability, freshnessStatus }),
+    reason: null,
+  };
 }
 
 function isDqUsable(dataQuality) {
+  if (dataQuality === null || dataQuality === undefined) {
+    return false;
+  }
   return (
     dataQuality.availability === DQ_USABLE_AVAILABILITY &&
     DQ_USABLE_FRESHNESS.includes(dataQuality.freshnessStatus)
@@ -1244,86 +1246,19 @@ export function buildPromotionPolicyArtifact(input) {
   );
   assertNoCallerAuthorityOverrides(input);
 
-  const trustEligibilityStatus = validateTrustEligibilityStatus(
+  // Soft-map required-evidence failures → PROMOTION_UNAVAILABLE.
+  // Authority/security violations (caller overrides, unknown fields,
+  // unsupported segmentation) still throw fail-closed above/inside soft helpers.
+  const trustResult = softValidateTrustEligibilityStatus(
     input.trustEligibilityStatus,
   );
-  const sampleSufficiencyVerdict = validateSampleSufficiencyVerdict(
+  const sampleResult = softValidateSampleSufficiencyVerdict(
     input.sampleSufficiencyVerdict,
   );
-  const dataQuality = validateDataQuality(input.dataQuality);
-  const degradationPolicyState = validateDegradationPolicyState(
+  const dqResult = softValidateDataQuality(input.dataQuality);
+  const degradationResult = softValidateDegradationPolicyState(
     input.degradationPolicyState,
   );
-
-  if (
-    !Object.prototype.hasOwnProperty.call(input, 'cohort') ||
-    input.cohort === undefined ||
-    input.cohort === null
-  ) {
-    // Soft-map missing cohort to PROMOTION_UNAVAILABLE (mission tests 24)
-    const recordedAtMissingCohort =
-      typeof input.recordedAt === 'string' && input.recordedAt.trim().length > 0
-        ? input.recordedAt
-        : canonicalNowIso();
-    const policyIdMissingCohort = computePolicyId({
-      promotionStatus: PROMOTION_STATUS.PROMOTION_UNAVAILABLE,
-      unavailableReason: 'COHORT_MISSING',
-      trustEligibilityStatus,
-      sampleSufficiencyVerdict,
-      degradationPolicyState,
-      dataQuality,
-    });
-    return freezeDeep({
-      schemaVersion: PROMOTION_POLICY_SCHEMA_VERSION,
-      contractVersion: PROMOTION_POLICY_CONTRACT_VERSION,
-      policyVersion: PROMOTION_POLICY_POLICY_VERSION,
-      artifactType: PROMOTION_POLICY_ARTIFACT_TYPE,
-      policyType: PROMOTION_POLICY_TYPE,
-      authorityClass: PROMOTION_POLICY_AUTHORITY_CLASS,
-      sliceId: PROMOTION_POLICY_SLICE_ID,
-      officialName: PROMOTION_POLICY_OFFICIAL_NAME,
-      ownershipRole: PROMOTION_POLICY_OWNERSHIP_ROLE,
-      isSourceOfTruth: PROMOTION_POLICY_IS_SOURCE_OF_TRUTH,
-      writer: PROMOTION_POLICY_WRITER,
-      methodKey: PROMOTION_POLICY_METHOD_KEY,
-      stage: PROMOTION_POLICY_STAGE,
-      policyId: policyIdMissingCohort,
-      recordedAt: recordedAtMissingCohort,
-      promotionStatus: PROMOTION_STATUS.PROMOTION_UNAVAILABLE,
-      unavailableReason: 'COHORT_MISSING',
-      negativeGates: Object.freeze([]),
-      trustEligibilityStatus,
-      sampleSufficiencyVerdict,
-      dataQuality,
-      dqUsable: isDqUsable(dataQuality),
-      degradationPolicyState,
-      aggregateRef: null,
-      segmentedPerformancePolicyRef: null,
-      cohort: null,
-      numericPromotionThreshold: PROMOTION_NUMERIC_THRESHOLD_V1,
-      memoryless: MEMORYLESS,
-      recommendationOnly: RECOMMENDATION_ONLY,
-      limitations: PROMOTION_POLICY_LIMITATIONS,
-      hardFlags: { ...REQUIRED_HARD_FLAGS },
-      sideEffects: { ...ZERO_PROMOTION_POLICY_SIDE_EFFECTS },
-      implementationVersion: PROMOTION_POLICY_IMPLEMENTATION_VERSION,
-    });
-  }
-
-  let cohort;
-  try {
-    cohort = extractCohort(input.cohort);
-  } catch (err) {
-    if (err instanceof PromotionPolicyContractError) {
-      // Soft-map malformed cohort structural issues that are "mismatch" style;
-      // dimension missing/invalid still throw (fail-closed on bad shape).
-      // For mission test 24 (missing) handled above; malformed → throw.
-      throw err;
-    }
-    throw err;
-  }
-
-  const cohortCompatibility = classifyCohortCompatibility(cohort);
   const aggregateRefResult = tryValidateThinRef(
     validateThinAggregateRef,
     input.aggregateRef,
@@ -1332,16 +1267,74 @@ export function buildPromotionPolicyArtifact(input) {
     validateThinSegmentedPolicyRef,
     input.segmentedPerformancePolicyRef,
   );
+  const cohortResult = softValidateCohort(
+    Object.prototype.hasOwnProperty.call(input, 'cohort')
+      ? input.cohort
+      : undefined,
+  );
 
-  const evaluation = evaluatePromotionStatus({
-    trustEligibilityStatus,
-    sampleSufficiencyVerdict,
-    dataQuality,
-    degradationPolicyState,
-    aggregateRefResult,
-    segmentedRefResult,
-    cohortCompatibility,
-  });
+  // Priority: Trust → Sample → DQ → Degradation → Aggregate → Segmented → Cohort → Version
+  const evidenceUnavailableReasons = [];
+  if (!trustResult.ok) evidenceUnavailableReasons.push(trustResult.reason);
+  if (!sampleResult.ok) evidenceUnavailableReasons.push(sampleResult.reason);
+  if (!dqResult.ok) evidenceUnavailableReasons.push(dqResult.reason);
+  if (!degradationResult.ok) {
+    evidenceUnavailableReasons.push(degradationResult.reason);
+  }
+  if (!aggregateRefResult.ok) {
+    evidenceUnavailableReasons.push(
+      aggregateRefResult.reason || 'AGGREGATE_UNAVAILABLE',
+    );
+  }
+  if (!segmentedRefResult.ok) {
+    evidenceUnavailableReasons.push(
+      segmentedRefResult.reason || 'SEGMENTED_UNAVAILABLE',
+    );
+  }
+
+  let cohort = null;
+  let cohortCompatibility = { ok: false, reason: 'COHORT_MISSING' };
+  if (!cohortResult.ok) {
+    evidenceUnavailableReasons.push(cohortResult.reason);
+  } else {
+    cohort = cohortResult.value;
+    cohortCompatibility = classifyCohortCompatibility(cohort);
+    if (!cohortCompatibility.ok) {
+      evidenceUnavailableReasons.push(cohortCompatibility.reason);
+    }
+  }
+
+  // Preserve successfully validated evidence; null for unparseable required evidence.
+  const trustEligibilityStatus = trustResult.ok ? trustResult.value : null;
+  const sampleSufficiencyVerdict = sampleResult.ok ? sampleResult.value : null;
+  const dataQuality = dqResult.ok ? dqResult.value : null;
+  const degradationPolicyState = degradationResult.ok
+    ? degradationResult.value
+    : null;
+  const aggregateRef = aggregateRefResult.ok ? aggregateRefResult.value : null;
+  const segmentedPerformancePolicyRef = segmentedRefResult.ok
+    ? segmentedRefResult.value
+    : null;
+
+  let evaluation;
+  if (evidenceUnavailableReasons.length > 0) {
+    evaluation = {
+      promotionStatus: PROMOTION_STATUS.PROMOTION_UNAVAILABLE,
+      unavailableReason: evidenceUnavailableReasons[0],
+      unavailableReasons: Object.freeze([...evidenceUnavailableReasons]),
+      negativeGates: Object.freeze([]),
+    };
+  } else {
+    evaluation = evaluatePromotionStatus({
+      trustEligibilityStatus,
+      sampleSufficiencyVerdict,
+      dataQuality,
+      degradationPolicyState,
+      aggregateRefResult,
+      segmentedRefResult,
+      cohortCompatibility,
+    });
+  }
 
   const recordedAt =
     typeof input.recordedAt === 'string' && input.recordedAt.trim().length > 0
@@ -1356,10 +1349,8 @@ export function buildPromotionPolicyArtifact(input) {
     sampleSufficiencyVerdict,
     degradationPolicyState,
     dataQuality,
-    aggregateRef: aggregateRefResult.ok ? aggregateRefResult.value : null,
-    segmentedPerformancePolicyRef: segmentedRefResult.ok
-      ? segmentedRefResult.value
-      : null,
+    aggregateRef,
+    segmentedPerformancePolicyRef,
     cohort,
   });
 
@@ -1387,10 +1378,8 @@ export function buildPromotionPolicyArtifact(input) {
     dataQuality,
     dqUsable: isDqUsable(dataQuality),
     degradationPolicyState,
-    aggregateRef: aggregateRefResult.ok ? aggregateRefResult.value : null,
-    segmentedPerformancePolicyRef: segmentedRefResult.ok
-      ? segmentedRefResult.value
-      : null,
+    aggregateRef,
+    segmentedPerformancePolicyRef,
     cohort,
     numericPromotionThreshold: PROMOTION_NUMERIC_THRESHOLD_V1,
     memoryless: MEMORYLESS,
@@ -1491,6 +1480,10 @@ export function validatePromotionPolicyArtifact(artifact) {
   }
 
   // Rebuild equality from canonical semantic inputs.
+  // Reconstruct rebuild inputs so softValidate maps null evidence back to the
+  // same unavailableReason (MISSING vs MALFORMED vs UNSUPPORTED distinction).
+  // Do not invent cohort/version identity — only sentinel shapes for soft-map.
+  const reason = artifact.unavailableReason;
   const rebuildInput = {
     trustEligibilityStatus: artifact.trustEligibilityStatus,
     sampleSufficiencyVerdict: artifact.sampleSufficiencyVerdict,
@@ -1501,9 +1494,72 @@ export function validatePromotionPolicyArtifact(artifact) {
     cohort: artifact.cohort,
     recordedAt: artifact.recordedAt,
   };
-  // Missing cohort soft-path: rebuild with absent cohort.
+
+  if (artifact.trustEligibilityStatus === null) {
+    if (reason === 'TRUST_MALFORMED') {
+      rebuildInput.trustEligibilityStatus = 0;
+    } else if (reason === 'TRUST_UNSUPPORTED') {
+      rebuildInput.trustEligibilityStatus = '__UNSUPPORTED__';
+    } else {
+      rebuildInput.trustEligibilityStatus = null;
+    }
+  }
+  if (artifact.sampleSufficiencyVerdict === null) {
+    if (reason === 'SAMPLE_SUFFICIENCY_MALFORMED') {
+      rebuildInput.sampleSufficiencyVerdict = 0;
+    } else if (reason === 'SAMPLE_SUFFICIENCY_UNSUPPORTED') {
+      rebuildInput.sampleSufficiencyVerdict = '__UNSUPPORTED__';
+    } else {
+      rebuildInput.sampleSufficiencyVerdict = null;
+    }
+  }
+  if (artifact.dataQuality === null) {
+    if (reason === 'DQ_MALFORMED') {
+      rebuildInput.dataQuality = 'fresh';
+    } else if (reason === 'DQ_AVAILABILITY_MISSING') {
+      rebuildInput.dataQuality = { freshnessStatus: FRESHNESS_STATUS.FRESH };
+    } else if (reason === 'DQ_FRESHNESS_MISSING') {
+      rebuildInput.dataQuality = { availability: AVAILABILITY.AVAILABLE };
+    } else if (reason === 'DQ_AVAILABILITY_MALFORMED') {
+      rebuildInput.dataQuality = {
+        availability: 1,
+        freshnessStatus: FRESHNESS_STATUS.FRESH,
+      };
+    } else if (reason === 'DQ_AVAILABILITY_UNSUPPORTED') {
+      rebuildInput.dataQuality = {
+        availability: '__UNSUPPORTED__',
+        freshnessStatus: FRESHNESS_STATUS.FRESH,
+      };
+    } else if (reason === 'DQ_FRESHNESS_MALFORMED') {
+      rebuildInput.dataQuality = {
+        availability: AVAILABILITY.AVAILABLE,
+        freshnessStatus: 1,
+      };
+    } else if (reason === 'DQ_FRESHNESS_UNSUPPORTED') {
+      rebuildInput.dataQuality = {
+        availability: AVAILABILITY.AVAILABLE,
+        freshnessStatus: '__UNSUPPORTED__',
+      };
+    } else {
+      rebuildInput.dataQuality = null;
+    }
+  }
+  if (artifact.degradationPolicyState === null) {
+    if (reason === 'DEGRADATION_MALFORMED') {
+      rebuildInput.degradationPolicyState = 0;
+    } else if (reason === 'DEGRADATION_UNSUPPORTED') {
+      rebuildInput.degradationPolicyState = '__UNSUPPORTED__';
+    } else {
+      rebuildInput.degradationPolicyState = null;
+    }
+  }
+
   if (artifact.cohort === null || artifact.cohort === undefined) {
-    delete rebuildInput.cohort;
+    if (reason === 'COHORT_MALFORMED') {
+      rebuildInput.cohort = 42;
+    } else {
+      delete rebuildInput.cohort;
+    }
   }
   if (artifact.aggregateRef === null) {
     delete rebuildInput.aggregateRef;
