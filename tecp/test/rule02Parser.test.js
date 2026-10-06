@@ -282,24 +282,50 @@ test('parser has zero network DB and filesystem write authority', () => {
   assert.equal(pkg.devDependencies, undefined);
 });
 
-test('checked-in Rule02 exposes one normalized TECP active package', () => {
+test('checked-in Rule02 live authority invariants', () => {
   const before = readFileSync(rule02Path);
   const text = before.toString('utf8');
-  const first = parseRule02(text, { sourceSha: '9c489c60c2500d7f50ae5a258750df1a0cee1daa' });
-  const second = parseRule02(text, { sourceSha: '9c489c60c2500d7f50ae5a258750df1a0cee1daa' });
+  const primary = (value) => String(value ?? '').split(' / ')[0].trim();
+  const first = parseRule02(text);
+  const second = parseRule02(text);
   assert.deepEqual(first, second);
-  assert.equal(first.progress.PROJECT_PROGRESS, '4/10');
-  assert.equal(first.progress.NEXT_GATE, 'STAGE11_GOVERNANCE_DISCOVERY');
-  assert.equal(first.artemis.STAGE11_IMPLEMENTATION_AUTHORIZED, 'NO / GOVERNANCE_DISCOVERY_ONLY');
-  assert.equal(first.artemis.AUTHORIZED_SLICE, 'NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION');
-  assert.deepEqual(first.authority.activeSliceIdentifiers, ['TECP-005-RULE02-PARSER']);
+
+  const ratio = /^\d+\/\d+$/;
+  assert.match(first.progress.PROJECT_PROGRESS, ratio);
+  assert.match(first.progress.CURRENT_STAGE_PROGRESS, ratio);
+  for (const ratioValue of [first.progress.PROJECT_PROGRESS, first.progress.CURRENT_STAGE_PROGRESS]) {
+    const [done, total] = ratioValue.split('/').map(Number);
+    assert.equal(Number.isInteger(done) && Number.isInteger(total), true);
+    assert.equal(total >= 1 && done >= 0 && done <= total, true);
+  }
+  for (const field of ['CURRENT_STAGE', 'NEXT_GATE', 'PROGRESS_BLOCKER']) {
+    assert.equal(typeof first.progress[field], 'string');
+    assert.equal(first.progress[field].length > 0, true);
+  }
+
+  const identifiers = first.authority.activeSliceIdentifiers;
+  assert.equal(Array.isArray(identifiers), true);
+  assert.equal(identifiers.length, 1);
+  const activeSlice = identifiers[0];
+  assert.equal(typeof activeSlice, 'string');
+  assert.equal(activeSlice.length > 0, true);
+  assert.equal(activeSlice, primary(first.tecp.TECP_AUTHORIZED_SLICE));
+  assert.equal(activeSlice, primary(first.authority.activeWorkPackage.sliceId));
+  assert.equal(activeSlice, primary(first.authority.activeWorkPackage.officialName));
   assert.equal(first.authority.activeWorkPackage.domain, 'tecp');
-  assert.equal(first.authority.activeWorkPackage.sliceId, 'TECP-005-RULE02-PARSER');
-  assert.equal(first.tecp.TECP_IMPLEMENTATION_AUTHORIZED, 'NO / UNTIL_THIS_GOVERNANCE_PR_MERGES');
-  assert.equal(
-    first.tecp.implementationAuthorizationState.TECP005_IMPLEMENTATION_AUTHORIZED,
-    'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES',
-  );
+  assert.equal(first.diagnostics.activeRegions.filter((region) => region === 'activeWorkPackage').length, 1);
+
+  const artemisSlice = primary(first.artemis.AUTHORIZED_SLICE);
+  assert.equal(artemisSlice.length > 0, true);
+  assert.notEqual(artemisSlice, activeSlice);
+  assert.equal(identifiers.includes(artemisSlice), false);
+
+  const diagnosticText = JSON.stringify(first.diagnostics);
+  for (const code of ['DUPLICATE_ACTIVE_AUTHORITY', 'CONTRADICTORY_AUTHORIZATION', 'AMBIGUOUS_ACTIVE_SECTION', 'MALFORMED_RULE02']) {
+    assert.equal(diagnosticText.includes(code), false);
+  }
+
   const after = readFileSync(rule02Path);
   assert.deepEqual(before, after);
+  assert.equal(text, before.toString('utf8'));
 });
