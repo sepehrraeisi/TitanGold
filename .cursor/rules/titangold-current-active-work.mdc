@@ -3306,7 +3306,7 @@ This governance transaction formally closes and freezes Artemis Core Stage 10. I
 
 ### Historical — Artemis Core Stage 10 Completion / Final Integration Governance OWNER DECISION (GOVERNANCE DECISION + READ-ONLY DISCOVERY ONLY — SUPERSEDED AS ACTIVE AUTHORITY BY STAGE10 FINAL COMPLETION CLOSEOUT)
 
-### Active Work Package — Artemis Core Stage 10 Completion / Final Integration Governance OWNER DECISION (GOVERNANCE DECISION + READ-ONLY DISCOVERY ONLY)
+### Active Work Package — Artemis Core Stage 10 Completion / Final Integration Governance OWNER DECISION (GOVERNANCE DECISION + READ-ONLY DISCOVERY ONLY — SUPERSEDED AS ACTIVE AUTHORITY)
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **PRIOR_SLICE = STAGE10_PROMOTION_POLICY_CONTRACT_FORMAL_CLOSEOUT_AND_NEXT_DEPENDENCY_DISCOVERY**
@@ -6865,7 +6865,7 @@ This governance transaction closes R9 as COMPLETED_VERIFIED and authorizes **onl
 
 
 
-### Active Work Package — TitanGold Master Reconciliation R8.5 / R9 Canonical GitHub Fast-Forward Governance Authorization (GOVERNANCE ONLY — R9 EXECUTION NOT STARTED)
+### Active Work Package — TitanGold Master Reconciliation R8.5 / R9 Canonical GitHub Fast-Forward Governance Authorization (GOVERNANCE ONLY — R9 EXECUTION NOT STARTED — SUPERSEDED AS ACTIVE AUTHORITY)
 
 **AUTHORIZED_SLICE = R9_CANONICAL_GITHUB_INTEGRATION_EXECUTION**
 **PRIOR_SLICE = R8_CANONICAL_GITHUB_INTEGRATION_PREPARATION**
@@ -8008,7 +8008,7 @@ LIVE = NOT_AUTHORIZED
 **NEXT_GATE_STATUS = NOT_AUTHORIZED**
 **NEXT_GATE_ONLY = YES**
 
-### Active Work Package — Artemis Core Stage 10 Trust / Weighting Policy OWNER DECISION (GOVERNANCE ONLY)
+### Active Work Package — Artemis Core Stage 10 Trust / Weighting Policy OWNER DECISION (GOVERNANCE ONLY — SUPERSEDED AS ACTIVE AUTHORITY)
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **SLICE_ID = S10-TRUST-WEIGHTING-POLICY-GOVERNANCE**
