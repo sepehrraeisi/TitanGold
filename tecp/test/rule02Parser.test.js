@@ -282,9 +282,24 @@ test('parser has zero network DB and filesystem write authority', () => {
   assert.equal(pkg.devDependencies, undefined);
 });
 
-test('checked-in Rule02 fails closed on duplicate active work packages', () => {
+test('checked-in Rule02 exposes one normalized TECP active package', () => {
   const before = readFileSync(rule02Path);
-  expectCode(() => parseRule02(before.toString('utf8')), ERROR_CODES.DUPLICATE_ACTIVE_AUTHORITY);
+  const text = before.toString('utf8');
+  const first = parseRule02(text, { sourceSha: '9c489c60c2500d7f50ae5a258750df1a0cee1daa' });
+  const second = parseRule02(text, { sourceSha: '9c489c60c2500d7f50ae5a258750df1a0cee1daa' });
+  assert.deepEqual(first, second);
+  assert.equal(first.progress.PROJECT_PROGRESS, '4/10');
+  assert.equal(first.progress.NEXT_GATE, 'STAGE11_GOVERNANCE_DISCOVERY');
+  assert.equal(first.artemis.STAGE11_IMPLEMENTATION_AUTHORIZED, 'NO / GOVERNANCE_DISCOVERY_ONLY');
+  assert.equal(first.artemis.AUTHORIZED_SLICE, 'NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION');
+  assert.deepEqual(first.authority.activeSliceIdentifiers, ['TECP-005-RULE02-PARSER']);
+  assert.equal(first.authority.activeWorkPackage.domain, 'tecp');
+  assert.equal(first.authority.activeWorkPackage.sliceId, 'TECP-005-RULE02-PARSER');
+  assert.equal(first.tecp.TECP_IMPLEMENTATION_AUTHORIZED, 'NO / UNTIL_THIS_GOVERNANCE_PR_MERGES');
+  assert.equal(
+    first.tecp.implementationAuthorizationState.TECP005_IMPLEMENTATION_AUTHORIZED,
+    'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES',
+  );
   const after = readFileSync(rule02Path);
   assert.deepEqual(before, after);
 });
