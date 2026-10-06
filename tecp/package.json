@@ -1,0 +1,16 @@
+{
+  "name": "tecp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated TECP-003 service skeleton. Local fail-closed stubs only.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/serviceSkeleton.test.js"
+  }
+}
