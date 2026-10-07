@@ -314,7 +314,21 @@ test('canonical Rule02 allow flows through governance into REQUEST_IMPLEMENTATIO
   const text = readFileSync(rule02Path, 'utf8');
   const parsed = parseRule02(text);
   const sliceFromTecp = parsed.tecp?.TECP_AUTHORIZED_SLICE;
+  const sliceFromPackage = parsed.authority?.activeWorkPackage?.sliceId;
+  assert.equal(typeof sliceFromTecp, 'string');
+  assert.ok(sliceFromTecp.length > 0);
+  assert.equal(sliceFromTecp, sliceFromPackage);
+
   const facts = parsed.governanceFacts;
+  assert.ok(facts);
+  assert.equal(typeof facts.authorityClass, 'string');
+  assert.ok(facts.authorityClass.length > 0);
+  assert.equal(typeof facts.riskTier, 'string');
+  assert.ok(facts.riskTier.length > 0);
+  assert.ok(Array.isArray(facts.authorizedFileScope));
+  assert.ok(facts.authorizedFileScope.length > 0);
+  assert.ok(facts.authorizedFileScope.every((entry) => typeof entry === 'string' && entry.length > 0));
+
   const request = {
     sliceId: sliceFromTecp,
     authorityClass: facts.authorityClass,
@@ -327,7 +341,6 @@ test('canonical Rule02 allow flows through governance into REQUEST_IMPLEMENTATIO
   const governance = validateGovernance(parsed, request);
   assert.equal(governance.allowed, true);
   assert.equal(governance.decision, GOVERNANCE_DECISIONS.ALLOW);
-  assert.equal(sliceFromTecp, 'TECP-007-ACTOR-CAPABILITY-ENGINE');
 
   const actorInput = actor('CHATGPT_INTEGRATOR', 'chatgpt-integrator');
   const capabilityContext = context(governance, { authorityBoundary: 'TECP_CONTROL_PLANE' });
