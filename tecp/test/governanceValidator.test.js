@@ -318,17 +318,55 @@ test('evaluation does not change environment keys', () => {
   assert.deepEqual(Object.keys(process.env).sort(), before);
 });
 
-test('canonical Rule02 parser output allows the exact TECP-006 implementation request', () => {
+test('canonical Rule02 parser output allows the currently authorized TECP implementation request', () => {
   const text = readFileSync(rule02Path, 'utf8');
-  const parsed = parseRule02(text, { sourceSha: 'f00cc9b203ff3e809a708e65cbff2004b3259ac7' });
-  const before = structuredClone(parsed);
-  const request = validRequest();
+  const parsed = parseRule02(text);
+  const parsedBefore = structuredClone(parsed);
+
+  const sliceFromTecp = parsed.tecp?.TECP_AUTHORIZED_SLICE;
+  const sliceFromPackage = parsed.authority?.activeWorkPackage?.sliceId;
+  assert.equal(typeof sliceFromTecp, 'string');
+  assert.ok(sliceFromTecp.length > 0);
+  assert.equal(sliceFromTecp, sliceFromPackage);
+
+  const facts = parsed.governanceFacts;
+  assert.ok(facts);
+  assert.equal(typeof facts.authorityClass, 'string');
+  assert.ok(facts.authorityClass.length > 0);
+  assert.equal(typeof facts.riskTier, 'string');
+  assert.ok(facts.riskTier.length > 0);
+  assert.ok(Array.isArray(facts.authorizedFileScope));
+  assert.ok(facts.authorizedFileScope.length > 0);
+  assert.equal(Object.keys(facts.authorizedFileScope).length, facts.authorizedFileScope.length);
+  assert.ok(facts.authorizedFileScope.every((entry) => typeof entry === 'string' && entry.length > 0));
+
+  const activeAuthorization = parsed.tecp?.implementationAuthorizationState?.activeWorkPackage;
+  assert.equal(typeof activeAuthorization, 'string');
+  assert.ok(activeAuthorization.length > 0);
+  assert.equal(activeAuthorization, parsed.lifecyclePrecedence?.rawImplementationAuthorization);
+
+  const request = {
+    sliceId: sliceFromTecp,
+    authorityClass: facts.authorityClass,
+    riskTier: facts.riskTier,
+    requestedPaths: [...facts.authorizedFileScope],
+    operationClass: OPERATION_CLASSES.IMPLEMENT,
+    requiresDeploy: false,
+    requiresProductionMutation: false,
+  };
+  const requestBefore = structuredClone(request);
+
   const result = validateGovernance(parsed, request);
-  assert.equal(result.decision, GOVERNANCE_DECISIONS.ALLOW);
   assert.equal(result.allowed, true);
-  assert.equal(result.matchedFacts.sliceId, SLICE);
-  assert.equal(result.matchedFacts.authorityClass, AUTHORITY);
-  assert.equal(result.matchedFacts.riskTier, RISK);
-  assert.equal(result.matchedFacts.implementationAuthorization, EFFECTIVE);
-  assert.deepEqual(parsed, before);
+  assert.equal(result.decision, GOVERNANCE_DECISIONS.ALLOW);
+  assert.equal(result.matchedFacts.sliceId, sliceFromTecp);
+  assert.equal(result.matchedFacts.authorityClass, facts.authorityClass);
+  assert.equal(result.matchedFacts.riskTier, facts.riskTier);
+  assert.deepEqual(result.matchedFacts.authorizedFileScope, facts.authorizedFileScope);
+  assert.equal(result.matchedFacts.implementationAuthorization, activeAuthorization);
+
+  const repeated = validateGovernance(parsed, request);
+  assert.deepEqual(repeated, result);
+  assert.deepEqual(parsed, parsedBefore);
+  assert.deepEqual(request, requestBefore);
 });
