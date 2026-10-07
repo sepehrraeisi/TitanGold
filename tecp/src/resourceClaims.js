@@ -1,7 +1,7 @@
 /**
  * TECP-009 in-memory resource claims.
  *
- * Persistent schema owner remains migration 056 (`tecp_resource_claims`).
+ * Persistent schema owner remains migration 056 (`public.tecp_task_resource_claims`).
  * Conceptual field mapping only:
  *   taskId ↔ task_id
  *   resourceType ↔ resource_type

@@ -1,7 +1,8 @@
 /**
  * TECP-009 resource claims tests.
  *
- * Persistent schema owner remains migration 056. Conceptual mapping only:
+ * Persistent schema owner remains migration 056 (`public.tecp_task_resource_claims`).
+ * Conceptual mapping only:
  * taskId ↔ task_id, resourceType ↔ resource_type, resourceKey ↔ resource_key,
  * accessMode ↔ access_mode. Duplicate tuples are in-memory only. This module
  * does not read or write a database and does not create a UNIQUE constraint.
@@ -286,7 +287,10 @@ test('persistence boundary stays conceptual and in-memory', () => {
   assert.match(source, /resourceType ↔ resource_type/);
   assert.match(source, /resourceKey ↔ resource_key/);
   assert.match(source, /accessMode ↔ access_mode/);
-  assert.match(source, /migration 056/);
+  const canonicalPersistenceReference = 'migration 056 (`public.tecp_task_resource_claims`)';
+  assert.equal(source.includes(canonicalPersistenceReference), true);
+  const withoutCanonicalTable = source.split('tecp_task_resource_claims').join('');
+  assert.equal(withoutCanonicalTable.includes('tecp_resource_claims'), false);
   assert.equal(source.includes('UNIQUE'), true);
   for (const token of ['from \'pg\'', 'from "pg"', 'node:sqlite', 'repository', 'SELECT ', 'INSERT ']) {
     assert.equal(source.includes(token), false, token);
