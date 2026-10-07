@@ -329,3 +329,281 @@ test('checked-in Rule02 live authority invariants', () => {
   assert.deepEqual(before, after);
   assert.equal(text, before.toString('utf8'));
 });
+
+const STRUCTURED_YES = 'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES';
+const STRUCTURED_SCOPE = 'tecp/src/rule02Parser.js | tecp/test/rule02Parser.test.js | tecp/test/fixtures/';
+const STRUCTURED_PATHS = 'tecp/src/config.js | tecp/src/service.js';
+const STRUCTURED_STOPS = 'SECOND_PARSER_OWNER | EXTERNAL_DEPENDENCY_REQUIRED';
+const STRUCTURED_RULE = 'CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION';
+
+function structuredDocument(overrides = {}, options = {}) {
+  const facts = {
+    RISK_TIER: 'Tier 2',
+    AUTHORITY_CLASS: 'ENGINEERING_CONTROL_PLANE',
+    AUTHORIZED_FILE_SCOPE: STRUCTURED_SCOPE,
+    PROTECTED_PATHS: STRUCTURED_PATHS,
+    STOP_CONDITIONS: STRUCTURED_STOPS,
+    IMPLEMENTATION_START_CONDITIONS: 'THIS_GOVERNANCE_PR_MERGED',
+    COMPLETION_GATE: 'TECP005A_STRUCTURED_GOVERNANCE_FACTS_COMPLETE',
+    COMPLETION_GATE_STATUS: 'NOT_REACHED',
+    LIFECYCLE_PRECEDENCE_RULE: STRUCTURED_RULE,
+    TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION: 'CONSUMED / NON-ACTIVE',
+    PRIOR_SLICE: 'TECP-005-RULE02-PARSER',
+    TECP_005_STATUS: 'CLOSED / FROZEN / VERIFIED',
+    IMPLEMENTATION_AUTHORIZED: STRUCTURED_YES,
+    ...overrides,
+  };
+  const lines = [];
+  for (const [key, value] of Object.entries(facts)) {
+    if (value === null) continue;
+    if (key === 'PROTECTED_PATHS') lines.push(`${key} = ${value}`);
+    else lines.push(`**${key} = ${value}**`);
+  }
+  return `## Canonical Project Progress Snapshot
+**PROJECT_PROGRESS = 4/10**
+**CURRENT_STAGE = ARTEMIS_CORE_STAGE_11_PAPER_SIMULATED_FULL_CHAIN_READINESS**
+**CURRENT_STAGE_PROGRESS = 11/15**
+**NEXT_GATE = STAGE11_GOVERNANCE_DISCOVERY**
+**PROGRESS_BLOCKER = NONE**
+**TECP_AUTHORIZED_SLICE = TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS**
+**TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
+**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+
+### Active Work Package — TECP-005A
+**SLICE_ID = TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS**
+**OFFICIAL_NAME = TECP_005A_RULE02_STRUCTURED_GOVERNANCE_FACTS**
+**TECP_AUTHORIZED_SLICE = TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS**
+${lines.join('\n')}
+${options.awpExtra || ''}
+
+## Next Owner gate
+**TECP_NEXT_GATE = TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS**
+${options.tail || ''}
+`;
+}
+
+test('structured RISK_TIER extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
+});
+
+test('structured AUTHORITY_CLASS extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.governanceFacts.authorityClass, 'ENGINEERING_CONTROL_PLANE');
+});
+
+test('authorized file scope array extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.deepEqual(parsed.governanceFacts.authorizedFileScope, [
+    'tecp/src/rule02Parser.js',
+    'tecp/test/rule02Parser.test.js',
+    'tecp/test/fixtures/',
+  ]);
+});
+
+test('protected paths array extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.deepEqual(parsed.governanceFacts.protectedPaths, [
+    'tecp/src/config.js',
+    'tecp/src/service.js',
+  ]);
+});
+
+test('stop conditions array extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.deepEqual(parsed.governanceFacts.stopConditions, [
+    'SECOND_PARSER_OWNER',
+    'EXTERNAL_DEPENDENCY_REQUIRED',
+  ]);
+});
+
+test('implementation start conditions extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.governanceFacts.implementationStartConditions, 'THIS_GOVERNANCE_PR_MERGED');
+});
+
+test('completion gate extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.governanceFacts.completionGate, 'TECP005A_STRUCTURED_GOVERNANCE_FACTS_COMPLETE');
+});
+
+test('completion gate status extraction', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.governanceFacts.completionGateStatus, 'NOT_REACHED');
+});
+
+test('lifecycle precedence output', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.lifecyclePrecedence.rule, STRUCTURED_RULE);
+  assert.equal(parsed.lifecyclePrecedence.consumedSlice, 'TECP-005-RULE02-PARSER');
+  assert.equal(parsed.lifecyclePrecedence.status, 'CLOSED / FROZEN / VERIFIED');
+});
+
+test('consumed authorization effective-state behavior', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.lifecyclePrecedence.implementationAuthorizationEffective, 'CONSUMED / NON-ACTIVE');
+});
+
+test('raw implementation authorization preserved', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.lifecyclePrecedence.rawImplementationAuthorization, STRUCTURED_YES);
+  assert.equal(parsed.tecp.implementationAuthorizationState.activeWorkPackage, STRUCTURED_YES);
+});
+
+test('historical structured governance values ignored', () => {
+  const parsed = parseRule02(structuredDocument({}, {
+    tail: `### Historical — older structured facts
+**RISK_TIER = Tier 1**
+**AUTHORIZED_FILE_SCOPE = backend/legacy.js**`,
+  }));
+  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
+  assert.deepEqual(parsed.governanceFacts.authorizedFileScope, [
+    'tecp/src/rule02Parser.js',
+    'tecp/test/rule02Parser.test.js',
+    'tecp/test/fixtures/',
+  ]);
+});
+
+test('closeout structured governance values ignored', () => {
+  const parsed = parseRule02(structuredDocument({}, {
+    tail: `### TECP structured facts CLOSEOUT
+**RISK_TIER = Tier 9**
+**AUTHORITY_CLASS = HISTORICAL_ONLY**`,
+  }));
+  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
+  assert.equal(parsed.governanceFacts.authorityClass, 'ENGINEERING_CONTROL_PLANE');
+});
+
+test('superseded structured governance values ignored', () => {
+  const parsed = parseRule02(structuredDocument({}, {
+    tail: `### Active Work Package — prior slice SUPERSEDED AS ACTIVE AUTHORITY
+**RISK_TIER = Tier 9**
+**AUTHORIZED_FILE_SCOPE = superseded/path.js**`,
+  }));
+  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
+  assert.deepEqual(parsed.governanceFacts.authorizedFileScope[0], 'tecp/src/rule02Parser.js');
+});
+
+test('missing required governance fact fails closed', () => {
+  assert.throws(
+    () => parseRule02(structuredDocument({ RISK_TIER: null })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT,
+  );
+  assert.throws(
+    () => parseRule02(structuredDocument({ LIFECYCLE_PRECEDENCE_RULE: null })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT,
+  );
+  assert.throws(
+    () => parseRule02(structuredDocument({ TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION: null })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT,
+  );
+});
+
+test('conflicting active governance fact fails closed', () => {
+  assert.throws(
+    () => parseRule02(structuredDocument({}, { awpExtra: '**RISK_TIER = Tier 9**' })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT,
+  );
+  assert.throws(
+    () => parseRule02(structuredDocument({ TECP_005_STATUS: 'OPEN / NOT_CLOSED' })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT,
+  );
+  assert.throws(
+    () => parseRule02(structuredDocument({
+      TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION: 'YES / STILL_ACTIVE',
+    })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT,
+  );
+  assert.throws(
+    () => parseRule02(structuredDocument({
+      LIFECYCLE_PRECEDENCE_RULE: 'SOME_OTHER_RULE',
+    })),
+    (error) => error instanceof Rule02ParseError && error.code === ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT,
+  );
+});
+
+test('TECP and Artemis independence preserved with structured facts', () => {
+  const parsed = parseRule02(structuredDocument());
+  assert.equal(parsed.tecp.TECP_AUTHORIZED_SLICE, 'TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS');
+  assert.equal(parsed.artemis.AUTHORIZED_SLICE, 'NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION');
+  assert.equal(JSON.stringify(parsed.tecp).includes('TECP-006'), false);
+});
+
+test('current canonical Rule02 structured governance facts', () => {
+  const parsed = parseRule02(readFileSync(rule02Path, 'utf8'));
+  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
+  assert.equal(parsed.governanceFacts.authorityClass, 'ENGINEERING_CONTROL_PLANE');
+  assert.deepEqual(parsed.governanceFacts.authorizedFileScope, [
+    'tecp/src/rule02Parser.js',
+    'tecp/test/rule02Parser.test.js',
+    'tecp/test/fixtures/',
+  ]);
+  assert.deepEqual(parsed.governanceFacts.protectedPaths, [
+    '.cursor/rules/titangold-core-engineering-rules.mdc',
+    '.cursor/rules/titangold-current-active-work.mdc',
+    'backend/**',
+    '/home/ubuntu/webapp/TitanGold',
+    'backend/database/migrations/056_create_tecp_control_plane_foundation.sql',
+    'tecp/package.json',
+    'tecp/README.md',
+    'tecp/src/config.js',
+    'tecp/src/health.js',
+    'tecp/src/index.js',
+    'tecp/src/ports/githubPort.js',
+    'tecp/src/ports/linearPort.js',
+    'tecp/src/service.js',
+    'tecp/test/serviceSkeleton.test.js',
+    'Data Hub',
+    'AI Shared Foundation',
+    'Agents Shell',
+  ]);
+  assert.deepEqual(parsed.governanceFacts.stopConditions, [
+    'SECOND_PARSER_OWNER',
+    'EXTERNAL_DEPENDENCY_REQUIRED',
+    'MISSING_REQUIRED_GOVERNANCE_FACT',
+    'CONFLICTING_ACTIVE_GOVERNANCE_FACT',
+    'HISTORICAL_INFERENCE',
+    'TECP006_IMPLEMENTATION',
+    'LOCKED_TOKEN_REWRITE',
+    'PRODUCTION_MUTATION',
+    'DEPLOY',
+    'NETWORK',
+    'DB',
+    'GITHUB',
+    'LINEAR',
+    'RUNTIME',
+  ]);
+  assert.equal(parsed.governanceFacts.implementationStartConditions, 'THIS_GOVERNANCE_PR_MERGED');
+  assert.equal(parsed.governanceFacts.completionGate, 'TECP005A_STRUCTURED_GOVERNANCE_FACTS_COMPLETE');
+  assert.equal(parsed.governanceFacts.completionGateStatus, 'NOT_REACHED');
+  assert.equal(parsed.lifecyclePrecedence.rule, STRUCTURED_RULE);
+  assert.equal(parsed.lifecyclePrecedence.consumedSlice, 'TECP-005-RULE02-PARSER');
+  assert.equal(parsed.lifecyclePrecedence.rawImplementationAuthorization, STRUCTURED_YES);
+  assert.equal(parsed.lifecyclePrecedence.implementationAuthorizationEffective, 'CONSUMED / NON-ACTIVE');
+  assert.equal(parsed.lifecyclePrecedence.status, 'CLOSED / FROZEN / VERIFIED');
+  assert.equal(parsed.tecp.TECP_AUTHORIZED_SLICE, 'TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS');
+  assert.equal(JSON.stringify(parsed.tecp).includes('TECP-006'), false);
+  assert.equal(parsed.artemis.AUTHORIZED_SLICE, 'NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION');
+});
+
+test('deterministic repeated structured parse', () => {
+  const input = structuredDocument();
+  assert.deepEqual(parseRule02(input), parseRule02(input));
+});
+
+test('structured parse does not mutate input', () => {
+  const input = structuredDocument();
+  const before = `${input}`;
+  parseRule02(input);
+  assert.equal(input, before);
+});
+
+test('structured parse has zero side effects', () => {
+  const cwd = process.cwd();
+  parseRule02(structuredDocument());
+  assert.equal(process.cwd(), cwd);
+  const source = readFileSync(parserSourcePath, 'utf8');
+  for (const token of FORBIDDEN_SOURCE) {
+    assert.equal(source.includes(token), false);
+  }
+});

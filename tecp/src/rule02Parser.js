@@ -14,6 +14,8 @@ export const ERROR_CODES = Object.freeze({
   STALE_HISTORICAL_ONLY: 'STALE_HISTORICAL_ONLY',
   MISSING_PROGRESS_SNAPSHOT: 'MISSING_PROGRESS_SNAPSHOT',
   AMBIGUOUS_ACTIVE_SECTION: 'AMBIGUOUS_ACTIVE_SECTION',
+  MISSING_REQUIRED_GOVERNANCE_FACT: 'MISSING_REQUIRED_GOVERNANCE_FACT',
+  CONFLICTING_ACTIVE_GOVERNANCE_FACT: 'CONFLICTING_ACTIVE_GOVERNANCE_FACT',
 });
 
 const ORIGIN = Object.freeze({
@@ -42,6 +44,43 @@ const GOVERNANCE_KEYS = [
   'GOVERNANCE_REVISION',
   'GOVERNANCE_BASE_MAIN_SHA',
 ];
+
+const STRUCTURED_SCALAR_KEYS = new Set([
+  'RISK_TIER',
+  'AUTHORITY_CLASS',
+  'IMPLEMENTATION_START_CONDITIONS',
+  'COMPLETION_GATE',
+  'COMPLETION_GATE_STATUS',
+  'LIFECYCLE_PRECEDENCE_RULE',
+  'TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION',
+  'PRIOR_SLICE',
+  'TECP_005_STATUS',
+]);
+
+const STRUCTURED_LIST_KEYS = new Set([
+  'AUTHORIZED_FILE_SCOPE',
+  'PROTECTED_PATHS',
+  'STOP_CONDITIONS',
+]);
+
+const REQUIRED_STRUCTURED_KEYS = [
+  'RISK_TIER',
+  'AUTHORITY_CLASS',
+  'AUTHORIZED_FILE_SCOPE',
+  'PROTECTED_PATHS',
+  'STOP_CONDITIONS',
+  'IMPLEMENTATION_START_CONDITIONS',
+  'COMPLETION_GATE',
+  'COMPLETION_GATE_STATUS',
+  'LIFECYCLE_PRECEDENCE_RULE',
+  'TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION',
+  'PRIOR_SLICE',
+  'TECP_005_STATUS',
+];
+
+const CLOSED_STATUS = 'CLOSED / FROZEN / VERIFIED';
+const LIFECYCLE_RULE = 'CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION';
+const CONSUMED_AUTH = 'CONSUMED / NON-ACTIVE';
 
 export class Rule02ParseError extends Error {
   constructor(code, details = {}) {
@@ -308,6 +347,81 @@ function remember(state, bucket, field, value, origin) {
   return saved;
 }
 
+function noteStructuredFact(state, key, value) {
+  if (!state.structuredFacts) state.structuredFacts = new Map();
+  const existing = state.structuredFacts.get(key);
+  if (existing === undefined) {
+    state.structuredFacts.set(key, value);
+    return;
+  }
+  if (existing !== value) {
+    throw new Rule02ParseError(ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT, { field: key });
+  }
+}
+
+function splitStructuredList(raw, field) {
+  const parts = String(raw).split(' | ').map((part) => part.trim());
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) {
+    throw new Rule02ParseError(ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT, { field });
+  }
+  return parts;
+}
+
+function structuredGovernance(state) {
+  const facts = state.structuredFacts;
+  if (!facts || facts.size === 0) return null;
+
+  for (const key of REQUIRED_STRUCTURED_KEYS) {
+    const value = facts.get(key);
+    if (value === undefined || !String(value).trim()) {
+      throw new Rule02ParseError(ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT, { field: key });
+    }
+  }
+
+  const status = facts.get('TECP_005_STATUS');
+  const rule = facts.get('LIFECYCLE_PRECEDENCE_RULE');
+  const prior = facts.get('TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION');
+  if (rule !== LIFECYCLE_RULE) {
+    throw new Rule02ParseError(ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT, { field: 'LIFECYCLE_PRECEDENCE_RULE' });
+  }
+  if (status !== CLOSED_STATUS) {
+    throw new Rule02ParseError(ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT, { field: 'TECP_005_STATUS' });
+  }
+  if (prior !== CONSUMED_AUTH) {
+    throw new Rule02ParseError(ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT, { field: 'TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION' });
+  }
+
+  const raw = state.awpImpl
+    ? state.awpImpl.value
+    : (state.tecp005Impl ? state.tecp005Impl.value : '');
+  if (!String(raw).trim()) {
+    throw new Rule02ParseError(ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT, { field: 'IMPLEMENTATION_AUTHORIZED' });
+  }
+  if (state.awpImpl && state.tecp005Impl && state.awpImpl.value !== state.tecp005Impl.value) {
+    throw new Rule02ParseError(ERROR_CODES.CONFLICTING_ACTIVE_GOVERNANCE_FACT, { field: 'IMPLEMENTATION_AUTHORIZED' });
+  }
+
+  return {
+    governanceFacts: {
+      riskTier: facts.get('RISK_TIER'),
+      authorityClass: facts.get('AUTHORITY_CLASS'),
+      authorizedFileScope: splitStructuredList(facts.get('AUTHORIZED_FILE_SCOPE'), 'AUTHORIZED_FILE_SCOPE'),
+      protectedPaths: splitStructuredList(facts.get('PROTECTED_PATHS'), 'PROTECTED_PATHS'),
+      stopConditions: splitStructuredList(facts.get('STOP_CONDITIONS'), 'STOP_CONDITIONS'),
+      implementationStartConditions: facts.get('IMPLEMENTATION_START_CONDITIONS'),
+      completionGate: facts.get('COMPLETION_GATE'),
+      completionGateStatus: facts.get('COMPLETION_GATE_STATUS'),
+    },
+    lifecyclePrecedence: {
+      rule,
+      consumedSlice: facts.get('PRIOR_SLICE'),
+      rawImplementationAuthorization: raw,
+      implementationAuthorizationEffective: CONSUMED_AUTH,
+      status,
+    },
+  };
+}
+
 function applySnapshot(state, section) {
   for (const assignment of section.assignments) {
     routeCommon(state, assignment, ORIGIN.snapshot, { fromSnapshot: true, domain: null });
@@ -318,6 +432,13 @@ function applyAwp(state, section) {
   const domain = awpDomain(section);
   state.awpDomain = domain;
   for (const assignment of section.assignments) {
+    if (STRUCTURED_SCALAR_KEYS.has(assignment.key) || STRUCTURED_LIST_KEYS.has(assignment.key)) {
+      if (!String(assignment.value).trim()) {
+        throw new Rule02ParseError(ERROR_CODES.MISSING_REQUIRED_GOVERNANCE_FACT, { field: assignment.key });
+      }
+      noteStructuredFact(state, assignment.key, assignment.value);
+      if (assignment.key !== 'TECP_005_STATUS') continue;
+    }
     if (assignment.key === 'SLICE_ID') {
       state.sliceId = remember(state, 'sliceId', 'SLICE_ID', assignment.value, ORIGIN.awp).value;
       if (domain === 'tecp' || primaryToken(assignment.value).startsWith('TECP-')) {
@@ -506,7 +627,9 @@ function buildResult(state, sourceMeta, awp, excluded) {
     superseded: excluded.filter((section) => section.flags.superseded).length,
   };
 
-  return {
+  const structured = structuredGovernance(state);
+
+  const result = {
     progress: {
       PROJECT_PROGRESS: state.progress.PROJECT_PROGRESS,
       CURRENT_STAGE: state.progress.CURRENT_STAGE,
@@ -554,6 +677,17 @@ function buildResult(state, sourceMeta, awp, excluded) {
       activeRegions: regions,
       excludedSectionCount: excluded.length,
     },
+  };
+  if (!structured) return result;
+  return {
+    progress: result.progress,
+    tecp: result.tecp,
+    artemis: result.artemis,
+    authority: result.authority,
+    governanceFacts: structured.governanceFacts,
+    lifecyclePrecedence: structured.lifecyclePrecedence,
+    source: result.source,
+    diagnostics: result.diagnostics,
   };
 }
 
