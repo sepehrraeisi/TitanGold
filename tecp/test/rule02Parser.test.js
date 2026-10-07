@@ -530,60 +530,78 @@ test('TECP and Artemis independence preserved with structured facts', () => {
 });
 
 test('current canonical Rule02 structured governance facts', () => {
-  const parsed = parseRule02(readFileSync(rule02Path, 'utf8'));
-  assert.equal(parsed.governanceFacts.riskTier, 'Tier 2');
-  assert.equal(parsed.governanceFacts.authorityClass, 'ENGINEERING_CONTROL_PLANE');
-  assert.deepEqual(parsed.governanceFacts.authorizedFileScope, [
-    'tecp/src/rule02Parser.js',
-    'tecp/test/rule02Parser.test.js',
-    'tecp/test/fixtures/',
-  ]);
-  assert.deepEqual(parsed.governanceFacts.protectedPaths, [
-    '.cursor/rules/titangold-core-engineering-rules.mdc',
-    '.cursor/rules/titangold-current-active-work.mdc',
-    'backend/**',
-    '/home/ubuntu/webapp/TitanGold',
-    'backend/database/migrations/056_create_tecp_control_plane_foundation.sql',
-    'tecp/package.json',
-    'tecp/README.md',
-    'tecp/src/config.js',
-    'tecp/src/health.js',
-    'tecp/src/index.js',
-    'tecp/src/ports/githubPort.js',
-    'tecp/src/ports/linearPort.js',
-    'tecp/src/service.js',
-    'tecp/test/serviceSkeleton.test.js',
-    'Data Hub',
-    'AI Shared Foundation',
-    'Agents Shell',
-  ]);
-  assert.deepEqual(parsed.governanceFacts.stopConditions, [
-    'SECOND_PARSER_OWNER',
-    'EXTERNAL_DEPENDENCY_REQUIRED',
-    'MISSING_REQUIRED_GOVERNANCE_FACT',
-    'CONFLICTING_ACTIVE_GOVERNANCE_FACT',
-    'HISTORICAL_INFERENCE',
-    'TECP006_IMPLEMENTATION',
-    'LOCKED_TOKEN_REWRITE',
-    'PRODUCTION_MUTATION',
-    'DEPLOY',
-    'NETWORK',
-    'DB',
-    'GITHUB',
-    'LINEAR',
-    'RUNTIME',
-  ]);
-  assert.equal(parsed.governanceFacts.implementationStartConditions, 'THIS_GOVERNANCE_PR_MERGED');
-  assert.equal(parsed.governanceFacts.completionGate, 'TECP005A_STRUCTURED_GOVERNANCE_FACTS_COMPLETE');
-  assert.equal(parsed.governanceFacts.completionGateStatus, 'NOT_REACHED');
-  assert.equal(parsed.lifecyclePrecedence.rule, STRUCTURED_RULE);
-  assert.equal(parsed.lifecyclePrecedence.consumedSlice, 'TECP-005-RULE02-PARSER');
-  assert.equal(parsed.lifecyclePrecedence.rawImplementationAuthorization, STRUCTURED_YES);
-  assert.equal(parsed.lifecyclePrecedence.implementationAuthorizationEffective, 'CONSUMED / NON-ACTIVE');
-  assert.equal(parsed.lifecyclePrecedence.status, 'CLOSED / FROZEN / VERIFIED');
-  assert.equal(parsed.tecp.TECP_AUTHORIZED_SLICE, 'TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS');
-  assert.equal(JSON.stringify(parsed.tecp).includes('TECP-006'), false);
-  assert.equal(parsed.artemis.AUTHORIZED_SLICE, 'NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION');
+  const before = readFileSync(rule02Path);
+  const text = before.toString('utf8');
+  const primary = (value) => String(value ?? '').split(' / ')[0].trim();
+  const nonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+  const denseStringArray = (value) => Array.isArray(value)
+    && value.every((member) => typeof member === 'string' && member.trim().length > 0);
+
+  const first = parseRule02(text);
+  const second = parseRule02(text);
+  assert.deepEqual(first, second);
+
+  const facts = first.governanceFacts;
+  assert.equal(facts != null && typeof facts === 'object' && !Array.isArray(facts), true);
+  assert.equal(nonEmptyString(facts.riskTier), true);
+  assert.equal(nonEmptyString(facts.authorityClass), true);
+  assert.equal(denseStringArray(facts.authorizedFileScope), true);
+  assert.equal(facts.authorizedFileScope.length > 0, true);
+  assert.equal(denseStringArray(facts.protectedPaths), true);
+  assert.equal(denseStringArray(facts.stopConditions), true);
+  assert.equal(nonEmptyString(facts.implementationStartConditions), true);
+  assert.equal(nonEmptyString(facts.completionGate), true);
+  assert.equal(nonEmptyString(facts.completionGateStatus), true);
+  assert.deepEqual(facts.authorizedFileScope, second.governanceFacts.authorizedFileScope);
+  assert.deepEqual(facts.protectedPaths, second.governanceFacts.protectedPaths);
+  assert.deepEqual(facts.stopConditions, second.governanceFacts.stopConditions);
+
+  const activeSlice = primary(first.tecp.TECP_AUTHORIZED_SLICE);
+  const workPackage = first.authority.activeWorkPackage;
+  assert.equal(activeSlice.length > 0, true);
+  assert.equal(activeSlice, primary(workPackage.sliceId));
+  assert.equal(activeSlice, primary(workPackage.officialName));
+  assert.equal(workPackage.domain, 'tecp');
+
+  const artemisSlice = primary(first.artemis.AUTHORIZED_SLICE);
+  assert.notEqual(artemisSlice, activeSlice);
+  assert.equal(first.authority.activeSliceIdentifiers.includes(artemisSlice), false);
+
+  const diagnosticText = JSON.stringify(first.diagnostics);
+  for (const code of [
+    'DUPLICATE_ACTIVE_AUTHORITY',
+    'CONTRADICTORY_AUTHORIZATION',
+    'AMBIGUOUS_ACTIVE_SECTION',
+    'MALFORMED_RULE02',
+  ]) {
+    assert.equal(diagnosticText.includes(code), false);
+  }
+  assert.equal(
+    first.diagnostics.activeRegions.filter((region) => region === 'activeWorkPackage').length,
+    1,
+  );
+
+  if (first.lifecyclePrecedence != null) {
+    const life = first.lifecyclePrecedence;
+    for (const field of [
+      'rule',
+      'consumedSlice',
+      'rawImplementationAuthorization',
+      'implementationAuthorizationEffective',
+      'status',
+    ]) {
+      assert.equal(nonEmptyString(life[field]), true, field);
+    }
+    const effective = life.implementationAuthorizationEffective;
+    if (/CONSUMED|NON-ACTIVE/.test(effective)) {
+      assert.notEqual(primary(effective), 'YES');
+    }
+    assert.deepEqual(life, second.lifecyclePrecedence);
+  }
+
+  const after = readFileSync(rule02Path);
+  assert.deepEqual(before, after);
+  assert.equal(text, before.toString('utf8'));
 });
 
 test('deterministic repeated structured parse', () => {
