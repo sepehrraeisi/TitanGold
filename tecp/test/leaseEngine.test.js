@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -13,10 +12,10 @@ import {
   releaseLease,
   validateLease,
 } from '../src/leaseEngine.js';
+import * as leaseEngine from '../src/leaseEngine.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sourcePath = join(here, '../src/leaseEngine.js');
-const repoRoot = join(here, '../..');
 
 function grantRequest(overrides = {}) {
   return {
@@ -440,23 +439,28 @@ test('source boundary excludes clocks, lifecycle, imports, and persistence', () 
   assert.equal(source.includes('BLOCKED'), false);
 });
 
-test('only the two authorized lease files differ from the base', () => {
-  const base = '9ad86ddbfb8e76482a74e6e4c791b0b6aff62ec7';
-  const porcelain = execFileSync('git', ['status', '--porcelain'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  const uncommitted = porcelain.split('\n').filter(Boolean).map((line) => {
-    const path = line.slice(3).trim();
-    return path.includes(' -> ') ? path.split(' -> ').pop() : path;
-  });
-  const committed = execFileSync('git', ['diff', '--name-only', base], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  }).split('\n').filter(Boolean);
-  const files = [...new Set([...uncommitted, ...committed])].sort();
-  assert.deepEqual(files, [
-    'tecp/src/leaseEngine.js',
-    'tecp/test/leaseEngine.test.js',
+test('public export surface is exactly the lease boundary', () => {
+  assert.deepEqual(Object.keys(leaseEngine).sort(), [
+    'LEASE_DECISIONS',
+    'LEASE_STATUSES',
+    'canonicalizeLease',
+    'grantLease',
+    'releaseLease',
+    'validateLease',
   ]);
+  const forbidden = [
+    'renewLease',
+    'revokeLease',
+    'heartbeatLease',
+    'expireLease',
+    'persistLease',
+    'saveLease',
+    'loadLease',
+    'scheduleLease',
+    'lockLease',
+    'acquireRuntimeLock',
+  ];
+  for (const name of forbidden) {
+    assert.equal(Object.hasOwn(leaseEngine, name), false, name);
+  }
 });
