@@ -7,17 +7,23 @@ import { describe, it } from 'node:test';
 import {
   SCOPE_EXPANSION_CATEGORIES,
   SCOPE_EXPANSION_DECISIONS,
-  SCOPE_EXPANSION_REASONS,
-  canonicalizeScopeExpansionContext,
   canonicalizeScopeExpansionRequest,
   evaluateScopeExpansion,
-  isValidRepoRelativePath,
   validateScopeExpansionContext,
   validateScopeExpansionRequest,
 } from '../src/scopeExpansion.js';
 
 const SOURCE_PATH = join(dirname(fileURLToPath(import.meta.url)), '../src/scopeExpansion.js');
 const SOURCE_TEXT = readFileSync(SOURCE_PATH, 'utf8');
+
+const EXPECTED_PUBLIC_EXPORTS = Object.freeze([
+  'SCOPE_EXPANSION_CATEGORIES',
+  'SCOPE_EXPANSION_DECISIONS',
+  'canonicalizeScopeExpansionRequest',
+  'evaluateScopeExpansion',
+  'validateScopeExpansionContext',
+  'validateScopeExpansionRequest',
+]);
 
 function baseRequest(overrides = {}) {
   return {
@@ -123,61 +129,61 @@ describe('TECP-012 Scope Expansion — request validation', () => {
     delete request.reason;
     const result = validateScopeExpansionRequest(request);
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUEST_SHAPE]);
+    assert.deepEqual(result.reasons, ['INVALID_REQUEST_SHAPE']);
   });
 
   it('10. extra field => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest({ ...baseRequest(), extra: true });
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUEST_SHAPE]);
+    assert.deepEqual(result.reasons, ['INVALID_REQUEST_SHAPE']);
   });
 
   it('11. empty requestId => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ requestId: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUEST_ID]);
+    assert.deepEqual(result.reasons, ['INVALID_REQUEST_ID']);
   });
 
   it('12. empty taskId => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ taskId: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_TASK_ID]);
+    assert.deepEqual(result.reasons, ['INVALID_TASK_ID']);
   });
 
   it('13. empty actorId => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ actorId: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_ACTOR_ID]);
+    assert.deepEqual(result.reasons, ['INVALID_ACTOR_ID']);
   });
 
   it('14. invalid category => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ category: 'OTHER' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_CATEGORY]);
+    assert.deepEqual(result.reasons, ['INVALID_CATEGORY']);
   });
 
   it('15. empty reason => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ reason: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REASON]);
+    assert.deepEqual(result.reasons, ['INVALID_REASON']);
   });
 
   it('16. empty governanceRevision => INVALID_REQUEST', () => {
     const result = validateScopeExpansionRequest(baseRequest({ governanceRevision: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_GOVERNANCE_REVISION]);
+    assert.deepEqual(result.reasons, ['INVALID_GOVERNANCE_REVISION']);
   });
 
   it('17. invalid stopCondition type', () => {
     const result = validateScopeExpansionRequest(baseRequest({ stopCondition: 1 }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_STOP_CONDITION]);
+    assert.deepEqual(result.reasons, ['INVALID_STOP_CONDITION']);
   });
 
   it('18. empty-string stopCondition invalid', () => {
     const result = validateScopeExpansionRequest(baseRequest({ stopCondition: '' }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_STOP_CONDITION]);
+    assert.deepEqual(result.reasons, ['INVALID_STOP_CONDITION']);
   });
 
   it('19. duplicate requestedPaths invalid', () => {
@@ -185,7 +191,7 @@ describe('TECP-012 Scope Expansion — request validation', () => {
       requestedPaths: ['foo/bar', 'foo/bar'],
     }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUESTED_PATHS]);
+    assert.deepEqual(result.reasons, ['INVALID_REQUESTED_PATHS']);
   });
 
   it('20. absolute requested path invalid', () => {
@@ -193,14 +199,14 @@ describe('TECP-012 Scope Expansion — request validation', () => {
       requestedPaths: ['/absolute/path'],
     }));
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUESTED_PATHS]);
+    assert.deepEqual(result.reasons, ['INVALID_REQUESTED_PATHS']);
   });
 
   it('21. parent traversal requested path invalid', () => {
     for (const path of ['../foo', 'foo/../bar', 'foo/..', '..']) {
       const result = validateScopeExpansionRequest(baseRequest({ requestedPaths: [path] }));
       assert.equal(result.valid, false, path);
-      assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_REQUESTED_PATHS]);
+      assert.deepEqual(result.reasons, ['INVALID_REQUESTED_PATHS']);
     }
   });
 
@@ -220,7 +226,6 @@ describe('TECP-012 Scope Expansion — request validation', () => {
   });
 
   it('accepts literal empty path segments without normalization', () => {
-    assert.equal(isValidRepoRelativePath('foo//bar'), true);
     const result = validateScopeExpansionRequest(baseRequest({
       requestedPaths: ['foo//bar'],
     }));
@@ -258,43 +263,55 @@ describe('TECP-012 Scope Expansion — context validation', () => {
 
   it('27. invalid taskId', () => {
     const result = validateScopeExpansionContext(baseContext({ taskId: '' }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_TASK_ID]);
+    assert.deepEqual(result.reasons, ['INVALID_TASK_ID']);
   });
 
   it('28. invalid authorityClass', () => {
     const result = validateScopeExpansionContext(baseContext({ authorityClass: '' }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_AUTHORITY_CLASS]);
+    assert.deepEqual(result.reasons, ['INVALID_AUTHORITY_CLASS']);
   });
 
   it('29. invalid riskTier', () => {
     const result = validateScopeExpansionContext(baseContext({ riskTier: '' }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_RISK_TIER]);
+    assert.deepEqual(result.reasons, ['INVALID_RISK_TIER']);
   });
 
   it('30. invalid governanceRevision', () => {
     const result = validateScopeExpansionContext(baseContext({ governanceRevision: '' }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_GOVERNANCE_REVISION]);
+    assert.deepEqual(result.reasons, ['INVALID_GOVERNANCE_REVISION']);
   });
 
   it('31. duplicate authorizedPaths invalid', () => {
     const result = validateScopeExpansionContext(baseContext({
       authorizedPaths: ['a', 'a'],
     }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_AUTHORIZED_PATHS]);
+    assert.deepEqual(result.reasons, ['INVALID_AUTHORIZED_PATHS']);
   });
 
   it('32. absolute authorized path invalid', () => {
     const result = validateScopeExpansionContext(baseContext({
       authorizedPaths: ['/abs'],
     }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_AUTHORIZED_PATHS]);
+    assert.deepEqual(result.reasons, ['INVALID_AUTHORIZED_PATHS']);
   });
 
   it('33. parent traversal authorized path invalid', () => {
     const result = validateScopeExpansionContext(baseContext({
       authorizedPaths: ['foo/../bar'],
     }));
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.INVALID_AUTHORIZED_PATHS]);
+    assert.deepEqual(result.reasons, ['INVALID_AUTHORIZED_PATHS']);
+  });
+
+  it('context canonicalization is lossless and frozen via public validation', () => {
+    const context = baseContext({ authorizedPaths: ['a', 'b'] });
+    const before = snapshot(context);
+    const result = validateScopeExpansionContext(context);
+    assert.equal(result.valid, true);
+    assert.ok(Object.isFrozen(result.context));
+    assert.ok(Object.isFrozen(result.context.authorizedPaths));
+    assert.deepEqual(result.context.authorizedPaths, ['a', 'b']);
+    assert.notEqual(result.context.authorizedPaths, context.authorizedPaths);
+    assert.deepEqual(context, before);
   });
 });
 
@@ -303,7 +320,7 @@ describe('TECP-012 Scope Expansion — evaluation', () => {
     const result = evaluateScopeExpansion(baseRequest(), baseContext());
     assert.equal(result.valid, true);
     assert.equal(result.decision, SCOPE_EXPANSION_DECISIONS.WITHIN_SCOPE);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.ALL_PATHS_WITHIN_SCOPE]);
+    assert.deepEqual(result.reasons, ['ALL_PATHS_WITHIN_SCOPE']);
     assert.deepEqual(result.uncoveredPaths, []);
   });
 
@@ -356,7 +373,7 @@ describe('TECP-012 Scope Expansion — evaluation', () => {
       baseContext({ authorizedPaths: ['foo/bar'] }),
     );
     assert.equal(result.decision, SCOPE_EXPANSION_DECISIONS.OWNER_APPROVAL_REQUIRED);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.PROTECTED_PATH_REQUIRES_OWNER]);
+    assert.deepEqual(result.reasons, ['PROTECTED_PATH_REQUIRES_OWNER']);
   });
 
   it('41. AUTHORITY_CLASS => OWNER_APPROVAL_REQUIRED', () => {
@@ -429,7 +446,7 @@ describe('TECP-012 Scope Expansion — evaluation', () => {
       baseContext(),
     );
     assert.equal(result.decision, SCOPE_EXPANSION_DECISIONS.OWNER_APPROVAL_REQUIRED);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.STOP_CONDITION_PRESENT]);
+    assert.deepEqual(result.reasons, ['STOP_CONDITION_PRESENT']);
   });
 
   it('48. task mismatch => INVALID_REQUEST', () => {
@@ -439,7 +456,7 @@ describe('TECP-012 Scope Expansion — evaluation', () => {
     );
     assert.equal(result.valid, false);
     assert.equal(result.decision, SCOPE_EXPANSION_DECISIONS.INVALID_REQUEST);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.TASK_MISMATCH]);
+    assert.deepEqual(result.reasons, ['TASK_MISMATCH']);
   });
 
   it('49. governance revision mismatch => INVALID_REQUEST', () => {
@@ -448,7 +465,7 @@ describe('TECP-012 Scope Expansion — evaluation', () => {
       baseContext({ governanceRevision: 'rev-b' }),
     );
     assert.equal(result.valid, false);
-    assert.deepEqual(result.reasons, [SCOPE_EXPANSION_REASONS.GOVERNANCE_REVISION_MISMATCH]);
+    assert.deepEqual(result.reasons, ['GOVERNANCE_REVISION_MISMATCH']);
   });
 });
 
@@ -499,15 +516,11 @@ describe('TECP-012 Scope Expansion — immutability and determinism', () => {
     assert.deepEqual(a, b);
   });
 
-  it('canonicalize helpers are lossless and frozen', () => {
+  it('canonicalizeScopeExpansionRequest is lossless and frozen', () => {
     const request = baseRequest({ requestedPaths: ['a', 'b'] });
-    const context = baseContext({ authorizedPaths: ['a'] });
     const cRequest = canonicalizeScopeExpansionRequest(request);
-    const cContext = canonicalizeScopeExpansionContext(context);
     assert.ok(Object.isFrozen(cRequest));
     assert.ok(Object.isFrozen(cRequest.requestedPaths));
-    assert.ok(Object.isFrozen(cContext));
-    assert.ok(Object.isFrozen(cContext.authorizedPaths));
     assert.deepEqual(cRequest.requestedPaths, ['a', 'b']);
     assert.notEqual(cRequest.requestedPaths, request.requestedPaths);
   });
@@ -550,6 +563,15 @@ describe('TECP-012 Scope Expansion — boundary', () => {
     assert.equal(module.applyScopeExpansion, undefined);
     assert.equal(module.expandTaskScope, undefined);
     assert.equal(module.mutateRule02, undefined);
+  });
+
+  it('exact public export surface', async () => {
+    const module = await import('../src/scopeExpansion.js');
+    const exported = Object.keys(module).sort();
+    assert.deepEqual(exported, [...EXPECTED_PUBLIC_EXPORTS]);
+    assert.equal(module.SCOPE_EXPANSION_REASONS, undefined);
+    assert.equal(module.canonicalizeScopeExpansionContext, undefined);
+    assert.equal(module.isValidRepoRelativePath, undefined);
   });
 
   it('64-76. source boundary: no forbidden imports or side-effect APIs', () => {

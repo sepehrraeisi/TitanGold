@@ -21,7 +21,7 @@ export const SCOPE_EXPANSION_DECISIONS = Object.freeze({
   INVALID_REQUEST: 'INVALID_REQUEST',
 });
 
-export const SCOPE_EXPANSION_REASONS = Object.freeze({
+const SCOPE_EXPANSION_REASONS = Object.freeze({
   INVALID_REQUEST_SHAPE: 'INVALID_REQUEST_SHAPE',
   INVALID_CONTEXT_SHAPE: 'INVALID_CONTEXT_SHAPE',
   INVALID_REQUEST_ID: 'INVALID_REQUEST_ID',
@@ -103,7 +103,7 @@ function freezeDeep(value) {
  * Empty segments (e.g. `foo//bar`) are accepted literally — governance does
  * not forbid them and inventing normalization is prohibited.
  */
-export function isValidRepoRelativePath(value) {
+function isValidRepoRelativePath(value) {
   if (!isNonEmptyString(value)) return false;
   if (value.startsWith('/')) return false;
   const segments = value.split('/');
@@ -247,7 +247,7 @@ export function canonicalizeScopeExpansionRequest(request) {
   });
 }
 
-export function canonicalizeScopeExpansionContext(context) {
+function canonicalizeScopeExpansionContext(context) {
   return Object.freeze({
     taskId: context.taskId,
     authorizedPaths: copyPathList(context.authorizedPaths),
