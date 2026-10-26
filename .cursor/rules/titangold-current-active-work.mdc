@@ -5,7 +5,7 @@ alwaysApply: true
 
 # TitanGold Current Active Work (Rule 02)
 
-> CURRENT AUTHORITY PRECEDENCE: the Canonical Project Progress Snapshot and the current non-Historical Active Work Packages below are the active authority. Artemis/Stage 11 authority and TECP parallel-workstream authority are INDEPENDENT and MUST NOT replace each other. Any later block explicitly labeled Historical, Closeout, Superseded, or preserved evidence is non-authorizing even if it contains former AUTHORIZED_SLICE / IMPLEMENTATION_AUTHORIZED values. TECP-003-SERVICE-SKELETON is CLOSED / FROZEN / CONSUMED. TECP-004-DATABASE-FOUNDATION is CLOSED / FROZEN / VERIFIED at merge `666ef86aa62970460ca95d8a384bd1228f2a768a` (PR #175). TECP-005-RULE02-PARSER is CLOSED / FROZEN / VERIFIED at main `bc792a19ffb98b2949c040a23664ec7df10dc1cc` (PR #178). Prior TECP-005 IMPLEMENTATION_AUTHORIZED = YES remains visible as the raw locked token and is CONSUMED / NON-ACTIVE under the explicit lifecycle precedence rule CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS is CLOSED / FROZEN / VERIFIED. Prior TECP-005A implementation authorization is CONSUMED / NON-ACTIVE. TECP-006-GOVERNANCE-VALIDATOR is CLOSED / FROZEN / VERIFIED. Prior TECP-006 implementation authorization is CONSUMED / NON-ACTIVE. TECP-007-ACTOR-CAPABILITY-ENGINE is CLOSED / FROZEN / VERIFIED. Prior TECP-007 implementation authorization is CONSUMED / NON-ACTIVE. TECP-008-TASK-GRAPH is CLOSED / FROZEN / VERIFIED. Prior TECP-008 implementation authorization is CONSUMED / NON-ACTIVE. TECP-009-RESOURCE-CLAIMS is CLOSED / FROZEN / VERIFIED. TECP009_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-010-CONFLICT-ENGINE is CLOSED / FROZEN / VERIFIED. TECP010_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-011-LEASE-ENGINE is CLOSED / FROZEN / VERIFIED at merge `e612d7d2b1f36beb86b47322540e0ca2d6358f10` (PR #197) with remediation merge `bc1f672bab1181b18f8b4ebbbd20c42829309395` (PR #198). Prior TECP-011 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-012-SCOPE-EXPANSION is CLOSED / FROZEN / VERIFIED at merge `1ad0ca443e9afffccb561bf32870abc9aa64aade` (PR #200). Prior TECP-012 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-013-AUDIT-EVENT is CLOSED / FROZEN / VERIFIED at merge `92e23ceb05e0cfcef07bcffd9993886b1c70fbf9` (PR #202). Prior TECP-013 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-014-IDEMPOTENCY-OPS is CLOSED / FROZEN / VERIFIED at merge `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce` (PR #204). Prior TECP-014 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. The active exact slice after this governance PR merges is TECP-015-RECOVERY. TECP015_IMPLEMENTATION_AUTHORIZED is YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES. TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE is NO. TECP015_IMPLEMENTATION_STARTED is NO. Before this governance PR merges the exact-slice authorization is not effective. After it merges the exact slice TECP-015-RECOVERY is authorized and implementation has not started. TECP-016 and later slices remain NOT AUTHORIZED. This transaction does not implement the Recovery domain model. The parser does not authorize. STAGE11_IMPLEMENTATION = NO. TECP-005T-RULE02-PARSER-TEST-DECOUPLING is CLOSED / FROZEN / VERIFIED at merge `101b73bbc614de1d7b12482d3a76369e5540deab` (PR #180); prior TECP-005T implementation authorization is CONSUMED / NON-ACTIVE; TECP-005T is not current implementation authority.
+> CURRENT AUTHORITY PRECEDENCE: the Canonical Project Progress Snapshot and the current non-Historical Active Work Packages below are the active authority. Artemis/Stage 11 authority and TECP parallel-workstream authority are INDEPENDENT and MUST NOT replace each other. Any later block explicitly labeled Historical, Closeout, Superseded, or preserved evidence is non-authorizing even if it contains former AUTHORIZED_SLICE / IMPLEMENTATION_AUTHORIZED values. TECP-003-SERVICE-SKELETON is CLOSED / FROZEN / CONSUMED. TECP-004-DATABASE-FOUNDATION is CLOSED / FROZEN / VERIFIED at merge `666ef86aa62970460ca95d8a384bd1228f2a768a` (PR #175). TECP-005-RULE02-PARSER is CLOSED / FROZEN / VERIFIED at main `bc792a19ffb98b2949c040a23664ec7df10dc1cc` (PR #178). Prior TECP-005 IMPLEMENTATION_AUTHORIZED = YES remains visible as the raw locked token and is CONSUMED / NON-ACTIVE under the explicit lifecycle precedence rule CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS is CLOSED / FROZEN / VERIFIED. Prior TECP-005A implementation authorization is CONSUMED / NON-ACTIVE. TECP-006-GOVERNANCE-VALIDATOR is CLOSED / FROZEN / VERIFIED. Prior TECP-006 implementation authorization is CONSUMED / NON-ACTIVE. TECP-007-ACTOR-CAPABILITY-ENGINE is CLOSED / FROZEN / VERIFIED. Prior TECP-007 implementation authorization is CONSUMED / NON-ACTIVE. TECP-008-TASK-GRAPH is CLOSED / FROZEN / VERIFIED. Prior TECP-008 implementation authorization is CONSUMED / NON-ACTIVE. TECP-009-RESOURCE-CLAIMS is CLOSED / FROZEN / VERIFIED. TECP009_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-010-CONFLICT-ENGINE is CLOSED / FROZEN / VERIFIED. TECP010_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-011-LEASE-ENGINE is CLOSED / FROZEN / VERIFIED at merge `e612d7d2b1f36beb86b47322540e0ca2d6358f10` (PR #197) with remediation merge `bc1f672bab1181b18f8b4ebbbd20c42829309395` (PR #198). Prior TECP-011 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-012-SCOPE-EXPANSION is CLOSED / FROZEN / VERIFIED at merge `1ad0ca443e9afffccb561bf32870abc9aa64aade` (PR #200). Prior TECP-012 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-013-AUDIT-EVENT is CLOSED / FROZEN / VERIFIED at merge `92e23ceb05e0cfcef07bcffd9993886b1c70fbf9` (PR #202). Prior TECP-013 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-014-IDEMPOTENCY-OPS is CLOSED / FROZEN / VERIFIED at merge `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce` (PR #204). Prior TECP-014 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. The active exact slice after this governance PR merges is TECP-016-EVIDENCE-LEDGER. TECP016_IMPLEMENTATION_AUTHORIZED is YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES. TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE is NO. TECP016_IMPLEMENTATION_STARTED is NO. Before this governance PR merges the exact-slice authorization is not effective. After it merges the exact slice TECP-016-EVIDENCE-LEDGER is authorized and implementation has not started. TECP-017 and later slices remain NOT AUTHORIZED. This transaction does not implement the Evidence Ledger domain model. The parser does not authorize. STAGE11_IMPLEMENTATION = NO. TECP-005T-RULE02-PARSER-TEST-DECOUPLING is CLOSED / FROZEN / VERIFIED at merge `101b73bbc614de1d7b12482d3a76369e5540deab` (PR #180); prior TECP-005T implementation authorization is CONSUMED / NON-ACTIVE; TECP-005T is not current implementation authority.
 
 ## Canonical Project Progress Snapshot (Core Rule §107)
 
@@ -30,14 +30,14 @@ alwaysApply: true
 **CURRENT_PHASE = STAGE10_FORMAL_FREEZE_COMPLETE / STAGE11_GOVERNANCE_DISCOVERY_ENTRY**
 **FORMAL_TECP_PARALLEL_WORKSTREAM_AUTHORIZATION = CONSUMED / TECP-003 CLOSED**
 **PARALLEL_PROGRAM = TITAN_ENGINEERING_CONTROL_PLANE**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 AUTHORIZED EXACT SLICE NOT STARTED / TECP-016 NOT AUTHORIZED**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
 **TECP_PROGRAM_COUPLING_TO_ARTEMIS = NONE / INDEPENDENT_ENGINEERING_WORKSTREAM**
 **TECP_STAGE11_SCOPE_COUPLING = NONE**
 **TECP_STAGE11_OWNER_MUTATION = NO**
 **TECP_STAGE10_BASELINE_MUTATION = NO**
 **TECP_PROGRESS_COUNTER_COUPLING = NONE**
 **TECP_MAY_RUN_PARALLEL_WITH_STAGE11_GOVERNANCE_DISCOVERY = YES**
-**TECP_AUTHORIZED_SLICE = TECP-015-RECOVERY**
+**TECP_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
 **TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
 **TECP_IMPLEMENTATION = NO**
 **TECP_NO_OTHER_SLICE_AUTHORIZED = YES**
@@ -78,7 +78,7 @@ alwaysApply: true
 **TECP005_VERDICT = TECP005_CLOSED_FROZEN_VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_NEXT_GATE = TECP-015-RECOVERY**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
 **TECP005T_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005T_IMPLEMENTATION_HEAD = `940af9a465fd3431b47992b8244b6c32671ad26a`**
 **TECP005T_MERGED_PR = #180**
@@ -168,12 +168,21 @@ alwaysApply: true
 **TECP014_MERGED_PR = #204**
 **TECP014_MERGE_SHA = `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce`**
 **TECP014_TESTS = Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 446/446 PASS**
-**TECP_015_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP015_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
-**TECP015_IMPLEMENTATION_STARTED = NO**
-**TECP_016_STATUS = NOT_AUTHORIZED**
-**TECP016_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
 **TECP009_BRANCH = `feat/tecp-009-resource-claims`**
 **TECP009_INITIAL_HEAD = `d9e257653e1c7ec795fa116e2afa6a3595c634ff`**
 **TECP009_HEAD = `11ade0b28054f7c5773044648ae021913cd5e9a3`**
@@ -256,7 +265,7 @@ alwaysApply: true
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **RULE02_AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **ARTEMIS_AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-015-RECOVERY**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
 **OFFICIAL_NAME = ARTEMIS_STAGE10_FINAL_COMPLETION_CLOSEOUT**
 **AUTHORIZATION_CLASS = FORMAL_AUTHORIZATION / EXACT_SLICE_ONLY**
 **IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
@@ -2927,11 +2936,111 @@ This governance transaction does not create `tecp/src/taskGraph.js` or `tecp/tes
 
 **SIDE-EFFECT LEDGER = IMPLEMENTATION=0 · TASK_GRAPH_SOURCE=0 · ENGINE_SOURCE=0 · VALIDATOR_SOURCE=0 · PARSER_MODIFIED=0 · TESTS_MODIFIED=0 · PRODUCTION_MUTATION=0 · DEPLOY=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · RUNTIME_MUTATION=0 · CREDENTIAL_READ=0 · MIGRATION_CHANGE=0 · TECP009_PLUS=0**
 
-### Active Work Package — TECP-015 RECOVERY AUTHORIZATION (GOVERNANCE ONLY — NO IMPLEMENTATION)
+### Active Work Package — TECP-016 EVIDENCE LEDGER AUTHORIZATION (GOVERNANCE ONLY — NO IMPLEMENTATION)
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_AUTHORIZED_SLICE = TECP-015-RECOVERY**
-**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-015-RECOVERY**
+**TECP_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
+**SLICE_ID = TECP-016-EVIDENCE-LEDGER**
+**OFFICIAL_NAME = TECP-016-EVIDENCE-LEDGER**
+**PRIOR_SLICE = TECP-015-RECOVERY**
+**RISK_TIER = Tier 2**
+**AUTHORITY_CLASS = ENGINEERING_CONTROL_PLANE**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
+**IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP005_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
+**LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
+AUTHORIZED_FILE_SCOPE = tecp/src/evidenceLedger.js | tecp/test/evidenceLedger.test.js
+PROTECTED_PATHS = PROTECTED_PATHS = .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/titangold-current-active-work.mdc | backend/** | /home/ubuntu/webapp/TitanGold | backend/database/migrations/056_create_tecp_control_plane_foundation.sql | tecp/package.json | tecp/README.md | tecp/src/config.js | tecp/src/health.js | tecp/src/index.js | tecp/src/ports/githubPort.js | tecp/src/ports/linearPort.js | tecp/src/service.js | tecp/test/serviceSkeleton.test.js | tecp/src/rule02Parser.js | tecp/test/rule02Parser.test.js | tecp/test/fixtures/ | tecp/src/governanceValidator.js | tecp/test/governanceValidator.test.js | tecp/src/actorCapabilityEngine.js | tecp/test/actorCapabilityEngine.test.js | tecp/src/taskGraph.js | tecp/test/taskGraph.test.js | tecp/src/resourceClaims.js | tecp/test/resourceClaims.test.js | tecp/src/conflictEngine.js | tecp/test/conflictEngine.test.js | tecp/src/leaseEngine.js | tecp/test/leaseEngine.test.js | tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js | tecp/src/auditEvent.js | tecp/test/auditEvent.test.js | tecp/src/idempotencyOps.js | tecp/test/idempotencyOps.test.js | backend/middleware/auth.js | backend/middleware/requireCapability.js | backend/services/capabilities.js | backend/services/agentCapabilityRegistry.js | backend/services/agentExecutionPolicyService.js | backend/routes/access-control.js | backend/middleware/accessControlGateway.js | backend/services/connections/mexc/capabilityMatrix.js | backend/services/connections/mexc/capabilityIds.js | backend/services/connections/mexc/capabilityInventory.js | Data Hub | AI Shared Foundation | Agents Shell | application audit_logs ownership | application system_logs ownership | tecp/src/recovery.js | tecp/test/recovery.test.js
+STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | REDIS | MIGRATION_CHANGE | EVIDENCE_PERSISTENCE | EVIDENCE_QUERY | EVIDENCE_COLLECTION | PAYLOAD_FIELD | CONTENT_FIELD | METADATA_FIELD | SECRET_CAPTURE | PII_CAPTURE | CLOCK | TIMESTAMP | SEQUENCE | RETENTION | AUDIT_IMPORT | IDEMPOTENCY_IMPORT | RECOVERY_IMPORT | RUNTIME_OBSERVATION | GITHUB | LINEAR | NETWORK | FILESYSTEM | PROVIDER_QUERY | ACTOR_CAPABILITY_MUTATION | GOVERNANCE_BYPASS | BACKEND_CHANGE | PACKAGE_CHANGE | DEPLOY | PRODUCTION_MUTATION | TECP017_PLUS
+IMPLEMENTATION_START_CONDITIONS = THIS_GOVERNANCE_PR_MERGED
+COMPLETION_GATE = TECP016_EVIDENCE_LEDGER_COMPLETE
+COMPLETION_GATE_STATUS = NOT_REACHED
+
+This governance transaction closes TECP-015-RECOVERY as CLOSED / FROZEN / VERIFIED, records Owner decisions OD-TECP016-A through OD-TECP016-Z, and authorizes exact slice TECP-016-EVIDENCE-LEDGER. It does not create `tecp/src/evidenceLedger.js` or `tecp/test/evidenceLedger.test.js`. Authorization is effective only after this governance PR merges. `TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO`. `TECP016_IMPLEMENTATION_STARTED = NO`.
+
+TECP-015-RECOVERY is CLOSED / FROZEN / VERIFIED. Implementation evidence: branch `feat/tecp-015-recovery`, head `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`, PR #206, merge SHA `7e37a9cad89650c0bb9677d839a5325fa6b463cf`. Final tests: Recovery 42/42 PASS, Idempotency Ops 76/76 PASS, Audit Event 37/37 PASS, Scope Expansion 63/63 PASS, Lease Engine 50/50 PASS, Conflict Engine 42/42 PASS, Resource Claims 36/36 PASS, Task Graph 32/32 PASS, Actor Capability Engine 32/32 PASS, Governance Validator 30/30 PASS, Rule02 Parser 38/38 PASS, full TECP suite 488/488 PASS. TECP015_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE under LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. COMPLETION_GATE = TECP015_RECOVERY_COMPLETE. COMPLETION_GATE_STATUS = REACHED / CLOSED / FROZEN.
+
+Owner decision OD-TECP016-A. `TECP-016-EVIDENCE-LEDGER` owns a PURE IN-MEMORY EVIDENCE FACT VALUE MODEL. Responsibilities only: validate one evidence fact; canonicalize one evidence fact. It does NOT: submit evidence; persist evidence; query evidence; aggregate evidence; order evidence; emit evidence; collect runtime/GitHub/Linear evidence; authorize execution. The word “Ledger” defines the future ownership boundary, not a persistent store in this slice.
+
+Owner decision OD-TECP016-B. Exact fields: `evidenceId`; `taskId`; `actorId`; `governanceRevision`; `evidenceType`; `evidenceRef`. All six: required; non-empty strings; opaque; case-sensitive. No optional fields. No extra fields.
+
+Owner decision OD-TECP016-C. `evidenceId` is: caller supplied; opaque; required; non-empty; case-sensitive. No UUID generation. No global uniqueness registry. No duplicate store. No dedupe semantics in this slice.
+
+Owner decision OD-TECP016-D. `evidenceType` is: required; non-empty opaque string; open vocabulary; case-sensitive. No inferred behavior.
+
+Owner decision OD-TECP016-E. `evidenceRef` is an opaque non-empty reference string only. It may identify evidence elsewhere but TECP-016 does not dereference or fetch it. No: source object; origin object; URL fetching; provider lookup.
+
+Owner decision OD-TECP016-F. TECP-016 MUST NOT carry raw evidence payload. Forbidden fields/concepts: payload; body; content; data; metadata; log; stack trace; provider response; runtime dump; credential; secret; password; API key; token; private key; PII. `evidenceRef` must remain a reference identifier only.
+
+Owner decision OD-TECP016-G. Canonical evidence facts are: immutable; frozen; copy-safe. No: update; delete; patch; supersede; mutate. Append-only persistence semantics are future work, not implemented here.
+
+Owner decision OD-TECP016-H. No: timestamp; createdAt; sequence; ordering; clock; Date.now; TTL; retention timer. TECP-016 does not own ordering.
+
+Owner decision OD-TECP016-I. Pure in-memory only. No: DB; SQL; migration; Redis; evidence table; repository; DAO; cache; inbox/outbox. Migration 056 remains unchanged.
+
+Owner decision OD-TECP016-J. Authorize exactly: `validateEvidence(evidence)`; `canonicalizeEvidence(evidence)`. Optional frozen constant: `EVIDENCE_VALIDATION_DECISIONS`. No: submitEvidence; storeEvidence; persistEvidence; queryEvidence; listEvidence; getEvidence; deleteEvidence; supersedeEvidence; appendEvidence.
+
+Owner decision OD-TECP016-K. Exact decisions: `VALID`; `INVALID_EVIDENCE`; `INVALID_EVIDENCE_ID`; `INVALID_TASK_REFERENCE`; `INVALID_ACTOR_REFERENCE`; `INVALID_GOVERNANCE_REVISION`; `INVALID_EVIDENCE_TYPE`; `INVALID_EVIDENCE_REF`. Precedence: 1. malformed/non-object/array/wrong keys → INVALID_EVIDENCE 2. evidenceId 3. taskId 4. actorId 5. governanceRevision 6. evidenceType 7. evidenceRef 8. VALID
+
+Owner decision OD-TECP016-L. `validateEvidence(evidence)` returns frozen: `{ valid, decision, reasons, evidence }` Valid: true; VALID; []; canonical frozen copy. Invalid: false; matching invalid decision; `[decision]`; null. `canonicalizeEvidence(evidence)` returns exact fixed-order frozen copy.
+
+Owner decision OD-TECP016-M. TECP-016 does NOT import TECP-013 Audit Event. Audit Event and Evidence Ledger remain separate domains. No audit→evidence conversion. No evidence→audit conversion.
+
+Owner decision OD-TECP016-N. TECP-016 does NOT import TECP-014 Idempotency Ops. No dedupe/comparison/replay logic.
+
+Owner decision OD-TECP016-O. TECP-016 does NOT import TECP-015 Recovery. Recovery may reference evidence in future orchestration, but not in this slice.
+
+Owner decision OD-TECP016-P. Runtime evidence collection belongs to future TECP-025 Runtime Provenance. TECP-016 does not inspect runtime.
+
+Owner decision OD-TECP016-Q. No GitHub or Linear access. Evidence refs may later point to external artifacts, but this slice never fetches or validates them.
+
+Owner decision OD-TECP016-R. TECP-016 does not approve Human QA. It only models evidence facts. No PASS/FAIL authority.
+
+Owner decision OD-TECP016-S. Existing `SUBMIT_EVIDENCE` actor capability is NOT executed or consumed by this module. Capability remains governance-level authorization token only. TECP-016 does not mutate Actor Capability Engine.
+
+Owner decision OD-TECP016-T. No evidence collection/ledger query API. No list/filter/search. Future persistent ledger/query slice requires separate authorization.
+
+Owner decision OD-TECP016-U. No retention policy in this slice because nothing is persisted.
+
+Owner decision OD-TECP016-V. No network/fs/env/process/provider/GitHub/Linear/runtime side effects.
+
+Owner decision OD-TECP016-W. Validation of an evidence value does NOT authorize implementation, merge, deploy, execution, or closeout. No Governance Validator bypass.
+
+Owner decision OD-TECP016-X. TECP-016 becomes canonical owner only for the evidence FACT VALUE MODEL defined here. It does not become owner of: audit logs; application logs; runtime provenance; external artifacts; provider responses.
+
+Owner decision OD-TECP016-Y. Same input → same output. No clock/random/UUID/env/fs/network/DB state.
+
+Owner decision OD-TECP016-Z. Any future: evidence persistence; evidence query; external ingestion; retention; runtime collection; GitHub/Linear evidence adapter. requires a separate authorized slice and must not be silently added to TECP-016 implementation.
+
+Active exact slice after this governance PR merges is TECP-016-EVIDENCE-LEDGER. TECP-017 and later slices remain NOT_AUTHORIZED. COMPLETION_GATE_STATUS remains NOT_REACHED.
+
+Side-effect ledger for this transaction: implementation 0, production code 0, tests 0, DB reads 0, DB writes 0, migration edits 0, Redis 0, runtime mutation 0, deploy 0, production mutation 0, network 0, credential reads 0, Rule02 write 1 (governance-only), TECP017_PLUS 0.
+
+
+### Historical — TECP-015 RECOVERY AUTHORIZATION (SUPERSEDED AS ACTIVE AUTHORITY BY TECP-015 CLOSEOUT + TECP-016 AUTHORIZATION)
+
+**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**TECP_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
 **SLICE_ID = TECP-015-RECOVERY**
 **OFFICIAL_NAME = TECP-015-RECOVERY**
 **PRIOR_SLICE = TECP-014-IDEMPOTENCY-OPS**
@@ -2946,19 +3055,28 @@ This governance transaction does not create `tecp/src/taskGraph.js` or `tecp/tes
 **TECP014_MERGED_PR = #204**
 **TECP014_MERGE_SHA = `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce`**
 **TECP014_TESTS = Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 446/446 PASS**
-**TECP_015_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP015_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
-**TECP015_IMPLEMENTATION_STARTED = NO**
-**TECP_016_STATUS = NOT_AUTHORIZED**
-**TECP016_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
 **IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
 **TECP005_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
 **TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 AUTHORIZED EXACT SLICE NOT STARTED / TECP-016 NOT AUTHORIZED**
-**TECP_NEXT_GATE = TECP-015-RECOVERY**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
 AUTHORIZED_FILE_SCOPE = tecp/src/recovery.js | tecp/test/recovery.test.js
 PROTECTED_PATHS = .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/titangold-current-active-work.mdc | backend/** | /home/ubuntu/webapp/TitanGold | backend/database/migrations/056_create_tecp_control_plane_foundation.sql | tecp/package.json | tecp/README.md | tecp/src/config.js | tecp/src/health.js | tecp/src/index.js | tecp/src/ports/githubPort.js | tecp/src/ports/linearPort.js | tecp/src/service.js | tecp/test/serviceSkeleton.test.js | tecp/src/rule02Parser.js | tecp/test/rule02Parser.test.js | tecp/test/fixtures/ | tecp/src/governanceValidator.js | tecp/test/governanceValidator.test.js | tecp/src/actorCapabilityEngine.js | tecp/test/actorCapabilityEngine.test.js | tecp/src/taskGraph.js | tecp/test/taskGraph.test.js | tecp/src/resourceClaims.js | tecp/test/resourceClaims.test.js | tecp/src/conflictEngine.js | tecp/test/conflictEngine.test.js | tecp/src/leaseEngine.js | tecp/test/leaseEngine.test.js | tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js | tecp/src/auditEvent.js | tecp/test/auditEvent.test.js | tecp/src/idempotencyOps.js | tecp/test/idempotencyOps.test.js | backend/middleware/auth.js | backend/middleware/requireCapability.js | backend/services/capabilities.js | backend/services/agentCapabilityRegistry.js | backend/services/agentExecutionPolicyService.js | backend/routes/access-control.js | backend/middleware/accessControlGateway.js | backend/services/connections/mexc/capabilityMatrix.js | backend/services/connections/mexc/capabilityIds.js | backend/services/connections/mexc/capabilityInventory.js | Data Hub | AI Shared Foundation | Agents Shell | application audit_logs ownership | application system_logs ownership
 STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | REDIS | MIGRATION_CHANGE | RECOVERY_EXECUTION | RETRY_LOGIC | REPLAY_LOGIC | RESUME_LOGIC | REQUEUE_LOGIC | TASK_MUTATION | LEASE_MUTATION | LEASE_TAKEOVER | WORKER_CONTROL | RUNTIME_OBSERVATION | PROVIDER_QUERY | EXTERNAL_SIDE_EFFECT | CHECKPOINT | PERSISTENCE | CLOCK | TTL | HEARTBEAT | STALE_DETECTION | SIDE_EFFECT_EXECUTION | RUNTIME_OPERATION | EXTERNAL_OPERATION | AUDIT_EVENT_EMISSION | EVIDENCE_LEDGER_LOGIC | EVIDENCE_WRITE | TASK_SCHEDULING | WORKER_SELECTION | LEASE_ENGINE_IMPORT | TASK_GRAPH_IMPORT | IDEMPOTENCY_OPS_IMPORT | AUDIT_EVENT_IMPORT | CONFLICT_ENGINE_IMPORT | ACTOR_CAPABILITY_IMPORT | SCOPE_EXPANSION_IMPORT | EVIDENCE_LEDGER_IMPORT | PACKAGE_CHANGE | EXTERNAL_DEPENDENCY_REQUIRED | BACKEND_CHANGE | VALIDATOR_MUTATION | PARSER_MUTATION | NETWORK | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | RUNTIME_MUTATION | CREDENTIAL_READ | SECRET_CAPTURE | PII_CAPTURE | TECP016_PLUS
@@ -3010,8 +3128,8 @@ Side-effect ledger for this transaction: implementation 0, production code 0, te
 
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_AUTHORIZED_SLICE = TECP-015-RECOVERY**
-**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-015-RECOVERY**
+**TECP_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
 **SLICE_ID = TECP-014-IDEMPOTENCY-OPS**
 **OFFICIAL_NAME = TECP-014-IDEMPOTENCY-OPS**
 **PRIOR_SLICE = TECP-013-AUDIT-EVENT**
@@ -3035,15 +3153,28 @@ Side-effect ledger for this transaction: implementation 0, production code 0, te
 **TECP014_MERGED_PR = #204**
 **TECP014_MERGE_SHA = `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce`**
 **TECP014_TESTS = Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 446/446 PASS**
-**TECP_015_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP015_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
 **IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
 **TECP005_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
 **TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 AUTHORIZED EXACT SLICE NOT STARTED / TECP-016 NOT AUTHORIZED**
-**TECP_NEXT_GATE = TECP-015-RECOVERY**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
 AUTHORIZED_FILE_SCOPE = tecp/src/idempotencyOps.js | tecp/test/idempotencyOps.test.js
 PROTECTED_PATHS = .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/titangold-current-active-work.mdc | backend/** | /home/ubuntu/webapp/TitanGold | backend/database/migrations/056_create_tecp_control_plane_foundation.sql | tecp/package.json | tecp/README.md | tecp/src/config.js | tecp/src/health.js | tecp/src/index.js | tecp/src/ports/githubPort.js | tecp/src/ports/linearPort.js | tecp/src/service.js | tecp/test/serviceSkeleton.test.js | tecp/src/rule02Parser.js | tecp/test/rule02Parser.test.js | tecp/test/fixtures/ | tecp/src/governanceValidator.js | tecp/test/governanceValidator.test.js | tecp/src/actorCapabilityEngine.js | tecp/test/actorCapabilityEngine.test.js | tecp/src/taskGraph.js | tecp/test/taskGraph.test.js | tecp/src/resourceClaims.js | tecp/test/resourceClaims.test.js | tecp/src/conflictEngine.js | tecp/test/conflictEngine.test.js | tecp/src/leaseEngine.js | tecp/test/leaseEngine.test.js | tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js | tecp/src/auditEvent.js | tecp/test/auditEvent.test.js | backend/middleware/auth.js | backend/middleware/requireCapability.js | backend/services/capabilities.js | backend/services/agentCapabilityRegistry.js | backend/services/agentExecutionPolicyService.js | backend/routes/access-control.js | backend/middleware/accessControlGateway.js | backend/services/connections/mexc/capabilityMatrix.js | backend/services/connections/mexc/capabilityIds.js | backend/services/connections/mexc/capabilityInventory.js | Data Hub | AI Shared Foundation | Agents Shell | application audit_logs ownership | application system_logs ownership
 STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | REDIS | MIGRATION_CHANGE | OPERATION_PERSISTENCE | IDEMPOTENCY_STORE | RESULT_PERSISTENCE | ERROR_PERSISTENCE | INBOX_OUTBOX | STATUS_STATE_MACHINE | RETRY_LOOP | BACKOFF_LOGIC | ATTEMPT_COUNTER | TIMER | CLOCK | TTL | EXPIRATION | RECOVERY_LOGIC | CRASH_RECOVERY | SIDE_EFFECT_EXECUTION | RUNTIME_OPERATION | EXTERNAL_OPERATION | AUDIT_EVENT_EMISSION | EVIDENCE_LEDGER_LOGIC | EVIDENCE_WRITE | TASK_MUTATION | TASK_SCHEDULING | WORKER_SELECTION | LEASE_MUTATION | CONFLICT_ENGINE_MUTATION | RESOURCE_CLAIM_MUTATION | TASK_GRAPH_MUTATION | ACTOR_CAPABILITY_MUTATION | SCOPE_EXPANSION_MUTATION | AUDIT_EVENT_MUTATION | PACKAGE_CHANGE | EXTERNAL_DEPENDENCY_REQUIRED | BACKEND_CHANGE | VALIDATOR_MUTATION | PARSER_MUTATION | NETWORK | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | RUNTIME_MUTATION | CREDENTIAL_READ | SECRET_CAPTURE | PII_CAPTURE | TECP015_PLUS
@@ -3057,8 +3188,8 @@ This historical governance transaction authorized exact slice TECP-014-IDEMPOTEN
 
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_AUTHORIZED_SLICE = TECP-015-RECOVERY**
-**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-015-RECOVERY**
+**TECP_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-016-EVIDENCE-LEDGER**
 **SLICE_ID = TECP-013-AUDIT-EVENT**
 **OFFICIAL_NAME = TECP-013-AUDIT-EVENT**
 **PRIOR_SLICE = TECP-012-SCOPE-EXPANSION**
@@ -3089,8 +3220,8 @@ This historical governance transaction authorized exact slice TECP-014-IDEMPOTEN
 **TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 AUTHORIZED EXACT SLICE NOT STARTED / TECP-016 NOT AUTHORIZED**
-**TECP_NEXT_GATE = TECP-015-RECOVERY**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
 AUTHORIZED_FILE_SCOPE = tecp/src/auditEvent.js | tecp/test/auditEvent.test.js
 PROTECTED_PATHS = .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/titangold-current-active-work.mdc | backend/** | /home/ubuntu/webapp/TitanGold | backend/database/migrations/056_create_tecp_control_plane_foundation.sql | tecp/package.json | tecp/README.md | tecp/src/config.js | tecp/src/health.js | tecp/src/index.js | tecp/src/ports/githubPort.js | tecp/src/ports/linearPort.js | tecp/src/service.js | tecp/test/serviceSkeleton.test.js | tecp/src/rule02Parser.js | tecp/test/rule02Parser.test.js | tecp/test/fixtures/ | tecp/src/governanceValidator.js | tecp/test/governanceValidator.test.js | tecp/src/actorCapabilityEngine.js | tecp/test/actorCapabilityEngine.test.js | tecp/src/taskGraph.js | tecp/test/taskGraph.test.js | tecp/src/resourceClaims.js | tecp/test/resourceClaims.test.js | tecp/src/conflictEngine.js | tecp/test/conflictEngine.test.js | tecp/src/leaseEngine.js | tecp/test/leaseEngine.test.js | tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js | backend/middleware/auth.js | backend/middleware/requireCapability.js | backend/services/capabilities.js | backend/services/agentCapabilityRegistry.js | backend/services/agentExecutionPolicyService.js | backend/routes/access-control.js | backend/middleware/accessControlGateway.js | backend/services/connections/mexc/capabilityMatrix.js | backend/services/connections/mexc/capabilityIds.js | backend/services/connections/mexc/capabilityInventory.js | Data Hub | AI Shared Foundation | Agents Shell | application audit_logs ownership | application system_logs ownership
 STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | MIGRATION_CHANGE | EVENT_PERSISTENCE | EVENT_STORE | SYSTEM_CLOCK_DEPENDENCY | TIMESTAMP_LOGIC | SEQUENCE_ALLOCATION | EVENT_ORDERING_LOGIC | EVENT_COLLECTION_OWNER | EVENT_EMISSION | EVENT_BUS | RUNTIME_EVENT_CAPTURE | RUNTIME_PROVENANCE | EVIDENCE_LEDGER_LOGIC | EVIDENCE_WRITE | SUBMIT_EVIDENCE_REUSE | CREDENTIAL_CAPTURE | SECRET_CAPTURE | PII_CAPTURE | PAYLOAD_FIELD | SOURCE_ORIGIN_FIELD | TASK_MUTATION | TASK_SCHEDULING | WORKER_SELECTION | LEASE_MUTATION | CONFLICT_ENGINE_MUTATION | RESOURCE_CLAIM_MUTATION | TASK_GRAPH_MUTATION | ACTOR_CAPABILITY_MUTATION | SCOPE_EXPANSION_MUTATION | PACKAGE_CHANGE | EXTERNAL_DEPENDENCY_REQUIRED | BACKEND_CHANGE | VALIDATOR_MUTATION | PARSER_MUTATION | NETWORK | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | RUNTIME_MUTATION | NEW_AUDIT_OWNER | TECP014_PLUS
@@ -3194,7 +3325,7 @@ This historical governance transaction authorized exact slice TECP-013-AUDIT-EVE
 **TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-014 CLOSED FROZEN VERIFIED / TECP-015 AUTHORIZED EXACT SLICE NOT STARTED / TECP-016 NOT AUTHORIZED**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-003 FROZEN / TECP-004 CLOSED FROZEN VERIFIED / TECP-005 CLOSED FROZEN VERIFIED / TECP-005T CLOSED FROZEN VERIFIED / TECP-005A CLOSED FROZEN VERIFIED CONSUMED / TECP-006 CLOSED FROZEN VERIFIED / TECP-007 CLOSED FROZEN VERIFIED / TECP-008 CLOSED FROZEN VERIFIED / TECP-009 CLOSED FROZEN VERIFIED / TECP-010 CLOSED FROZEN VERIFIED / TECP-011 CLOSED FROZEN VERIFIED / TECP-012 CLOSED FROZEN VERIFIED / TECP-013 CLOSED FROZEN VERIFIED / TECP-015 CLOSED FROZEN VERIFIED / TECP-016 AUTHORIZED EXACT SLICE NOT STARTED / TECP-017 NOT AUTHORIZED**
 **TECP_NEXT_GATE = TECP-013-AUDIT-EVENT**
 AUTHORIZED_FILE_SCOPE = tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js
 COMPLETION_GATE = TECP012_SCOPE_EXPANSION_COMPLETE
@@ -16634,8 +16765,8 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP005_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
 **TECP005_IMPLEMENTATION_STARTED = YES / COMPLETE**
 **TECP005_VERDICT = TECP005_CLOSED_FROZEN_VERIFIED**
-**TECP_NEXT_GATE = TECP-015-RECOVERY**
-**TECP_NEXT_GATE_STATUS = TECP-015 AUTHORIZED / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_GOVERNANCE_PR_MERGES / NOT_EFFECTIVE_BEFORE_MERGE / IMPLEMENTATION_NOT_STARTED**
+**TECP_NEXT_GATE = TECP-016-EVIDENCE-LEDGER**
+**TECP_NEXT_GATE_STATUS = TECP-016 AUTHORIZED / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_GOVERNANCE_PR_MERGES / NOT_EFFECTIVE_BEFORE_MERGE / IMPLEMENTATION_NOT_STARTED**
 **TECP005A_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005A_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP005A_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
@@ -16681,12 +16812,21 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP014_MERGED_PR = #204**
 **TECP014_MERGE_SHA = `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce`**
 **TECP014_TESTS = Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 446/446 PASS**
-**TECP_015_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP015_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
-**TECP015_IMPLEMENTATION_STARTED = NO**
-**TECP_016_STATUS = NOT_AUTHORIZED**
-**TECP016_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
 **TECP_IMPLEMENTATION = NO**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
@@ -16759,12 +16899,21 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP014_MERGED_PR = #204**
 **TECP014_MERGE_SHA = `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce`**
 **TECP014_TESTS = Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 446/446 PASS**
-**TECP_015_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP015_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_015_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP015_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
-**TECP015_IMPLEMENTATION_STARTED = NO**
-**TECP_016_STATUS = NOT_AUTHORIZED**
-**TECP016_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP015_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP015_BRANCH = `feat/tecp-015-recovery`**
+**TECP015_HEAD = `ebb7ee7a4b70c5ab32c7cac1244bf4b125dfb39a`**
+**TECP015_MERGED_PR = #206**
+**TECP015_MERGE_SHA = `7e37a9cad89650c0bb9677d839a5325fa6b463cf`**
+**TECP015_TESTS = Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 488/488 PASS**
+**TECP_016_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP016_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP016_IMPLEMENTATION_STARTED = NO**
+**TECP_017_STATUS = NOT_AUTHORIZED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = NO**
 **TECP005_MERGE_SHA = bc792a19ffb98b2949c040a23664ec7df10dc1cc**
 **TECP005_MERGED_PR = #178**
 **TECP005_HUMAN_QA = PASS**
