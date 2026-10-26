@@ -144,13 +144,47 @@ function assertFrozen(value) {
   assert.equal(Object.isFrozen(value), true);
 }
 
-function assertInvalid(result) {
+/** validateRecoveryCase invalid: no public decision field. */
+function assertValidateInvalid(result) {
+  assert.equal(result.valid, false);
+  assert.equal(Object.prototype.hasOwnProperty.call(result, 'decision'), false);
+  assert.deepEqual(result.reasons, ['INVALID_RECOVERY_CASE']);
+  assert.equal(result.recoveryCase, null);
+  assert.deepEqual(Object.keys(result).sort(), ['reasons', 'recoveryCase', 'valid']);
+  assertFrozen(result);
+  assertFrozen(result.reasons);
+}
+
+/** evaluateRecovery invalid: decision = INVALID_RECOVERY_CASE. */
+function assertEvaluateInvalid(result) {
   assert.equal(result.valid, false);
   assert.equal(result.decision, 'INVALID_RECOVERY_CASE');
   assert.deepEqual(result.reasons, ['INVALID_RECOVERY_CASE']);
   assert.equal(result.recoveryCase, null);
   assertFrozen(result);
   assertFrozen(result.reasons);
+}
+
+/** validateRecoveryCase valid: no decision; does not classify flags. */
+function assertValidateValid(result, input) {
+  assert.equal(result.valid, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(result, 'decision'), false);
+  assert.deepEqual(result.reasons, []);
+  assert.notEqual(result.recoveryCase, null);
+  assert.notEqual(result.recoveryCase, input);
+  assert.deepEqual(Object.keys(result.recoveryCase), [...CASE_KEYS]);
+  assert.equal(result.recoveryCase.recoveryCaseId, input.recoveryCaseId);
+  assert.equal(result.recoveryCase.taskId, input.taskId);
+  assert.equal(result.recoveryCase.actorId, input.actorId);
+  assert.equal(result.recoveryCase.governanceRevision, input.governanceRevision);
+  assert.equal(result.recoveryCase.failureType, input.failureType);
+  for (const key of BOOLEAN_KEYS) {
+    assert.equal(result.recoveryCase[key], input[key]);
+  }
+  assert.deepEqual(Object.keys(result).sort(), ['reasons', 'recoveryCase', 'valid']);
+  assertFrozen(result);
+  assertFrozen(result.reasons);
+  assertFrozen(result.recoveryCase);
 }
 
 function assertProposable(result, input) {
@@ -201,9 +235,9 @@ describe('TECP-015 Recovery — decisions and exports', () => {
 });
 
 describe('TECP-015 Recovery — valid proposable case', () => {
-  it('3. validateRecoveryCase proposable', () => {
+  it('3. validateRecoveryCase valid without decision', () => {
     const input = proposableCase();
-    assertProposable(validateRecoveryCase(input), input);
+    assertValidateValid(validateRecoveryCase(input), input);
   });
 
   it('4. evaluateRecovery proposable', () => {
@@ -211,24 +245,31 @@ describe('TECP-015 Recovery — valid proposable case', () => {
     assertProposable(evaluateRecovery(input), input);
   });
 
-  it('5. validate and evaluate agree on proposable', () => {
+  it('5. validate and evaluate are separate contracts', () => {
     const input = proposableCase();
-    assert.deepEqual(validateRecoveryCase(input), evaluateRecovery(input));
+    const validated = validateRecoveryCase(input);
+    const evaluated = evaluateRecovery(input);
+    assertValidateValid(validated, input);
+    assertProposable(evaluated, input);
+    assert.equal(Object.prototype.hasOwnProperty.call(validated, 'decision'), false);
+    assert.equal(evaluated.decision, 'RECOVERY_PROPOSABLE');
+    assert.deepEqual(validated.recoveryCase, evaluated.recoveryCase);
   });
 });
 
 describe('TECP-015 Recovery — invalid string fields', () => {
   for (const key of STRING_KEYS) {
     it(`6. empty ${key} is invalid`, () => {
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: '' })));
-      assertInvalid(evaluateRecovery(proposableCase({ [key]: '' })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: '' })));
+      assertEvaluateInvalid(evaluateRecovery(proposableCase({ [key]: '' })));
     });
 
     it(`7. non-string ${key} is invalid`, () => {
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: 1 })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: null })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: undefined })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: ['x'] })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: 1 })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: null })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: undefined })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: ['x'] })));
+      assertEvaluateInvalid(evaluateRecovery(proposableCase({ [key]: 1 })));
     });
   }
 });
@@ -236,63 +277,78 @@ describe('TECP-015 Recovery — invalid string fields', () => {
 describe('TECP-015 Recovery — invalid boolean fields', () => {
   for (const key of BOOLEAN_KEYS) {
     it(`8. non-boolean ${key} is invalid`, () => {
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: 'false' })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: 0 })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: 1 })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: null })));
-      assertInvalid(validateRecoveryCase(proposableCase({ [key]: undefined })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: 'false' })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: 0 })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: 1 })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: null })));
+      assertValidateInvalid(validateRecoveryCase(proposableCase({ [key]: undefined })));
+      assertEvaluateInvalid(evaluateRecovery(proposableCase({ [key]: 'false' })));
     });
   }
 });
 
 describe('TECP-015 Recovery — malformed objects / missing / extra keys', () => {
   it('9. null / array / non-object', () => {
-    assertInvalid(validateRecoveryCase(null));
-    assertInvalid(validateRecoveryCase(undefined));
-    assertInvalid(validateRecoveryCase([]));
-    assertInvalid(validateRecoveryCase('rc'));
-    assertInvalid(validateRecoveryCase(42));
+    assertValidateInvalid(validateRecoveryCase(null));
+    assertValidateInvalid(validateRecoveryCase(undefined));
+    assertValidateInvalid(validateRecoveryCase([]));
+    assertValidateInvalid(validateRecoveryCase('rc'));
+    assertValidateInvalid(validateRecoveryCase(42));
+    assertEvaluateInvalid(evaluateRecovery(null));
   });
 
   it('10. missing key', () => {
     const input = proposableCase();
     delete input.failureType;
-    assertInvalid(validateRecoveryCase(input));
+    assertValidateInvalid(validateRecoveryCase(input));
+    assertEvaluateInvalid(evaluateRecovery(input));
   });
 
   it('11. extra key', () => {
     const input = proposableCase({ extra: 'nope' });
-    // extra key changes Object.keys order / length relative to CASE_KEYS
-    assertInvalid(validateRecoveryCase(input));
+    assertValidateInvalid(validateRecoveryCase(input));
+    assertEvaluateInvalid(evaluateRecovery(input));
   });
 
-  it('12. wrong key order is invalid', () => {
-    const input = {
+  it('12. input key order does not matter; canonical order restored', () => {
+    const reordered = {
       taskId: 'task-001',
       recoveryCaseId: 'rc-001',
       actorId: 'actor-001',
       governanceRevision: 'rev-001',
       failureType: 'WORKER_CRASH',
-      requiresTaskMutation: false,
-      requiresLeaseMutation: false,
-      requiresRuntimeObservation: false,
-      requiresExternalSideEffect: false,
-      requiresScopeExpansion: false,
       requiresConflictOverride: false,
+      requiresScopeExpansion: false,
+      requiresExternalSideEffect: false,
+      requiresRuntimeObservation: false,
+      requiresLeaseMutation: false,
+      requiresTaskMutation: false,
     };
-    assertInvalid(validateRecoveryCase(input));
+    assert.notDeepEqual(Object.keys(reordered), [...CASE_KEYS]);
+
+    const validated = validateRecoveryCase(reordered);
+    assertValidateValid(validated, reordered);
+    assert.deepEqual(Object.keys(validated.recoveryCase), [...CASE_KEYS]);
+
+    const evaluated = evaluateRecovery(reordered);
+    assertProposable(evaluated, reordered);
+    assert.deepEqual(Object.keys(evaluated.recoveryCase), [...CASE_KEYS]);
+
+    const canonical = canonicalizeRecoveryCase(reordered);
+    assert.deepEqual(Object.keys(canonical), [...CASE_KEYS]);
   });
 });
 
 describe('TECP-015 Recovery — OWNER_REVIEW_REQUIRED per protected flag', () => {
   for (const entry of FLAG_REASON_ORDER) {
-    it(`13. only ${entry.key}=true => OWNER_REVIEW with ${entry.reason}`, () => {
+    it(`13. only ${entry.key}=true => evaluate OWNER_REVIEW; validate remains decision-free`, () => {
       const input = proposableCase({ [entry.key]: true });
       const validated = validateRecoveryCase(input);
       const evaluated = evaluateRecovery(input);
-      assertOwnerReview(validated, input, [entry.reason]);
+      assertValidateValid(validated, input);
+      assert.equal(validated.recoveryCase[entry.key], true);
       assertOwnerReview(evaluated, input, [entry.reason]);
-      assert.deepEqual(validated, evaluated);
+      assert.equal(Object.prototype.hasOwnProperty.call(validated, 'decision'), false);
     });
   }
 });
@@ -307,6 +363,7 @@ describe('TECP-015 Recovery — multiple flags ordered reasons', () => {
       'TASK_MUTATION_REQUIRED',
       'CONFLICT_OVERRIDE_REQUIRED',
     ]);
+    assertValidateValid(validateRecoveryCase(input), input);
   });
 
   it('15. all six flags true => full ordered reasons', () => {
@@ -387,6 +444,11 @@ describe('TECP-015 Recovery — immutability, determinism, input safety', () => 
     const invalid = evaluateRecovery(null);
     assertFrozen(invalid);
     assertFrozen(invalid.reasons);
+
+    const validated = validateRecoveryCase(proposableCase());
+    assertFrozen(validated);
+    assertFrozen(validated.reasons);
+    assertFrozen(validated.recoveryCase);
   });
 
   it('20. determinism — same input same output', () => {
@@ -394,7 +456,10 @@ describe('TECP-015 Recovery — immutability, determinism, input safety', () => 
     const a = evaluateRecovery(input);
     const b = evaluateRecovery(input);
     assert.deepEqual(a, b);
-    assert.deepEqual(validateRecoveryCase(input), a);
+    const va = validateRecoveryCase(input);
+    const vb = validateRecoveryCase(input);
+    assert.deepEqual(va, vb);
+    assert.deepEqual(va.recoveryCase, a.recoveryCase);
   });
 
   it('21. input is not mutated', () => {

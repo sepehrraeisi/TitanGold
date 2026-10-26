@@ -53,6 +53,9 @@ const FLAG_REASON_TOKENS = Object.freeze([
   Object.freeze({ key: 'requiresConflictOverride', reason: 'CONFLICT_OVERRIDE_REQUIRED' }),
 ]);
 
+/** Private validation reason for structurally/field-invalid recovery cases. */
+const INVALID_REASON = 'INVALID_RECOVERY_CASE';
+
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -61,13 +64,16 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.length > 0;
 }
 
+/**
+ * Exact key-set membership only. Input property insertion order must not matter.
+ */
 function hasExactKeys(value) {
   const keys = Object.keys(value);
   if (keys.length !== CASE_KEYS.length) {
     return false;
   }
-  for (let i = 0; i < CASE_KEYS.length; i += 1) {
-    if (keys[i] !== CASE_KEYS[i]) {
+  for (const key of CASE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
       return false;
     }
   }
@@ -114,41 +120,24 @@ function collectOwnerReviewReasons(recoveryCase) {
 }
 
 /**
- * Structural + field validation. Returns INVALID_RECOVERY_CASE or null when valid.
+ * Structural + field validation. Returns true when valid, false when invalid.
+ * Does not classify protected-boundary flags.
  */
-function classifyInvalid(recoveryCase) {
+function isStructurallyValid(recoveryCase) {
   if (!isPlainObject(recoveryCase) || !hasExactKeys(recoveryCase)) {
-    return RECOVERY_DECISIONS.INVALID_RECOVERY_CASE;
+    return false;
   }
   for (const key of STRING_KEYS) {
     if (!isNonEmptyString(recoveryCase[key])) {
-      return RECOVERY_DECISIONS.INVALID_RECOVERY_CASE;
+      return false;
     }
   }
   for (const key of BOOLEAN_KEYS) {
     if (typeof recoveryCase[key] !== 'boolean') {
-      return RECOVERY_DECISIONS.INVALID_RECOVERY_CASE;
+      return false;
     }
   }
-  return null;
-}
-
-function invalidResult() {
-  return freezeDeep({
-    valid: false,
-    decision: RECOVERY_DECISIONS.INVALID_RECOVERY_CASE,
-    reasons: [RECOVERY_DECISIONS.INVALID_RECOVERY_CASE],
-    recoveryCase: null,
-  });
-}
-
-function validResult(decision, reasons, recoveryCase) {
-  return freezeDeep({
-    valid: true,
-    decision,
-    reasons,
-    recoveryCase,
-  });
+  return true;
 }
 
 /**
@@ -160,28 +149,58 @@ export function canonicalizeRecoveryCase(recoveryCase) {
 }
 
 /**
- * Validate and classify one recovery case.
- * Invalid structure/fields → INVALID_RECOVERY_CASE.
- * Any protected-boundary flag true → OWNER_REVIEW_REQUIRED.
- * All six flags false → RECOVERY_PROPOSABLE.
+ * Validate one recovery case. Does not return a public decision and does not
+ * classify protected-boundary flags.
+ *
+ * Valid:   { valid: true, reasons: [], recoveryCase: canonical frozen copy }
+ * Invalid: { valid: false, reasons: [private validation reason], recoveryCase: null }
  */
 export function validateRecoveryCase(recoveryCase) {
-  if (classifyInvalid(recoveryCase) !== null) {
-    return invalidResult();
+  if (!isStructurallyValid(recoveryCase)) {
+    return freezeDeep({
+      valid: false,
+      reasons: [INVALID_REASON],
+      recoveryCase: null,
+    });
   }
-  const canonical = canonicalizeRecoveryCase(recoveryCase);
-  const reasons = collectOwnerReviewReasons(canonical);
-  if (reasons.length > 0) {
-    return validResult(RECOVERY_DECISIONS.OWNER_REVIEW_REQUIRED, reasons, canonical);
-  }
-  return validResult(RECOVERY_DECISIONS.RECOVERY_PROPOSABLE, [], canonical);
+  return freezeDeep({
+    valid: true,
+    reasons: [],
+    recoveryCase: canonicalizeRecoveryCase(recoveryCase),
+  });
 }
 
 /**
  * Deterministically evaluate one recovery case.
- * Same classification contract as validateRecoveryCase (OD-F / OD-N).
- * RECOVERY_PROPOSABLE is proposal-only and does not authorize execution.
+ * Invalid input => INVALID_RECOVERY_CASE.
+ * Any protected-boundary flag true => OWNER_REVIEW_REQUIRED.
+ * All six flags false => RECOVERY_PROPOSABLE (proposal-only; does not authorize execution).
+ *
+ * Returns: { valid, decision, reasons, recoveryCase }
  */
 export function evaluateRecovery(recoveryCase) {
-  return validateRecoveryCase(recoveryCase);
+  if (!isStructurallyValid(recoveryCase)) {
+    return freezeDeep({
+      valid: false,
+      decision: RECOVERY_DECISIONS.INVALID_RECOVERY_CASE,
+      reasons: [RECOVERY_DECISIONS.INVALID_RECOVERY_CASE],
+      recoveryCase: null,
+    });
+  }
+  const canonical = canonicalizeRecoveryCase(recoveryCase);
+  const reasons = collectOwnerReviewReasons(canonical);
+  if (reasons.length > 0) {
+    return freezeDeep({
+      valid: true,
+      decision: RECOVERY_DECISIONS.OWNER_REVIEW_REQUIRED,
+      reasons,
+      recoveryCase: canonical,
+    });
+  }
+  return freezeDeep({
+    valid: true,
+    decision: RECOVERY_DECISIONS.RECOVERY_PROPOSABLE,
+    reasons: [],
+    recoveryCase: canonical,
+  });
 }
