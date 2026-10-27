@@ -173,12 +173,16 @@ test('health fails closed when a port claims live authority', () => {
   assert.equal(health.reason, 'GITHUB_LIVE_AUTHORITY');
 });
 
-test('package manifest has no external dependencies', () => {
+test('package manifest allows only exact MCP SDK and zod allowlist', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(manifest.name, 'tecp');
   assert.equal(manifest.private, true);
   assert.equal(manifest.type, 'module');
-  assert.equal(manifest.dependencies, undefined);
+  assert.deepEqual(manifest.dependencies, {
+    '@modelcontextprotocol/server': '2.4.0',
+    zod: '4.6.7',
+  });
+  assert.equal(Object.keys(manifest.dependencies).length, 2);
   assert.equal(manifest.devDependencies, undefined);
   assert.equal(manifest.scripts.test, 'node --test test/serviceSkeleton.test.js');
 });

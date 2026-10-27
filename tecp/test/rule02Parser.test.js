@@ -278,7 +278,11 @@ test('parser has zero network DB and filesystem write authority', () => {
   assert.equal(service.includes('rule02Parser'), false);
   assert.equal(index.includes('rule02Parser'), false);
   const pkg = JSON.parse(readFileSync(packagePath, 'utf8'));
-  assert.equal(pkg.dependencies, undefined);
+  assert.deepEqual(pkg.dependencies, {
+    '@modelcontextprotocol/server': '2.4.0',
+    zod: '4.6.7',
+  });
+  assert.equal(Object.keys(pkg.dependencies).length, 2);
   assert.equal(pkg.devDependencies, undefined);
 });
 
