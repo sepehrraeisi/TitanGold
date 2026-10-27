@@ -310,7 +310,7 @@ test('canonical vocabulary is exact', () => {
   assert.equal(TECP_CAPABILITY_POLICY.GITHUB.includes('OBSERVE_RUNTIME'), false);
 });
 
-test('canonical Rule02 allow flows through governance into REQUEST_IMPLEMENTATION', () => {
+test('canonical Rule02 active authorization flows; consumed authorization denies implementation', () => {
   const text = readFileSync(rule02Path, 'utf8');
   const parsed = parseRule02(text);
   const sliceFromTecp = parsed.tecp?.TECP_AUTHORIZED_SLICE;
@@ -338,9 +338,21 @@ test('canonical Rule02 allow flows through governance into REQUEST_IMPLEMENTATIO
     requiresDeploy: false,
     requiresProductionMutation: false,
   };
+  const activeAuthorization = parsed.tecp?.implementationAuthorizationState?.activeWorkPackage;
+  assert.equal(activeAuthorization, parsed.lifecyclePrecedence?.rawImplementationAuthorization);
   const governance = validateGovernance(parsed, request);
-  assert.equal(governance.allowed, true);
-  assert.equal(governance.decision, GOVERNANCE_DECISIONS.ALLOW);
+  const authorizationConsumed = activeAuthorization === 'CONSUMED / NON-ACTIVE';
+  if (authorizationConsumed) {
+    assert.equal(governance.allowed, false);
+    assert.equal(governance.decision, GOVERNANCE_DECISIONS.DENY_NOT_AUTHORIZED);
+  } else {
+    assert.equal(
+      activeAuthorization,
+      'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES',
+    );
+    assert.equal(governance.allowed, true);
+    assert.equal(governance.decision, GOVERNANCE_DECISIONS.ALLOW);
+  }
 
   const actorInput = actor('CHATGPT_INTEGRATOR', 'chatgpt-integrator');
   const capabilityContext = context(governance, { authorityBoundary: 'TECP_CONTROL_PLANE' });
@@ -349,8 +361,12 @@ test('canonical Rule02 allow flows through governance into REQUEST_IMPLEMENTATIO
   const contextBefore = structuredClone(capabilityContext);
 
   const result = evaluateCapability(actorInput, 'REQUEST_IMPLEMENTATION', capabilityContext);
-  assert.equal(result.allowed, true);
-  assert.equal(result.decision, CAPABILITY_DECISIONS.ALLOW);
+  assert.equal(result.allowed, !authorizationConsumed);
+  assert.equal(
+    result.decision,
+    authorizationConsumed ? CAPABILITY_DECISIONS.DENY_GOVERNANCE : CAPABILITY_DECISIONS.ALLOW,
+  );
+  if (authorizationConsumed) assert.deepEqual(result.reasons, ['GOVERNANCE_DENY']);
   assert.equal(result.capability, 'REQUEST_IMPLEMENTATION');
   assert.deepEqual(result.actor, { actorId: 'chatgpt-integrator', actorType: 'CHATGPT_INTEGRATOR' });
   assert.deepEqual(actorInput, actorBefore);
