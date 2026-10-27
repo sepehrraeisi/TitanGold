@@ -318,7 +318,7 @@ test('evaluation does not change environment keys', () => {
   assert.deepEqual(Object.keys(process.env).sort(), before);
 });
 
-test('canonical Rule02 parser output allows the currently authorized TECP implementation request', () => {
+test('canonical Rule02 live governance honors active authorization and closed fail-closed state', () => {
   const text = readFileSync(rule02Path, 'utf8');
   const parsed = parseRule02(text);
   const parsedBefore = structuredClone(parsed);
@@ -357,8 +357,20 @@ test('canonical Rule02 parser output allows the currently authorized TECP implem
   const requestBefore = structuredClone(request);
 
   const result = validateGovernance(parsed, request);
-  assert.equal(result.allowed, true);
-  assert.equal(result.decision, GOVERNANCE_DECISIONS.ALLOW);
+  // Canonical Rule02 can be in either an active exact-slice implementation
+  // state or a formally closed/consumed state. Closed must fail closed.
+  if (activeAuthorization === 'CONSUMED / NON-ACTIVE') {
+    assert.equal(result.allowed, false);
+    assert.equal(result.decision, GOVERNANCE_DECISIONS.DENY_NOT_AUTHORIZED);
+    assert.deepEqual(result.reasons, ['IMPLEMENTATION_AUTHORIZATION_NOT_EFFECTIVE']);
+  } else {
+    assert.equal(
+      activeAuthorization,
+      'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES',
+    );
+    assert.equal(result.allowed, true);
+    assert.equal(result.decision, GOVERNANCE_DECISIONS.ALLOW);
+  }
   assert.equal(result.matchedFacts.sliceId, sliceFromTecp);
   assert.equal(result.matchedFacts.authorityClass, facts.authorityClass);
   assert.equal(result.matchedFacts.riskTier, facts.riskTier);
