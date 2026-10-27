@@ -2998,7 +2998,7 @@ This governance transaction does not create `tecp/src/taskGraph.js` or `tecp/tes
 
 AUTHORIZED_FILE_SCOPE = .cursor/mcp.json | tecp/test/singleCursorIntegration.test.js
 PROTECTED_PATHS = .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/titangold-current-active-work.mdc | backend/** | /home/ubuntu/webapp/TitanGold | backend/database/migrations/056_create_tecp_control_plane_foundation.sql | tecp/README.md | tecp/src/config.js | tecp/src/health.js | tecp/src/index.js | tecp/src/ports/githubPort.js | tecp/src/ports/linearPort.js | tecp/src/service.js | tecp/src/rule02Parser.js | tecp/test/fixtures/ | tecp/src/governanceValidator.js | tecp/test/governanceValidator.test.js | tecp/src/actorCapabilityEngine.js | tecp/test/actorCapabilityEngine.test.js | tecp/src/taskGraph.js | tecp/test/taskGraph.test.js | tecp/src/resourceClaims.js | tecp/test/resourceClaims.test.js | tecp/src/conflictEngine.js | tecp/test/conflictEngine.test.js | tecp/src/leaseEngine.js | tecp/test/leaseEngine.test.js | tecp/src/scopeExpansion.js | tecp/test/scopeExpansion.test.js | tecp/src/auditEvent.js | tecp/test/auditEvent.test.js | tecp/src/idempotencyOps.js | tecp/test/idempotencyOps.test.js | tecp/src/recovery.js | tecp/test/recovery.test.js | tecp/src/evidenceLedger.js | tecp/test/evidenceLedger.test.js | tecp/src/titanMcp.js | tecp/test/titanMcp.test.js | backend/middleware/auth.js | backend/middleware/requireCapability.js | backend/services/capabilities.js | backend/services/agentCapabilityRegistry.js | backend/services/agentExecutionPolicyService.js | backend/routes/access-control.js | backend/middleware/accessControlGateway.js | backend/services/connections/mexc/capabilityMatrix.js | backend/services/connections/mexc/capabilityIds.js | backend/services/connections/mexc/capabilityInventory.js | Data Hub | AI Shared Foundation | Agents Shell | application audit_logs ownership | application system_logs ownership | tecp/src/mcpServer.js | tecp/src/mcpStdio.js | tecp/test/mcpServer.test.js | tecp/package.json | tecp/package-lock.json | tecp/test/rule02Parser.test.js | tecp/test/serviceSkeleton.test.js
-STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | REDIS | MIGRATION_CHANGE | NETWORK | OUTBOUND_HTTP | OUTBOUND_FETCH | CHILD_PROCESS | WORKER_THREADS | FS_WRITE | FS_READ_OUTSIDE_FIXTURE | ENV_SECRET_READ | CREDENTIAL_READ | PROVIDER_QUERY | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | HTTP_SERVER | SSE_SERVER | WEBSOCKET_SERVER | LISTENING_PORT | RESOURCE_ENDPOINT | PROMPT_ENDPOINT | MUTATION_TOOL | WORKER_EXECUTION | TECP_DOMAIN_IMPORT | ARBITRARY_CODE_EXECUTION | AUDIT_IMPORT | IDEMPOTENCY_IMPORT | RECOVERY_IMPORT | EVIDENCE_IMPORT | LEASE_IMPORT | CONFLICT_IMPORT | SCOPE_IMPORT | ACTOR_CAPABILITY_MUTATION | GOVERNANCE_BYPASS | BACKEND_CHANGE | TECP018_PLUS | CURSOR_MULTICLIENT | CURSOR_GLOBAL_CONFIG | CURSOR_REMOTE_MCP | CURSOR_CREDENTIALS | TECP019_PLUS | SOURCE_MUTATION | DEPENDENCY_MUTATION
+STOP_CONDITIONS = RULE02_MUTATION | CORE_RULES_MUTATION | DB_READ_REQUIRED | DB_WRITE | REDIS | MIGRATION_CHANGE | NETWORK | OUTBOUND_HTTP | OUTBOUND_FETCH | CHILD_PROCESS | WORKER_THREADS | FS_WRITE | FS_READ_OUTSIDE_FIXTURE | ENV_SECRET_READ | CREDENTIAL_READ | PROVIDER_QUERY | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | HTTP_SERVER | SSE_SERVER | WEBSOCKET_SERVER | LISTENING_PORT | RESOURCE_ENDPOINT | PROMPT_ENDPOINT | MUTATION_TOOL | WORKER_EXECUTION | TECP_DOMAIN_IMPORT | ARBITRARY_CODE_EXECUTION | AUDIT_IMPORT | IDEMPOTENCY_IMPORT | RECOVERY_IMPORT | EVIDENCE_IMPORT | LEASE_IMPORT | CONFLICT_IMPORT | SCOPE_IMPORT | ACTOR_CAPABILITY_MUTATION | GOVERNANCE_BYPASS | BACKEND_CHANGE | CURSOR_MULTICLIENT | CURSOR_GLOBAL_CONFIG | CURSOR_REMOTE_MCP | CURSOR_CREDENTIALS | TECP019_PLUS | SOURCE_MUTATION | DEPENDENCY_MUTATION
 IMPLEMENTATION_START_CONDITIONS = THIS_GOVERNANCE_PR_MERGED
 COMPLETION_GATE = TECP018_SINGLE_CURSOR_OPERATIONAL_CONNECTIVITY_COMPLETE
 COMPLETION_GATE_STATUS = NOT_REACHED
@@ -16979,8 +16979,8 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP005_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
 **TECP005_IMPLEMENTATION_STARTED = YES / COMPLETE**
 **TECP005_VERDICT = TECP005_CLOSED_FROZEN_VERIFIED**
-**TECP_NEXT_GATE = TECP-017-TITAN-MCP**
-**TECP_NEXT_GATE_STATUS = TECP-017 AUTHORIZED / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_GOVERNANCE_PR_MERGES / NOT_EFFECTIVE_BEFORE_MERGE / IMPLEMENTATION_NOT_STARTED**
+**TECP_NEXT_GATE = TECP-018-SINGLE-CURSOR**
+**TECP_NEXT_GATE_STATUS = TECP-018 AUTHORIZED / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_GOVERNANCE_PR_MERGES / NOT_EFFECTIVE_BEFORE_MERGE / IMPLEMENTATION_NOT_STARTED**
 **TECP005A_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005A_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP005A_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
@@ -17044,12 +17044,16 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP016_MERGED_PR = #208**
 **TECP016_MERGE_SHA = `ae64d2170cd0d09f73b0164af1ad6a366a98d89b`**
 **TECP016_TESTS = Evidence Ledger 42/42 PASS · Recovery 42/42 PASS · Idempotency Ops 76/76 PASS · Audit Event 37/37 PASS · Scope Expansion 63/63 PASS · Lease Engine 50/50 PASS · Conflict Engine 42/42 PASS · Resource Claims 36/36 PASS · Task Graph 32/32 PASS · Actor Capability Engine 32/32 PASS · Governance Validator 30/30 PASS · Rule02 Parser 38/38 PASS · Full TECP suite 530/530 PASS**
-**TECP_017_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
-**TECP017_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_017_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP017_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP017_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
-**TECP017_IMPLEMENTATION_STARTED = NO**
-**TECP_018_STATUS = NOT_AUTHORIZED**
-**TECP018_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP017_IMPLEMENTATION_STARTED = YES / COMPLETE**
+**TECP_018_STATUS = AUTHORIZED / EXACT_SLICE_ONLY / IMPLEMENTATION_NOT_STARTED**
+**TECP018_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP018_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP018_IMPLEMENTATION_STARTED = NO**
+**TECP_019_STATUS = NOT_AUTHORIZED**
+**TECP019_IMPLEMENTATION_AUTHORIZED = NO**
 **TECP_IMPLEMENTATION = NO**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
