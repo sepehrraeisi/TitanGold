@@ -12,5 +12,9 @@
   },
   "scripts": {
     "test": "node --test test/serviceSkeleton.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
   }
 }
