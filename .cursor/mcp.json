@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "titangold-tecp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/tecp/src/mcpStdio.js"
+      ]
+    }
+  }
+}
