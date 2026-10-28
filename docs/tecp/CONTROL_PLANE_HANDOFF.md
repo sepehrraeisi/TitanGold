@@ -1,8 +1,8 @@
 # TitanGold / TECP — Living Handoff and Next-Gate Index
 
 **Last verified:** 2026-10-28  
-**Snapshot canonical main:** `8dbee0f471e99361fc7fbd939972068ea81836f7`  
-**Read first:** [Rule02](../../.cursor/rules/titangold-current-active-work.mdc) and Rule01 v4.7. **This handoff is NOT authority, NOT a second progress counter and NOT TECP-020 closeout.** Rule02 on current `main` overrides any stale status here.
+**Snapshot canonical main:** `74cda2ccf6926bf4155a941528fceded3054cc30`  
+**Read first:** [Rule02](../../.cursor/rules/titangold-current-active-work.mdc) and Rule01 v4.7. **This handoff is NOT authority, NOT a second progress counter, and NOT an implementation approval.** The live Rule02 on current `main` overrides stale status here.
 
 > How to recover from a lost chat: fetch `main`, read canonical Rule02 + Rule01, compare the live SHA with the snapshot above, then review this evidence index and its PR links. Never trust prior-chat authority or stale worktrees.
 
@@ -11,13 +11,13 @@
 | Item | Verified record | Do not infer |
 |---|---|---|
 | TECP-019 | CLOSED / FROZEN / VERIFIED after [PR #218](https://github.com/sepehrraeisi/TitanGold/pull/218) and formal [PR #219](https://github.com/sepehrraeisi/TitanGold/pull/219) | Previous implementation approval was CONSUMED / NON-ACTIVE |
-| TECP-020 | `TECP-020-ROADMAP-AND-CAPABILITY-RECONCILIATION`, READ-ONLY DISCOVERY authorized by [PR #220](https://github.com/sepehrraeisi/TitanGold/pull/220) | Not implemented; NOT closed; no executable worker authority |
-| Next owner gate | `TECP020_CAPABILITY_RECONCILIATION_REVIEWED_BY_OWNER`; as of snapshot **NOT_REACHED** | Cannot close without owner review and separate governance |
+| TECP-020 | `TECP-020-ROADMAP-AND-CAPABILITY-RECONCILIATION` formally **CLOSED / FROZEN / VERIFIED** by [PR #222](https://github.com/sepehrraeisi/TitanGold/pull/222), after read-only discovery [PR #220](https://github.com/sepehrraeisi/TitanGold/pull/220) | Discovery entitlement CONSUMED / NON-ACTIVE; `TECP020_IMPLEMENTATION_AUTHORIZED=NO` |
+| Next owner gate | `TECP_NEXT_DISPOSABLE_TASK_LEASE_PROOF_OWNER_DECISION / NOT_AUTHORIZED` | Candidate is design-only; separate owner-approved governance required before any experiment |
 | TECP-021+ | NOT_AUTHORIZED | No automatic next stage |
 | Cursor MCP | Real local connection, ping/manifest and bounded Agent QA PASS | Not evidence of multi-agent, autonomous recovery or production service |
 | Artemis | Independently at `PROJECT_PROGRESS=4/10`, Stage 11, `CURRENT_STAGE_PROGRESS=11/15` | Do not inflate from TECP progress |
 
-**Exact merged main:** `8dbee0f471e99361fc7fbd939972068ea81836f7` — PR #220; **only Rule02 changed**. PR #220 testing on head `9de5ed0f4e61f83916223c7b5a97d1f57544e26a`: focused governance tests **109/109 PASS** and full TECP test suite **560/560 PASS (29 suites)**, exit 0, clean review worktree and one changed Rule02 file. These are owner SSH/terminal results, **not claims about GitHub CI**. PR #219 merged as `a699dbd72b9279acfd7341c2ee2cc8b322d00949`. PR #218 merged as `c3f05a7c6e4b5ad058708e48652eed846eddd87a`.
+**Latest verified main:** `74cda2ccf6926bf4155a941528fceded3054cc30` — [PR #222](https://github.com/sepehrraeisi/TitanGold/pull/222) merged; **Rule02 only**. PR #222 tested at head `944866a52628f42a13cbcce3b8b6d487904ea567`: **109/109 focused**, **560/560 full** (29 suites), exit codes 0, clean SSH worktree and exactly one changed Rule02 file. These are owner-provided terminal results, not independent GitHub CI. Prior PR #221 documentation merge: `36084a76d7a9b579f0753a1a7676be7239cab4ee`; PR #220 governance merge: `8dbee0f471e99361fc7fbd939972068ea81836f7`.
 
 ## Historical evidence milestones
 
@@ -28,6 +28,7 @@
 - TECP-018 one-Cursor config: [PR #214](https://github.com/sepehrraeisi/TitanGold/pull/214), formal closeout [PR #215](https://github.com/sepehrraeisi/TitanGold/pull/215). Repo integration tests check config, **not** launching a real Agent.
 - TECP-019 governance [PR #217](https://github.com/sepehrraeisi/TitanGold/pull/217), implementation [PR #218](https://github.com/sepehrraeisi/TitanGold/pull/218), formal closeout [PR #219](https://github.com/sepehrraeisi/TitanGold/pull/219). `governanceReadModel.js` is a presentation-only model, intentionally tied to TECP-019 and fail-closed for other slices.
 - TECP-020 read-only governance [PR #220](https://github.com/sepehrraeisi/TitanGold/pull/220). This **does not** authorize the historical TECP-020 “Conflict Pilot”; future target `CAP-PILOT-CONFLICT` remains deferred.
+- TECP-020 source-only reconciliation completed; formal closeout [PR #222](https://github.com/sepehrraeisi/TitanGold/pull/222), merged main `74cda2ccf6926bf4155a941528fceded3054cc30`. Owner SSH tests: **109/109 focused + 560/560 full PASS**. Current TECP implementation authority is **NO**.
 
 ## Cursor QA boundary (human evidence)
 
@@ -59,8 +60,8 @@
 - [x] Bounded single-Cursor MCP recovery test PASS.
 - [x] TECP-020 read-only discovery authorized via PR #220.
 - [x] Source-only capability gap and key blockers identified.
-- [ ] **CURRENT:** present TECP-020 evidence/dependency register and proposed smallest safe next slice for **owner review**; Rule02 completion gate remains open.
-- [ ] **NEXT PROPOSED ONLY:** separate governance authorization for a disposable-DB atomic Task/Lease persistence slice (with precise ownership, isolation/fencing, test dependencies and protected paths).
+- [x] TECP-020 owner-reviewed source-only reconciliation and formal closeout through PR #222; Rule02 gate moved.
+- [ ] **CURRENT / NOT_AUTHORIZED:** owner decision for `CAP-DURABLE-ATOMIC-LEASE-DISPOSABLE` and a separate exact-scope governance proposal. No implementation permission, DB connection, code or runtime mutation.
 - [ ] Prove concurrent Claim/Lease safety and restart/fencing in nonproduction; independent tests and Human QA.
 - [ ] Add durable Evidence/Audit/Recovery/Idempotency under separate authorizations.
 - [ ] Add a restricted action-capable MCP gateway only after separate owner decision.
@@ -68,6 +69,8 @@
 - [ ] Verify *two* Cursor conflict pilot; only then expand **3 → 4 → 5** with crash/recovery tests.
 
 ### Candidate next slice: NOT_AUTHORIZED
+
+**After PR #222:** this is the next *proposed* capability, not a numbered TECP-021 stage or an effective implementation slice. It requires a separate explicit owner decision, Rule02 authorization PR, exact file list, Tier-3-or-higher risk review, disposable PostgreSQL isolation and Human QA. The historical Conflict Pilot (`CAP-PILOT-CONFLICT`) remains deferred.
 
 Proposed label `TECP-NEXT-DURABLE-TASK-LEASE-TRANSACTION` is **not** an approved numbered stage. Possible exact-scope candidates, to be reviewed before any governance authorization: **new** `tecp/src/ports/taskLeaseRepository.js` + **new** `tecp/test/taskLeaseRepository.test.js`. A real PostgreSQL driver may require explicit revisions of frozen `tecp/package.json`, `tecp/package-lock.json`, `tecp/test/serviceSkeleton.test.js` and `tecp/test/rule02Parser.test.js`, **or** an owner-approved separate persistence package. An additive new-numbered migration is conditional; frozen migration 056 must not be changed. No package change, DB connection, implementation or deployment now.
 
@@ -79,10 +82,10 @@ Future tests must cover competing claims, stale owner fencing, rollback, duplica
 2. After a meaningful separately approved gate, update this document with **verified PR link, exact SHAs, changed-file scope, tests/environment, owner QA, deploy classification and next gate**. Changes must be owner-authorized, not silent.
 3. Keep Rule02 as the sole canonical progress/authorization source, per Rule01 §107. Never use this file to introduce a parallel progress counter.
 4. Separate `MERGED`, `DEPLOYED`, `RUNTIME_VERIFIED`, per Rule01 §108. Do not fake a redeploy for documentation-only changes.
-5. No TECP-020 code change, multiworker pilot, new MCP tool, DB access, Production mutation or TECP-021+ authorization until the correct separate governance decision.
+5. TECP-020 is closed and its discovery entitlement consumed. No new Task/Lease implementation, two-Cursor pilot, MCP tool, live/disposable DB connection, Production mutation or TECP-021+ action until a separate Rule02 authorization is explicitly owner-approved and effective.
 
 ## Resume prompt for another ChatGPT chat / Cursor
 
-> Continue TitanGold TECP using `docs/tecp/CONTROL_PLANE_HANDOFF.md` as a historical handoff only. First read the **current** Rule01 v4.7 and the **current** Rule02 on canonical GitHub `main`. Confirm the live SHA and any newer PR. Snapshot baseline: `8dbee0f471e99361fc7fbd939972068ea81836f7`; PR #220 merged; TECP-019 CLOSED/FROZEN/VERIFIED; TECP-020 read-only reconciliation active, with `TECP020_CAPABILITY_RECONCILIATION_REVIEWED_BY_OWNER` not yet reached. Do read-only capability and dependency reconciliation, report exact tests/evidence and propose the smallest owner-authorizable durable Task/Lease slice. No automatic implementation, GitHub mutation during read-only discovery, multi-Cursor, DB or Production actions. If Rule02 or current Git differs, defer to canonical evidence and report the discrepancy.
+> Resume TitanGold TECP using `docs/tecp/CONTROL_PLANE_HANDOFF.md` as a historical evidence index only. First inspect current Rule01 v4.7 and current Rule02 on canonical GitHub `main`, then compare the live SHA against snapshot `74cda2ccf6926bf4155a941528fceded3054cc30`. [PR #222](https://github.com/sepehrraeisi/TitanGold/pull/222) merged; TECP-020 is CLOSED/FROZEN/VERIFIED, read-only entitlement CONSUMED/NON-ACTIVE, implementation NO. Current owner gate: `TECP_NEXT_DISPOSABLE_TASK_LEASE_PROOF_OWNER_DECISION / NOT_AUTHORIZED`. Candidate: an isolated disposable PostgreSQL atomic WRITE lease + fencing proof, design-only. Check newer PRs, verify source/test evidence, and obtain independent owner approval for any governance merge or implementation. Do not mutate code, Rule02, DB, MCP, production or multi-Cursor on the basis of this handoff. If current Rule02 differs, defer to live canonical authority.
 
-**Snapshot status:** TECP-020 remains read-only / awaiting owner completion decision. This living handoff is documentation, not governance authority.
+**Snapshot status:** TECP-020 CLOSED / FROZEN / VERIFIED after PR #222; next Task/Lease disposable proof is NOT_AUTHORIZED. This document records evidence and decisions but never grants authority.
