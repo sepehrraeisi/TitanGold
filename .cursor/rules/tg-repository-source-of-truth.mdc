@@ -1,0 +1,167 @@
+---
+description: 'TitanGold original v4.7 rules for repository source of truth. Mandatory for relevant work, sections 13-15.'
+alwaysApply: false
+---
+
+# 13. Repository Safety
+
+Before editing:
+
+- Inspect current branch
+- Inspect `git status`
+- Inspect local HEAD
+- Inspect remote HEAD
+- Check ahead/behind
+- Identify untracked files
+- Identify unrelated modified files
+- Confirm active runtime source path
+- Confirm deployed artifact path where applicable
+
+Do not implement with an unknown repository state.
+
+## Protected Unrelated Work
+
+A dirty original working tree is allowed only when all existing modifications
+are:
+
+- Explicitly identified
+- Confirmed unrelated
+- Treated as protected user or parallel work
+- Excluded from staging, commits, builds and deployment
+
+Do not:
+
+- Modify protected files
+- Reset them
+- Restore them
+- Stash them
+- Delete them
+- Move them
+- Include them in patches
+- Expose their contents when sensitive
+- Use `git add .`
+- Use `git add -A`
+- Use `git commit -a`
+- Use broad clean, reset, restore or stash commands
+
+Use:
+
+1. An isolated clean Git worktree based on `origin/main`, or
+2. Explicit path-scoped staging plus full cached-diff inspection and a clean
+   verification worktree
+
+The active outcome must be verified in a clean isolated worktree before
+closeout.
+
+Never describe the original working tree as clean when protected changes
+remain.
+
+---
+
+# 14. RCA Standard
+
+RCA depth must match risk.
+
+## Tier 1
+
+A concise RCA is sufficient:
+
+- Symptom
+- Confirmed cause
+- Affected component
+- Why the fix is correct
+- Regression target
+
+## Tier 2
+
+A normal RCA must include:
+
+- User-visible symptom
+- Underlying cause
+- Affected layers
+- Source-of-Truth impact
+- Regression risks
+
+## Tier 3 and Tier 4
+
+A full RCA is required:
+
+- User-visible symptom
+- Real underlying cause
+- Affected layers
+- Why current behavior exists
+- Security and runtime impact
+- Data and provider impact
+- Why the proposed fix addresses the cause
+- Failure modes
+- Rollback
+- Regression risks
+
+Do not create a long formal RCA for a trivial copy defect.
+
+Do not skip RCA for a security, runtime or financial defect.
+
+---
+
+# 15. Dependency and Source-of-Truth Review
+
+Identify only proven dependencies:
+
+- Frontend components
+- Shared UI components
+- API clients
+- Routes
+- Services
+- Database tables
+- Migrations
+- Redis/cache
+- Authentication
+- RBAC
+- Capabilities
+- ACL
+- Runtime mode
+- Kill Switch
+- Scheduler
+- Worker
+- Provider integrations
+- Settings
+- Nginx
+- PM2
+- Deployment scripts
+
+Before creating a field, route, service or setting, identify the existing
+owner.
+
+Never duplicate:
+
+- Settings
+- Tokens
+- API keys
+- Credentials
+- Integrations
+- Connection metadata
+- Capability Matrix
+- Agent registry
+- Permission rules
+- Runtime mode
+- Kill Switch
+- Scheduler state
+- Worker state
+- Provider configuration
+- Cache
+- Database state
+- API contracts
+- Audit/history
+- Notification configuration
+
+If an owner exists:
+
+- Reuse it
+- Extend it
+- Connect to it
+- Or migrate the old path into it
+
+Never create a parallel implementation.
+
+---
+

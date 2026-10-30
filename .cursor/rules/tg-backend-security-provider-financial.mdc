@@ -1,0 +1,343 @@
+---
+description: 'TitanGold original v4.7 rules for backend security provider financial. Mandatory for relevant work, sections 16-20.'
+alwaysApply: false
+---
+
+# 16. Backend, Database and Cache Rules
+
+## Backend
+
+Verify where applicable:
+
+- Route registration
+- Authentication
+- Database-authoritative identity
+- Capabilities/RBAC
+- ACL
+- Object-level authorization
+- Runtime policy
+- Validation
+- Field allowlists
+- Mass-assignment protection
+- Rate limiting
+- Transactions
+- Idempotency
+- Error sanitization
+- Audit/history
+- Service ownership
+
+Frontend visibility is never authorization.
+
+Generic PATCH handlers must reject unknown fields.
+
+Unsafe legacy routes must not remain mountable.
+
+## Database
+
+Verify where applicable:
+
+- Canonical table
+- Canonical columns
+- Migration history
+- Constraints
+- Defaults
+- Foreign keys
+- Indexes
+- JSONB structure
+- Query plans
+- Concurrency
+- Transactions
+- Audit timestamps
+- User/global ownership
+- Rollback
+
+Do not create a migration unless required.
+
+Any migration must be:
+
+- Reversible
+- Safe by default
+- Non-destructive
+- Production-data preserving
+- Performance measured
+- Documented
+
+Never create duplicate state columns.
+
+## Redis and Cache
+
+Verify where applicable:
+
+- Key ownership
+- TTL
+- Cache versus Source of Truth
+- Invalidation
+- Multi-process consistency
+- PM2 behavior
+- Worker behavior
+- Restart behavior
+- Stale data risk
+- Security elevation risk
+- Failure fallback
+
+PostgreSQL or the documented canonical store remains authoritative unless the
+architecture explicitly defines otherwise.
+
+Redis failure must never enable Live execution or elevate permissions.
+
+Do not add cache complexity without measured benefit.
+
+---
+
+# 17. Security and Secret Handling
+
+Verify:
+
+- Authentication
+- Authorization
+- Capabilities
+- ACL
+- Runtime mode
+- Kill Switch
+- Provider connection
+- Secret handling
+- Logging redaction
+- Audit history
+- External side effects
+- Failure behavior
+
+Never expose:
+
+- JWTs
+- Tokens
+- API keys
+- API Secrets
+- Credentials
+- Encryption payloads
+- Chat IDs
+- Authorization headers
+- Authenticated WebSocket URLs
+- Raw environment files
+- Sensitive provider payloads
+- Signed provider queries
+
+Every sensitive failure must fail closed.
+
+## Canonical Credential Rule
+
+Provider credentials must have one canonical encrypted server-side owner.
+
+Do not store provider Secrets in:
+
+- localStorage
+- IndexedDB
+- frontend state beyond transient input
+- URLs
+- logs
+- audit metadata
+- metrics labels
+
+Stored credentials must not be prefilled into forms.
+
+Credential rotation must use new transient values.
+
+Delete and disable actions must require confirmation.
+
+---
+
+# 18. Official Provider Documentation Rule
+
+Provider-specific facts must come from official provider documentation.
+
+Use official sources for:
+
+- Endpoints
+- Signing
+- Headers
+- Timestamp
+- Receive window
+- Permission semantics
+- Rate limits
+- Error codes
+- Maintenance behavior
+- Network requirements
+- Deposit/withdrawal rules
+- Futures rules
+- P2P rules
+- Account-edit rules
+
+Record:
+
+- Exact official pages used
+- Retrieval date
+- Selected endpoints
+- Permission requirements
+- Known provider limitations
+
+Do not rely on blogs, forums or copied examples as the primary contract.
+
+Do not include real credentials or signed requests in documentation.
+
+---
+
+# 19. Controlled Real Provider Testing
+
+The rule “never connect a real exchange during tests” is replaced with a
+safer explicit model that distinguishes public, private-read and transactional
+provider requests.
+
+## Public Read-Only Requests
+
+Unauthenticated public read-only provider requests may be authorized at the
+outcome level when the Current Active Work Rule identifies:
+
+- Provider
+- Approved public capability class
+- Environment
+- Rate and timeout bounds
+- Persistence behavior
+- Expected user workflow
+
+Per-endpoint Human approval is not required for ordinary public market-data
+requests that remain inside that authorization.
+
+Examples include approved public access to:
+
+- Prices
+- Candles
+- Order books
+- Public trades
+- Public symbols
+- Public network metadata where officially supported without authentication
+
+Public authorization must never be interpreted as authorization for private,
+authenticated or transactional endpoints.
+
+## Private Read and Transactional Requests
+
+A real private authenticated or transactional provider request is allowed only
+when:
+
+- The Current Active Work Rule explicitly authorizes it
+- The exact endpoint is approved
+- The endpoint is read-only unless Tier-4 approval exists
+- Credentials are limited to the minimum permissions needed
+- No credential is exposed to Cursor output, logs or chat
+- The environment is identified
+- The expected state transition is defined
+- Persistence behavior is defined
+- A rollback or reset plan exists
+- Rate limits and timeout are bounded
+- Human approval is obtained where required
+
+Exact endpoint approval remains required for:
+
+- Private authenticated requests
+- Account reads
+- Permission discovery
+- Provider mutations
+- Financial or operational side effects
+
+Automated unit and integration tests must use fake providers.
+
+Controlled Staging Browser QA may use outcome-authorized public endpoints when
+bounded and observable.
+
+A controlled real authentication test is not the same as a real financial
+side effect.
+
+No automated test may perform an irreversible operation.
+
+
+# 20. Financial and Account-Change Safety
+
+External financial or account side effects include:
+
+- Order placement
+- Order cancellation
+- Order modification
+- Transfer
+- Withdrawal
+- Settlement
+- P2P order placement
+- Account edits
+- Permission changes
+- Address-book changes
+
+Provider permission alone is not sufficient.
+
+Every sensitive operation must pass:
+
+1. Verified user identity
+2. TitanGold capability
+3. Object-level authorization
+4. Verified provider Connection
+5. Required provider capability
+6. Requested mode
+7. Effective runtime mode
+8. Deployment capability
+9. Emergency Stop state
+10. Provider/broker state
+11. ACL and Filter Rules
+12. Risk Rules
+13. Operation-specific validation
+14. Idempotency
+15. Explicit confirmation
+16. Audit record
+17. Runtime acknowledgement
+
+Admin role alone does not bypass these gates.
+
+## Withdrawal-Specific Requirements
+
+Where applicable:
+
+- Network validation
+- Address validation
+- Memo/Tag validation
+- Withdrawal minimum
+- Fee visibility
+- Amount limits
+- Address allowlist
+- Cooldown
+- Duplicate-request protection
+- Confirmation summary
+- Provider response tracking
+- Failure and recovery state
+
+## Transfer-Specific Requirements
+
+Where applicable:
+
+- Source account
+- Destination account
+- Asset
+- Available balance
+- Amount
+- Direction
+- Duplicate protection
+- Reconciliation
+- History
+
+## Account Edit Requirements
+
+Do not implement account edits merely because the provider exposes a
+permission.
+
+Each account-edit capability must have:
+
+- A real TitanGold use case
+- Explicit user benefit
+- Provider contract
+- Reversible or recoverable behavior
+- Confirmation
+- Audit
+- Permission
+- Human-QA scenario
+
+Capabilities related to KYC, password, security controls or irreversible
+account configuration should normally remain outside TitanGold unless
+explicitly approved.
+
+---
+

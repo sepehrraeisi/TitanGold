@@ -1,0 +1,487 @@
+---
+description: 'TitanGold original v4.7 rules for agent workflow delivery controls. Mandatory for relevant work, sections 24-30.'
+alwaysApply: false
+---
+
+# 24. Agent Program Rules
+
+## Agents Shell
+
+Agents Shell is a closed baseline.
+
+It includes:
+
+- Runtime/preference status
+- WebSocket state
+- Search/navigation
+- Agent cards
+- Permission UX
+- Shared panel shell
+- Loading/empty/error
+- Responsive behavior
+- Dark theme
+- i18n
+- RTL and Persian typography
+
+## Agent-by-Agent Completion
+
+Agent business logic should normally be completed one Agent at a time.
+
+Shared provider or runtime foundations may serve multiple Agents, but they do
+not authorize simultaneous redesign of multiple Agent business panels.
+
+For every Agent outcome:
+
+1. RCA
+2. Dependency audit
+3. Source-of-Truth audit
+4. Backend/API audit
+5. Database/cache audit
+6. Security audit
+7. Scheduler/worker audit where applicable
+8. Provider audit
+9. Data correctness
+10. Frontend functionality
+11. Professional redesign
+12. Performance verification
+13. Browser QA
+14. Human QA
+15. Regression
+16. Build/deploy
+17. Git closeout
+18. Freeze
+
+## Agent Card Standard
+
+Every Agent card should communicate:
+
+- Agent name
+- Short purpose
+- Operational status
+- Last run or Never run
+- Execution class
+- Meaningful result count
+- Accuracy only when calculable
+- Dry Run status
+- Blocked reason where applicable
+- Clear action such as Open Agent
+
+Do not show:
+
+- Raw keys
+- Fake values
+- Misleading zeroes
+- Undefined/null
+- Excessive capabilities
+- Contradictory status
+
+## Agent Control Panel
+
+Use the shared shell.
+
+Show:
+
+- Name
+- Purpose
+- Operational status
+- Effective mode
+- Side-effect classification
+- Last run
+- Primary action
+- Close action
+
+Business tabs remain Agent-specific.
+
+Agent Settings must not duplicate:
+
+- Global settings
+- Credentials
+- Provider Connections
+- Runtime mode
+- Kill Switch
+- Shared risk settings
+
+Agent Integrations should show read-only status and link to the canonical
+owner.
+
+## Agent Data Integrity
+
+Every metric must have a definition and canonical source.
+
+Card, panel, overview, results, history, database and API must agree.
+
+Unknown values display `N/A`, not fake zeroes.
+
+Agent completion does not require a fixed number or fixed names of business
+tabs.
+
+The final information architecture must follow the Agent's specialized user
+needs and real data capabilities.
+
+The shared Agent Product Template standardizes shell behavior, not business
+content.
+
+Every Agent outcome must document:
+
+- Why each section exists
+- What user question it answers
+- Its canonical data owner
+- Its unavailable behavior
+- Its relationship to other sections
+
+Decorative, duplicate or unsupported sections must not be created merely for
+visual symmetry.
+
+## Artemis Compatibility Requirement
+
+Every Agent is both:
+
+1. A specialized user-facing product, and
+2. A potential machine-consumable evidence producer, control authority,
+   feasibility authority, allocation authority or execution component for
+   Artemis.
+
+Agent product completion must therefore assess two separate dimensions:
+
+- USER PRODUCT COMPLETENESS
+- ARTEMIS INTEGRATION READINESS
+
+The user-facing UI must not be treated as the Agent's only consumer.
+
+Every Agent outcome must identify:
+
+- Its verified role in the Artemis decision chain
+- The questions it answers
+- The markets, symbols and timeframes it covers
+- The canonical data owner
+- The canonical machine-readable output
+- Freshness and data-quality semantics
+- Supporting and conflicting evidence
+- Limitations
+- Authority boundaries
+- Whether its output is advisory, vetoing, sizing, feasibility or execution
+- Current Artemis integration-readiness state
+
+Do not retrofit a different ad hoc Artemis payload for each Agent.
+
+Until the shared canonical Artemis contract is approved and frozen, an Agent
+may expose a scoped adapter proposal, but it must not create a parallel shared
+contract owner.
+
+Agent completion does not mean automated-trading readiness.
+
+No Agent may claim that it is connected to Artemis, decision-eligible or
+execution-eligible without verified end-to-end evidence.
+
+---
+
+# 25. WebSocket Rule
+
+Agents WebSocket must have:
+
+- One client instance
+- Correct cleanup
+- Bounded reconnects
+- Exponential backoff
+- Stable state
+- Manual retry in degraded mode
+- No reconnect spam
+- No flashing warning
+- No duplicate subscriptions
+- No JWT in logs
+- No authenticated URL in console
+- REST fallback where appropriate
+
+If unavailable:
+
+- Show one stable degraded message
+- Keep the page usable
+- Do not show fake real-time status
+
+---
+
+# 26. Performance Verification
+
+Performance work must be proportional to risk and change.
+
+## Tier 1
+
+Verify:
+
+- No duplicate requests
+- No obvious render loop
+- No new polling
+- No layout overflow
+- Bundle impact when meaningful
+
+## Tier 2
+
+Verify:
+
+- API latency samples
+- Query count
+- Browser request count
+- Duplicate calls
+- Render behavior
+- Cache behavior where applicable
+
+## Tier 3 and Tier 4
+
+Verify where meaningful:
+
+- p50
+- p95
+- p99
+- Query cost
+- Redis operations
+- Cold and warm behavior
+- Memory
+- Log volume
+- Provider latency
+- Timeout
+- Retry
+- Response-size bounds
+- Concurrency
+
+Do not guess performance.
+
+If no prior feature exists, report:
+
+`BASELINE NOT AVAILABLE`
+
+Do not create expensive diagnostics on critical paths.
+
+---
+
+# 27. Automated Verification
+
+Run all relevant tests based on proven dependencies and risk.
+
+## Tier 1
+
+- Focused frontend tests
+- i18n tests
+- Accessibility checks
+- Browser tests
+
+## Tier 2
+
+- Unit tests
+- API contract tests
+- Frontend tests
+- Browser tests
+- Targeted regression
+
+## Tier 3
+
+- Unit
+- API
+- Integration
+- Security
+- Database
+- Redis
+- Worker/scheduler
+- Provider-adapter
+- Frontend regression
+- Browser regression
+
+## Tier 4
+
+All Tier-3 tests plus:
+
+- Idempotency
+- Failure recovery
+- Limits
+- Confirmation
+- Audit
+- Reconciliation
+- Controlled dry-run or sandbox behavior
+- Explicit real-operation plan where authorized
+
+Creating a test file is not verification.
+
+Tests must be executed.
+
+Report:
+
+- Suite
+- Executed
+- Passed
+- Failed
+- Skipped
+- Retried
+- Flaky
+- Environment
+
+Regression scope must follow proven dependencies, not the entire repository by
+default.
+
+---
+
+# 28. Browser QA and Human QA Milestones
+
+Browser QA is mandatory for every changed user-facing outcome.
+
+Verify where applicable:
+
+- Render
+- Navigation
+- Direct load
+- Hard refresh
+- Loading
+- Empty
+- Error
+- Permissions
+- Actions
+- Confirmations
+- Success
+- Failure
+- Network
+- Console
+- Responsive
+- Dark theme
+- Keyboard
+- Accessibility
+- i18n
+- RTL
+
+Do not call API tests Browser QA.
+
+Do not mark Browser QA PASS from code inspection.
+
+## Human-QA Milestone Rule
+
+Human QA is performed at a meaningful user-facing milestone, not after every
+minor internal phase.
+
+During an active outcome, Cursor may:
+
+- Fix Tier-1 defects
+- Fix related Tier-2 defects
+- Repeat Browser QA
+- Update tests
+- Continue to the milestone
+
+without asking for a new Dynamic Rule each time.
+
+Human QA is required before:
+
+- Closing an outcome
+- Enabling a real provider test
+- Applying a Tier-4 operation
+- Declaring REAL WORKING
+
+If Human QA finds multiple related defects, bundle them into one Remediation
+Bundle and return one consolidated retest.
+
+Human QA remains the final authority.
+
+---
+
+# 29. Deployment and Runtime Provenance
+
+Implementation is not complete after code changes.
+
+Required where applicable:
+
+- Production-style build
+- Dist verification
+- Deployment
+- PM2 reload/restart only where required
+- Backend port verification
+- Health endpoint
+- Readiness endpoint
+- Worker verification
+- Worker acknowledgement
+- Nginx verification
+- WebSocket routing
+- Served bundle verification
+- Runtime safety
+- Log inspection
+
+PM2 `online` alone is not proof of health.
+
+Always distinguish Development, Staging and Production.
+
+Do not call Staging Production.
+
+Every closeout report must state:
+
+- Environment
+- Domain
+- Source path
+- Dist path
+- Runtime path
+- PM2 process
+- Nginx target
+- Runtime implementation commit
+- Documentation HEAD
+- Served bundle
+
+Runtime provenance must be truthful.
+
+A stale or misleading commit marker must be repaired or clearly explained
+before claiming verified runtime.
+
+Runtime and Git provenance must distinguish:
+
+- Base SHA
+- Feature or PR Head
+- Runtime implementation commit
+- Documentation Head
+- Deployed backend marker
+- Served frontend bundle
+- Main merge commit
+
+These values may legitimately differ.
+
+Do not rewrite or redeploy unchanged runtime merely to make all values equal.
+
+After a Squash Merge, the main merge commit becomes the canonical Git product
+baseline, while the deployed artifact must either be rebuilt from exact main
+or explicitly mapped and proven tree-equivalent during post-merge closeout.
+
+---
+
+# 30. Git and Commit Strategy
+
+Use a clean isolated worktree for scoped implementation when the original tree
+contains protected work.
+
+Implementation may use multiple meaningful commits when needed.
+
+Good commit boundaries:
+
+- Backend/provider contract
+- Frontend workflow
+- Tests
+- Documentation closeout
+
+Do not create commits only to record:
+
+- Latest HEAD
+- Implementation pointer
+- Stamp
+- Self-referential hash
+- Documentation pointer chain
+
+Do not rewrite pushed history merely to remove a harmless past pointer commit.
+
+Do not create new ones.
+
+Before closeout:
+
+- Correct branch
+- Clean scoped worktree
+- Protected original work untouched
+- Scoped commits
+- No secrets
+- Push complete
+- Local committed HEAD equals remote HEAD
+- Runtime source equals implementation baseline
+- Served artifact equals implementation baseline
+- Documentation HEAD recorded separately
+- Rollback documented
+
+---
+

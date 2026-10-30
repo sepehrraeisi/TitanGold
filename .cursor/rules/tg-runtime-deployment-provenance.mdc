@@ -1,0 +1,385 @@
+---
+description: 'TitanGold original v4.7 rules for runtime deployment provenance. Mandatory for relevant work, sections 108-109.'
+alwaysApply: false
+---
+
+# 108. Git-to-Server Runtime Alignment and Deployment Drift Guard
+
+TitanGold must prevent a completed GitHub change from silently remaining absent
+from the runtime environment that is expected to serve it.
+
+The canonical principle is:
+
+> Git completion, deployment completion and runtime verification are three
+> separate facts.
+
+Therefore:
+
+`MERGED != DEPLOYED != VERIFIED`
+
+A Git commit, green CI result, merged PR or documentation closeout must never be
+treated as proof that the corresponding runtime is active on the server.
+
+This section refines the deployment and provenance requirements in Section 29
+and connects them to the Progress Snapshot in Section 107.
+
+## 108.1 Runtime-Affecting vs Non-Runtime Changes
+
+Every closeout must classify the change as one of:
+
+- `DEPLOY_REQUIRED = YES`
+- `DEPLOY_REQUIRED = NO`
+- `DEPLOY_REQUIRED = UNKNOWN / BLOCKED`
+
+`DEPLOY_REQUIRED = YES` applies when the completed outcome changes a runtime
+artifact, runtime configuration or served product behavior, including where
+applicable:
+
+- Backend code
+- Frontend code
+- Worker or scheduler code
+- Runtime configuration
+- PM2 ecosystem or process configuration
+- Nginx/runtime routing
+- Database migration required by the runtime outcome
+- Generated runtime artifact
+- Provider/runtime adapter
+- Any executable service or bundle expected to be active on the target server
+
+`DEPLOY_REQUIRED = NO` is appropriate only when the completed change cannot alter
+the served runtime, for example:
+
+- Rule 02 governance-only correction
+- Core Rule documentation-only update
+- Documentation-only closeout
+- Non-runtime evidence or planning artifact
+
+A documentation commit must not trigger a meaningless redeployment solely to
+make Git and runtime SHAs appear identical.
+
+When `DEPLOY_REQUIRED = NO`, use:
+
+```text
+DEPLOY_STATUS = NOT_REQUIRED
+RUNTIME_VERIFIED = NOT_APPLICABLE
+SERVER_DRIFT = NONE
+```
+
+This means no runtime verification is required for that documentation/governance
+change; it does not make any claim about unrelated runtime health.
+
+## 108.2 Mandatory Runtime Alignment Fields
+
+For every meaningful runtime-affecting closeout, record the following in the
+current Evidence Ledger and, where useful, summarize them in Rule 02:
+
+```text
+MAIN_GIT_SHA = <canonical merged main baseline>
+RUNTIME_IMPLEMENTATION_SHA = <implementation actually deployed or mapped>
+DEPLOY_REQUIRED = YES | NO | UNKNOWN / BLOCKED
+DEPLOY_STATUS = NOT_REQUIRED | PENDING | DEPLOYED | FAILED | ROLLED_BACK
+RUNTIME_VERIFIED = YES | NO | NOT_APPLICABLE
+SERVER_DRIFT = NONE | EXPECTED_TREE_EQUIVALENT | <short blocker/reason>
+SERVED_ARTIFACT_PROVENANCE = <verified bundle/service/runtime reference>
+```
+
+Where the architecture uses multiple independently deployed artifacts, record
+the relevant provenance separately, for example:
+
+- Backend runtime commit
+- Frontend served bundle
+- Worker runtime commit
+- Migration baseline
+- PM2/runtime configuration provenance
+
+Do not force unrelated runtime surfaces to share one fake SHA.
+
+## 108.3 No Runtime Stage Closure Before Verification
+
+When `DEPLOY_REQUIRED = YES`, the corresponding implementation or production
+stage must not be marked complete merely because:
+
+- Code was committed
+- Code was pushed
+- A PR was merged
+- CI was green
+- A build succeeded locally
+
+Before the runtime-affecting stage is complete, verify as applicable:
+
+1. The intended canonical implementation is deployed or proven tree-equivalent
+   to the deployed artifact.
+2. The correct server/runtime path is active.
+3. Required process reload/restart/replacement occurred only where needed.
+4. Health/readiness passes.
+5. The served frontend/backend/worker artifact matches the intended baseline.
+6. Relevant Browser/API/runtime QA passes.
+7. No unexpected server drift remains.
+8. Runtime provenance is recorded.
+
+If any required item is unresolved:
+
+```text
+RUNTIME_VERIFIED = NO
+SERVER_DRIFT = <reason>
+```
+
+and the stage remains open, blocked or `NEEDS MORE VERIFICATION`.
+
+## 108.4 Post-Merge Runtime Reconciliation
+
+After a runtime-affecting PR is merged, perform one bounded post-merge
+reconciliation according to Section 29.
+
+The preferred outcomes are:
+
+### Exact-Main Deployment
+
+The runtime is built/deployed from the exact canonical main merge commit.
+
+Record:
+
+```text
+SERVER_DRIFT = NONE
+```
+
+### Proven Tree-Equivalent Deployment
+
+A previously deployed implementation commit is proven to be runtime/tree
+equivalent to the merged main product baseline.
+
+This is allowed only when the proof is explicit and the served artifact is
+verified.
+
+Record:
+
+```text
+SERVER_DRIFT = EXPECTED_TREE_EQUIVALENT
+```
+
+with the implementation and main references in the Evidence Ledger.
+
+Do not redeploy unchanged runtime merely to cosmetically equalize commit
+markers.
+
+### Real Drift
+
+If GitHub main contains a runtime-affecting change that is not present on the
+expected server/runtime:
+
+```text
+SERVER_DRIFT = RUNTIME_ALIGNMENT_PENDING
+RUNTIME_VERIFIED = NO
+```
+
+The affected milestone must not be called complete.
+
+## 108.5 Deployment Failure and Rollback Truthfulness
+
+If deployment fails:
+
+- Do not claim the feature is live.
+- Record the failed deployment state.
+- Preserve the last verified runtime baseline.
+- Follow the approved rollback or recovery path.
+- Reverify runtime state after rollback.
+
+If rollback restores the previous runtime successfully, distinguish:
+
+- Git product state: newer merged implementation exists
+- Runtime state: older verified implementation remains active
+
+This is a real Git-to-server drift and must remain visible until explicitly
+resolved.
+
+Do not hide this state by changing documentation markers.
+
+## 108.6 Runtime Drift as a Progress Blocker
+
+Section 107 Progress Snapshot must treat unresolved required runtime alignment as
+a real blocker.
+
+When the active stage requires server deployment and runtime verification is not
+complete:
+
+```text
+PROGRESS_BLOCKER = RUNTIME_ALIGNMENT_PENDING
+```
+
+or another precise runtime blocker.
+
+Do not advance the counted stage merely because the Git portion is finished.
+
+When deployment is not required, do not create a fake deployment blocker.
+
+## 108.7 Cursor Closeout Requirement
+
+For every meaningful Cursor closeout, include one compact deployment line:
+
+```text
+RUNTIME: Deploy <YES/NO/UNKNOWN> | Status <state> | Verified <YES/NO/NOT_APPLICABLE> | Drift <NONE/reason>
+```
+
+For runtime-affecting work, the closeout must also identify the canonical Git
+baseline and actual deployed/runtime provenance.
+
+The Integrator must verify that the runtime line agrees with:
+
+- Git state
+- Runtime evidence
+- Rule 02
+- Evidence Ledger
+- Progress Snapshot
+
+If these disagree, perform reconciliation before declaring the stage complete.
+
+## 108.8 No Automatic Production Mutation from Documentation
+
+Adding this Rule does not authorize deployment, restart, configuration mutation,
+database migration or production access.
+
+Deployment remains governed by:
+
+- Dynamic Active-Work authorization
+- Risk tier
+- Existing production-safety rules
+- Required Human QA
+- Operation-specific approval where applicable
+
+This section is a verification and closure requirement, not standing production
+authorization.
+
+## 108.9 Final Git-to-Server Alignment Principle
+
+The goal is not to make Git and server markers look identical.
+
+The goal is:
+
+> Every runtime-affecting change that TitanGold calls complete must be proven to
+> exist in the intended runtime, and every intentional or accidental difference
+> between Git and the server must remain explicit until reconciled.
+
+For owner visibility:
+
+> A feature is not finished merely because it exists on GitHub. It is finished
+> when the intended runtime is deployed, verified and truthfully mapped back to
+> the canonical Git state.
+
+---
+
+# 109. Production Build / Artifact Activation Safety
+
+This section is non-negotiable. It refines Section 29 and Section 108 for
+frontend artifacts. It does not authorize a production build, activation,
+nginx reload or C2_052 execution by itself.
+
+The canonical principle is:
+
+> A production frontend artifact may be created only from an isolated clean
+> named commit, written first to a non-live staging directory, verified,
+> backed up against, and activated as a separate explicit operation.
+
+An authorized `npm run build` is not permission to overwrite the live nginx
+root from a dirty production-serving worktree.
+
+## 109.1 Forbidden build origins
+
+1. Building the frontend directly from a production-serving worktree is
+   forbidden.
+2. Building when Vite `outDir` (or equivalent) resolves to the current nginx
+   live root, or writes inside that live root, is forbidden.
+3. A dirty source tree may never be used to create a production / release
+   artifact.
+4. Untracked application source consumed by the frontend dependency graph is
+   forbidden for release builds.
+
+## 109.2 Required production artifact origin
+
+Production artifacts must originate from all of:
+
+- an isolated clean Git worktree
+- a named commit SHA
+- a locked dependency manifest (`package-lock.json` or the canonical lockfile)
+
+Production build output must first be generated into a **non-live**
+staging/release directory. It must not be written into the currently served
+nginx dist during the build phase.
+
+## 109.3 Activation is a separate operation
+
+The currently served dist must have a verified backup **before** activation.
+
+Activation must be a separate explicit operation after artifact verification.
+
+Rollback must exist **before** activation. If a verified backup cannot be
+created, activation must not proceed.
+
+Activation targets only the live dist. It must not mutate application source,
+backend processes, PM2, PostgreSQL or Redis.
+
+## 109.4 Artifact provenance
+
+Every production frontend artifact must record at least:
+
+- source commit
+- branch
+- clean-tree proof
+- package-lock SHA
+- artifact tree SHA
+- build timestamp / run ID
+
+## 109.5 Hard-fail at the build command
+
+`npm run build` or equivalent run against a live production root must **hard
+fail** before Vite writes dist.
+
+The guard must be wired into the normal frontend build lifecycle so it cannot
+be silently skipped by the default `npm run build` path.
+
+The guard must not rely only on an environment variable that anyone can casually
+unset.
+
+No instruction from ChatGPT, Cursor or an operator may bypass these gates
+merely because a build itself was authorized.
+
+A bypass, if ever architecturally required, needs a distinct Owner emergency
+authorization artifact and must not be the default path.
+
+## 109.6 Supported production flow
+
+```text
+CLEAN COMMIT
+  → ISOLATED CLEAN WORKTREE
+  → BUILD INTO NON-LIVE RELEASE DIRECTORY
+  → ARTIFACT MANIFEST
+  → VERIFY
+  → BACKUP CURRENT LIVE DIST
+  → EXPLICIT ACTIVATE
+  → HTTPS SMOKE
+  → ROLLBACK AVAILABLE
+```
+
+The legacy workflow “`npm run build` from `/home/ubuntu/webapp/TitanGold`
+then nginx reload” is a known incident class and is refused by code.
+
+## 109.7 Current live production identity
+
+The current live production source root is:
+
+`/home/ubuntu/webapp/TitanGold`
+
+The current live nginx dist root is:
+
+`/home/ubuntu/webapp/TitanGold/dist`
+
+These identities are declared in-repo (`deploy/production-roots.json`) and may
+additionally be marked on the server by `.titangold-production-root`. Creating
+that marker on production is a separate Owner-gated activation step. Absence
+of the marker does not authorize a live-root build when the configured path
+matches.
+
+## 109.8 Developer-local builds
+
+Normal local/dev builds outside a declared production root, writing to a
+non-live `outDir`, remain allowed. Release/production mode remains fail-closed.
+

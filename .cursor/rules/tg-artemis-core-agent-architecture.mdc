@@ -1,0 +1,450 @@
+---
+description: 'TitanGold original v4.7 rules for artemis core agent architecture. Mandatory for relevant work, sections 45-48.'
+alwaysApply: false
+---
+
+# 45. Artemis Central Intelligence Architecture
+
+Artemis is TitanGold's central intelligence and orchestration authority.
+
+Artemis is not:
+
+- A sixteenth equal-vote Agent
+- A simple majority-vote engine
+- A frontend-only summary panel
+- A direct replacement for Risk Management
+- A direct replacement for Portfolio Allocation
+- A direct replacement for Liquidity analysis
+- An unrestricted execution bypass
+
+Artemis must coordinate specialized capabilities while preserving the
+authority boundaries of each Agent and every TitanGold safety layer.
+
+The target architecture is:
+
+Market, provider and internal data
+→ Specialized evidence-producing Agents
+→ Canonical Agent evidence contracts
+→ Artemis context alignment and conflict resolution
+→ Risk veto and limits
+→ Portfolio allocation and optimization
+→ Liquidity and execution-feasibility validation
+→ Runtime policy, Emergency Stop and capability gates
+→ Order Management
+→ Provider execution only when explicitly authorized
+
+Every Agent must be designed so that its useful outputs can eventually support
+this architecture without forcing a second business-logic rewrite.
+
+The canonical registry, actual code and verified runtime remain authoritative.
+
+The current planning inventory contains these 15 Agent keys:
+
+- arbitrage
+- technical
+- trend
+- sentiment
+- pattern
+- risk
+- price_prediction
+- portfolio
+- fundamental
+- market_intelligence
+- volume
+- timing
+- optimization
+- order
+- liquidity
+
+If the canonical registry changes, the inventory and role map must be updated.
+Do not preserve a stale list merely because this rule mentions it.
+
+A complete Agent product may be frozen before Artemis consumption is activated
+only when:
+
+- Its specialized product is complete
+- Its machine-consumable contract is defined or mapped
+- Its limitations and authority are explicit
+- Its Artemis integration-readiness state is truthful
+- Deferred integration work is recorded
+
+Product completion must never be presented as automated-trading completion.
+
+---
+
+# 46. Agent Role Taxonomy and Authority Boundaries
+
+Every Agent must have one verified primary role and may have documented
+secondary roles.
+
+Role classification must follow real implementation and product purpose, not
+the Agent name alone.
+
+## 46.1 Evidence and Market-Analysis Agents
+
+Typical current candidates:
+
+- technical
+- trend
+- sentiment
+- pattern
+- fundamental
+- market_intelligence
+- volume
+
+These Agents produce specialized evidence.
+
+They may report:
+
+- Direction
+- Regime
+- Strength
+- Pattern
+- Momentum
+- Volume context
+- Sentiment
+- Fundamental context
+- Market-event context
+- Supporting evidence
+- Conflicting evidence
+- Freshness
+- Data quality
+- Limitations
+
+They must not:
+
+- Place orders
+- Size positions
+- Override Risk
+- Claim execution approval
+- Convert analysis into an irreversible side effect
+
+## 46.2 Opportunity, Prediction and Timing Agents
+
+Typical current candidates:
+
+- price_prediction
+- timing
+- arbitrage
+
+These Agents may produce:
+
+- Forecast scenarios
+- Opportunity candidates
+- Timing windows
+- Analytical spread opportunities
+- Probability or confidence only when calibrated
+- Invalidating conditions
+- Time horizon
+- Expiry
+
+They must not:
+
+- Present uncertainty as certainty
+- Create execution instructions without downstream validation
+- Trigger orders directly
+- Bypass Risk, Portfolio, Liquidity or runtime policy
+
+## 46.3 Control, Allocation and Optimization Agents
+
+Typical current candidates:
+
+- risk
+- portfolio
+- optimization
+
+Risk Management has veto and limit authority when its canonical policy
+conditions are satisfied.
+
+Portfolio Allocation and Optimization may determine or recommend:
+
+- Exposure
+- Allocation
+- Position-size bounds
+- Diversification constraints
+- Capital utilization
+- Portfolio-level conflicts
+
+They must not:
+
+- Invent available balance
+- Bypass canonical account/portfolio state
+- Place orders directly
+- Override Emergency Stop or runtime policy
+
+## 46.4 Feasibility Agent
+
+The current liquidity Agent is a likely execution-feasibility authority.
+
+It may evaluate:
+
+- Market depth
+- Spread
+- Slippage
+- Tradable size
+- Market impact
+- Data freshness
+- Execution feasibility
+
+It must not determine market direction solely because an order book exists.
+
+It must not place an order.
+
+## 46.5 Execution Agent
+
+The current order Agent is the execution component.
+
+Order Management must:
+
+- Receive an approved, bounded and traceable execution intent
+- Revalidate all required gates
+- Enforce idempotency
+- Enforce confirmation where required
+- Persist audit and provider response
+- Reconcile the operation
+
+Order Management must not:
+
+- Decide market direction
+- Manufacture profitability
+- Replace Artemis
+- Replace Risk
+- Replace Portfolio sizing
+- Replace Liquidity feasibility
+- Execute from an untraceable Agent output
+
+## 46.6 Role Changes
+
+A role change is an architectural change.
+
+Before changing an Agent role:
+
+- Produce an RCA
+- Identify old and new authority
+- Identify affected consumers
+- Identify safety impact
+- Update contracts and tests
+- Obtain explicit approval when authority increases
+
+No Agent may silently gain veto, sizing, feasibility or execution authority.
+
+---
+
+# 47. Canonical Agent-to-Artemis Evidence Contract
+
+Artemis must not consume raw internal service objects, arbitrary JSON,
+frontend display models or Agent-specific undocumented payloads.
+
+One canonical, versioned Agent-to-Artemis contract must exist.
+
+The first implementation or major redesign of this shared contract is a
+Shared Foundation Work Package and requires explicit approval.
+
+After it is frozen, every Agent must consume or adapt to that owner.
+
+Do not create one incompatible Artemis schema per Agent.
+
+## 47.1 Canonical Evidence Envelope
+
+The canonical envelope must support, where applicable:
+
+- schemaVersion
+- contractVersion
+- agentId
+- agentRole
+- authorityClass
+- runId
+- correlationId
+- decisionContextId
+- user or tenant ownership where applicable
+- provider or venue
+- market type
+- symbol
+- base asset
+- quote asset
+- timeframe
+- analysis horizon
+- analysis timestamp
+- source timestamp
+- source-candle timestamp
+- expiry timestamp where applicable
+- freshness status
+- freshness reason
+- provenance
+- data-quality status
+- availability
+- unavailable reason
+- lifecycle status
+- signal or conclusion
+- direction
+- regime
+- strength
+- confidence value when valid
+- confidence method
+- confidence provenance
+- supporting evidence
+- conflicting evidence
+- invalidating conditions
+- risk flags
+- limitations
+- recommended next action class
+- execution class
+- model or algorithm version
+- configuration version
+- code implementation version
+- created and completed timestamps
+
+Fields that do not apply must be omitted or explicitly unavailable according to
+the contract.
+
+Do not fill non-applicable fields with fake zeroes, empty success or guessed
+values.
+
+## 47.2 Evidence Item
+
+Each supporting or conflicting evidence item should identify:
+
+- evidenceId
+- evidenceType
+- canonical source
+- value and unit when applicable
+- interpretation
+- directional contribution
+- strength or severity when valid
+- timestamp
+- freshness
+- provenance
+- quality
+- limitation
+- correlation family
+- explanation key
+
+Raw internal reason codes must not be exposed as final user prose.
+
+## 47.3 Confidence
+
+Confidence is allowed only when:
+
+- The meaning is defined
+- The calculation or model is documented
+- Inputs are known
+- Calibration or evaluation exists when predictive meaning is claimed
+- The value is reproducible
+- The provenance is recorded
+
+Do not use the same field for:
+
+- Trend strength
+- Prediction probability
+- Data quality
+- Model accuracy
+- Agreement count
+- Execution feasibility
+
+When confidence is not defensible, return unavailable.
+
+## 47.4 Contract Versioning
+
+Contract changes must be:
+
+- Versioned
+- Backward compatible where practical
+- Consumer-aware
+- Covered by provider and consumer contract tests
+- Recorded in the Evidence Ledger
+
+A breaking contract change requires:
+
+- Affected Agent list
+- Artemis consumer impact
+- Migration or adapter plan
+- Rollback
+- Explicit approval
+
+---
+
+# 48. Cross-Agent Identity, Compatibility and Correlation Control
+
+Artemis may compare or combine Agent outputs only when their decision context is
+compatible.
+
+Canonical context must include:
+
+- Provider or venue
+- Market type
+- Canonical symbol identity
+- Base and quote asset
+- Timeframe
+- Analysis horizon
+- Source-time window
+- Data freshness
+- Ownership scope
+- Runtime environment
+
+Do not combine incompatible:
+
+- Symbols
+- Markets
+- Venues
+- Timeframes
+- Horizons
+- Source-time windows
+- User portfolios
+- Runtime environments
+
+A one-minute signal and a one-day signal may both be valid, but they are not
+automatically contradictory or directly combinable.
+
+## 48.1 Symbol and Timeframe Normalization
+
+One canonical owner must normalize:
+
+- Asset symbols
+- Trading pairs
+- Provider-specific symbols
+- Market type
+- Timeframe identifiers
+- Timezone
+- Closed-candle policy
+
+Agents must not create private symbol aliases that Artemis cannot reconcile.
+
+## 48.2 Freshness
+
+Stale evidence must be classified explicitly.
+
+Stale or expired evidence must not be treated as:
+
+- Current
+- Neutral
+- A confirming vote
+- A successful absence of risk
+
+Artemis must know the freshness rule of every Agent output.
+
+## 48.3 Correlated Evidence
+
+Multiple Agents may derive conclusions from the same underlying market data.
+
+Examples:
+
+- Technical, Trend and Pattern may all consume the same OHLCV candles
+- Volume and Liquidity may partially share market microstructure data
+- Sentiment and Market Intelligence may share external sources
+
+These outputs must not automatically count as independent confirmations.
+
+Every evidence item or Agent output must declare a correlation family or
+equivalent provenance grouping when meaningful.
+
+Artemis must:
+
+- Detect obvious shared-source correlation
+- Avoid naive double counting
+- Preserve the original evidence lineage
+- Report when apparent consensus comes from one underlying source family
+
+Correlation adjustment must not be hidden.
+
+---
+

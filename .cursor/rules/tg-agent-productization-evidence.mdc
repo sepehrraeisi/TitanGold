@@ -1,0 +1,353 @@
+---
+description: 'TitanGold original v4.7 rules for agent productization evidence. Mandatory for relevant work, sections 38-44.'
+alwaysApply: false
+---
+
+# 38. Existing Agent Productization Standard
+
+TitanGold Agents normally already have partial frontend, backend, database,
+configuration or runtime implementation.
+
+An Agent outcome must not be treated as greenfield unless discovery proves
+that no reusable implementation exists.
+
+Before editing, classify each existing Agent capability as:
+
+1. KEEP UNCHANGED
+2. REUSE DIRECTLY
+3. REUSE THROUGH ADAPTER
+4. TARGETED CORRECTION
+5. LEGACY REPLACEMENT
+6. UNSUPPORTED — DISPLAY AS UNAVAILABLE
+
+Preserve implementation that is real, correct, secure, tested and owned by a
+canonical Source of Truth.
+
+Prefer adapters and targeted corrections over rewrites.
+
+Do not recreate an existing service, route, calculation, setting, registry,
+history store, provider adapter or runtime owner.
+
+Do not keep incorrect, misleading or duplicate behavior merely because it
+already exists.
+
+Every Agent productization outcome must begin with a specialized needs
+assessment covering:
+
+- Real user problem
+- User decisions supported
+- Existing capabilities
+- Missing useful capabilities
+- Data availability
+- Analytical limitations
+- Safety boundaries
+- Agent-specific information architecture
+
+Agent Product Template provides the shared shell only.
+
+Business sections, tabs, workflows, metrics, history, settings and evidence
+must be designed for the specialized needs of that Agent.
+
+Do not copy another Agent's business layout blindly.
+
+Useful Agent-specific improvements may be implemented inside the approved
+outcome when:
+
+- A truthful canonical data owner exists
+- The calculation or behavior is clearly defined
+- It remains inside the Agent outcome
+- It does not create a parallel Source of Truth
+- It can be tested deterministically
+- It does not cross a stop gate
+
+When no truthful owner exists, display Unavailable rather than synthetic data.
+
+# 39. Production Reachability and Legacy Retirement
+
+Human QA not triggering a path is not proof that the path is unreachable.
+
+For every legacy, duplicate or suspicious production path, verify:
+
+- Import graph
+- Registry ownership
+- Route ownership
+- Lazy-loading ownership
+- Render reachability
+- Navigation reachability
+- Production build inclusion
+- Generated bundle or chunk inclusion
+- Runtime invocation
+
+A component is dead only when evidence proves it is not reachable through the
+production graph.
+
+Every Agent must end with one canonical production owner for:
+
+- UI panel or popup
+- Analysis execution
+- API contract
+- Calculation
+- Settings
+- History
+- Integration readiness
+
+Do not leave legacy and canonical owners reachable simultaneously.
+
+Native browser dialogs are prohibited in worked-on product paths:
+
+- alert
+- window.alert
+- confirm
+- window.confirm
+- prompt
+- window.prompt
+
+Use canonical accessible in-product confirmation and feedback layers.
+
+Required reachable native browser-dialog count at closeout:
+
+0
+
+# 40. Evidence Validity and Selective Revalidation
+
+Verification evidence remains valid until a change affects the layer that the
+evidence proves.
+
+Do not rerun unrelated expensive verification merely because HEAD changed.
+
+Change-impact rules:
+
+Frontend runtime change invalidates:
+
+- Frontend build evidence
+- Served bundle provenance
+- Relevant frontend tests
+- Relevant Browser QA
+
+Backend runtime change invalidates:
+
+- Relevant backend tests
+- Backend runtime marker
+- Health/readiness evidence
+- Relevant API and Browser QA
+
+API contract change invalidates:
+
+- Provider contract tests
+- Consumer contract tests
+- Relevant end-to-end workflow evidence
+
+E2E-only change does not require runtime deployment.
+
+Test-only change does not change runtime provenance.
+
+Documentation-only change does not require:
+
+- Build
+- Deployment
+- Restart
+- New served bundle
+- Runtime marker change
+- Repetition of unchanged runtime tests
+
+Translation or layout-only changes do not require unrelated backend suites.
+
+Revalidation scope must follow the actual changed dependency graph.
+
+Evidence invalidation follows proven transitive dependencies, not only the
+directly modified file or layer.
+
+A change to a shared contract, shared component, provider adapter, runtime
+policy, generated client, configuration owner or canonical Source of Truth
+invalidates the relevant evidence of every proven downstream consumer.
+
+Evidence must not be reused when:
+
+- Its tested dependency changed
+- Its runtime configuration changed
+- Its generated artifact changed
+- Its provider behavior changed
+- Its environment materially changed
+- Its Source-of-Truth mapping changed
+
+Selective revalidation means rerunning only affected evidence, not preserving
+stale evidence.
+
+Every final report must state which previous evidence remained valid and which
+evidence was rerun.
+
+
+# 41. CI Differential and Flake Classification
+
+A failing repository test is not automatically owned by the active branch.
+
+For every broad or unexpected failure:
+
+1. Record the exact feature SHA
+2. Record the exact base SHA
+3. Run or inspect the same test against the base SHA
+4. Compare failure roots
+5. Classify the failure as:
+
+- BRANCH-OWNED REGRESSION
+- PRE-EXISTING BASE FAILURE
+- CI INFRASTRUCTURE FAILURE
+- NON-DETERMINISTIC / FLAKY
+- CONFIGURATION OR PERMISSION FAILURE
+
+Only branch-owned failures are repaired inside the active Agent outcome.
+
+Do not mix repository-wide CI stabilization into an Agent branch.
+
+A flaky classification requires repeated evidence on both feature and base
+when practical.
+
+A single successful rerun does not prove resolution.
+
+Do not cancel, rerun or raise timeouts merely to hide a failure.
+
+Required GitHub workflows must be evaluated on the final PR Head, not an older
+commit.
+
+Failure ownership and merge eligibility are separate decisions.
+
+A pre-existing base failure is not owned by the active Agent branch and must
+not be silently repaired inside that branch.
+
+However, when the failure keeps a required GitHub check red:
+
+- The PR remains not merge-ready
+- The required check must not be bypassed
+- The Agent PR must remain open or blocked
+- The base failure must be resolved through a separate approved CI
+  stabilization outcome, or the repository protection policy must be changed
+  explicitly by the owner
+
+Do not describe a PR as merge-ready while a required check is red, even when
+the failure is pre-existing.
+
+
+# 42. Browser and E2E Wait Discipline
+
+Browser tests must wait for meaningful application state.
+
+Do not use:
+
+- Arbitrary sleep
+- waitForTimeout
+- Near-suite-length step waits
+- Retry as a substitute for RCA
+- Higher timeout as the primary fix
+- networkidle as the only readiness signal
+- Broad selectors that can match stale UI
+
+Use:
+
+- Semantic roles
+- Stable application landmarks
+- Explicit lifecycle states
+- Bounded provider/API mocks where appropriate
+- Deterministic route readiness
+
+When a critical Browser scenario is unexpectedly slow:
+
+- Capture a trace
+- Identify the exact slow operation
+- Report step durations
+- Correct stale state, duplicate navigation, polling or initialization
+
+The suite timeout may remain an outer scenario budget.
+
+No individual step may silently consume most of that budget.
+
+A previously flaky critical path requires three consecutive passes with:
+
+- retries=0
+- console errors=0
+- page errors=0
+
+# 43. Side-Effect Ledger
+
+Every Agent Browser QA and Human-QA handoff must include an explicit
+side-effect ledger.
+
+Record counts for:
+
+- Public provider requests
+- Private provider requests
+- Credential access
+- Financial execution
+- Order operations
+- Transfer/withdrawal operations
+- Scheduler mutations
+- Worker restarts
+- Monitoring mutations
+- Settings mutations
+- Notification delivery
+- Native browser dialogs
+- Console errors
+- Page errors
+- Duplicate execution requests
+- Orphan overlays
+
+For read-only smoke, every unauthorized or unrelated mutation count must be 0.
+
+For one approved analytical run, record the exact expected request and run
+counts.
+
+Every count must identify its observation window and scenario, for example:
+
+- Page-load smoke
+- One confirmed analytical run
+- Settings-save scenario
+- Full Browser QA session
+
+Do not combine unrelated scenarios into one unexplained total.
+
+Expected counts must be declared before execution when the scenario includes
+an authorized mutation.
+
+Do not report “no side effects” without counted or observable evidence.
+
+
+# 44. Product Delivery and Git Lifecycle
+
+GitHub is a delivery and closeout mechanism, not the primary product outcome.
+
+Default Agent lifecycle:
+
+1. Specialized needs assessment
+2. Dependency and Source-of-Truth audit
+3. Implementation and integration
+4. Automated verification
+5. Staging deployment
+6. Browser QA
+7. Owner Human QA
+8. Remediation when required
+9. Draft PR
+10. Final PR review
+11. Explicit owner merge approval
+12. Merge
+13. One post-merge runtime alignment
+14. Freeze
+
+Do not create a PR before the Human-QA milestone unless explicitly authorized.
+
+Do not treat PR creation, green checks or mergeability as product completion.
+
+Do not create duplicate PRs for the same branch.
+
+After any PR-head change, evaluate required checks on the new final Head.
+
+Do not merge without explicit owner authorization.
+
+Use an expected Head SHA for merge when supported.
+
+After merge, perform one exact-main provenance alignment when runtime
+provenance requires it.
+
+Do not turn Git closeout into a new multi-stage product outcome.
+
+---
+---
+

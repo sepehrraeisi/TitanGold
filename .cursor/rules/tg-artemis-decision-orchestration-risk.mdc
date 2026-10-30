@@ -1,0 +1,392 @@
+---
+description: 'TitanGold original v4.7 rules for artemis decision orchestration risk. Mandatory for relevant work, sections 49-52.'
+alwaysApply: false
+---
+
+# 49. Artemis Decision Orchestration and Conflict Resolution
+
+Artemis must perform role-aware orchestration.
+
+It must not use simple majority voting unless an explicitly documented,
+validated workflow requires it.
+
+Artemis should consider:
+
+- Agent role
+- Authority class
+- Contract compatibility
+- Freshness
+- Data quality
+- Provenance
+- Time horizon
+- Market regime
+- Historical calibration where available
+- Supporting evidence
+- Conflicting evidence
+- Correlation
+- Missing evidence
+- Risk flags
+- Runtime safety
+
+## 49.1 Decision States
+
+Artemis decisions must use explicit lifecycle and eligibility states, such as:
+
+- insufficient_evidence
+- incompatible_evidence
+- stale_evidence
+- analysis_only
+- proposed
+- blocked_by_risk
+- blocked_by_portfolio
+- blocked_by_liquidity
+- blocked_by_runtime
+- awaiting_confirmation
+- shadow_only
+- paper_only
+- approved_for_execution
+- execution_failed
+- executed
+- reconciled
+
+Use only states that have canonical definitions.
+
+Do not convert a blocked or unavailable state into success.
+
+## 49.2 Conflict Resolution
+
+When Agents disagree, Artemis must:
+
+- Preserve each Agent conclusion
+- Preserve supporting and conflicting evidence
+- Identify incompatible timeframes or horizons
+- Identify stale evidence
+- Identify correlated evidence
+- Apply role-specific authority
+- Explain why one conclusion was preferred, limited or rejected
+- Return insufficient evidence when the conflict cannot be resolved safely
+
+Do not hide disagreement by averaging unrelated values.
+
+## 49.3 Missing Evidence
+
+Missing Agent output must not be treated as a negative or positive vote.
+
+Artemis must distinguish:
+
+- Agent not run
+- Agent unavailable
+- Provider unavailable
+- Evidence stale
+- Evidence incompatible
+- Agent blocked
+- Agent not applicable
+- Contract error
+
+Fail closed when required control evidence is missing.
+
+## 49.4 Weighting
+
+Agent weights, trust scores or calibration values must be:
+
+- Versioned
+- Explainable
+- Owned by one canonical policy
+- Based on evidence where possible
+- Scoped by market, timeframe and regime when needed
+- Audited
+- Protected by authorization
+
+Do not hardcode equal weights.
+
+Do not allow an arbitrary frontend control to change execution-relevant
+weights.
+
+---
+
+# 50. Risk, Portfolio, Liquidity and Execution Chain
+
+No analytical Agent output is an executable order.
+
+The required control chain is:
+
+Artemis analytical decision
+→ Risk validation and veto
+→ Portfolio and optimization limits
+→ Liquidity and execution-feasibility validation
+→ Runtime and capability validation
+→ Explicit confirmation where required
+→ Order Management
+→ Provider
+→ Reconciliation and audit
+
+## 50.1 Risk Authority
+
+Risk Management may:
+
+- Reject
+- Limit
+- Require additional evidence
+- Reduce size
+- Block an asset, market or operation
+- Enforce exposure, loss or volatility limits
+
+A Risk veto must not be silently overridden by Artemis or Order Management.
+
+An override, if ever permitted, is a separate high-risk capability requiring
+explicit authorization, audit and Human approval.
+
+## 50.2 Portfolio and Optimization Authority
+
+Portfolio and Optimization must consume canonical:
+
+- Available balance
+- Current positions
+- Existing exposure
+- Allocation constraints
+- User or strategy limits
+
+They may produce bounded sizing or allocation output.
+
+They must not fabricate account state.
+
+## 50.3 Liquidity Authority
+
+Liquidity must validate execution feasibility close enough to execution time.
+
+It must report:
+
+- Venue
+- Symbol
+- Side
+- Proposed size
+- Order-book timestamp
+- Spread
+- Expected slippage
+- Market-impact estimate
+- Maximum feasible size
+- Expiry
+- Limitations
+
+Stale liquidity approval is not valid execution approval.
+
+## 50.4 Order Management Authority
+
+Order Management may execute only when the execution intent includes:
+
+- Canonical decisionContextId
+- Traceable supporting Agent run IDs
+- Risk approval
+- Portfolio sizing
+- Liquidity approval
+- Runtime-policy approval
+- Provider capability
+- Requested and effective mode
+- Emergency Stop state
+- Idempotency key
+- Operation limits
+- Confirmation evidence where required
+- Audit owner
+
+Order Management must revalidate time-sensitive gates before execution.
+
+---
+
+# 51. Decision Lineage, Audit, Replay and Evaluation
+
+Every Artemis decision must be reconstructable.
+
+The audit lineage must identify:
+
+- Decision ID
+- Decision-context ID
+- Every contributing Agent run ID
+- Excluded Agent outputs and reasons
+- Contract versions
+- Agent implementation versions
+- Model or algorithm versions
+- Configuration versions
+- Source timestamps
+- Freshness decisions
+- Data-quality decisions
+- Correlation handling
+- Weight or policy versions
+- Risk outcome
+- Portfolio outcome
+- Liquidity outcome
+- Runtime-safety outcome
+- Confirmation
+- Order intent
+- Provider response
+- Reconciliation result
+
+Do not persist Secrets or sensitive signed provider payloads in lineage.
+
+## 51.1 Replay
+
+A historical decision should be replayable using the recorded evidence and
+versions where practical.
+
+Replay must distinguish:
+
+- Original historical evidence
+- Current code
+- Current configuration
+- Recomputed result
+
+Do not silently compare a historical decision with a different model or config.
+
+## 51.2 Backtesting and Leakage
+
+Backtesting must prevent:
+
+- Future-data leakage
+- Incomplete-candle leakage
+- Survivorship bias where relevant
+- Look-ahead configuration
+- Using post-decision outcomes as input
+- Hidden data revisions
+
+Backtest results must not be presented as live accuracy without qualification.
+
+## 51.3 Evaluation and Calibration
+
+Accuracy, precision, profitability or trust scores may be shown only when the
+evaluation methodology is defined and persisted.
+
+Evaluation should be segmented where meaningful by:
+
+- Agent
+- Symbol
+- Market
+- Timeframe
+- Horizon
+- Market regime
+- Model or algorithm version
+- Configuration version
+
+A global score must not hide poor performance in a specific regime.
+
+Evaluation must distinguish:
+
+- Direction correctness
+- Forecast calibration
+- Opportunity realization
+- Risk effectiveness
+- Sizing effectiveness
+- Liquidity-estimation quality
+- Execution quality
+
+No single “accuracy” number should be reused for all Agent roles.
+
+---
+
+# 52. Artemis Integration Readiness and Shared Contract Foundation
+
+Every Agent must have a truthful Artemis integration-readiness classification.
+
+Allowed readiness states:
+
+- NOT_ASSESSED
+- ROLE_MAPPED
+- CONTRACT_MAPPED
+- EVIDENCE_READY
+- ARTEMIS_CONSUMABLE
+- DECISION_ELIGIBLE
+- CONTROL_ELIGIBLE
+- EXECUTION_ELIGIBLE
+- BLOCKED
+- NOT_APPLICABLE
+
+These are readiness classifications, not substitutes for the final product
+verdict.
+
+## 52.1 Readiness Definitions
+
+### NOT_ASSESSED
+
+No verified Artemis assessment exists.
+
+### ROLE_MAPPED
+
+The Agent role and authority boundary are documented.
+
+### CONTRACT_MAPPED
+
+Existing outputs are mapped to the canonical contract, but complete verified
+production output is not yet available.
+
+### EVIDENCE_READY
+
+The Agent produces truthful, versioned, persisted and tested evidence.
+
+### ARTEMIS_CONSUMABLE
+
+Artemis can ingest and validate the output end to end.
+
+### DECISION_ELIGIBLE
+
+The output is compatible, fresh and approved for Artemis analytical decisions.
+
+### CONTROL_ELIGIBLE
+
+A control Agent such as Risk, Portfolio or Liquidity is verified for its
+specific authority.
+
+### EXECUTION_ELIGIBLE
+
+An execution component is verified for a specifically authorized operation and
+environment.
+
+This state does not itself authorize Live execution.
+
+### BLOCKED
+
+A known contract, data, security, evaluation or runtime blocker exists.
+
+### NOT_APPLICABLE
+
+The Agent has no direct Artemis role, with documented reason.
+
+## 52.2 Agent Freeze Criteria
+
+An Agent may be frozen as a user-facing product only when its product outcome
+passes the normal rules.
+
+Its closeout must separately state:
+
+- Product verdict
+- Artemis role
+- Artemis readiness
+- Contract version
+- Remaining integration work
+- Automated-trading eligibility
+
+Do not use `REAL WORKING` to imply `EXECUTION_ELIGIBLE`.
+
+## 52.3 Shared Contract Foundation
+
+Before multiple Agent-specific Artemis adapters proliferate, TitanGold must
+create one approved Artemis Contract Foundation Work Package.
+
+That package must define:
+
+- Canonical evidence envelope
+- Schema/version owner
+- Validation
+- Persistence
+- Correlation IDs
+- Compatibility rules
+- Readiness states
+- Consumer tests
+- Failure behavior
+- Documentation
+- Rollback
+
+Once closed and frozen, Agents must consume it.
+
+Do not reopen the broader AI Shared Foundation merely to implement the contract
+unless the approved RCA proves that the smallest correct owner belongs there.
+
+---
+

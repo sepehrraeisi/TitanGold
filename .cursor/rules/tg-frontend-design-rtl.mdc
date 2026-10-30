@@ -1,0 +1,127 @@
+---
+description: 'TitanGold original v4.7 rules for frontend design rtl. Mandatory for relevant work, sections 21-23.'
+alwaysApply: false
+---
+
+# 21. Frontend Functionality
+
+Before visual redesign, verify real functionality:
+
+- Data source
+- API contract
+- Loading
+- Empty
+- Error
+- Permission state
+- Disabled state
+- Running state
+- Success
+- Failure
+- Refresh
+- Persistence
+- Hard refresh
+- Direct navigation
+- Network behavior
+- Console behavior
+- i18n
+- RTL
+- Accessibility
+
+Do not redesign around fake, placeholder or contradictory data.
+
+No button may silently do nothing.
+
+Disabled controls require a visible or accessible reason.
+
+Unsupported capabilities must be truthful.
+
+---
+
+# 22. UI/UX and Design System
+
+Every worked-on outcome must receive a UX review before closure.
+
+Review:
+
+- Information hierarchy
+- Workflow clarity
+- Primary action
+- Secondary actions
+- Status communication
+- Capability communication
+- Layout
+- Cards
+- Typography
+- Spacing
+- Forms
+- Tables
+- Loading
+- Empty
+- Error
+- Disabled
+- Confirmation
+- Feedback
+- Responsive layout
+- Accessibility
+- Keyboard
+- Focus
+- Dark theme
+- i18n
+- RTL
+- Overflow
+- Truncation
+
+Redesign must improve usefulness, not merely appearance.
+
+Remove unnecessary controls and complexity.
+
+Do not preserve confusing UI solely because it exists.
+
+## Canonical Design-System Source of Truth
+
+Canonical reference:
+
+`/home/ubuntu/webapp/TitanGold/DESIGN_SYSTEM_DATAHUB.md`
+
+Primary reference implementation:
+
+`components/ai/AIManager/tabs/DataHub/TelegramPanel.tsx`
+
+Reuse existing shared tokens and components where applicable.
+
+Do not create:
+
+- A second color system
+- Parallel button styles
+- Parallel badge styles
+- Parallel card tokens
+- Parallel form styles
+- Parallel modal patterns
+- Another independent design-system utility layer
+
+Adapt the design language to the workflow.
+
+Do not copy business layout blindly.
+
+---
+
+# 23. Persian, RTL and Technical-Value Rules
+
+Every worked-on surface must verify:
+
+- English LTR
+- Persian RTL
+- Canonical Persian font
+- Mixed-direction technical values
+- API keys and IDs remain readable LTR
+- Numbers remain readable
+- Dates and times remain understandable
+- Symbols and asset pairs remain readable
+- No raw i18n keys
+- No English leakage where translation is expected
+
+Portal-rendered UI must explicitly inherit language, direction and typography
+when necessary.
+
+---
+

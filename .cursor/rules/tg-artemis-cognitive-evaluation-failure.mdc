@@ -1,0 +1,239 @@
+---
+description: 'TitanGold original v4.7 rules for artemis cognitive evaluation failure. Mandatory for relevant work, sections 67-69.'
+alwaysApply: false
+---
+
+# 67. Cognitive Evaluation, Calibration and Self-Sufficiency
+
+Artemis cognition must be evaluated as a system, not merely by measuring the
+accuracy of one LLM or one Agent.
+
+## 67.1 Cognitive-System Evaluation
+
+Evaluation should distinguish, where meaningful:
+
+- Evidence selection quality
+- Exclusion quality
+- Conflict detection quality
+- Correlation handling quality
+- Missing-evidence handling
+- Abstention quality
+- Scenario usefulness
+- Decision calibration
+- Directional usefulness
+- Risk-flag recall
+- Explanation faithfulness
+- Decision stability under irrelevant input changes
+- Robustness to one provider/model outage
+- Robustness to stale or malformed evidence
+- Latency
+- Cost
+
+## 67.2 Component vs System Performance
+
+TitanGold must distinguish:
+
+- Agent performance
+- Advisor/model performance
+- Router performance
+- Memory retrieval performance
+- Cognitive Kernel performance
+- Artemis synthesis performance
+- Control-chain performance
+- Execution performance
+
+A high-performing advisor does not prove that Artemis synthesis is good.
+
+A good Artemis analytical decision does not prove execution quality.
+
+## 67.3 Ablation and Dependency Measurement
+
+Where practical, self-sufficiency claims should be supported by controlled
+comparisons such as:
+
+- Internal evidence only
+- Internal evidence plus memory
+- Internal evidence plus one advisor
+- Internal evidence plus Council
+- Local model versus external model
+- With and without a specific Agent family
+
+The purpose is to measure which capability materially improves the approved
+workflow.
+
+Do not use ablation results to bypass safety controls.
+
+## 67.4 Self-Sufficiency Meaning
+
+Artemis becomes more self-sufficient when the approved workflow remains within
+quality, calibration, safety, provenance, latency and cost thresholds with less
+routine dependency on external AI.
+
+Self-sufficiency does not require zero external-AI usage.
+
+External specialists may remain valuable for:
+
+- Rare expertise
+- Challenge
+- Benchmarking
+- Independent verification
+- Incident analysis
+- Model-diversity checks
+
+## 67.5 No Automatic Cognitive Promotion
+
+A model, routing policy, prompt policy, memory strategy or synthesis policy must
+not be promoted to production merely because it appears better in one sample or
+one backtest.
+
+Promotion requires the applicable TitanGold lifecycle:
+
+Offline validation
+→ controlled evaluation
+→ Shadow where applicable
+→ Paper where applicable
+→ Human QA
+→ explicit production promotion
+
+Execution maturity remains governed by Section 53.
+
+---
+
+# 68. Artemis Cognitive Failure and Degraded-Mode Rules
+
+Artemis must degrade safely when a cognitive dependency fails.
+
+## 68.1 Model Failure
+
+If a selected model is unavailable, rate-limited, invalid or times out:
+
+- Record the actual failure
+- Apply an approved fallback only when allowed
+- Preserve fallback provenance
+- Do not fabricate a response
+- Do not convert model absence into agreement
+- Do not weaken required safety gates
+
+If the workflow is safe with deterministic logic and internal evidence alone,
+Artemis may proceed in a documented degraded mode.
+
+If the model or verification capability is required by policy, Artemis must
+return blocked or insufficient evidence.
+
+## 68.2 Invalid Structured Output
+
+Malformed or schema-invalid model/advisor output must not enter canonical
+synthesis as valid evidence.
+
+The system may perform a bounded repair/retry according to approved policy.
+
+Repeated repair must not become unbounded token, latency or cost consumption.
+
+## 68.3 Conflicting Cognitive Outputs
+
+When multiple models or reasoning passes conflict:
+
+- Preserve the conflict
+- Check context compatibility
+- Check source and model correlation
+- Apply task-specific evaluation history where valid
+- Allow Artemis to abstain
+
+Do not force consensus solely to produce an answer.
+
+## 68.4 Cognitive Timeout
+
+A cognitive workflow must have bounded time and resource budgets.
+
+If the deadline expires:
+
+- Cancel unnecessary outstanding advisor work where supported
+- Preserve completed valid inputs
+- Mark missing inputs accurately
+- Return a degraded, blocked or insufficient state according to policy
+
+Do not allow unbounded deliberation to delay time-sensitive safety checks.
+
+## 68.5 Deterministic Gate Precedence
+
+A cognitive dependency failure must never cause a deterministic safety gate to
+fail open.
+
+When safety state is uncertain, execution remains blocked.
+
+---
+
+# 69. Artemis Cognitive Architecture Completion Gate
+
+Sections 60–68 are part of the Artemis architecture and refine Sections 45–58.
+They do not authorize implementation by themselves.
+
+The Dynamic Active-Work Rule remains the only implementation authority.
+
+Before Artemis Core Stage 6 (`Real Artemis Evidence Orchestration`) may be
+considered complete, the approved implementation must have a verified mapping
+for:
+
+- Canonical Decision Context ownership
+- Cognitive Kernel ownership
+- Deterministic versus model-assisted boundaries
+- Model/advisor routing boundary
+- Memory-to-cognition boundary
+- Canonical Artemis Decision artifact
+- Decision lineage
+- Explicit cognitive abstention/failure states
+- Cognitive Decision versus Execution Authorization semantics
+
+Before Artemis Core Stage 15 (`Artemis Core Completion and Freeze`) may be
+declared complete, the approved maturity level must additionally verify:
+
+- Artemis identity is not coupled to one LLM/provider
+- A raw model answer cannot become a canonical Artemis Decision directly
+- Deterministic safety rules cannot be overridden by model output
+- Canonical decisions are reconstructable
+- Correlation and missing-evidence handling are real
+- Memory cannot recursively turn Artemis opinions into independent evidence
+- Model/advisor failures degrade safely
+- Cognitive evaluation is operational for the declared scope
+- User-facing explanations remain faithful to canonical decisions
+- Required Human QA has passed
+- Runtime provenance is exact
+
+## 69.1 Architectural Test
+
+A proposed Artemis implementation fails this architecture if its effective
+logic can be reduced to:
+
+`prompt -> one LLM -> answer -> execution`
+
+A compliant Artemis architecture must preserve the separation of:
+
+Context
+→ Evidence
+→ Deterministic validation/policy
+→ Cognitive reasoning
+→ Memory/advisory inputs where useful
+→ Artemis synthesis
+→ Canonical Artemis Decision
+→ Independent control chain
+→ Execution only when separately authorized
+
+## 69.2 Final Cognitive Operating Principle
+
+For cognition, the goal is not maximum model usage.
+
+The goal is:
+
+> The smallest, most reliable combination of deterministic logic, specialized
+> evidence, memory, model-assisted reasoning and external advice that produces
+> a truthful, explainable, reproducible and safely governable Artemis judgment.
+
+For Artemis identity, the governing principle is:
+
+> Models may change. Providers may change. Agents may evolve. Artemis remains
+> the canonical cognitive orchestrator, synthesizer and decision owner within
+> its approved analytical authority boundary.
+
+
+---
+

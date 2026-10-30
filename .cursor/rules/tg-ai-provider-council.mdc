@@ -1,0 +1,441 @@
+---
+description: 'TitanGold original v4.7 rules for ai provider council. Mandatory for relevant work, sections 55-56.'
+alwaysApply: false
+---
+
+# 55. Post-Core Agent Completion and Settings / AI Provider Infrastructure
+
+After Artemis Core reaches its approved completion gate, TitanGold must finish
+or re-validate remaining specialized Agent products one at a time before treating
+the ecosystem as mature.
+
+Each remaining Agent must still follow Sections 24, 38 and 45–53.
+
+A complete Agent is not merely a backend function. It must be:
+
+- A truthful specialized product for the user.
+- A truthful machine-consumable participant in the Artemis architecture.
+- Explicit about unavailable data and limitations.
+- Explicit about authority.
+- Evaluated under its own success metrics.
+
+Once the required Agent products are complete or their deferred state is
+explicit, TitanGold must perform a dedicated Settings and AI Provider
+Infrastructure Program Slice.
+
+## 55.1 Canonical Settings Ownership
+
+Global AI provider configuration must have one canonical owner.
+
+The preferred product location is the canonical Settings area, including the
+Configuration / API Integrations surface or its verified successor.
+
+Before implementation, inspect the real current Settings architecture and
+identify the canonical owner. Do not create a second provider-configuration
+system merely because Artemis, Agents or another screen needs provider access.
+
+Artemis and Agents should consume read-only status and links to the canonical
+owner rather than duplicate provider Secrets or configuration forms.
+
+## 55.2 API Integration Capability Inventory
+
+For every external AI provider or model platform, maintain a capability inventory
+that may include:
+
+- providerId
+- provider family
+- modelId
+- model/version identifier
+- supported modalities
+- reasoning capability class
+- tool/function-calling support
+- structured-output support
+- streaming support
+- context constraints
+- rate limits
+- quota
+- cost metadata when available
+- latency observations
+- region or residency constraints where relevant
+- provider availability
+- credential status
+- health/readiness
+- data-retention/privacy classification
+- allowed TitanGold use cases
+- prohibited use cases
+- fallback eligibility
+- deprecation state
+
+Provider and model names in documentation are examples, not permanent
+architecture.
+
+The canonical registry and current verified provider documentation are
+authoritative.
+
+Potential provider families may include, when officially supported and approved:
+
+- OpenAI / ChatGPT-class models
+- Google Gemini-class models
+- DeepSeek-class models
+- Anthropic Claude-class models
+- xAI Grok-class models
+- Mistral-class models
+- Approved local or self-hosted models
+- Future providers added through the same canonical contract
+
+Do not hardcode the architecture around one vendor.
+
+## 55.3 Credential and Secret Ownership
+
+All external-AI credentials must follow Section 17.
+
+In addition:
+
+- Secrets have one encrypted server-side owner.
+- The frontend never receives reusable Secrets after submission.
+- Stored Secrets are never prefilled.
+- Provider responses and logs must not echo Secrets.
+- Prompt traces must not include Secrets.
+- Provider health must not require exposing credentials.
+- Credential rotation must be auditable.
+- Disabling one provider must not corrupt unrelated providers.
+
+A provider may be configured but not authorized for Artemis use.
+
+Do not conflate:
+
+- provider configured
+- credentials valid
+- provider healthy
+- model available
+- task-compatible
+- privacy-compatible
+- Artemis-approved
+- execution-relevant
+
+## 55.4 Model Catalog and Provider Health
+
+TitanGold should maintain one canonical model catalog rather than scattering
+model names in frontend components or prompts.
+
+Health/readiness should distinguish:
+
+- configured
+- authenticated where required
+- healthy
+- degraded
+- rate-limited
+- quota exhausted
+- unavailable
+- unsupported
+- disabled
+
+A single healthy provider or model must not imply that the entire advisory
+system is healthy.
+
+Readiness must reflect the requirements of the actual requested workflow.
+
+## 55.5 Routing, Fallback and Cost Governance
+
+External model selection must be task-aware.
+
+Routing may consider:
+
+- task type
+- domain
+- required modality
+- required structured output
+- historical quality for that task
+- calibration
+- current provider health
+- latency
+- cost
+- quota
+- privacy classification
+- context size
+- model/version stability
+- diversity from already selected advisors
+
+Do not always call every model.
+
+Do not always call the most expensive model.
+
+Do not choose a cheaper or faster model when it cannot satisfy the required
+quality, privacy or safety boundary.
+
+Fallback must be explicit and auditable.
+
+A fallback response must not silently masquerade as the originally selected
+model.
+
+Every external-AI Program Slice must define bounded:
+
+- request count
+- concurrency
+- timeout
+- retry
+- token/context budget
+- cost budget
+- cache behavior
+- cancellation behavior
+
+Unbounded fan-out to external models is prohibited.
+
+---
+
+# 56. Artemis Multi-AI Council — External Advisor Architecture
+
+TitanGold may build a Multi-AI Council so Artemis can consult multiple external
+AI systems as advisors, critics and specialists.
+
+This capability is strategically important but must preserve Artemis as the
+central decision synthesizer.
+
+External AI models are not equal-vote members of the TitanGold Agent registry.
+
+They are **external advisors**.
+
+Artemis remains the canonical orchestration and synthesis authority.
+
+## 56.1 Council Operating Principle
+
+The Council must not be implemented as:
+
+- simple majority voting
+- one provider's answer copied as Artemis' answer
+- equal weighting of every model
+- repeated calls to near-identical models counted as independent confirmation
+- a way to bypass internal Agents
+- a way to bypass Risk, Portfolio, Liquidity, runtime safety or Order Management
+- a way to activate Live trading
+
+The preferred pattern is:
+
+TitanGold context and canonical evidence
+→ Artemis defines the question and required advisory roles
+→ task-aware router selects a bounded, diverse advisor set
+→ advisors produce independent first-pass analyses where useful
+→ selected advisors may critique assumptions or counterarguments
+→ evidence, disagreements, provenance and limitations are preserved
+→ Artemis performs the final synthesis
+→ normal Risk / Portfolio / Liquidity / runtime / Order gates remain unchanged
+
+## 56.2 Advisor Roles
+
+Council roles may include, where useful:
+
+- independent analyst
+- bullish thesis reviewer
+- bearish thesis reviewer
+- devil's advocate
+- risk critic
+- uncertainty critic
+- factual verifier
+- source/citation verifier
+- macroeconomic specialist
+- fundamental specialist
+- technical-analysis specialist
+- statistical or quantitative specialist
+- market-microstructure specialist
+- news/event specialist
+- software/engineering specialist
+- security specialist
+- data-quality critic
+- strategy critic
+- counterfactual/scenario analyst
+- final-response critic
+
+Roles are task assignments, not permanent provider identities.
+
+A provider should not permanently own “bullish” or “risk” authority merely
+because it performed that role once.
+
+## 56.3 Independence Before Deliberation
+
+When independent judgment matters, selected advisors should produce their first
+analysis without seeing other advisor conclusions.
+
+This reduces anchoring, imitation and false consensus.
+
+A later critique or debate round may expose selected arguments to other advisors
+when the workflow explicitly requires it.
+
+The system must distinguish:
+
+- independent initial opinion
+- critique
+- rebuttal
+- revised opinion
+- Artemis synthesis
+
+Do not store or present a later revised answer as though it were independent.
+
+## 56.4 No Naive Consensus
+
+Five models repeating the same underlying market narrative are not automatically
+five independent confirmations.
+
+Council synthesis must consider:
+
+- shared provider family
+- shared upstream information
+- duplicated prompt framing
+- common public narrative
+- common market-data source
+- common retrieval source
+- model-family similarity where known
+- correlated Agent evidence
+
+Advisor diversity is useful only when its provenance is meaningfully diverse.
+
+Consensus strength must not be based only on answer count.
+
+## 56.5 External Advisor Artifact
+
+External-AI output should use a bounded, versioned advisory artifact separate
+from raw Agent evidence and separate from authoritative control outputs.
+
+The artifact should support, where applicable:
+
+- consultationId
+- decisionContextId
+- advisorId
+- providerId
+- modelId
+- model/version
+- advisor role
+- task/domain classification
+- prompt/policy version
+- input evidence references
+- request timestamp
+- response timestamp
+- latency
+- cost/usage metadata when available and safe
+- conclusion
+- structured rationale
+- supporting points
+- counterpoints
+- uncertainty
+- confidence kind and provenance when defensible
+- citations/source references when available
+- limitations
+- refusal/unavailable status
+- safety flags
+- output schema version
+- response hash or integrity identifier where useful
+
+Do not persist:
+
+- Secrets
+- authorization headers
+- raw signed requests
+- hidden provider chain-of-thought
+- uncontrolled raw internal reasoning traces
+- sensitive private context not required by the approved task
+
+Store concise structured rationale and evidence references rather than requesting
+or depending on hidden reasoning.
+
+## 56.6 Advisor Output Is Untrusted Input
+
+Every external model response is untrusted input.
+
+It may be:
+
+- wrong
+- stale
+- hallucinated
+- manipulated
+- prompt-injected
+- overconfident
+- internally inconsistent
+- based on unavailable sources
+- based on a different time horizon
+- based on data TitanGold cannot verify
+
+Therefore:
+
+- Validate structured output.
+- Sanitize content before rendering or persistence.
+- Never execute arbitrary commands returned by an advisor.
+- Never execute code merely because an advisor suggested it.
+- Never treat an advisor's tool call as pre-authorized.
+- Never allow an advisor to write directly to production state.
+- Never allow an advisor to disable safety controls.
+- Never allow an advisor to alter credentials.
+- Never allow an advisor to modify Rule 01 or Rule 02 autonomously.
+- Never allow an advisor to place or authorize an order.
+
+Tool use by external advisors must be explicitly allowlisted, scoped and audited.
+
+## 56.7 Factuality and Source Verification
+
+An external AI statement is not automatically evidence merely because it sounds
+confident.
+
+Where the task depends on current public facts, official provider capabilities,
+news, market events or other verifiable sources:
+
+- Preserve source references when available.
+- Prefer canonical TitanGold data owners and official primary sources.
+- Distinguish model opinion from sourced fact.
+- Distinguish retrieved fact from model-generated inference.
+- Mark unsupported claims as unsupported or unavailable.
+
+Provider API facts continue to follow Section 18 and must be verified against
+official provider documentation.
+
+## 56.8 Cross-Domain Advisory Use
+
+The Council may support approved TitanGold work beyond direct market direction,
+including:
+
+- economics and macro context
+- company and fundamental research
+- quantitative reasoning
+- statistics
+- software engineering
+- infrastructure
+- cybersecurity
+- data engineering
+- product analysis
+- incident analysis
+- market news/event interpretation
+- geopolitical context where relevant
+- operational research
+- documentation and critique
+
+Cross-domain use must remain inside the approved TitanGold outcome.
+
+The Council must not become an unrestricted autonomous general-purpose actor
+with uncontrolled access to systems or data.
+
+## 56.9 Council Failure Behavior
+
+Council failure must degrade safely.
+
+Artemis must distinguish:
+
+- advisor not selected
+- advisor unavailable
+- provider unavailable
+- timeout
+- rate limit
+- quota exhaustion
+- invalid structured response
+- safety refusal
+- privacy restriction
+- insufficient source support
+- conflicting advisors
+
+Missing external advice must not automatically become a neutral or positive
+vote.
+
+If the task can proceed safely with internal evidence, Artemis may proceed under
+an explicitly documented degraded mode.
+
+If the task requires external verification and that verification is unavailable,
+Artemis must return insufficient evidence or blocked according to policy.
+
+---
+

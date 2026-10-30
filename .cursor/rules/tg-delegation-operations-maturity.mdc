@@ -1,0 +1,315 @@
+---
+description: 'TitanGold original v4.7 rules for delegation operations maturity. Mandatory for relevant work, sections 84-87.'
+alwaysApply: false
+---
+
+# 84. Delegation and Multi-Agent Operational Authority
+
+Artemis may delegate analysis or bounded operational subtasks, but delegation
+must never amplify authority.
+
+## 84.1 Attenuated Delegation
+
+A delegated Agent, model or worker may receive no more authority than the parent
+workflow has, and should normally receive less.
+
+Delegation authority should be bound to:
+
+- Exact task
+- Resource scope
+- Action scope
+- Time window
+- Request count
+- Data scope
+
+## 84.2 No Privilege Amplification Through Chaining
+
+An Agent without permission to modify Settings must not obtain that permission
+because Artemis asks it to call another Agent that has broader access.
+
+Policy enforcement must consider the initiating principal and delegation chain,
+not only the last service in the chain.
+
+## 84.3 Bounded Delegation Depth
+
+Operational delegation, retries and recursive planning must have bounded depth
+and resource budgets.
+
+## 84.4 Delegated Output Is Untrusted
+
+A delegated component may propose an Action Intent, but privileged mutation still
+passes the canonical Policy Decision and Enforcement boundary.
+
+---
+
+# 85. Artemis Autonomous Operations Maturity Roadmap
+
+Autonomous Operations must mature separately from automated-trading maturity in
+Section 53.
+
+Progress in operational autonomy never implicitly advances Live trading.
+
+## Operations Stage 0 — Read-Only Operator
+
+- Artemis can inspect approved system state
+- Artemis can research
+- Artemis can explain required changes
+- No mutations
+
+## Operations Stage 1 — Proposal Operator
+
+- Artemis creates canonical Action Intents
+- Artemis produces diffs and rollback plans
+- Human executes changes manually or through normal UI
+
+## Operations Stage 2 — Human-Approved Execution
+
+- Artemis can execute approved tools
+- Every material write requires exact approval
+- Audit and rollback are verified
+
+## Operations Stage 3 — Autonomous Reversible Operations
+
+- Proven Class O1 actions may execute automatically
+- User locks, limits, rollback and circuit breakers are operational
+- No broad cross-domain autonomy
+
+## Operations Stage 4 — Bounded Domain Operator
+
+- Selected domains may use verified Class O2 autonomy
+- Examples may include approved Agent configuration or approved public source
+  lifecycle
+- Canary, evaluation and domain-specific limits are operational
+
+## Operations Stage 5 — Cross-Domain Coordinated Operator
+
+- Artemis may coordinate changes across multiple approved domains
+- Dependency-aware planning is verified
+- Cross-domain blast-radius controls are verified
+- Privileged and critical actions remain approval-gated
+
+## Operations Stage 6 — Human-Operator Substitution for Approved Domains
+
+Artemis may perform most routine operator work for explicitly approved domains
+without routine human intervention.
+
+Requirements include:
+
+- Proven reliability
+- Low unauthorized-action rate
+- Verified rollback
+- Complete audit
+- Stable policy
+- Prompt-injection resistance
+- Cost controls
+- Human locks
+- Operations Kill Switch
+- Clear exception and escalation handling
+
+This stage does not grant constitutional, security-governance or Live-trading
+authority.
+
+## Operations Stage 7 — Governed Operational Self-Sufficiency
+
+Artemis can identify, research, implement, verify and learn from routine approved
+operational improvements across mature domains while humans primarily govern:
+
+- Policy
+- Exceptions
+- High-risk approvals
+- Security boundaries
+- Major architecture changes
+- Live financial authorization
+
+Operational self-sufficiency must remain measurable and revocable.
+
+## 85.1 No Stage Skipping
+
+Each stage requires evidence appropriate to the domain.
+
+A successful demonstration in one domain does not automatically promote another
+domain.
+
+## 85.2 Domain-Specific Maturity
+
+TitanGold may simultaneously have, for example:
+
+- Agent Settings at Operations Stage 4
+- Data Hub source management at Stage 2
+- Credential management at Stage 1
+- Security configuration at Stage 0
+
+Do not use one global maturity label to hide weaker domains.
+
+---
+
+# 86. Autonomous Operations Verification and Adversarial Test Standard
+
+Before an operational domain gains autonomous write authority, testing must
+cover both ordinary correctness and adversarial failure.
+
+## 86.1 Required Abuse and Failure Cases
+
+Where applicable, verify:
+
+- Direct prompt injection
+- Indirect prompt injection from web/data sources
+- Malicious provider response
+- Memory poisoning attempt
+- Tool hallucination
+- Unknown action type
+- Unknown setting field
+- Privilege-escalation attempt
+- Confused-deputy / delegation escalation
+- Forged approval
+- Approval parameter tampering
+- Expired approval
+- Approval replay
+- Expired capability lease
+- Lease replay
+- Stale resource version
+- Time-of-check/time-of-use state change
+- Cross-tenant or cross-user target confusion
+- Secret-exfiltration attempt
+- Egress to unapproved destination
+- Duplicate action delivery
+- Concurrent conflicting changes
+- Partial failure
+- Rollback failure
+- Audit-system failure
+- Policy-system failure
+- Provider outage
+- Model outage
+- Cost runaway
+- Retry/loop runaway
+- Circuit-breaker activation
+- Operations Kill Switch activation
+
+## 86.2 Shadow Operations
+
+Before enabling autonomous writes for a new action class, Artemis should run a
+shadow period where practical:
+
+- Artemis produces the Action Intent
+- Policy evaluates it
+- No mutation occurs
+- The proposed action is compared with what a trusted operator would approve or
+  with later observed system needs
+
+Shadow evidence should identify false-positive and false-negative operational
+recommendations.
+
+## 86.3 Canary Evidence
+
+Autonomous actions with multi-resource impact must prove canary behavior before
+broad rollout where practical.
+
+## 86.4 Required Safety Outcomes
+
+For the tested scope, required safety evidence should include:
+
+- Unauthorized mutations: 0
+- Unauthorized privilege increases: 0
+- Secret exposure: 0
+- Approval bypasses: 0
+- Unlogged privileged mutations: 0
+- Duplicate irreversible actions: 0
+- Policy fail-open events: 0
+- Kill-Switch bypasses: 0
+
+Known residual risk must be documented rather than converted into PASS.
+
+## 86.5 Recovery Evidence
+
+Where rollback is claimed, tests must demonstrate rollback or the documented
+compensating action.
+
+A rollback function that has never been exercised is not verified recovery.
+
+---
+
+# 87. Artemis Autonomous Operations Completion Gate
+
+Sections 70–86 define the architecture required for Artemis to become a trusted
+operator of TitanGold.
+
+They do not authorize implementation by themselves.
+
+The Dynamic Active-Work Rule remains authoritative.
+
+Before any domain may be described as **ARTEMIS AUTONOMOUSLY MANAGEABLE**, the
+approved implementation must verify:
+
+- Canonical resource owner exists
+- Action capabilities are explicit
+- No wildcard standing privilege is required
+- Artemis has a distinct non-human identity
+- Policy Decision is independent from model judgment
+- Policy Enforcement exists at the canonical owner
+- Capability authority is bounded and time-limited where appropriate
+- Action Intent is schema-valid
+- Exact mutation is auditable
+- Autonomy class is defined
+- Human lock behavior is verified
+- Approval binding is verified where applicable
+- Rollback/compensation is verified where claimed
+- Blast-radius and budget limits exist
+- Circuit-breaker behavior is verified
+- Operations Kill Switch is verified
+- Prompt-injection and tool-abuse tests pass
+- Secret handling passes
+- Failure behavior is fail-closed
+- Outcome evaluation exists
+- Human QA passes the declared maturity milestone
+
+Before Operations Stage 6 or Stage 7 may be claimed for any domain, additionally
+verify:
+
+- Sufficient longitudinal reliability evidence exists
+- Human override and rollback rates are measured
+- Autonomous changes produce measurable benefit or maintenance value
+- Provider/model outages do not create unsafe mutations
+- One compromised advisor or Agent cannot expand operational authority
+- Audit history is reconstructable
+- Autonomous authority can be revoked immediately
+- High-risk and constitutional actions remain outside autonomous scope
+
+## 87.1 Architectural Failure Test
+
+A proposed implementation is non-compliant if it effectively gives Artemis:
+
+`one super-admin credential + arbitrary tools + LLM judgment`
+
+A compliant architecture should preserve the separation of:
+
+Goal
+→ Research / Evidence
+→ Action Intent
+→ Deterministic Policy Decision
+→ Human Approval where required
+→ Short-Lived Capability
+→ Canonical Tool / Resource Owner
+→ Mutation
+→ Independent Verification
+→ Keep / Rollback
+→ Audit
+→ Evaluation / Memory
+
+## 87.2 Final Autonomous-Operations Principle
+
+The goal is not maximum privilege.
+
+The goal is:
+
+> Maximum useful operational independence with minimum standing privilege,
+> explicit delegated authority, bounded blast radius, independent policy
+> enforcement, verifiable outcomes, complete audit and reliable recovery.
+
+For human-operator substitution, the governing principle is:
+
+> Artemis may replace routine human operation inside approved domains, but it
+> must never replace the governance and safety boundaries that make those
+> operations trustworthy.
+
+---
+

@@ -1,0 +1,248 @@
+---
+description: 'TitanGold original v4.7 rules for conversational approval financial mandates. Mandatory for relevant work, sections 96-97.'
+alwaysApply: false
+---
+
+# 96. Conversational Approval and Confirmation UX
+
+Approvals requested through chat must implement Section 79 using trusted,
+structured product UI.
+
+A conversational sentence alone must not be the sole source of truth for what
+will execute when the action is sensitive.
+
+## 96.1 Structured Approval Card
+
+For an approval-gated action, the ACCP should render a trusted action summary
+derived from the canonical Action Intent.
+
+Where applicable, show:
+
+- Action
+- Target
+- Account/provider
+- Before state
+- After state
+- Amount/cost
+- Environment
+- Expected impact
+- Known risks
+- Reversibility
+- Rollback availability
+- Expiry
+- Required approval strength
+
+## 96.2 Model Text Is Not the Approval Contract
+
+Free-form Artemis prose may explain the proposed action.
+
+The authoritative approval parameters must come from trusted canonical state.
+
+An external source or model output must not alter the approval card.
+
+## 96.3 Ambiguous Yes/No
+
+A simple response such as:
+
+`yes`
+
+may approve an action only when:
+
+- Exactly one approval is pending
+- The pending action is clearly and currently displayed
+- Policy allows conversational approval for that class
+- The approval is bound to the exact action
+- No step-up requirement remains
+
+Otherwise the system must clarify or require explicit product interaction.
+
+## 96.4 Financial Confirmation
+
+Financial or account-changing confirmation must display the exact bounded
+operation where applicable, including:
+
+- Provider/account
+- Market
+- Symbol/asset
+- Side/direction
+- Order or operation type
+- Amount/size
+- Price or price policy where applicable
+- Estimated fee
+- Relevant slippage/impact
+- Mode
+- Relevant risk/portfolio/liquidity status
+- Expiry of time-sensitive approval
+
+A positive Artemis thesis is not a financial confirmation.
+
+## 96.5 Approval After Delay
+
+If a sensitive action waits for approval long enough that material state may
+have changed, Artemis must revalidate and, when necessary, produce a new
+approval preview.
+
+Do not execute stale financial or operational approvals against materially
+different state.
+
+---
+
+# 97. Delegated Trading Mandates and Financial Goals
+
+The ACCP may eventually allow a user to delegate bounded trading objectives to
+Artemis.
+
+This capability is called a **Delegated Trading Mandate**.
+
+A mandate is a constrained authorization envelope.
+
+It is not a guarantee of profit and does not replace the control chain in
+Sections 20, 50, 53 and 65.
+
+## 97.1 Financial Goal Is Not a Guaranteed Outcome
+
+A user instruction such as:
+
+`Turn 100 USDT into 500 USDT`
+
+must be interpreted as a target or objective, not as a guaranteed command.
+
+Artemis must not:
+
+- Promise the target will be reached
+- Increase risk without authorization merely to pursue the target
+- Hide losses or drawdown
+- Bypass Risk because the goal is aggressive
+- Continue after the mandate's stop conditions are reached
+
+## 97.2 Canonical Trading Mandate Artifact
+
+A mandate should support, where applicable:
+
+- mandateId
+- owner identity
+- account/provider scope
+- approved environment
+- execution maturity mode
+- initial delegated capital
+- capital ceiling
+- target/objective
+- time horizon
+- expiry
+- allowed assets/symbols
+- allowed market types
+- allowed strategy classes
+- prohibited assets/markets
+- leverage policy
+- maximum leverage
+- maximum position size
+- maximum portfolio exposure
+- maximum per-trade risk
+- maximum daily loss
+- maximum cumulative loss
+- maximum drawdown
+- maximum open positions
+- maximum trades per period
+- fee/cost bounds
+- slippage bounds
+- liquidity requirements
+- required evidence/control classes
+- stop conditions
+- pause conditions
+- confirmation policy
+- withdrawal/transfer exclusion
+- modification policy
+- revocation state
+- mandate version
+
+## 97.3 Mandate Creation and Modification
+
+A new mandate or material expansion of an existing mandate requires the
+applicable explicit user approval.
+
+Artemis must not autonomously increase:
+
+- Capital ceiling
+- Loss limit
+- Drawdown limit
+- Leverage
+- Market risk
+- Asset scope
+- Live-execution authority
+
+because current performance is poor or because a target has not been reached.
+
+## 97.4 Mandate Does Not Replace Execution Authorization
+
+Every execution under a valid mandate still requires the applicable:
+
+Artemis Decision
+→ Risk
+→ Portfolio / Optimization
+→ Liquidity
+→ Runtime / Capability
+→ Emergency Stop
+→ Order Management
+→ Provider
+→ Reconciliation
+
+A mandate may remove the need for repetitive human confirmation only for action
+classes explicitly permitted by policy and maturity.
+
+It does not remove the deterministic control chain.
+
+## 97.5 Trading Maturity Precedence
+
+A mandate does not advance automated-trading maturity.
+
+If TitanGold is only approved for Shadow or Paper, a mandate remains Shadow or
+Paper.
+
+Live trading remains governed by Section 53 and Tier-4 authorization.
+
+## 97.6 Mandate Suspension
+
+A mandate should suspend or stop according to policy when, for example:
+
+- Loss limit reached
+- Drawdown reached
+- Emergency Stop active
+- Runtime provenance uncertain
+- Required Agent/control evidence unavailable
+- Provider state unsafe
+- Reconciliation failure
+- Mandate expired
+- User revokes mandate
+- Audit lineage incomplete
+
+Suspension must fail closed for new financial execution.
+
+## 97.7 No Implied Withdrawal or Transfer Authority
+
+A trading mandate does not authorize:
+
+- Withdrawal
+- Transfer to another account
+- P2P transaction
+- Account security change
+
+unless that distinct operation has its own explicit authorization.
+
+## 97.8 Goal Progress Reporting
+
+Artemis should report mandate progress using truthful metrics such as:
+
+- Starting capital
+- Current reconciled value
+- Realized P&L
+- Unrealized P&L
+- Drawdown
+- Fees
+- Number of trades
+- Current risk utilization
+- Remaining mandate headroom
+
+Do not use projected returns as achieved progress.
+
+---
+

@@ -1,0 +1,324 @@
+---
+description: 'TitanGold original v4.7 rules for conversational memory tasks reporting. Mandatory for relevant work, sections 93-95.'
+alwaysApply: false
+---
+
+# 93. Conversational Memory and Personalization
+
+The ACCP must provide useful continuity without turning chat history into an
+uncontrolled authority source.
+
+Conversational memory must integrate with Sections 57 and 66.
+
+## 93.1 Memory Classes for Conversation
+
+The conversational experience may use:
+
+### Session Memory
+
+Short-lived working context for the active conversation.
+
+### User Preference Memory
+
+Approved preferences such as:
+
+- Language
+- Reporting style
+- Preferred markets
+- Preferred dashboard presentation
+- Risk-profile reference where canonical
+- Frequently used analytical scopes
+
+### Operational Memory
+
+What Artemis actually changed, verified, failed or rolled back.
+
+### Decision and Evaluation Memory
+
+Prior decisions, evidence, outcomes and evaluations.
+
+### Task Memory
+
+State and history of long-running goals and workflows.
+
+These classes must retain distinct provenance.
+
+## 93.2 Memory Is Not Permission
+
+A remembered statement such as:
+
+`Always trade aggressively`
+
+must not permanently authorize:
+
+- Live trading
+- Higher leverage
+- Higher loss limits
+- Permission changes
+- A new financial mandate
+
+Current policy and current valid mandates remain authoritative.
+
+## 93.3 Memory Write Policy
+
+Not every chat sentence should become durable memory.
+
+Before promotion to reusable memory, apply where relevant:
+
+- User/tenant scope
+- Memory class
+- Provenance
+- Sensitivity
+- Retention
+- Expiry
+- Confidence
+- Verification
+- Whether the information is a preference, fact, opinion or prediction
+
+## 93.4 Memory Correction and Supersession
+
+A user must be able to correct supported remembered preferences and factual
+profile information.
+
+New memory should supersede older conflicting memory according to one canonical
+policy rather than silently accumulating contradictions.
+
+## 93.5 Memory Isolation
+
+Memory from one user, tenant or authorization scope must not leak into another.
+
+Shared operational knowledge must be deliberately classified as shared and
+must not include user-private information.
+
+## 93.6 Memory Poisoning Defense
+
+External content, quoted web text, attachments, tool output and external-advisor
+responses must not become durable behavioral instructions merely because they
+were present in a conversation.
+
+Potential memory writes derived from untrusted content must be sanitized,
+classified and bounded.
+
+## 93.7 Secret Exclusion
+
+Credentials, API Secrets, tokens, authorization headers and equivalent secret
+material must not be retained in conversational memory.
+
+---
+
+# 94. Conversational Reporting, Evidence and Explanation
+
+When Artemis reports what happened, it must report from canonical evidence.
+
+The conversational model must not invent an operational history.
+
+## 94.1 Canonical Report Sources
+
+Questions such as:
+
+- `What did you do today?`
+- `Why did you disable that source?`
+- `Which Agent changed?`
+- `How many trades did you make?`
+- `What failed?`
+
+must be answered from the relevant canonical sources such as:
+
+- Action Ledger
+- Decision Ledger
+- Agent run history
+- Trading/order history
+- Configuration history
+- Task state
+- Audit records
+- Provider/runtime health
+- Reconciliation state
+
+## 94.2 Lifecycle Truthfulness
+
+Reports must distinguish:
+
+- Proposed
+- Planned
+- Awaiting approval
+- Approved
+- Started
+- Executed
+- Verification pending
+- Verified
+- Failed
+- Partially completed
+- Rolled back
+- Reconciled
+- Cancelled
+
+Do not say `done` merely because Artemis created a plan or tool call.
+
+## 94.3 Explainability Commands
+
+The ACCP should support natural-language requests equivalent to:
+
+- WHY
+- SHOW_EVIDENCE
+- SHOW_CHANGE
+- SHOW_STATUS
+- SHOW_LIMITATIONS
+
+Where available, Artemis should explain:
+
+- What it concluded
+- What evidence it used
+- What it excluded
+- Which policy blocked or allowed an action
+- What changed
+- What remains uncertain
+
+## 94.4 Financial Reporting
+
+Financial action reports must be based on reconciled or appropriately qualified
+canonical trading/account data.
+
+Do not report expected P&L as realized P&L.
+
+Do not report order submission as order fill.
+
+## 94.5 Redaction
+
+Evidence shown through chat must preserve:
+
+- Secret redaction
+- User/tenant privacy
+- Role authorization
+- Sensitive-log filtering
+
+`Show me everything` is not authorization to expose protected data.
+
+---
+
+# 95. Durable Goals, Tasks and Long-Running Workflows
+
+The ACCP must support work that continues beyond one request/response turn.
+
+A user should be able to delegate an approved bounded task without keeping the
+chat window open.
+
+## 95.1 Canonical Task Artifact
+
+A durable Artemis task should support, where applicable:
+
+- taskId
+- parentGoalId
+- owner principal
+- Artemis operator identity
+- task type
+- goal
+- current state
+- creation time
+- deadline/expiry
+- schedule where applicable
+- allowed capabilities
+- resource scope
+- financial/non-financial class
+- budget
+- retry budget
+- current checkpoint
+- pending approval
+- last successful step
+- next eligible step
+- cancellation state
+- failure reason
+- policy version
+- implementation version
+- output/report references
+
+## 95.2 Task Lifecycle
+
+Canonical task states should distinguish, where applicable:
+
+- CREATED
+- PLANNING
+- RESEARCHING
+- READY
+- WAITING
+- AWAITING_APPROVAL
+- RUNNING
+- PAUSED
+- DEGRADED
+- BLOCKED
+- VERIFYING
+- COMPLETED
+- FAILED
+- CANCELLED
+- EXPIRED
+- ROLLED_BACK
+- MANUAL_RECOVERY_REQUIRED
+
+Do not use one ambiguous `running` state for all long-lived workflows.
+
+## 95.3 Durable Execution
+
+Long-running tasks should preserve state across:
+
+- Browser closure
+- Client disconnect
+- Process restart
+- Approval delay
+- Provider delay
+
+where the approved architecture supports it.
+
+Durability must not weaken authorization.
+
+## 95.4 Revalidation on Resume
+
+A resumed task must revalidate time-sensitive requirements before a mutation.
+
+Examples:
+
+- Identity or delegation still valid
+- Approval still valid
+- Capability still available
+- Policy has not changed
+- Resource version remains compatible
+- Financial mandate is not expired
+- Runtime state is not blocked
+
+A task created yesterday does not automatically carry yesterday's authority
+forever.
+
+## 95.5 Pause and Cancel
+
+The user or authorized operator should be able to:
+
+- Pause a supported task
+- Cancel future steps
+- Revoke a pending delegation
+- Inspect current state
+
+Cancellation must not falsely claim to reverse already completed irreversible
+side effects.
+
+## 95.6 Versioned Pending Tasks
+
+When prompts, tools, policies, schemas or code change while a task is paused,
+the system must know which versions the task was created under.
+
+A materially incompatible old task must be migrated, restarted or rejected
+rather than resumed blindly.
+
+## 95.7 Bounded Background Work
+
+No conversational instruction may create unbounded:
+
+- Infinite monitoring
+- Infinite retries
+- Infinite research
+- Infinite model calls
+- Infinite provider calls
+- Unlimited spend
+
+unless a separately defined recurring policy with explicit limits owns that
+behavior.
+
+---
+
