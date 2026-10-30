@@ -1,0 +1,226 @@
+---
+description: 'TitanGold original v4.7 rules for progress roadmap governance. Mandatory for relevant work, sections 107-107.'
+alwaysApply: false
+---
+
+# 107. Canonical Project Progress Snapshot and Roadmap Visibility
+
+TitanGold must provide the product owner with a simple, truthful and continuously
+maintained view of project progress.
+
+The purpose is to answer, without requiring the owner to read engineering logs:
+
+- Where are we in the overall project?
+- Which major milestone is active?
+- Which stage of the current Program Slice is active?
+- How many currently known stages remain?
+- What is the next meaningful gate?
+- Is progress blocked?
+
+This mechanism is called the **TitanGold Progress Snapshot**.
+
+The Progress Snapshot is operational visibility only.
+
+It does not grant implementation authorization, production authorization, merge
+authorization, Tier-4 approval or permission to skip any gate in this Rule.
+
+Rule 02 remains the only Dynamic Active-Work implementation authority.
+
+## 107.1 One Canonical Snapshot
+
+There must be one canonical current Progress Snapshot inside Rule 02.
+
+Do not create parallel progress counters in:
+
+- Chat transcripts
+- Cursor notes
+- Frontend-only state
+- Separate temporary status files
+- PR descriptions
+- Ad hoc spreadsheets
+
+A living engineering document or Evidence Ledger may contain the detailed stage
+breakdown, but Rule 02 must contain the short canonical summary.
+
+The snapshot should normally contain only:
+
+```text
+PROJECT_PROGRESS = <completed_major_milestones>/<current_known_major_milestones>
+CURRENT_MAJOR_MILESTONE = <name>
+CURRENT_PROGRAM = <active Program Slice or outcome>
+CURRENT_STAGE = <stage name>
+CURRENT_STAGE_PROGRESS = <current_stage_index>/<current_known_stage_total>
+REMAINING_STAGES = <count>
+NEXT_GATE = <next meaningful gate>
+PROGRESS_BLOCKER = NONE | <current blocker>
+```
+
+Additional progress fields may be added only when they materially improve owner
+visibility.
+
+Do not turn Rule 02 into a project-management database.
+
+## 107.2 Counting Rules
+
+Progress counts must represent meaningful outcomes or gates.
+
+Do not inflate stage counts with:
+
+- Individual commits
+- Individual files
+- One test rerun
+- One small bug fix
+- One documentation edit
+- One diagnostic command
+- Internal implementation details that do not represent a real transition
+
+A stage should normally represent a meaningful state transition such as:
+
+- Discovery complete
+- Foundation complete
+- Implementation complete
+- Verification complete
+- Human QA complete
+- Production closeout complete
+- A roadmap stage completed
+
+The denominator is **the current known roadmap**, not a historical promise.
+
+If discovery proves that stages must be added, removed, merged or split:
+
+- Update the denominator truthfully
+- Update `REMAINING_STAGES`
+- Record the reason in the active Evidence Ledger or closeout evidence
+- Do not preserve an obsolete count merely to make progress appear better
+
+A blocked current stage remains the current stage.
+
+Parallel internal workstreams do not become separate counted stages unless each
+has an independent completion gate.
+
+When this Core Rule already defines a canonical maturity or stage count, the
+Progress Snapshot must use that canonical roadmap rather than invent another
+count.
+
+Examples include:
+
+- Artemis Core Completion stages
+- Automated-Trading maturity stages
+- Autonomous Operations maturity stages
+- Conversational maturity stages
+
+## 107.3 Percentages and Time Estimates
+
+Do not invent project percentages from unweighted stage counts.
+
+Prefer:
+
+`8/11 stages complete`
+
+over:
+
+`73% complete`
+
+unless a canonical weighted-progress model exists.
+
+Do not provide a time-to-completion estimate merely from stage count.
+
+An ETA may be reported only when supported by an explicit planning estimate,
+measured throughput or another defensible scheduling basis.
+
+## 107.4 Mandatory Update Triggers
+
+The Progress Snapshot must be updated when any of the following changes:
+
+- A counted stage completes
+- A stage is added, removed, merged or split
+- The active Program Slice changes
+- The active major milestone changes
+- The next gate changes
+- A blocker appears or clears
+- A terminal STOP, FAILED, ROLLED_BACK or equivalent state changes the roadmap
+- A new RCA introduces a required intermediate stage
+- A roadmap stage is formally skipped as NOT APPLICABLE with evidence
+
+Cursor must update the Progress Snapshot as part of the same legitimate Rule 02
+or closeout update that records the state transition.
+
+Do not create a standalone pointer, stamp or progress-only commit merely to
+increment a counter.
+
+For high-risk terminal closeout where Rule 02 must already change, the Progress
+Snapshot must be corrected in that same closeout.
+
+## 107.5 Cursor and Integrator Reporting
+
+Every meaningful Cursor closeout report should include one compact progress line:
+
+```text
+PROGRESS: Project <X/Y> | Milestone <name> | Stage <A/B> | Remaining <N> | Next <gate> | Blocker <NONE/reason>
+```
+
+The Integrator reviewing Cursor output must verify that the progress line agrees
+with Rule 02 and the actual engineering state.
+
+If the Progress Snapshot is stale, contradictory or unsupported:
+
+- Do not guess a replacement count
+- Perform read-only reconciliation
+- Correct the canonical snapshot before relying on it
+
+When the owner asks questions such as:
+
+- `How much is left?`
+- `Which stage are we on?`
+- `How many stages until Artemis?`
+- `What comes next?`
+
+the answer should be derived from the canonical Progress Snapshot and the
+applicable roadmap, not from memory or informal chat history.
+
+## 107.6 Owner-Facing Simplicity
+
+The owner-facing status should remain short.
+
+The normal human-readable form is:
+
+```text
+Project: <X/Y major milestones>
+Current: <program> — Stage <A/B>
+Remaining in this program: <N>
+Next: <gate>
+Blocked: <No / short reason>
+```
+
+Detailed engineering evidence remains available separately when needed.
+
+The Progress Snapshot must reduce coordination burden, not create another
+approval layer.
+
+## 107.7 Initial Bootstrap and Rebaseline
+
+For an existing project that did not previously maintain this snapshot:
+
+- Do not fabricate historical counts
+- Initialize the first canonical snapshot from the verified current roadmap
+- Use the next legitimate Rule 02 closeout or explicit roadmap rebaseline
+- Record only currently known major milestones and stages
+
+When a major roadmap is materially revised, perform one concise rebaseline and
+continue from the new truthful denominator.
+
+Past completed work remains completed unless a separate authorized defect or
+reopening rule requires otherwise.
+
+## 107.8 Final Progress-Visibility Principle
+
+The goal is not to make the roadmap look fixed.
+
+The goal is:
+
+> The owner should always be able to see where TitanGold is, what remains, what
+> comes next and what is blocking progress, using one short canonical status that
+> stays truthful as the engineering plan evolves.
+
+---
+

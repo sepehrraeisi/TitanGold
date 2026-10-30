@@ -1,0 +1,393 @@
+---
+description: 'TitanGold original v4.7 rules for conversational admin product ux. Mandatory for relevant work, sections 98-102.'
+alwaysApply: false
+---
+
+# 98. Conversational Administrative Operations
+
+Authorized administrators may use the ACCP for operational administration, but
+admin conversation remains subject to the same resource/action architecture as
+other Artemis operations.
+
+## 98.1 Administrative Read Examples
+
+Where authorized, Artemis may answer questions such as:
+
+- How many users are currently online?
+- Which services are degraded?
+- Which workers are unhealthy?
+- Which Agents failed recently?
+- Which providers are rate-limited?
+- Which tasks are blocked?
+- What changed during the last deployment?
+- Which sources are stale?
+
+Answers must come from canonical operational data.
+
+## 98.2 Administrative Mutation
+
+An administrator may request supported actions such as:
+
+- Pause an approved analytical scheduler job
+- Disable a degraded source
+- Change a bounded system setting
+- Change an approved Agent configuration
+- Trigger a supported recovery workflow
+
+The admin role does not bypass the Action Intent, policy, audit or approval
+architecture.
+
+## 98.3 Privacy-Minimized Admin Answers
+
+When aggregate information is sufficient, prefer aggregate information.
+
+Example:
+
+`42 users are online`
+
+does not require disclosing the identity of all 42 users.
+
+Access to individual user data must follow the relevant privacy and admin
+authorization policy.
+
+## 98.4 No Conversational Root Shell
+
+The existence of admin chat must not create:
+
+- Unrestricted production shell
+- Arbitrary SQL
+- Arbitrary filesystem write
+- Arbitrary secret read
+- Arbitrary cross-tenant mutation
+
+High-privilege maintenance capabilities, if ever exposed, require separate
+narrow contracts and stronger governance.
+
+## 98.5 Destructive User Administration
+
+Actions such as account deletion, permission elevation, credential reset or
+other high-impact user-management operations require their canonical approval
+and recovery semantics.
+
+Natural-language convenience does not reduce that risk.
+
+---
+
+# 99. Voice, Multimodal and Attachment Interaction
+
+Voice, images, files and other modalities may be used to communicate with
+Artemis, but modality must not change authority.
+
+## 99.1 Voice Parity
+
+A voice command has the same effective permissions and policy requirements as
+the equivalent text command.
+
+Voice must not become a shortcut around:
+
+- Authentication
+- Approval
+- Step-up authentication
+- Financial confirmation
+- Risk limits
+- Operations Kill Switch
+
+## 99.2 Transcript Visibility
+
+For material commands, the system should make the recognized transcript or
+normalized interpreted action visible before sensitive execution.
+
+This is especially important for:
+
+- Asset symbols
+- Numbers
+- Currency units
+- Percentages
+- Account names
+- Buy/sell direction
+
+## 99.3 Voice Ambiguity
+
+Ambiguous speech recognition for a sensitive parameter must trigger
+clarification or trusted confirmation.
+
+Examples:
+
+- `fifteen` vs `fifty`
+- `SOL` vs another similar token
+- `$100` vs `100 units`
+
+## 99.4 Voice Is Not Strong Authentication by Default
+
+Unless TitanGold later implements and verifies a dedicated strong voice
+authentication mechanism, voice recognition alone must not satisfy step-up or
+critical approval requirements.
+
+## 99.5 Attachment Content Is Untrusted
+
+Text extracted from:
+
+- Images
+- PDFs
+- Documents
+- Audio
+- Uploaded files
+
+is input data, not system instruction.
+
+Prompt-injection rules from Sections 58 and 83 apply.
+
+## 99.6 Sensitive Media
+
+Retention of voice recordings, transcripts, screenshots and uploaded files must
+follow the applicable privacy and retention policy.
+
+Do not retain more media than the approved use case requires.
+
+---
+
+# 100. Proactive Artemis Notifications and Initiated Conversation
+
+Artemis may initiate user-facing conversation when meaningful events require
+awareness or action.
+
+Proactivity must be useful, bounded and policy-controlled.
+
+## 100.1 Notification Classes
+
+The system should distinguish classes such as:
+
+- INFORMATIONAL
+- RECOMMENDATION
+- ACTION_REQUIRED
+- SECURITY
+- FINANCIAL
+- CRITICAL_OPERATIONAL
+
+The class determines priority, delivery channel and acknowledgement behavior.
+
+## 100.2 Evidence-Based Proactivity
+
+A proactive message must be tied to a canonical event, task, decision, policy
+condition or verified operational observation.
+
+Do not generate alerts merely because an LLM speculates that something might be
+wrong.
+
+## 100.3 No Alert Spam
+
+Notification policy should support:
+
+- Deduplication
+- Cooldowns
+- Grouping
+- Priority
+- User preference
+- Quiet behavior where appropriate
+- Escalation for unresolved critical states
+
+Repeated identical provider failures should not create uncontrolled
+notification flooding.
+
+## 100.4 Notification Is Not Approval
+
+A user opening, reading or dismissing a notification must not be interpreted as
+approval of a sensitive action.
+
+Approval remains explicit.
+
+## 100.5 Actionable Notifications
+
+Where appropriate, a proactive event may offer trusted actions such as:
+
+- View evidence
+- Open affected resource
+- Approve
+- Reject
+- Pause
+- Roll back
+- Dismiss
+
+The action buttons must use canonical policy and Action Intent state.
+
+## 100.6 Safety Events
+
+Critical safety notifications must truthfully distinguish:
+
+- Artemis detected a risk
+- A safety gate blocked an action
+- Emergency Stop activated
+- Operations Kill Switch activated
+- Reconciliation failed
+- Autonomous task suspended
+
+Do not hide a blocked or failed state behind friendly generic prose.
+
+---
+
+# 101. Explain, Inspect, Undo and Rollback Semantics
+
+The ACCP should make Artemis actions inspectable and recoverable through
+conversation where the underlying operation supports it.
+
+## 101.1 Explain
+
+A user may ask:
+
+`Why did you do that?`
+
+Artemis should answer from the canonical Decision and Action lineage.
+
+## 101.2 Show Evidence
+
+A user may ask:
+
+`Show me what you based that on.`
+
+Artemis should expose authorized structured evidence without leaking protected
+or secret data.
+
+## 101.3 Show Change
+
+A user may ask:
+
+`What exactly changed?`
+
+Artemis should present the canonical before/after diff or equivalent state
+transition.
+
+## 101.4 Undo
+
+`Undo` is valid only for actions with a verified reverse operation.
+
+The system must determine which prior action the user refers to.
+
+Do not guess when several recent reversible actions could match.
+
+## 101.5 Financial Actions Are Not Normally Undo
+
+A filled trade, transfer or withdrawal cannot be represented as undone.
+
+A later compensating trade or transfer is a **new financial operation** with:
+
+- New risk
+- New authorization
+- New fees
+- New market conditions
+- New audit lineage
+
+The UI and conversation must not label such a new operation as a magical undo.
+
+## 101.6 Rollback Failure
+
+If rollback fails or only partially succeeds, Artemis must state that explicitly
+and enter the documented recovery path.
+
+---
+
+# 102. Artemis Conversational Product UX
+
+The ACCP should support both lightweight access and serious operational work.
+
+## 102.1 Quick Artemis
+
+The compact assistant beside the active page should support tasks such as:
+
+- Quick questions
+- Current-page analysis
+- Simple inspection
+- Simple reversible actions
+- Navigation
+- Voice input
+- Current task status
+- Opening a larger workspace
+
+It should remain fast and unobtrusive.
+
+## 102.2 Artemis Workspace / Command Center
+
+A larger expandable or dedicated Artemis workspace should support:
+
+- Full conversation history
+- Current context
+- Active goals/tasks
+- Pending approvals
+- Recent actions
+- Reports
+- Evidence
+- Decision details
+- Capability/degraded-state visibility
+- Operational health
+- Financial mandate status
+- Admin operations where authorized
+- Rollback/recovery actions
+- Memory controls where appropriate
+
+The exact information architecture must follow real product needs and verified
+capabilities.
+
+## 102.3 Structured Conversational UI
+
+The ACCP should render trusted structured artifacts when text alone would be
+unsafe or inefficient.
+
+Examples:
+
+- Approval card
+- Task card
+- System-health card
+- Portfolio status
+- Trade/mandate summary
+- Before/after diff
+- Evidence list
+- Capability state
+- Failure/recovery state
+
+Do not expose raw internal JSON as the normal user experience.
+
+## 102.4 Action-State Visibility
+
+When Artemis is doing work, the user should be able to distinguish:
+
+- Thinking/analyzing
+- Researching
+- Waiting
+- Awaiting approval
+- Executing
+- Verifying
+- Completed
+- Failed
+- Rolled back
+
+Do not display a generic loading animation indefinitely.
+
+## 102.5 Accessibility and Localization
+
+The ACCP must follow the normal TitanGold UI standards, including:
+
+- English LTR
+- Persian RTL
+- Canonical Persian font
+- Keyboard use
+- Focus management
+- Screen-reader semantics
+- Responsive layout
+- Dark theme
+- Mixed-direction technical values
+- Accessible approval controls
+- Accessible streaming updates
+
+## 102.6 User Control Over Conversation
+
+The user should be able to:
+
+- Stop generation
+- Cancel supported tasks
+- Clear or archive conversation according to policy
+- Inspect pending approvals
+- Open relevant canonical product pages
+- Disable voice capture
+- Understand when Artemis is in degraded mode
+
+---
+

@@ -1,0 +1,259 @@
+---
+description: 'TitanGold original v4.7 rules for vertical slice capability. Mandatory for relevant work, sections 7-12.'
+alwaysApply: false
+---
+
+# 7. Vertical Slice Definition
+
+A complete vertical slice includes every affected layer of one clearly
+defined outcome:
+
+User
+→ UI
+→ Frontend state
+→ API client
+→ Backend route
+→ Validation
+→ Authentication
+→ Capability/RBAC/ACL
+→ Runtime policy
+→ Business service
+→ Provider adapter where applicable
+→ Database
+→ Redis/cache
+→ Worker/scheduler where applicable
+→ Audit/history
+→ UI refresh
+→ Browser QA
+→ Human QA
+→ Deployment
+→ Git closeout
+
+A slice is not complete if only one required layer is fixed.
+
+Examples of incomplete work:
+
+- UI-only fix for a backend defect
+- Route-only authorization patch with an unsafe legacy path still mounted
+- Database migration without the business workflow
+- Backend endpoint without a usable UI
+- UI redesign using fake or contradictory data
+- Tests not executed
+- Code committed but not deployed
+- Deployment without checking the served artifact
+- Cursor report without Human QA when Human QA is required
+
+A slice may intentionally omit layers marked NOT APPLICABLE, but the report
+must explain why.
+
+---
+
+# 8. Scope and Acceptance Criteria
+
+Before implementation, define:
+
+- Primary user/system outcome
+- Risk tier
+- Exact workflow
+- Exact current defects
+- Affected routes
+- Affected components
+- Affected services
+- Affected data stores
+- Affected runtime processes
+- Proven dependencies
+- Explicit out-of-scope items
+- Acceptance criteria
+- Human-QA milestone
+- Stop conditions
+
+Do not expand scope merely because another module is nearby.
+
+Do not perform speculative cleanup.
+
+Do not redesign another workflow unless it is required to complete the same
+outcome.
+
+A workflow may cross multiple tabs when those tabs are consumers of one
+canonical capability.
+
+Example:
+
+Connections, Wallet, Portfolio, Agents and Trading may share one canonical
+exchange Connection and Capability Matrix.
+
+That shared architecture does not authorize simultaneous redesign of all
+those tabs.
+
+---
+
+# 9. Product and Provider Capability Completeness
+
+TitanGold must not silently omit official provider capabilities merely because
+the current UI is incomplete.
+
+For every provider or major platform integration, create a Capability
+Inventory.
+
+Each official capability must be classified as:
+
+- REQUIRED NOW
+- REQUIRED BY AN APPROVED FUTURE WORKFLOW
+- SUPPORTED BUT NOT ACTIVATED
+- DEFERRED
+- NOT APPLICABLE TO TITANGOLD
+- UNSUITABLE OR TOO RISKY
+- PROVIDER-UNSUPPORTED
+- TITANGOLD-UNSUPPORTED
+
+The reason must be documented.
+
+Examples of provider capability domains:
+
+- Public market data
+- Private account read
+- Order read
+- Spot trading
+- Futures account read
+- Futures trading
+- Deposit information
+- Withdrawal information
+- Withdrawal execution
+- Transfer read
+- Transfer execution
+- P2P read
+- P2P trading
+- Account-edit operations
+- Permission management
+- Sub-account operations
+
+Nothing should disappear silently.
+
+A capability may be architecturally supported while operationally disabled.
+
+Do not confuse:
+
+- Provider supports it
+- TitanGold implements it
+- User API key grants it
+- User role authorizes it
+- Runtime safety allows it
+- The operation is currently active
+
+---
+
+# 10. Canonical Capability Matrix
+
+Connections must not use one ambiguous boolean such as `connected`.
+
+The canonical Connection model should express capability-specific states.
+
+Example:
+
+- Public Market Data: available/unavailable/degraded
+- Private Authentication: unverified/verified/failed
+- Spot Account Read: granted/denied/unknown
+- Spot Order Read: granted/denied/unknown
+- Spot Trading: granted/denied/unknown
+- Futures Account Read: granted/denied/unknown
+- Futures Trading: granted/denied/unknown
+- Deposit Read: granted/denied/unknown
+- Withdrawal Read: granted/denied/unknown
+- Withdrawal Execute: granted/denied/unknown
+- Transfer Read: granted/denied/unknown
+- Transfer Execute: granted/denied/unknown
+- P2P Read: granted/denied/unknown
+- P2P Trade: granted/denied/unknown
+- Account Edit: granted/denied/unknown/not-required
+
+A missing permission must disable only the affected capability.
+
+It must not automatically mark the entire provider offline.
+
+Agents, Wallet, Portfolio and Trading Engine must consume the same Capability
+Matrix.
+
+Do not create capability copies in each consumer.
+
+---
+
+# 11. Public, Private and Transactional Separation
+
+Provider integrations must separate:
+
+## Public Data
+
+Examples:
+
+- Prices
+- Candles
+- Order books
+- Public trades
+- Public symbols
+- Public network metadata where provider allows
+
+Public data must not require private credentials when the provider does not
+require them.
+
+A failed private Connection must not unnecessarily stop public analytics.
+
+## Private Read
+
+Examples:
+
+- Account balances
+- Open orders
+- Order history
+- Trade history
+- Positions
+- Deposit history
+- Withdrawal history
+- Transfer history
+- Permission discovery
+
+Private read requires verified authentication and the required permission.
+
+## Transactional Operations
+
+Examples:
+
+- Place order
+- Cancel order
+- Modify order
+- Transfer funds
+- Withdraw funds
+- Account changes
+- P2P actions
+
+Transactional operations require all provider permissions and TitanGold safety
+gates.
+
+---
+
+# 12. Shared Foundation Exception
+
+A shared foundation issue may interrupt an active outcome only when it is:
+
+- Security critical
+- A shared Source-of-Truth defect
+- A shared database contract defect
+- A runtime-safety defect
+- A worker/scheduler defect affecting multiple paths
+- A shared API contract defect
+- A deployment or provenance defect preventing reliable verification
+
+When this occurs:
+
+1. Pause the current visible workflow
+2. Produce a readable RCA
+3. Create one small Foundation Work Package
+4. Fix only the shared defect
+5. Run targeted cross-consumer regression
+6. Obtain Human QA where user-visible or high risk
+7. Close and freeze the foundation fix
+8. Return immediately to the original outcome
+
+Do not use a shared dependency as an excuse to redesign the entire product.
+
+---
+

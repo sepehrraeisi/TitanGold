@@ -1,0 +1,340 @@
+---
+description: 'TitanGold original v4.7 rules for artemis reasoning decision artifacts. Mandatory for relevant work, sections 63-66.'
+alwaysApply: false
+---
+
+# 63. Reasoning Model Layer and Model Independence
+
+LLMs and other foundation models are cognitive tools available to Artemis.
+They are not the identity or canonical authority of Artemis.
+
+## 63.1 Model Role
+
+A selected model may act as:
+
+- Reasoning engine
+- Specialist
+- Critic
+- Verifier
+- Scenario analyst
+- Structured summarizer
+- Challenger
+- Explanation generator
+
+The role is task-specific.
+
+A provider or model does not permanently own the role merely because it handled
+that role in a previous task.
+
+## 63.2 Internal and External Models
+
+The same architectural distinction applies to:
+
+- OpenAI-class models
+- Anthropic-class models
+- Gemini-class models
+- DeepSeek-class models
+- xAI-class models
+- Mistral-class models
+- Approved local models
+- Approved self-hosted models
+- Future TitanGold-trained models
+
+A model may be more trusted for a specific evaluated task, but no model becomes
+Artemis by being selected frequently.
+
+## 63.3 Task-Aware Model Routing
+
+Model routing must consider the rules in Section 55 and may additionally
+consider cognitive role requirements such as:
+
+- Need for independent first-pass judgment
+- Need for adversarial critique
+- Need for structured output
+- Need for long-context synthesis
+- Need for factual source verification
+- Need for low latency
+- Need for privacy-preserving local execution
+- Historical task-specific quality
+- Calibration and abstention behavior
+
+The router must not select a model merely because it is the default provider.
+
+## 63.4 Candidate Reasoning Contract
+
+Model output used by Artemis should be bounded and structured where practical.
+
+It should distinguish:
+
+- Conclusion
+- Supporting points
+- Counterpoints
+- Uncertainty
+- Assumptions
+- Source references when applicable
+- Limitations
+- Refusal/unavailable status
+- Model/provider/version
+- Prompt/policy version
+- Input evidence references
+
+Model output must be validated before entering Artemis synthesis.
+
+## 63.5 Fallback Provenance
+
+When routing falls back from one model to another:
+
+- The actual model used must be recorded
+- The fallback reason must be recorded
+- The response must not masquerade as the originally selected model
+- Evaluation must attribute performance to the actual model/version
+
+---
+
+# 64. Canonical Artemis Synthesis and Decision Artifact
+
+Artemis must produce one canonical decision artifact for every material
+cognitive decision that is intended to be persisted, evaluated, consumed by a
+control chain or presented as Artemis' conclusion.
+
+This artifact is the canonical representation of **Artemis' own synthesized
+judgment**.
+
+It is distinct from:
+
+- Agent evidence envelopes
+- External advisor artifacts
+- Raw model responses
+- Risk approvals
+- Portfolio sizing outputs
+- Liquidity feasibility outputs
+- Order intents
+- Provider responses
+
+## 64.1 Artemis Decision Artifact
+
+The canonical Artemis Decision should support, where applicable:
+
+- decisionId
+- decisionContextId
+- decision schema/version
+- lifecycle state
+- decision type
+- task/domain
+- provider/venue
+- market type
+- symbol
+- timeframe
+- analysis horizon
+- decision timestamp
+- expiry/review timestamp
+- analytical thesis
+- direction where defensible
+- regime where relevant
+- recommended next-action class
+- uncertainty status
+- confidence value only when valid
+- confidence meaning/method
+- confidence provenance
+- contributing Agent run IDs
+- contributing evidence IDs
+- excluded evidence IDs and reasons
+- conflicting evidence
+- correlation handling summary
+- missing evidence
+- required-but-unavailable evidence
+- assumptions
+- scenario summaries
+- invalidating conditions
+- risk flags known at synthesis time
+- memory references used
+- advisor consultation references
+- model/provider/version references
+- prompt/policy versions
+- configuration version
+- implementation version
+- structured synthesis rationale
+- limitations
+- downstream required control gates
+- created/completed timestamps
+
+Fields that are not applicable must not be populated with fake values.
+
+## 64.2 Decision Construction Rule
+
+A canonical Artemis Decision is valid only when:
+
+1. The Decision Context is valid
+2. Required evidence has passed compatibility and freshness checks
+3. Excluded or unavailable evidence is represented truthfully
+4. Deterministic policy results are preserved
+5. Model/advisor outputs used in synthesis are identified
+6. Correlation handling is recorded where meaningful
+7. The synthesis result passes the canonical decision schema
+8. The decision can be linked to its lineage
+
+A raw LLM completion may never be persisted directly as the canonical Artemis
+Decision without this boundary.
+
+## 64.3 Synthesis Does Not Mean Averaging
+
+Artemis synthesis may prefer, reject, limit or abstain from a conclusion.
+
+It must not reduce synthesis to:
+
+- Arithmetic averaging of incompatible scores
+- Equal-vote consensus
+- Count of bullish versus bearish Agents
+- Count of agreeing external models
+- Highest confidence number without confidence-type compatibility
+
+The synthesis policy must remain role-aware, context-aware, correlation-aware
+and explainable.
+
+## 64.4 Artemis Explanation
+
+User-facing explanations may be generated from the canonical Artemis Decision
+and its structured lineage.
+
+The explanation layer must not silently change the decision.
+
+If an explanation model generates a statement not supported by the decision
+artifact or its cited evidence, the statement must be rejected, marked as
+unsupported or omitted.
+
+---
+
+# 65. Cognitive Decision vs Execution Authorization
+
+TitanGold must use two explicit decision concepts.
+
+## 65.1 Artemis Cognitive Decision
+
+The **Artemis Cognitive Decision** answers questions such as:
+
+- What does the evidence currently imply?
+- Which scenario is preferred?
+- Is an opportunity analytically attractive?
+- Is evidence insufficient?
+- Should the system wait for more evidence?
+- What should be evaluated next?
+
+The canonical owner of this analytical synthesis is Artemis.
+
+An Artemis Cognitive Decision may be advisory, shadow-only, paper-only or
+otherwise non-executable.
+
+## 65.2 Execution Authorization
+
+**Execution Authorization** answers a different question:
+
+> Is this exact bounded operation, in this exact environment, with this exact
+> size and provider state, permitted to proceed now?
+
+No single cognitive model owns Execution Authorization.
+
+Execution Authorization is a composed result of the required control chain.
+
+Where applicable, it requires:
+
+Artemis analytical decision
+AND Risk approval
+AND Portfolio/Optimization bounds
+AND Liquidity feasibility
+AND Runtime policy approval
+AND Required TitanGold capability
+AND Required provider capability
+AND Emergency Stop clear state
+AND Required confirmation
+AND Order Management validation
+AND Idempotency
+AND Audit/lineage readiness
+AND Any Tier-4 authorization required by the Dynamic Rule
+
+If any mandatory gate fails, the result is no execution.
+
+## 65.3 No Ambiguous “Final Decision” Label
+
+Engineering documents, APIs and UI should avoid using the phrase `final decision` when it is unclear whether it means:
+
+- Artemis analytical conclusion
+- Control-chain authorization
+- Order intent
+- Provider execution result
+
+Use explicit names and states.
+
+## 65.4 Approved for Execution State
+
+Artemis must not mark a decision `approved_for_execution` merely because its
+own analytical synthesis is positive.
+
+That state is valid only when the canonical definition confirms that every
+required downstream control gate for that state has passed.
+
+---
+
+# 66. Artemis Memory-to-Cognition Interface
+
+Memory may influence Artemis reasoning, but memory is not an independent
+source of authority.
+
+Memory usage must follow Sections 51 and 57 and the additional rules below.
+
+## 66.1 Bounded Retrieval
+
+Memory retrieval should be scoped by the Decision Context and may consider:
+
+- Task/domain
+- Symbol
+- Market
+- Timeframe
+- Horizon
+- Regime
+- Agent role
+- Advisor role
+- Policy version
+- Recency
+- Provenance
+- Privacy class
+
+Do not inject unrelated historical memory merely because semantic similarity is
+high.
+
+## 66.2 Memory Is Not Ground Truth by Default
+
+A memory item must retain its source class.
+
+Artemis must distinguish:
+
+- Verified fact
+- Historical Agent evidence
+- Historical external-advisor opinion
+- Historical Artemis synthesis
+- Human evaluation
+- Later observed outcome
+- Operational incident
+
+A prior Artemis conclusion retrieved from memory is not independent evidence
+for the same conclusion.
+
+## 66.3 Outcome Linking
+
+When future outcomes are used for evaluation, they must be linked separately to
+the original decision and evidence.
+
+The later outcome must not overwrite the original decision-time inputs.
+
+This separation is required for honest replay and leakage prevention.
+
+## 66.4 Memory Failure Behavior
+
+If a required memory service is unavailable:
+
+- Artemis must identify the missing memory class
+- It must not fabricate historical experience
+- It may continue only if the workflow is explicitly safe without that memory
+- The degraded condition must be represented in the decision lineage
+
+---
+

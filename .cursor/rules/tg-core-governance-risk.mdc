@@ -1,0 +1,448 @@
+---
+description: 'TitanGold original v4.7 rules for core governance risk. Mandatory for relevant work, sections 1-6.'
+alwaysApply: false
+---
+
+
+# TitanGold Core Engineering Rules v4.7
+
+## Outcome-Driven, Risk-Based Vertical Slice, Source-of-Truth, Secure Integration, Production Verification and Human-QA Standard
+
+These rules are mandatory for all TitanGold engineering work.
+
+They replace TitanGold Core Engineering Rules v4.6.
+
+They preserve the strict security, runtime-safety, Source-of-Truth, deployment,
+Git, Human-QA, Agent-productization, evidence-validity, CI-differential and
+delivery-lifecycle standards of v4.6 while preserving the canonical Agent-to-Artemis
+architecture, role boundaries, evidence contracts, cross-Agent compatibility,
+decision lineage, evaluation and automated-trading maturity rules and adding the
+Artemis 15-stage Core Completion roadmap, canonical Settings/API-integration
+ownership, multi-provider AI advisory Council, task-aware model routing, memory,
+advisor-performance evaluation, continuous-learning governance and measured
+self-sufficiency rules required for TitanGold's long-term central intelligence,
+while adding the canonical Artemis cognitive identity, Decision Context,
+Cognitive Kernel, deterministic-versus-model-assisted reasoning boundary,
+model-independence rules, canonical Artemis Decision artifact, explicit
+Cognitive-Decision-versus-Execution-Authorization semantics and cognitive
+failure/evaluation gates required for Artemis to operate as a real central AI
+system rather than a wrapper around any single LLM.
+
+Cursor must follow these rules silently and consistently throughout the
+project.
+
+---
+
+# 1. Stable Project Baselines
+
+## Data Hub
+
+The Data Hub module is:
+
+- Fully completed
+- Production verified
+- Human-QA approved
+- Merged into `main`
+- Deployed
+- Officially closed
+- CLOSED AND FROZEN
+
+Do not:
+
+- Reopen Data Hub
+- Redesign Data Hub
+- Refactor Data Hub
+- Modify Data Hub
+- Include Data Hub in unrelated commits
+- Use Data Hub as a test area
+- Re-audit Data Hub without an explicit request
+
+Data Hub may only be inspected in read-only mode when another module depends
+on its existing contracts, database structures, ACL, scheduler patterns,
+runtime state, design tokens or APIs.
+
+## AI Shared Foundation
+
+The broad shared AI runtime foundation is CLOSED AND FROZEN unless a
+reproduced defect requires a separate, explicitly approved Foundation Work
+Package.
+
+The foundation includes:
+
+- Authentication hardening
+- Capability authorization
+- Agent execution policy
+- Requested versus effective runtime mode
+- Emergency Kill Switch
+- Worker acknowledgement
+- Scheduler execution path
+- Demo/Dry-Run enforcement
+- Route security
+- Redis safety
+- Agent panel RTL and Persian typography
+- Analytical scheduler separation
+- Staging readiness
+- Browser automation
+
+## Agents Shell
+
+Agents Shell is CLOSED AND FROZEN.
+
+Do not reopen or redesign the shared AI runtime foundation or Agents Shell
+without:
+
+- A reproduced defect
+- A scoped RCA
+- Explicit approval
+- Targeted regression requirements
+
+## Closed Baseline Rule
+
+A closed baseline may be inspected in read-only mode.
+
+A closed baseline may be changed only when:
+
+1. A defect is reproduced
+2. The defect cannot be correctly fixed outside the baseline
+3. The smallest affected shared surface is identified
+4. Regression consumers are listed
+5. Explicit implementation approval is granted
+6. The baseline is re-closed after Human QA
+
+A safe additive shared-token extension is allowed only when:
+
+- Existing token values do not change
+- Existing consumers do not change behavior
+- New consumers are listed
+- Browser regression covers existing consumers
+- The change is documented as additive
+
+---
+
+# 2. Dynamic Active-Work Authority
+
+The current module, tab, Agent, provider, workflow, slice, risk tier,
+engineering status, Human-QA status, implementation authorization, protected
+files, acceptance criteria and transition condition are defined only in:
+
+`02 — TitanGold Current Active Work`
+
+This Core Rule is stable.
+
+The Current Active Work Rule is dynamic and should remain short.
+
+It must define only:
+
+- Current module or product area
+- Current user-facing outcome
+- Current slice or program slice
+- Risk tier
+- Authorized scope
+- Hard boundaries
+- Acceptance criteria
+- Human-QA milestone
+- Protected unrelated files
+- Stop conditions
+- Next approved transition
+
+It must not repeat the entire Core Rule.
+
+When the Current Active Work Rule is:
+
+- Missing
+- Empty
+- Stale
+- Contradictory
+- Ambiguous
+- Not explicitly authorizing implementation
+
+then:
+
+- Implementation authorization is NOT GRANTED
+- Only safe read-only discovery is allowed
+- Cursor must report the missing or conflicting scope
+- Cursor must not guess the next task
+- Cursor must not code, commit, deploy or mutate runtime state
+
+A task-specific instruction may further narrow the Current Active Work Rule.
+
+A task-specific instruction may grant implementation only for the exact
+approved outcome.
+
+It may not weaken this Core Rule.
+
+---
+
+# 3. Outcome-Driven Delivery Model
+
+TitanGold work must be organized around a meaningful user or system outcome,
+not around individual files, buttons, strings or tiny defects.
+
+A valid work package should answer:
+
+> What useful, testable result will exist for the user or system when this
+> package is complete?
+
+Examples of good outcomes:
+
+- A user can securely configure, verify and manage a MEXC Connection
+- An Agent produces truthful results with real history and safe controls
+- Wallet can display deposit networks and safely prepare a withdrawal
+- Scheduler executes approved analytical Agents under Emergency Stop
+- A tab is fully useful in English and Persian across desktop and mobile
+
+Examples of poor work-package boundaries:
+
+- Change one button color
+- Add one translation key
+- Rename one label
+- Add one API field
+- Create one route without its consumer
+- Create a form without persistence
+- Create a backend service without a usable workflow
+
+Small fixes may still be implemented, but they should normally be absorbed
+inside the active outcome instead of becoming independent slices.
+
+---
+
+# 4. Work-Package Types
+
+Every task must be classified as one of the following.
+
+## 4.1 Read-Only Discovery
+
+Purpose:
+
+- Inspect architecture
+- Reproduce defects
+- Map dependencies
+- Verify Sources of Truth
+- Produce an implementation plan
+
+No mutation is allowed.
+
+## 4.2 Outcome Vertical Slice
+
+The default implementation unit.
+
+It completes one useful workflow across all affected layers.
+
+## 4.3 Program Slice
+
+Used for a large end-to-end product capability that cannot be made useful
+through artificial micro-slices.
+
+A Program Slice may include internal phases such as:
+
+- Discovery
+- Foundation
+- Backend contract
+- Provider integration
+- Frontend workflow
+- Capability mapping
+- Security hardening
+- Browser QA
+- Human QA
+- Closeout
+
+Internal phases do not automatically require separate user approval,
+separate Dynamic Rules or separate Human-QA cycles.
+
+The Program Slice must still have one primary outcome, one Source-of-Truth
+model and explicit high-risk gates.
+
+Examples:
+
+- MEXC End-to-End Connection Platform
+- Wallet Deposit/Withdrawal/Transfer Workflow
+- Complete Arbitrage Agent
+- Futures Trading Foundation
+
+## 4.4 Shared Foundation Work Package
+
+Used only for a proven cross-cutting defect or a new shared capability needed
+by multiple consumers.
+
+## 4.5 Remediation Bundle
+
+Used when Human QA or Browser QA finds multiple related low- or medium-risk
+defects inside the same approved outcome.
+
+Related defects should be fixed together when they share the same workflow or
+acceptance criteria.
+
+Do not create a new micro-slice for every button, label or spacing defect.
+
+## 4.6 Documentation-Only Closeout
+
+Used only after implementation and Human QA are complete.
+
+It must not pretend that runtime code changed.
+
+---
+
+# 5. Risk-Tier Model
+
+Every active work package must declare one risk tier.
+
+## Tier 0 — Read-Only / Documentation
+
+Examples:
+
+- Discovery
+- Audit
+- Documentation correction
+- Evidence verification
+
+Requirements:
+
+- Repository safety
+- No mutation
+- Accurate reporting
+- No deployment unless a runtime artifact actually changed
+
+## Tier 1 — Low Risk
+
+Examples:
+
+- Copy
+- i18n
+- RTL presentation
+- Spacing
+- Design-token alignment
+- Empty-state text
+- Non-security button styling
+- Layout and responsiveness
+
+Requirements:
+
+- Scoped RCA
+- Focused tests
+- Browser QA
+- Build/deploy when runtime UI changes
+- Human QA at the parent outcome milestone, not for every minor fix
+
+Cursor may fix additional reproduced Tier-1 defects within the same approved
+surface without stopping for a new authorization.
+
+## Tier 2 — Medium Risk
+
+Examples:
+
+- Frontend state
+- API contract changes
+- Safe read-only routes
+- Status mapping
+- Settings persistence
+- Capability display
+- Non-financial provider metadata
+- Agent result contracts
+
+Requirements:
+
+- Full dependency and Source-of-Truth review
+- Relevant backend/frontend tests
+- Browser QA
+- Deployment verification
+- Human QA at the outcome milestone
+
+Cursor may continue through related Tier-1 and Tier-2 defects when they remain
+inside the approved acceptance criteria.
+
+## Tier 3 — High Risk
+
+Examples:
+
+- Authentication
+- Authorization
+- Secrets
+- Encryption
+- Database migration
+- Redis authority
+- Scheduler
+- Worker
+- Runtime mode
+- Kill Switch
+- Provider private authentication
+- Account permission discovery
+- Financial status persistence
+
+Requirements:
+
+- Full RCA
+- Full dependency audit
+- Security review
+- Deterministic tests
+- Runtime provenance
+- Explicit stop gates
+- Explicit Human QA
+- Separate closeout evidence
+
+## Tier 4 — Critical Financial or External Side Effects
+
+Examples:
+
+- Real order placement
+- Order cancellation or modification
+- Real transfer
+- Real withdrawal
+- Settlement
+- Account mutation
+- P2P order placement
+- Real notification delivery with operational consequences
+- Enabling Live execution
+
+Requirements:
+
+- Explicit task-level authorization
+- Explicit credential and environment authorization
+- Operation-specific capability
+- Idempotency
+- Risk rules
+- Limits
+- Confirmation
+- Audit
+- Rollback or recovery plan
+- Controlled test account or non-production environment where possible
+- No irreversible automated test
+- Human approval immediately before controlled real execution when required
+
+Tier 4 work must never be authorized implicitly by a broad Program Slice.
+
+---
+
+# 6. Continue-vs-Stop Rule
+
+Cursor should continue within the current approved outcome when:
+
+- A defect is Tier 1 or Tier 2
+- It is reproduced
+- It affects the same workflow
+- It does not expand the Source of Truth
+- It does not require a new migration
+- It does not touch a closed baseline unexpectedly
+- It does not introduce real external side effects
+- It is covered by the existing acceptance criteria
+
+Cursor must stop and request or report explicit approval when:
+
+- Scope expands to a new user outcome
+- A new database migration is required
+- A new secret or credential owner is proposed
+- A shared foundation defect is found
+- A closed baseline must change
+- Runtime safety semantics must change
+- A real provider credential is required
+- A real private provider request is required and not already authorized
+- Any Tier-4 operation is required
+- Repository state is uncertain
+- Runtime provenance is uncertain
+- Requirements conflict
+- The implementation cannot remain fail-closed
+
+The purpose of this rule is to preserve safety without stopping after every
+minor defect.
+
+---
+

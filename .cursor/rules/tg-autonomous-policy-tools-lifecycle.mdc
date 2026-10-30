@@ -1,0 +1,425 @@
+---
+description: 'TitanGold original v4.7 rules for autonomous policy tools lifecycle. Mandatory for relevant work, sections 73-76.'
+alwaysApply: false
+---
+
+# 73. Autonomous Operations Policy Decision and Enforcement Architecture
+
+Autonomous Operations must use independent deterministic authorization outside
+the free-form cognitive path.
+
+The architecture should preserve three responsibilities:
+
+1. **Policy Decision** — determine whether the exact action is allowed.
+2. **Capability Issuance** — issue bounded authority for that exact approved
+   action.
+3. **Policy Enforcement** — enforce the authority at the canonical resource
+   owner.
+
+## 73.1 Policy Decision Point
+
+One canonical policy authority must evaluate, where applicable:
+
+- Artemis identity
+- Human requester identity
+- Resource
+- Action
+- Exact parameters
+- Environment
+- Autonomy class
+- Risk tier where relevant
+- Current operational state
+- Required approval state
+- User locks
+- Maintenance/freeze state
+- Rate and budget limits
+- Side-effect class
+- Secret requirements
+- Runtime safety state
+- Time validity
+- Dependency state
+
+The LLM or Cognitive Kernel may propose an action but must not be the authority
+that grants the permission to execute it.
+
+## 73.2 Policy Enforcement Point
+
+Every canonical mutable owner exposed to Artemis must enforce policy server-side
+at the point of mutation.
+
+A frontend approval badge, model statement or Action Intent alone is not
+authorization.
+
+## 73.3 Short-Lived Capability Lease
+
+An approved mutation should receive a short-lived capability lease or equivalent
+bounded authorization artifact.
+
+The lease should be bound to, where applicable:
+
+- Artemis operator identity
+- Action type
+- Target resource
+- Exact normalized parameter constraints
+- Environment
+- Maximum count or amount
+- Expiry
+- Approval record
+- Policy version
+- Idempotency/replay protection
+
+A lease for one action must not authorize another action merely because both use
+the same service.
+
+## 73.4 Just-Enough / Just-in-Time Authority
+
+Artemis should receive privileged write authority only for the time and scope
+required to execute the approved operation.
+
+Privileges should expire automatically.
+
+Do not leave an elevated write scope active because Artemis may need it later.
+
+## 73.5 Revalidation Before Commit
+
+For sensitive mutations, state may change between planning and execution.
+
+The enforcement layer must revalidate time-sensitive preconditions immediately
+before commit where applicable.
+
+Examples:
+
+- Resource version has not changed
+- Approval is still valid
+- Runtime state has not moved to blocked mode
+- User lock has not changed
+- Budget remains available
+- Provider state remains acceptable
+
+Stale authority must fail closed.
+
+## 73.6 Authorization Failure
+
+If policy lookup, audit dependency, approval validation or capability validation
+fails for a write action, the action must not execute.
+
+Do not interpret policy-system unavailability as permission.
+
+---
+
+# 74. Artemis Operational Autonomy Classes
+
+Operational Autonomy Classes classify **runtime Artemis actions**.
+
+They are separate from the engineering Risk Tiers in Section 5.
+
+An engineering work package may be Tier 3 while implementing a runtime action
+that will later be classified as a low-autonomy operation, and vice versa.
+
+## Class O0 — Observe
+
+Artemis may:
+
+- Read approved non-secret state
+- Inspect health
+- Research
+- Compare options
+- Produce recommendations
+- Build Action Intents
+
+No mutation is permitted.
+
+## Class O1 — Autonomous Reversible Local Change
+
+Artemis may execute automatically when all policy conditions pass.
+
+Typical characteristics:
+
+- Low blast radius
+- Fully reversible
+- No financial side effect
+- No credential change
+- No security-boundary change
+- No external publication
+- No irreversible deletion
+- Deterministic validation exists
+
+Possible examples after explicit registration:
+
+- Add/remove a symbol from one analytical Agent within an approved universe
+- Change an Agent timeframe within an approved set
+- Change a non-security analytical preference
+- Disable one unhealthy optional data source when a healthy fallback exists
+
+## Class O2 — Bounded Autonomous Operational Change
+
+Artemis may execute automatically only after the domain has been specifically
+promoted for bounded autonomy and all limits pass.
+
+Typical characteristics:
+
+- Reversible or compensatable
+- Moderate operational impact
+- Bounded external calls
+- Known owner and rollback
+- Canary or validation path available
+- No secret exposure
+- No privilege escalation
+
+Possible examples after verified maturity:
+
+- Onboard an approved public read-only data source through the canonical source
+  onboarding path
+- Adjust bounded polling or routing configuration
+- Move one approved analytical workload to a healthy provider
+- Disable a degraded integration without deleting credentials
+
+## Class O3 — Human-Approved Privileged Change
+
+Artemis may research, plan, validate and prepare the action, but exact human
+approval is required before execution.
+
+Typical examples:
+
+- Add a paid external provider
+- Create or rotate provider credentials
+- Change a setting with cross-system impact
+- Modify important scheduler behavior
+- Change a production integration with material cost or reliability impact
+- Permanently delete operational data or a configured integration
+
+## Class O4 — Critical / Strong Approval Change
+
+Artemis may prepare the operation but must not autonomously approve it.
+
+The policy may require step-up authentication, two-person approval, owner
+approval or another independent control.
+
+Examples include:
+
+- Financial or account-changing operations governed by Sections 20 and 53
+- Live-execution activation
+- High-impact permission changes
+- High-blast-radius destructive actions
+- Security-control reconfiguration
+- Critical production deployment actions where separately authorized
+
+## Class O5 — Artemis-Prohibited Governance Action
+
+These actions are outside autonomous Artemis authority even if technically
+reachable.
+
+Artemis may identify a need and prepare a proposal, but it may not grant itself
+permission or execute the governance change autonomously.
+
+Section 82 defines the canonical prohibited self-governance boundary.
+
+## 74.1 Default-Deny Classification
+
+An unclassified write action defaults to approval-required or prohibited
+according to policy.
+
+It must never default to autonomous execution.
+
+## 74.2 Promotion and Demotion
+
+An action class may be promoted to greater autonomy only through an approved
+policy change supported by evidence.
+
+Autonomy may be demoted immediately when:
+
+- Failure rate increases
+- Rollback fails
+- Data quality degrades
+- Provider behavior changes
+- Security evidence becomes uncertain
+- Unexpected blast radius is observed
+- Audit lineage becomes incomplete
+
+---
+
+# 75. Canonical Artemis Tool and Action Gateway
+
+Artemis must interact with mutable TitanGold resources through a canonical
+Action Gateway or equivalent policy-enforced tool layer.
+
+## 75.1 Narrow Typed Tools
+
+Tools should be specific, typed and schema-validated.
+
+Prefer:
+
+- `add_agent_symbol(agentId, symbol)`
+- `disable_data_source(sourceId, reason)`
+- `update_bounded_setting(settingId, value)`
+
+over:
+
+- arbitrary shell
+- arbitrary SQL
+- arbitrary HTTP with unrestricted destinations
+- generic admin RPC
+- unrestricted filesystem access
+
+## 75.2 No Direct Database Mutation by Model Output
+
+A model must not generate SQL or raw persistence commands that are executed
+against canonical production stores merely because Artemis requested a change.
+
+Canonical business services must own validation and persistence.
+
+## 75.3 UI Automation Is Not the Primary Control Path
+
+Artemis should not normally simulate a human clicking through TitanGold UI to
+change canonical product state.
+
+Human UI and Artemis should both consume the same canonical backend owner.
+
+Browser/UI automation may be used only when:
+
+- No correct canonical API/tool exists
+- The use is explicitly approved
+- The target is tightly scoped
+- Secret exposure is prevented
+- The UI path has deterministic verification
+- The operation does not bypass stronger server-side policy
+
+The long-term solution should still prefer a canonical programmatic owner.
+
+## 75.4 Tool Contract Requirements
+
+Each mutable tool should define, where applicable:
+
+- Allowed resource classes
+- Allowed parameter schema
+- Field allowlist
+- Preconditions
+- Postconditions
+- Idempotency behavior
+- Expected side effects
+- Maximum request count
+- Timeout
+- Retry policy
+- Rollback/compensation behavior
+- Secret handling
+- Audit fields
+- Error semantics
+
+## 75.5 Secret Brokerage
+
+When an authorized operation requires a Secret, Artemis should reference the
+canonical secret owner without receiving plaintext Secret material whenever the
+underlying integration permits it.
+
+A tool may use a Secret internally under policy without returning the Secret to
+Artemis.
+
+---
+
+# 76. Autonomous Change Lifecycle
+
+Every material autonomous change should follow a closed operational loop:
+
+Observe
+→ Identify Need
+→ Research
+→ Form Action Intent
+→ Validate / Simulate
+→ Policy Decision
+→ Human Approval where required
+→ Capability Lease
+→ Execute
+→ Verify
+→ Observe Outcome
+→ Keep or Roll Back
+→ Evaluate
+→ Learn
+
+## 76.1 Observe and Identify Need
+
+Artemis must distinguish:
+
+- User-requested change
+- System-detected defect
+- Optimization opportunity
+- Reliability remediation
+- Cost optimization
+- Data-quality improvement
+- Security recommendation
+
+The initiating reason must be recorded.
+
+## 76.2 Research
+
+Research must consider sources appropriate to the domain.
+
+Provider- or API-specific contracts must still follow official-documentation
+rules where applicable.
+
+Research uncertainty must be represented explicitly.
+
+## 76.3 Pre-Execution Validation
+
+Before a write, verify as applicable:
+
+- Correct canonical owner
+- Current resource version
+- Dependency impact
+- Reversibility
+- Expected blast radius
+- Policy class
+- Approval state
+- Budget
+- Rate limits
+- Required health
+- Audit readiness
+
+## 76.4 Canary and Progressive Change
+
+Where a change affects multiple resources or consumers, Artemis should prefer:
+
+1. One-resource canary
+2. Verification
+3. Small bounded expansion
+4. Verification
+5. Broader promotion only when evidence remains healthy
+
+Do not perform a broad fleet-wide configuration change when a narrower canary
+can prove the behavior first.
+
+## 76.5 Independent Postcondition Verification
+
+Success must be verified using canonical system state or observable behavior.
+
+Do not treat a model statement such as `change completed successfully` as
+execution evidence.
+
+## 76.6 Rollback
+
+For reversible changes, rollback should be defined before mutation.
+
+The system should record:
+
+- Pre-change state
+- Rollback action
+- Rollback expiry or constraints
+- Whether rollback was tested
+
+If a change cannot be rolled back, the action class must reflect the higher
+risk.
+
+## 76.7 Partial Failure
+
+A multi-step change must define behavior for partial completion.
+
+The system must not silently report success when:
+
+- Only some targets changed
+- Verification failed
+- A dependent service did not acknowledge the change
+- Compensation failed
+
+Use explicit partial, failed, rolled-back or manual-recovery states.
+
+---
+

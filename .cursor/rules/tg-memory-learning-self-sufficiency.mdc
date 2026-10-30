@@ -1,0 +1,435 @@
+---
+description: 'TitanGold original v4.7 rules for memory learning self sufficiency. Mandatory for relevant work, sections 57-59.'
+alwaysApply: false
+---
+
+# 57. Artemis Memory, Learning, Advisor Performance and Continuous Improvement
+
+Artemis is intended to improve over time, but “learning” must be defined in a
+way that is measurable, reproducible and safe.
+
+Artemis must not claim that it is learning merely because more chat history or
+more model responses exist.
+
+## 57.1 Memory Classes
+
+Artemis may maintain distinct memory classes, each with one canonical owner and
+retention policy:
+
+### Decision / Episodic Memory
+
+- what context existed
+- what evidence was available
+- what decisions were made
+- what advisors contributed
+- what controls accepted or rejected
+- what later outcome occurred
+
+### Knowledge / Semantic Memory
+
+- verified reusable facts
+- canonical definitions
+- approved domain knowledge
+- provider capabilities
+- system architecture knowledge
+- lessons derived from validated outcomes
+
+### Evaluation Memory
+
+- Agent performance
+- advisor performance
+- calibration
+- failure patterns
+- regime-specific quality
+- latency/cost observations
+- abstention/refusal quality
+
+### Operational Memory
+
+- incidents
+- recovery actions
+- provider outages
+- degraded modes
+- known recurring operational patterns
+
+Do not collapse all memory into one uncontrolled vector store or one free-form
+conversation history.
+
+## 57.2 Memory Provenance and Freshness
+
+Every reusable memory item should support, where applicable:
+
+- memoryId
+- source type
+- source reference
+- creation time
+- source time
+- last verified time
+- expiry or review time
+- confidence/provenance class
+- domain
+- scope
+- privacy classification
+- version
+- superseded-by relationship
+
+A model-generated statement must not be promoted to factual memory without the
+required verification.
+
+A prediction must not become “knowledge” merely because Artemis produced it.
+
+Future observed outcomes must be linked separately.
+
+## 57.3 Advisor Performance Is Contextual
+
+External advisors must not receive one permanent global trust score.
+
+Performance should be segmented where meaningful by:
+
+- provider/model version
+- task type
+- domain
+- market
+- symbol
+- timeframe
+- horizon
+- regime
+- language
+- tool/retrieval availability
+- prompt/policy version
+
+Evaluation may measure different dimensions, including:
+
+- factual correctness
+- citation/source quality
+- forecast calibration
+- directional usefulness
+- risk identification
+- contradiction detection
+- uncertainty quality
+- abstention quality
+- robustness under adversarial critique
+- consistency
+- latency
+- cost efficiency
+
+Do not reduce all advisor quality to one “accuracy” number.
+
+## 57.4 Teacher → Peer → Specialist Evolution
+
+The intended long-term relationship with external AI systems may evolve through:
+
+### Teacher / Strong Advisor
+
+Artemis consults external models frequently because internal capability is not
+yet mature.
+
+### Peer Advisor
+
+Artemis and selected external models provide comparable independent analysis and
+mutual critique.
+
+### Selective Specialist
+
+Artemis performs most routine synthesis itself and calls external specialists
+only where their demonstrated domain value justifies the cost, latency or
+privacy exposure.
+
+### Optional Challenger / Second Opinion
+
+Artemis is operationally self-sufficient for the approved domain but may call an
+external advisor for challenge, rare expertise, incident analysis or periodic
+benchmarking.
+
+Promotion between these states must be evidence-based.
+
+Do not assume Artemis becomes better than an external model simply because time
+has passed or more data has accumulated.
+
+## 57.5 Continuous Learning Loop
+
+The approved learning loop is conceptually:
+
+Observe
+→ Analyze
+→ Decide
+→ Record
+→ Observe Outcome
+→ Evaluate
+→ Calibrate
+→ Propose Improvement
+→ Validate Offline
+→ Shadow
+→ Promote only when approved
+
+Possible safe improvement mechanisms include:
+
+- better retrieval
+- better memory selection
+- improved task routing
+- improved advisor selection
+- evidence-based advisor weighting
+- calibrated confidence
+- prompt/policy version improvements
+- feature/algorithm improvements
+- approved model fine-tuning
+- approved local models
+- improved conflict resolution
+
+Learning does not authorize uncontrolled self-modification.
+
+## 57.6 No Autonomous Production Self-Modification
+
+Artemis may identify, recommend or prepare candidate improvements, but it must
+not autonomously:
+
+- modify production code
+- push Git commits
+- merge PRs
+- change Rule 01 or Rule 02
+- change credentials
+- change RBAC
+- change Emergency Stop semantics
+- change runtime mode
+- increase position or loss limits
+- change execution eligibility
+- activate Live trading
+- change provider permissions
+- change execution-relevant policy weights
+- deploy itself
+
+Production-affecting improvements must follow the normal TitanGold engineering,
+test, Human-QA, Git and deployment lifecycle.
+
+## 57.7 Model Training / Fine-Tuning Governance
+
+If Artemis eventually trains or fine-tunes a model, the work must be a separately
+approved Program Slice.
+
+It must define:
+
+- training objective
+- dataset owner
+- dataset provenance
+- licensing/usage rights where relevant
+- privacy classification
+- train/validation/test split
+- leakage controls
+- temporal split for market tasks where appropriate
+- baseline model
+- evaluation suite
+- calibration
+- regression thresholds
+- version identifier
+- reproducibility
+- rollback
+- deployment gate
+
+Do not train on:
+
+- Secrets
+- private provider credentials
+- unauthorized user data
+- future outcomes that leak into historical inputs
+- unverified model-generated text presented as ground truth
+- duplicated evaluation data that invalidates the holdout set
+
+A newly trained model must not replace the production model solely because its
+training loss is lower.
+
+## 57.8 Feedback-Loop Protection
+
+Artemis must distinguish:
+
+- external fact
+- Agent-derived evidence
+- external advisor opinion
+- Artemis synthesis
+- later observed outcome
+- human evaluation
+
+Do not recursively reinforce Artemis-generated opinions as independent evidence.
+
+Do not count the same model-generated claim after storage/retrieval as a new
+confirmation.
+
+Do not let a model train on its own historical predictions and then evaluate
+against those predictions as though they were ground truth.
+
+---
+
+# 58. Artemis Self-Sufficiency, Governance and External-AI Safety Gates
+
+TitanGold's long-term objective is a highly capable Artemis that can perform the
+approved domain work increasingly independently while using external AI systems
+selectively and intelligently.
+
+Self-sufficiency is a measured system property, not a marketing label.
+
+## 58.1 Self-Sufficiency Criteria
+
+Artemis may be described as more independent only when evidence shows, for the
+approved scope:
+
+- internal Agents and memory provide sufficient coverage
+- external-provider outages do not collapse the core workflow
+- decision quality remains within approved thresholds without routine external
+  consultation
+- calibration remains acceptable
+- risk detection remains acceptable
+- provenance remains complete
+- failure behavior remains safe
+- latency and cost remain acceptable
+- evaluation is segmented by domain/regime rather than hidden in one aggregate
+- periodic external benchmarking does not reveal a material quality regression
+
+Do not claim that Artemis is “better than ChatGPT”, “better than Gemini”,
+“better than DeepSeek” or better than any other model globally.
+
+Comparative claims must be:
+
+- domain-specific
+- task-specific
+- version-specific
+- methodology-defined
+- reproducible
+- time-bounded
+
+## 58.2 External Advisors Remain Replaceable
+
+Artemis architecture must tolerate:
+
+- provider removal
+- model deprecation
+- price changes
+- quota changes
+- region changes
+- provider outages
+- model-quality regression
+- policy changes
+
+No single external AI provider should become an undocumented single point of
+failure for the canonical Artemis workflow.
+
+## 58.3 Privacy and Minimum Necessary Context
+
+External advisors receive only the minimum context required for the approved
+advisory task.
+
+Before sending context externally, classify it as:
+
+- public
+- internal product-safe
+- privileged diagnostic
+- user-private
+- secret / prohibited
+
+Secret/prohibited data must never be sent.
+
+User-private or privileged data requires an explicitly approved use case,
+provider policy compatibility and the required authorization.
+
+Do not send an entire database row, log bundle, conversation history or user
+profile when a bounded derived context is sufficient.
+
+## 58.4 Prompt-Injection and Tool Safety
+
+Content retrieved from the web, documents, news, provider payloads or user data
+must be treated as data, not trusted instructions.
+
+External advisor prompts and tool layers must defend against:
+
+- prompt injection
+- instruction smuggling
+- data exfiltration
+- secret requests
+- tool escalation
+- malicious URLs or payloads
+- arbitrary code execution
+- cross-tenant data exposure
+
+An external source cannot grant itself tool permission.
+
+A model cannot authorize its own elevation.
+
+## 58.5 Human Governance and Explainability
+
+For material Artemis changes, the system must preserve enough explanation for a
+human reviewer to understand:
+
+- what changed
+- why it changed
+- which evidence supported it
+- which advisors influenced it
+- which evaluation improved
+- which risks remain
+- how to roll back
+
+Human QA remains final authority at the required milestone.
+
+## 58.6 Relationship to Automated-Trading Maturity
+
+The Multi-AI Council, memory, advisor scoring, improved routing or Artemis
+self-sufficiency do not independently advance the trading maturity stage.
+
+Section 53 remains authoritative.
+
+External AI advice can never bypass:
+
+- Risk veto
+- Portfolio bounds
+- Liquidity feasibility
+- runtime safety
+- Emergency Stop
+- provider capability checks
+- confirmation rules
+- Order Management idempotency
+- Tier-4 authorization
+
+A more intelligent Artemis must also be a more traceable and better-governed
+Artemis.
+
+---
+
+# 59. Final Operating Principle
+
+TitanGold engineering must be:
+
+- Strict about money
+- Strict about Secrets
+- Strict about identity and permissions
+- Strict about runtime safety
+- Strict about Sources of Truth
+- Strict about evidence provenance
+- Strict about Agent authority boundaries
+- Strict about Artemis decision lineage
+- Strict about deployment evidence
+- Strict about Human QA
+
+TitanGold engineering should be fast about:
+
+- Copy
+- i18n
+- Spacing
+- Layout
+- Low-risk UX corrections
+- Related remediation inside an approved outcome
+- Parallel read-only audits
+- Reusable verification commands
+- Selective revalidation based on proven dependencies
+
+The goal is not maximum process.
+
+The goal is:
+
+> The smallest amount of process that still produces a secure, truthful,
+> complete, explainable and professionally verified system.
+
+For automated trading, the goal is not maximum automation.
+
+The goal is:
+
+> The highest level of automation that remains evidence-based, traceable,
+> bounded, reversible where possible and safe under failure.
+---
+

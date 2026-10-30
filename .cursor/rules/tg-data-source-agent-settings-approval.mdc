@@ -1,0 +1,289 @@
+---
+description: 'TitanGold original v4.7 rules for data source agent settings approval. Mandatory for relevant work, sections 77-79.'
+alwaysApply: false
+---
+
+# 77. Artemis Data Hub and External Source Lifecycle
+
+Artemis may eventually manage approved Data Hub operational source state, but
+this capability must preserve the Data Hub Source of Truth and the closed
+baseline rule.
+
+## 77.1 Closed Baseline Compatibility
+
+The current Data Hub code and frozen product baseline remain protected by
+Section 1.
+
+Artemis must not modify Data Hub code, schema, contracts or frozen architecture
+merely because Autonomous Operations exists.
+
+Operational source management becomes Artemis-writable only after an explicitly
+approved **Data Hub Operational Management Contract** or verified existing
+canonical management path defines:
+
+- Which source records are operational configuration rather than frozen code
+- Which fields are mutable
+- Which actions are safe
+- Which actions require approval
+- Validation
+- Audit
+- Rollback
+- Consumer impact
+
+Until that contract is approved and verified, Artemis remains read-only toward
+the frozen Data Hub surface.
+
+## 77.2 Candidate Source Research
+
+Before proposing a new external source, Artemis should evaluate where
+applicable:
+
+- Official ownership and documentation
+- API or access method
+- Authentication requirements
+- Licensing and permitted usage
+- Terms relevant to TitanGold use
+- Privacy and data classification
+- Region/residency constraints
+- Cost
+- Quota
+- Rate limits
+- Reliability history
+- Freshness
+- Coverage
+- Schema stability
+- Data-quality characteristics
+- Duplication with existing sources
+- Correlation with existing sources
+- Provenance quality
+- Known provider limitations
+- Security and supply-chain risk
+- Prompt-injection or untrusted-content risk
+
+## 77.3 Source Quarantine
+
+A newly discovered source should not feed production decision-making merely
+because Artemis found it useful.
+
+Where practical, onboarding should use a quarantine or evaluation state:
+
+- Fetch a bounded sample
+- Validate schema
+- Validate data types
+- Measure freshness
+- Measure error rate
+- Inspect unexpected content
+- Detect duplicate or poisoned payload patterns
+- Compare with canonical or trusted references
+- Record cost and latency
+
+Only after passing the required gate may the source become production-eligible.
+
+## 77.4 Public vs Credentialed Source
+
+A public read-only source may qualify for bounded autonomous onboarding after the
+relevant domain reaches sufficient maturity.
+
+A source requiring a new credential, payment, legal commitment, write access or
+sensitive data transfer requires the applicable approval class.
+
+Artemis must not create an external account or accept contractual terms merely
+because a provider appears useful unless that action is explicitly authorized.
+
+## 77.5 Source Promotion
+
+Promotion should distinguish:
+
+- discovered
+- proposed
+- quarantined
+- validated
+- shadow-consumed
+- production-eligible
+- active
+- degraded
+- disabled
+- rejected
+- retired
+
+Do not collapse discovery and production activation into one action.
+
+## 77.6 Source Disable and Retirement
+
+Artemis may disable a source autonomously only when policy explicitly allows it
+and the blast radius is bounded.
+
+Permanent deletion, credential revocation or loss of historical provenance may
+require stronger approval.
+
+---
+
+# 78. Artemis Agent and Settings Management
+
+Artemis should eventually be able to operate Agent and product settings in the
+same canonical system used by a human operator.
+
+## 78.1 Setting Metadata
+
+Every Artemis-manageable setting should declare, where applicable:
+
+- settingId
+- canonical owner
+- data type
+- valid range or enum
+- default
+- current value
+- scope
+- consumer list
+- secret-bearing status
+- security sensitivity
+- financial sensitivity
+- runtime effect
+- restart/reload requirement
+- reversibility
+- autonomy class
+- user-lock state
+- validation rules
+- dependency constraints
+
+## 78.2 Agent Configuration Examples
+
+After the relevant Agent contract is verified, Artemis may be permitted to
+perform bounded actions such as:
+
+- Add an approved symbol
+- Remove an approved symbol
+- Change timeframe within an allowlist
+- Adjust non-security analytical parameters within validated bounds
+- Enable or disable an optional analytical input
+- Change an approved model or provider preference
+
+The exact Agent must remain the Source-of-Truth owner of its supported
+configuration contract.
+
+## 78.3 No Arbitrary Settings Mutation
+
+Artemis must not use a generic patch interface that permits unknown or future
+fields to be changed automatically.
+
+New settings default to non-autonomous until classified.
+
+## 78.4 Cross-Agent Changes
+
+A change affecting multiple Agents has a larger blast radius than the same
+change applied to one Agent.
+
+Mass changes should use canary rollout, tighter limits and stronger approval
+where appropriate.
+
+## 78.5 Human Locks and Pinned Values
+
+A human may mark a supported setting as:
+
+- Artemis-managed
+- Artemis-suggested only
+- Approval-required
+- Human-locked
+
+Artemis must respect the effective lock.
+
+A user may explicitly instruct Artemis to change a locked value only through the
+canonical approval semantics for that action.
+
+## 78.6 Temporary Optimization Changes
+
+Where useful, Artemis may apply a time-bounded configuration experiment with an
+automatic expiry or revert point.
+
+The experiment must identify:
+
+- Baseline
+- Expected improvement
+- Observation window
+- Success criterion
+- Failure criterion
+- Revert rule
+
+---
+
+# 79. Approval Integrity and Human Governance
+
+Human approval is a security control and must not be reduced to a model-generated
+question followed by an unbound `yes`.
+
+## 79.1 Approval Artifact
+
+A sensitive approval should bind to the exact intended action, including where
+applicable:
+
+- approvalId
+- approving human identity
+- Artemis actionId
+- action type
+- target resource
+- normalized parameter hash or equivalent exact representation
+- before/after diff
+- risk/autonomy class
+- relevant cost or amount
+- environment
+- expiry
+- single-use or bounded-use semantics
+- step-up-auth status
+- policy version
+
+Changing material action parameters invalidates the approval unless the approval
+explicitly bounded those parameters.
+
+## 79.2 Trusted Approval Presentation
+
+Approval UI must be generated from the canonical Action Intent and trusted policy
+metadata.
+
+Do not allow untrusted web content, external advisor text or free-form model
+output to define the authoritative action preview.
+
+The user must be able to see what operation will actually occur.
+
+## 79.3 User Instruction vs Approval
+
+A natural-language request may express a goal without constituting approval for
+every derived privileged action.
+
+Example:
+
+`Improve our market-data coverage`
+
+does not automatically authorize:
+
+- Paying a new provider
+- Creating a credential
+- Sending private data externally
+- Deleting an existing provider
+- Changing production security policy
+
+A direct instruction may count as the required approval only when the policy
+explicitly allows command-as-approval and the exact operation is sufficiently
+specified and bound.
+
+## 79.4 Strong Approval
+
+Critical actions may require one or more of:
+
+- Step-up authentication
+- Re-authentication
+- Two-person approval
+- Separate security-owner approval
+- Explicit owner approval immediately before execution
+
+The same Artemis cognitive component that proposes an action must not fabricate
+or self-issue the independent approval.
+
+## 79.5 Approval Expiry and Replay Protection
+
+Approvals must expire.
+
+An old approval must not be replayed against a new state, new resource or new
+parameter set.
+
+---
+

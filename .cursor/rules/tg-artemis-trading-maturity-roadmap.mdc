@@ -1,0 +1,292 @@
+---
+description: 'TitanGold original v4.7 rules for artemis trading maturity roadmap. Mandatory for relevant work, sections 53-54.'
+alwaysApply: false
+---
+
+# 53. Automated-Trading Maturity Stages and Live Gate
+
+Completing all 15 Agents does not automatically authorize automated trading.
+
+TitanGold automated trading must advance through explicit maturity stages.
+
+## Stage 0 — Specialized Agent Product
+
+- Agent works as a truthful standalone product
+- Human QA complete
+- No Artemis consumption required
+
+## Stage 1 — Canonical Evidence
+
+- Agent produces the canonical versioned evidence contract
+- Evidence is persisted and traceable
+- No execution
+
+## Stage 2 — Artemis Advisory
+
+- Artemis consumes compatible evidence
+- Produces explainable recommendations
+- No orders
+- Human reviews decisions
+
+## Stage 3 — Shadow Decisions
+
+- Artemis makes decisions in parallel with the live market
+- No orders are sent
+- Decisions, gates and outcomes are recorded
+- Calibration and conflict handling are evaluated
+
+## Stage 4 — Paper or Simulated Execution
+
+- Full decision chain runs
+- Simulated orders and reconciliation
+- Risk, sizing, liquidity and failure recovery verified
+- No real funds
+
+## Stage 5 — Controlled Sandbox or Limited Test Environment
+
+- Explicit environment authorization
+- Minimum permissions
+- Bounded operations
+- Tier-4 controls where real external effects exist
+- Human approval
+
+## Stage 6 — Limited Live Automation
+
+Requires all of:
+
+- Explicit Tier-4 task authorization
+- Approved provider and account
+- Approved assets and markets
+- Approved operation types
+- Position and loss limits
+- Idempotency
+- Risk veto
+- Portfolio sizing
+- Liquidity validation
+- Emergency Stop
+- Worker acknowledgement
+- Audit
+- Reconciliation
+- Alerting
+- Rollback and incident plan
+- Human approval immediately before activation when required
+
+## Stage 7 — Expanded Live Automation
+
+Requires a separate explicit outcome after Stage 6 evidence.
+
+Do not jump stages.
+
+A stage may be rolled back immediately when:
+
+- Data quality degrades
+- Calibration fails
+- Reconciliation fails
+- Runtime provenance is uncertain
+- Risk controls fail
+- Provider behavior changes
+- Audit lineage is incomplete
+- Emergency Stop or worker acknowledgement is unreliable
+
+Live mode must fail closed.
+
+No broad Agent Program Slice, Artemis feature, PR merge or green CI check may
+implicitly authorize Stage 5, Stage 6 or Stage 7.
+
+---
+
+# 54. Artemis Core Completion Program — 15-Stage Roadmap
+
+The Artemis program must be executed as a deliberate sequence of verifiable
+capabilities. This roadmap prevents the central intelligence layer from becoming
+an unbounded rewrite, a collection of disconnected experiments, or a premature
+Live-trading shortcut.
+
+This section defines **Artemis Core Completion**. Core completion means the
+internal TitanGold evidence, orchestration, control, lineage, evaluation and
+safe-maturity architecture is complete and verified for the approved maturity
+stage. It does **not** mean that all future cognitive expansion, external-AI
+advisory capabilities or Live automation are automatically enabled.
+
+The Dynamic Active-Work Rule remains authoritative for which stage is currently
+authorized. A later stage must not be inferred from the existence of this
+roadmap.
+
+The fifteen stages are:
+
+## Stage 1 — Canonical Evidence Discovery
+
+- Inventory every active Agent and its real outputs.
+- Map stable Agent identity, DB record identity and legacy aliases.
+- Define role and authority boundaries.
+- Classify confidence, freshness, data quality and limitations truthfully.
+- Design the canonical Agent-to-Artemis evidence contract from real system
+  capabilities rather than from imagined fields.
+- No implementation unless separately authorized.
+
+## Stage 2 — Canonical Evidence Foundation
+
+- Implement one versioned evidence envelope and validator.
+- Implement canonical Agent identity normalization.
+- Establish compatibility, nullability and unavailable semantics.
+- Establish evidence lineage identifiers and contract version ownership.
+- Preserve `ai_decisions` or another existing Source of Truth unless a separately
+  approved persistence change is required.
+- No Agent-specific parallel evidence schemas.
+
+## Stage 3 — Agent-by-Agent Contract Compatibility
+
+- Assess each Agent independently.
+- Prefer adapters and targeted corrections over rewrites.
+- Classify each Agent as contract-ready, adapter-ready, correction-required,
+  implementation-required, non-evidence role or unavailable/deferred.
+- Preserve the specialized user-facing Agent product while adding a truthful
+  machine-consumable role.
+- Do not force Risk, Portfolio, Optimization, Liquidity or Order Management into
+  a false directional-vote model.
+
+## Stage 4 — Evidence Validation, Persistence and Read-Only Ingestion
+
+- Validate schema and identity.
+- Persist or reconstruct evidence according to the approved Source-of-Truth
+  design.
+- Reject incompatible, stale or invalid evidence when policy requires.
+- Distinguish unavailable from neutral.
+- Preserve provenance, correlation family, limitations and confidence method.
+- Artemis remains advisory and non-executing.
+
+## Stage 5 — Artemis Orchestration Discovery
+
+- Map the real current orchestrator, legacy mocks and remaining synthetic paths.
+- Define conflict-resolution semantics.
+- Define correlation-aware evidence grouping.
+- Define missing-evidence behavior.
+- Define role-aware authority handling.
+- Define the minimum canonical orchestration boundary before implementation.
+
+## Stage 6 — Real Artemis Evidence Orchestration
+
+- Replace or contain synthetic Agent calls in the approved scope.
+- Consume canonical evidence packages.
+- Preserve every contributing and excluded Agent result.
+- Resolve incompatible timeframes and horizons explicitly.
+- Avoid naive majority voting and correlated double counting.
+- Produce explainable analytical recommendations only.
+
+## Stage 7 — Canonical Control Chain Integration
+
+The required chain remains:
+
+Artemis analytical decision
+→ Risk veto and limits
+→ Portfolio and Optimization bounded allocation/sizing
+→ Liquidity execution-feasibility validation
+→ Runtime mode, capability and Emergency Stop validation
+→ Order Management
+→ Provider only when explicitly authorized
+→ Reconciliation and audit
+
+At this stage:
+
+- Risk owns veto authority.
+- Portfolio and Optimization own only bounded sizing/allocation authority.
+- Liquidity owns execution-feasibility authority.
+- Order Management owns execution mechanics only.
+- No component may silently absorb another component's authority.
+
+## Stage 8 — Shadow Decision Mode
+
+- Artemis makes time-stamped decisions against real market context without
+  sending orders.
+- Contributing evidence, exclusions, conflicts and control outcomes are recorded.
+- Decisions are compared with future observed outcomes.
+- No simulated success may be presented as realized performance.
+- Shadow mode must remain operationally isolated from order placement.
+
+## Stage 9 — Decision Lineage, Replay and Evaluation Foundation
+
+- Every decision becomes reconstructable.
+- Evidence, policy, configuration, model and implementation versions are linked.
+- Replay distinguishes original historical evidence from current recomputation.
+- Backtesting prevents look-ahead and future-data leakage.
+- Evaluation is segmented by Agent role, market, symbol, timeframe, horizon,
+  regime and version where meaningful.
+
+## Stage 10 — Calibration and Promotion Framework
+
+- Confidence calibration is measured when predictive claims are made.
+- Trust or weighting policies become evidence-based and versioned.
+- Promotion gates are explicit.
+- A weak global average must not hide poor performance in a specific regime.
+- Regression or degraded data quality can demote a component immediately.
+
+## Stage 11 — Paper / Simulated Full-Chain Readiness
+
+- Full decision → control → execution-intent chain runs with simulated orders.
+- Risk, sizing, liquidity, idempotency, failure handling and reconciliation are
+  exercised.
+- No real funds are used.
+- Paper execution must use the same contracts and gates intended for later
+  controlled execution where practical.
+
+## Stage 12 — Operational Reliability and Failure Recovery
+
+Before any controlled real-effect environment:
+
+- Provider failure behavior is verified.
+- Worker and scheduler failure behavior is verified.
+- Emergency Stop and runtime acknowledgement are verified.
+- Duplicate execution is prevented.
+- Reconciliation and incident recovery are tested.
+- Runtime provenance is exact and auditable.
+- Alerting and rollback procedures are documented.
+
+## Stage 13 — Controlled Test-Environment Readiness
+
+- Use only an explicitly approved environment.
+- Use minimum credentials and capabilities.
+- Bound assets, markets, operations, size and rate.
+- Keep Tier-4 authorization separate from technical readiness.
+- Human approval is required where real external side effects exist.
+
+## Stage 14 — Limited Live Readiness Gate
+
+A system may be technically ready for Limited Live only when Section 53 gates
+are satisfied and the Dynamic Rule explicitly authorizes the operation.
+
+Technical readiness never equals Live authorization.
+
+No implementation, PR, Human-QA PASS, green CI result, confidence score or
+Artemis recommendation may implicitly activate Live mode.
+
+## Stage 15 — Artemis Core Completion and Freeze
+
+Artemis Core may be declared complete only when:
+
+- Canonical evidence is stable.
+- Role-aware orchestration is real and explainable.
+- Risk, Portfolio, Liquidity, runtime safety and Order Management boundaries are
+  enforced.
+- Decision lineage and evaluation are operational.
+- Shadow and Paper evidence support the declared maturity.
+- Remaining limitations are explicit.
+- Human QA passes the approved milestone.
+- Exact-main runtime provenance is verified.
+- The completed baseline is closed and frozen.
+
+After Stage 15, additional cognitive expansion, external-AI advisory systems,
+provider infrastructure and self-improvement remain separate Program Slices.
+
+Do not use “Artemis Core Complete” to imply:
+
+- Every Agent product is complete.
+- External AI providers are configured.
+- The Multi-AI Council exists.
+- Artemis is self-sufficient.
+- Live trading is enabled.
+- Expanded Live automation is authorized.
+
+Section 53 remains the authoritative automated-trading maturity and Live gate.
+
+---
+

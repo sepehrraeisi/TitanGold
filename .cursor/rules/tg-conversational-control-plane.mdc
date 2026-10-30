@@ -1,0 +1,495 @@
+---
+description: 'TitanGold original v4.7 rules for conversational control plane. Mandatory for relevant work, sections 88-92.'
+alwaysApply: false
+---
+
+# 88. Artemis Conversational Control Plane (ACCP)
+
+TitanGold must treat the Artemis conversational experience as a first-class
+control plane for the product, not as a decorative chatbot or a separate AI
+identity.
+
+The canonical product name for this architecture is:
+
+**Artemis Conversational Control Plane (ACCP)**
+
+The ACCP is the human-facing conversational interface to the same Artemis
+cognitive, operational, policy, memory, task and control architecture defined
+elsewhere in this Rule.
+
+The canonical principle is:
+
+> The user should be able to express goals, questions and authorized commands in
+> natural language without needing to know TitanGold's internal navigation,
+> while every underlying read, mutation and financial action still uses the same
+> canonical owners, permissions and safety gates as non-conversational product
+> paths.
+
+The ACCP must not create:
+
+- A second Artemis brain
+- A second permission system
+- A second Settings owner
+- A second Agent configuration owner
+- A second trading engine
+- A second Data Hub owner
+- A second memory Source of Truth
+- A second audit system
+
+The conversational layer is an interface and orchestration surface over
+canonical TitanGold capabilities.
+
+## 88.1 Artemis Chat Is Artemis
+
+The user-facing assistant must not be architected as:
+
+`Chatbot -> Artemis`
+
+when that separation creates an independent chatbot identity or decision owner.
+
+The target conceptual architecture is:
+
+Human
+→ Artemis Conversational Control Plane
+→ Authenticated Identity and Session Context
+→ Artemis Cognitive Kernel
+→ Intent / Goal / Task Interpretation
+→ Capability and Policy Resolution
+→ Canonical TitanGold Services
+→ Verification / Audit / Memory
+→ Conversational Response
+
+A model may generate language inside this workflow, but the model is not the
+conversational authority.
+
+## 88.2 Conversational Sovereignty
+
+TitanGold should progress toward **Conversational Sovereignty** for approved
+domains.
+
+Conversational Sovereignty means:
+
+- A normal user can accomplish most legitimate product goals by speaking or
+  writing to Artemis.
+- An authorized administrator can accomplish most legitimate operational goals
+  through the same conversational surface.
+- The user does not need to know which menu, tab or internal service owns the
+  workflow.
+- Artemis transparently routes the request to the canonical owner.
+- The ordinary UI remains available for inspection, transparency, emergency use,
+  advanced control and fallback.
+
+Conversational Sovereignty does not mean that every possible natural-language
+request must execute.
+
+Artemis must remain truthful about missing, partial, blocked and unauthorized
+capabilities.
+
+## 88.3 Front Door, Not Back Door
+
+The ACCP may become TitanGold's primary user interface, but it must never become
+a privileged back door around normal security.
+
+A conversational command must not receive greater authority than the equivalent
+canonical UI/API operation.
+
+The fact that an action was requested in natural language does not weaken:
+
+- Authentication
+- RBAC
+- ACL
+- Capability checks
+- Object-level authorization
+- Policy
+- Runtime mode
+- Emergency Stop
+- Artemis Operations Kill Switch
+- Risk
+- Portfolio
+- Liquidity
+- Confirmation
+- Tier-4 gates
+
+---
+
+# 89. Conversational Identity, Session, Tenant and Role Context
+
+Every conversational interaction that can access non-public TitanGold state must
+be bound to a verified identity and session.
+
+Natural language is not identity.
+
+## 89.1 Authenticated Principal
+
+The ACCP must distinguish:
+
+- Anonymous/public context where allowed
+- Authenticated user
+- Authorized administrator
+- Artemis non-human operator identity
+- Delegated service identity
+- Test/simulation identity
+
+A statement such as:
+
+`I am the admin`
+
+must not alter effective authorization.
+
+Authorization is derived from canonical identity and policy state.
+
+## 89.2 User and Artemis Lineage
+
+For an action derived from a user request, lineage should preserve both:
+
+- The human principal who expressed the goal
+- The Artemis operator principal that planned and/or executed the action
+
+Do not impersonate the human principal merely because Artemis acts on the
+human's behalf.
+
+## 89.3 Tenant and Ownership Isolation
+
+Conversation, memory, task state, reports, approvals and tool calls must preserve
+user/tenant ownership.
+
+Artemis must not allow:
+
+- Cross-user memory retrieval
+- Cross-tenant page context
+- Cross-user portfolio resolution
+- Cross-tenant admin action
+- Cross-user approval reuse
+
+unless the initiating principal has the exact canonical authority.
+
+## 89.4 Role-Aware Capability Disclosure
+
+Artemis may explain only the capabilities appropriate to the effective
+principal.
+
+An unauthorized user must not gain sensitive operational knowledge merely by
+asking which privileged tools or resources exist.
+
+Where appropriate, Artemis may state:
+
+`You are not authorized for that operation`
+
+without exposing unnecessary internal details.
+
+## 89.5 Step-Up Authentication
+
+A valid chat session does not automatically satisfy stronger authentication
+requirements.
+
+Sensitive actions may require:
+
+- Re-authentication
+- Step-up authentication
+- A fresh confirmation
+- A separate approval artifact
+
+according to the canonical action policy.
+
+## 89.6 Session Expiry
+
+Pending actions, approvals and privileged conversational state must not remain
+valid indefinitely after the user session expires.
+
+A resumed conversation must revalidate identity and authorization before any new
+write or financial side effect.
+
+---
+
+# 90. Conversation Intent, Goal and Command Compiler
+
+Free-form user language must not directly become a tool invocation.
+
+The ACCP must have a canonical **Conversation Intent and Command Compiler** or
+equivalent boundary that converts natural-language meaning into validated
+TitanGold concepts.
+
+## 90.1 Canonical Intent Classes
+
+The system should support explicit intent classes such as:
+
+- ASK
+- INSPECT
+- EXPLAIN
+- REPORT
+- RESEARCH
+- PLAN
+- PROPOSE
+- ACT
+- MONITOR
+- SCHEDULE
+- CANCEL
+- PAUSE
+- RESUME
+- REVIEW
+- NAVIGATE
+- SHOW_EVIDENCE
+- UNDO_OR_ROLLBACK
+
+Additional classes may be added through one canonical owner.
+
+Do not infer execution merely because a user asks a question about an action.
+
+Examples:
+
+`Is BTC attractive now?`
+
+is not equivalent to:
+
+`Buy BTC now.`
+
+## 90.2 Goal vs Action
+
+The compiler must distinguish a high-level goal from a concrete action.
+
+Example:
+
+`Improve my portfolio`
+
+is a goal.
+
+It does not itself define:
+
+- Asset
+- Side
+- Amount
+- Provider
+- Market type
+- Leverage
+- Loss limit
+- Execution mode
+
+Artemis may research and plan from the goal, but a material mutation must still
+cross the Action Intent and policy boundary in Sections 72–79.
+
+## 90.3 Parameter Resolution
+
+When a conversational action is intended, Artemis must normalize required
+parameters from:
+
+- Explicit user language
+- Canonical page/workspace context
+- Verified account or portfolio state
+- Approved user preference
+- Valid existing mandate
+
+Parameter resolution must preserve provenance.
+
+Do not silently fill a sensitive missing parameter with a model guess.
+
+## 90.4 Ambiguity Policy
+
+For low-impact, easily reversible operations, policy may allow Artemis to use a
+high-confidence canonical interpretation.
+
+For high-impact, destructive, privileged or financial operations, material
+ambiguity must cause:
+
+- Clarification
+- Proposal without execution
+- Or denial
+
+according to policy.
+
+Examples of material ambiguity include:
+
+- Which account
+- Which provider
+- Which asset
+- Whether `100` means units or currency value
+- Whether the user means Spot or Futures
+- Whether `close it` refers to a UI panel or a financial position
+
+## 90.5 No Free-Form Execution Path
+
+A non-compliant conversational architecture is:
+
+`user text -> LLM -> privileged tool`
+
+A compliant path preserves at least:
+
+User language
+→ Intent / Goal
+→ Canonical parameters
+→ Action Intent
+→ Deterministic policy
+→ Approval where required
+→ Canonical tool
+→ Verification
+
+---
+
+# 91. Conversational Capability Discovery and Truthfulness
+
+The ACCP must know what TitanGold can actually do now.
+
+This is especially important while TitanGold contains incomplete, partial,
+deferred or not-yet-integrated subsystems.
+
+## 91.1 Conversational Capability Registry
+
+Conversational capability discovery must consume the canonical Resource and
+Action Capability Registry from Section 71 and the verified runtime state.
+
+The ACCP may expose human-readable states such as:
+
+- READY
+- READY_WITH_APPROVAL
+- READ_ONLY
+- PARTIAL
+- DEGRADED
+- BLOCKED
+- NOT_IMPLEMENTED
+- NOT_CONFIGURED
+- PROVIDER_UNAVAILABLE
+- NOT_AUTHORIZED
+- NOT_APPLICABLE
+
+These labels must have canonical definitions.
+
+## 91.2 No Promise Beyond Runtime Capability
+
+Artemis must not say:
+
+`I will do it`
+
+when the required workflow does not exist, is blocked or is unauthorized.
+
+Instead it should distinguish:
+
+- What it can do immediately
+- What it can only analyze
+- What it can prepare
+- What needs approval
+- What is currently unavailable
+- What is not yet implemented
+
+Example:
+
+If Live trading is not enabled, Artemis may offer:
+
+- Analysis
+- Strategy construction
+- Shadow evaluation
+- Paper execution
+
+but must not imply that a real order will be placed.
+
+## 91.3 Capability Changes Without Chat Rewrite
+
+A subsystem should become conversationally available by registering or exposing
+its canonical capability, policy and tool contracts.
+
+The ACCP should not require a bespoke chatbot rewrite for every new Agent or
+product feature.
+
+The preferred lifecycle is:
+
+Subsystem capability verified
+→ Canonical action/read contract available
+→ Policy registered
+→ Conversational capability discovered
+→ ACCP may use it
+
+## 91.4 Degraded Capability
+
+A capability that is temporarily degraded must remain distinguishable from one
+that is permanently unsupported.
+
+Artemis must preserve the actual reason.
+
+Do not convert a provider outage into:
+
+`TitanGold does not support this feature.`
+
+## 91.5 Capability Snapshot for Material Actions
+
+For long-running or high-impact workflows, the system should record the
+capability state that existed when the task began and revalidate it before
+mutation.
+
+---
+
+# 92. Page, Workspace and Navigation Context
+
+Because the ACCP may appear beside every TitanGold screen, Artemis may use
+current product context to reduce unnecessary clarification.
+
+Page context is convenience, not authorization.
+
+## 92.1 Canonical Page Context
+
+Where applicable, the ACCP may receive a bounded canonical context such as:
+
+- Current route
+- Product module
+- Selected Agent
+- Selected provider
+- Selected account
+- Selected symbol
+- Selected timeframe
+- Selected portfolio
+- Active filters
+- Visible object ID
+- Environment
+
+Do not send the entire DOM or arbitrary page state when canonical context is
+sufficient.
+
+## 92.2 Context Visibility
+
+When context materially affects interpretation, the UI should make the resolved
+context visible to the user.
+
+Examples:
+
+`Portfolio · MEXC Spot · BTC/USDT`
+
+or:
+
+`Technical Agent · 4H`
+
+This reduces hidden-context errors.
+
+## 92.3 Stale Context
+
+Page context must expire or be revalidated when:
+
+- The user navigates
+- The selected object changes
+- The session resumes after a material delay
+- The underlying object was deleted or replaced
+
+Do not execute a sensitive action against stale UI context.
+
+## 92.4 Navigation Capability
+
+Artemis may navigate the user to a TitanGold surface through an explicit
+navigation capability.
+
+Navigation must be separate from mutation.
+
+`Open the API settings`
+
+may navigate without granting permission to change API settings.
+
+## 92.5 Pronoun and Referential Resolution
+
+Commands such as:
+
+- `Analyze this`
+- `Open the one that failed this morning`
+- `Remove it`
+- `Close that`
+
+must resolve to one unambiguous canonical object before material mutation.
+
+When resolution is ambiguous, Artemis must ask or present choices.
+
+---
+

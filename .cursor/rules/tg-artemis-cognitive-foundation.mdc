@@ -1,0 +1,331 @@
+---
+description: 'TitanGold original v4.7 rules for artemis cognitive foundation. Mandatory for relevant work, sections 60-62.'
+alwaysApply: false
+---
+
+# 60. Artemis Cognitive Identity and System Boundary
+
+Artemis is TitanGold's central AI system and cognitive orchestration authority.
+
+Artemis is an **AI system**, but Artemis is not identical to any single model,
+LLM, prompt, provider, Agent, workflow, vector store or external-AI Council.
+
+The canonical identity rule is:
+
+> Artemis owns cognition orchestration and synthesis. Models provide bounded
+> cognitive capabilities. Agents provide specialized evidence or bounded
+> authorities. Safety and execution components retain their own authority.
+
+Therefore:
+
+- `Artemis != LLM`
+- `Artemis != external AI provider`
+- `Artemis != Multi-AI Council`
+- `Artemis != one prompt or prompt chain`
+- `Artemis != simple Agent aggregation`
+- `Artemis != majority vote`
+- `Artemis != Risk Management`
+- `Artemis != Portfolio Allocation`
+- `Artemis != Liquidity`
+- `Artemis != Order Management`
+
+A model may be replaced, upgraded, disabled or unavailable without changing the
+canonical identity of Artemis.
+
+A future TitanGold-trained, fine-tuned, local or self-hosted model is also not
+Artemis itself. It is a cognitive capability that Artemis may route to and use
+under the same provenance, evaluation, privacy, safety and versioning rules as
+other approved models.
+
+## 60.1 Artemis as a Composite Cognitive System
+
+The Artemis cognitive system is composed conceptually of:
+
+- Canonical Decision Context
+- Evidence ingestion and compatibility validation
+- Deterministic policy and eligibility logic
+- Cognitive reasoning and conflict analysis
+- Memory and retrieval interfaces
+- Internal or external model-assisted reasoning where useful
+- Advisor routing and Council consultation where useful
+- Correlation-aware evidence handling
+- Uncertainty and abstention handling
+- Synthesis
+- Canonical Artemis Decision creation
+- Decision lineage, replay and evaluation
+- Downstream control-chain handoff
+
+These capabilities may be implemented through multiple services or modules.
+
+The architecture must not create duplicate owners merely to match these
+conceptual names.
+
+The real repository, canonical services, canonical database owners, canonical
+contracts and verified runtime remain authoritative for implementation.
+
+## 60.2 Artemis Own Judgment
+
+The phrase **Artemis' own judgment** has one specific architectural meaning:
+
+> The validated synthesis produced by the Artemis cognitive system from the
+> canonical decision context, eligible evidence, policy, memory and approved
+> advisory inputs, represented as a canonical Artemis Decision.
+
+Artemis' own judgment is not:
+
+- A copied LLM answer
+- The answer of the highest-ranked external model
+- A majority vote
+- A weighted average without reasoning provenance
+- A frontend summary
+- A raw Agent result
+- A hidden prompt response stored without validation
+
+The system must be able to identify which inputs influenced the Artemis
+Decision and which inputs were rejected, unavailable, stale, incompatible or
+excluded.
+
+---
+
+# 61. Canonical Artemis Decision Context
+
+Every material Artemis reasoning workflow must operate on a canonical,
+versioned Decision Context.
+
+The Decision Context answers:
+
+> What exact question is Artemis deciding, for whom, under what market,
+> temporal, operational and safety conditions?
+
+The context must be created before final synthesis.
+
+## 61.1 Decision Context Content
+
+Where applicable, the canonical Decision Context should identify:
+
+- decisionContextId
+- context schema/version
+- user or tenant ownership
+- task/domain classification
+- requested outcome
+- provider or venue
+- market type
+- canonical symbol
+- base and quote asset
+- timeframe
+- analysis horizon
+- source-time window
+- current timestamp
+- environment
+- requested runtime mode
+- effective runtime mode where known
+- portfolio/account scope where authorized and required
+- applicable strategy or policy scope
+- required Agent roles
+- required control authorities
+- permitted external-advisor classes
+- privacy classification
+- data-quality requirements
+- freshness requirements
+- latency or expiry bounds
+- execution class
+- decision maturity mode such as advisory, shadow or paper
+- explicit unavailable or unknown fields
+
+The exact schema may evolve, but there must be one canonical owner.
+
+## 61.2 Context Normalization
+
+Before reasoning, Artemis must normalize or validate where applicable:
+
+- Provider/venue identity
+- Market type
+- Symbol identity
+- Timeframe
+- Horizon
+- Timezone
+- Closed-candle policy
+- Ownership scope
+- Runtime environment
+- Data freshness
+- Data-quality requirements
+
+Artemis must not silently combine evidence from a different context merely
+because the asset name looks similar.
+
+## 61.3 Context Snapshot and Reproducibility
+
+A material decision should be reconstructable against the context that existed
+at decision time.
+
+The system must distinguish:
+
+- The original decision-time context
+- Later updated account or market state
+- Later memory changes
+- Current policy
+- Current model versions
+- Current recomputation
+
+Do not silently replay a historical decision against a materially different
+context and present it as the original result.
+
+## 61.4 Bounded Context Principle
+
+Artemis must send only the minimum relevant and authorized context to any
+model, advisor, retrieval system or tool.
+
+Do not use unbounded dumps of:
+
+- Database rows
+- Logs
+- User history
+- Conversation history
+- Agent internals
+- Provider payloads
+- Secret-bearing configuration
+
+when a bounded canonical representation is sufficient.
+
+---
+
+# 62. Artemis Cognitive Kernel
+
+The **Artemis Cognitive Kernel** is the canonical reasoning-and-decision layer
+that transforms a valid Decision Context plus eligible inputs into a validated
+Artemis Decision.
+
+The Cognitive Kernel is not required to be one process, class, service or LLM.
+It is an architectural responsibility with one canonical ownership boundary.
+
+Conceptually:
+
+Decision Context
+→ Evidence validation and eligibility
+→ Deterministic policy checks
+→ Conflict/correlation analysis
+→ Memory retrieval where relevant
+→ Model/advisor reasoning where useful
+→ Uncertainty analysis
+→ Artemis synthesis
+→ Canonical Artemis Decision
+
+The Cognitive Kernel must preserve the authority boundaries defined in Sections
+45–58.
+
+## 62.1 Deterministic Cognitive Responsibilities
+
+The following classes of behavior must remain deterministic, explicit or
+otherwise independently verifiable and must not depend solely on free-form LLM
+judgment:
+
+- Schema validation
+- Canonical identity validation
+- Ownership validation
+- Required-field validation
+- Freshness classification
+- Expiry enforcement
+- Context compatibility
+- Timeframe/horizon compatibility rules
+- Availability semantics
+- Authority-class enforcement
+- Required-control presence
+- Capability checks
+- Runtime mode checks
+- Emergency Stop checks
+- Hard risk limits
+- Hard portfolio limits
+- Hard execution limits
+- Idempotency requirements
+- State-transition validity
+- Contract/version compatibility
+- Policy version selection
+- Correlation-family metadata handling
+- Audit/lineage requirements
+- Secret/privacy prohibitions
+- Tier-4 authorization gates
+
+An LLM may explain a deterministic result, but it must not rewrite or override
+that result.
+
+## 62.2 Model-Assisted Cognitive Responsibilities
+
+Approved models may assist Artemis with non-authoritative cognitive tasks such
+as:
+
+- Interpreting complex compatible evidence
+- Identifying non-obvious contradictions
+- Generating alternative hypotheses
+- Scenario construction
+- Counterfactual analysis
+- Critiquing assumptions
+- Comparing competing explanations
+- Summarizing supporting and conflicting evidence
+- Identifying uncertainty and missing information
+- Producing bounded structured rationale
+- Generating human-readable explanations from validated decision artifacts
+
+These model-assisted results remain untrusted candidate reasoning until they
+pass the required validation and synthesis boundary.
+
+## 62.3 No LLM Safety Authority
+
+No LLM, local model, external advisor or Council response may directly:
+
+- Change a hard risk limit
+- Approve an otherwise blocked execution
+- Override Emergency Stop
+- Change effective runtime mode
+- Change provider permissions
+- Grant a missing capability
+- Bypass confirmation
+- Create execution eligibility from missing control evidence
+- Mark stale evidence as fresh
+- Convert unavailable evidence into neutral support
+- Mutate credentials
+- Authorize its own tool use
+
+Safety-critical authority must remain outside model-generated free-form output.
+
+## 62.4 Uncertainty and Abstention
+
+The Cognitive Kernel must be able to return no directional or action conclusion
+when evidence is insufficient.
+
+Valid outcomes include, where canonically defined:
+
+- insufficient_evidence
+- incompatible_evidence
+- stale_evidence
+- unavailable
+- blocked
+- analysis_only
+
+Artemis must prefer explicit abstention over fabricated certainty.
+
+No requirement exists for Artemis to always output BUY, SELL, LONG, SHORT or
+HOLD.
+
+## 62.5 Reasoning Trace Policy
+
+Artemis must preserve enough structured rationale and lineage for audit,
+explanation, replay and evaluation.
+
+Do not require, persist or expose hidden provider chain-of-thought or
+uncontrolled internal reasoning traces.
+
+Persist structured decision rationale such as:
+
+- Evidence relied upon
+- Evidence rejected
+- Conflicts found
+- Uncertainty
+- Assumptions
+- Scenarios considered
+- Invalidating conditions
+- Policy results
+- Model/advisor contributions
+- Final synthesis summary
+
+---
+

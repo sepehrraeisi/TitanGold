@@ -1,0 +1,362 @@
+---
+description: 'TitanGold original v4.7 rules for documentation parallel design regression. Mandatory for relevant work, sections 31-37.'
+alwaysApply: false
+---
+
+# 31. Documentation Strategy
+
+Documentation should be produced once per meaningful outcome.
+
+During implementation, one living engineering document may be updated.
+
+Do not create a new closeout document for every minor remediation.
+
+A completed outcome requires:
+
+- RCA
+- Dependency audit
+- Architecture
+- Source of Truth
+- API contract
+- Database/cache findings
+- Security evidence
+- Capability Inventory where applicable
+- Performance evidence
+- Browser evidence
+- Human-QA evidence
+- Regression
+- Deployment
+- Rollback
+- Deferred work
+
+## Documentation-Only Closeout
+
+A documentation-only commit does not require rebuild, restart or redeployment
+when no runtime artifact changed.
+
+Reports must distinguish:
+
+- Runtime implementation baseline
+- Documentation closeout HEAD
+- Served bundle
+- Active runtime source
+
+Do not redeploy unchanged code just to make a documentation HEAD appear in a
+runtime marker.
+
+Every active Program Slice must maintain one Evidence Ledger inside its living
+engineering document.
+
+The ledger must be the current Source of Truth for:
+
+- Base and implementation commits
+- Runtime provenance
+- Test totals
+- Browser evidence
+- Human-QA state
+- Known base CI debt
+- Side-effect counts
+- Scheduler/worker fingerprint
+- Artemis contract version and integration-readiness state
+- Agent role and authority classification
+- PR and merge state
+
+Later reports must be generated from the current ledger.
+
+Do not carry forward stale totals or stale commit references from earlier
+reports.
+
+---
+
+# 32. Parallel Work, Skills and Subagents
+
+Parallel read-only investigation is allowed when it reduces elapsed time.
+
+Good parallel workstreams:
+
+- Backend/security audit
+- Frontend/UX audit
+- Provider-documentation audit
+- Test/regression audit
+- Database/query audit
+
+Rules:
+
+- One primary Integrator owns the final architecture
+- One Source of Truth remains authoritative
+- Subagents must not make overlapping writes
+- Subagents must not independently commit to the same branch
+- Subagents must not create parallel credential, capability or runtime owners
+- All findings must be reconciled before implementation
+- Security-critical decisions remain with the Integrator
+- Conflicting findings require a stop and resolution
+
+Skills and reusable commands are encouraged for:
+
+- Repository preflight
+- Protected-file checks
+- Runtime provenance
+- Secret scanning
+- Browser QA matrix
+- Git closeout
+- Documentation verification
+
+Reusable automation must simplify the process, not add another approval layer.
+
+---
+
+# 33. Design-System Completion Matrix
+
+Every changed user-facing outcome must report:
+
+Layout ........ PASS/FAIL
+Spacing ....... PASS/FAIL
+Cards ......... PASS/FAIL
+Typography .... PASS/FAIL
+Badges ........ PASS/FAIL
+Loading ....... PASS/FAIL
+Empty State ... PASS/FAIL
+Error State ... PASS/FAIL
+Forms ......... PASS/FAIL
+Actions ....... PASS/FAIL
+Confirmations . PASS/FAIL
+Accessibility . PASS/FAIL
+Keyboard ...... PASS/FAIL
+Responsive .... PASS/FAIL
+Dark Theme .... PASS/FAIL
+i18n .......... PASS/FAIL
+RTL ........... PASS/FAIL
+Overflow ...... PASS/FAIL
+Focus ......... PASS/FAIL
+
+Use NOT APPLICABLE only with an explanation.
+
+PASS requires browser evidence.
+
+---
+
+# 34. Regression Prevention
+
+Before closing an outcome, verify:
+
+- Shared APIs still work
+- Shared settings remain authoritative
+- Capability Matrix remains authoritative
+- Runtime safety remains unchanged
+- Related consumers still load
+- Existing Browser QA still passes
+- No performance regression
+- No database integrity regression
+- No Redis regression
+- No PM2/Nginx regression
+- No Git integrity regression
+- Closed baselines remain unchanged
+
+A feature is incomplete if it fixes one area and silently breaks another.
+
+Regression scope must be based on proven dependencies.
+
+---
+
+# 35. Verdict Rules
+
+Allowed verdicts:
+
+- REAL WORKING
+- NEEDS MORE VERIFICATION
+- PARTIAL
+- BROKEN
+- UNSAFE
+- UI ONLY
+
+## REAL WORKING
+
+Allowed only when all required conditions for the declared risk tier and
+outcome are satisfied:
+
+- RCA complete
+- Dependencies audited
+- Source of Truth preserved
+- Relevant backend verified
+- Relevant database/cache verified
+- Security verified
+- Runtime verified
+- Performance verified where applicable
+- Frontend complete
+- UX complete
+- Tests passed
+- Build passed
+- Deployment verified
+- Browser QA passed
+- Human QA passed
+- Regression passed
+- Git synchronized
+- Documentation complete
+- No known relevant defect remains
+
+## NEEDS MORE VERIFICATION
+
+Use when implementation appears complete but required evidence or Human QA is
+pending.
+
+## PARTIAL
+
+Use when known functionality, UX, testing or integration remains incomplete.
+
+## BROKEN
+
+Use when the primary workflow fails.
+
+## UNSAFE
+
+Use when authorization, secrets, runtime safety or external-side-effect
+protection is unreliable.
+
+## UI ONLY
+
+Use when only frontend behavior exists without verified backend/runtime
+support.
+
+Do not use REAL WORKING based only on Cursor’s report.
+
+---
+
+# 36. Risk-Based Cursor Response Format
+
+The previous 25-section format remains mandatory for:
+
+- Tier 3
+- Tier 4
+- Shared Foundation work
+- Final closeout
+- Any task explicitly requesting the full format
+
+Full format:
+
+## 1. Scope
+## 2. Out of Scope
+## 3. Repository Status
+## 4. RCA
+## 5. Dependency Findings
+## 6. Source of Truth
+## 7. Architecture Decision
+## 8. Backend Changes
+## 9. Database Changes
+## 10. Redis/Cache Changes
+## 11. Security Changes
+## 12. Runtime/Worker Changes
+## 13. Frontend Changes
+## 14. UI/UX Redesign
+## 15. Tests
+## 16. Performance
+## 17. Browser QA
+## 18. Human-QA Handoff
+## 19. Regression
+## 20. Build/Deployment
+## 21. Files Changed
+## 22. Commits
+## 23. Git Verification
+## 24. Remaining Risks
+## 25. Final Verdict
+
+For Tier 1 and Tier 2 iterative work, a compact report is allowed:
+
+## 1. Outcome and Scope
+## 2. Confirmed Cause
+## 3. Changes
+## 4. Tests
+## 5. Browser QA
+## 6. Deployment
+## 7. Git
+## 8. Remaining Risks
+## 9. Human-QA Milestone
+## 10. Verdict
+
+For every Agent Program Slice or Agent final closeout, the report must also
+include:
+
+- Specialized Agent role
+- Artemis authority boundary
+- Canonical Agent-to-Artemis contract status
+- Contract/schema version
+- Market, symbol and timeframe coverage
+- Freshness and provenance semantics
+- Cross-Agent compatibility findings
+- Correlated-evidence family
+- Artemis integration-readiness state
+- Decision, veto, sizing, feasibility or execution eligibility
+- Deferred Artemis work
+
+Do not claim evidence not produced.
+
+Use:
+
+- VERIFIED
+- NOT VERIFIED
+- BLOCKED
+- NOT APPLICABLE
+
+Do not convert assumptions into PASS.
+
+---
+
+# 37. Hard Restrictions
+
+- Do not modify Data Hub
+- Do not modify protected unrelated work
+- Do not reopen closed baselines without explicit approval
+- Do not code before the cause and owner are known
+- Do not expand beyond the approved outcome
+- Do not create duplicate settings
+- Do not create duplicate credentials
+- Do not create duplicate Connection state
+- Do not create duplicate Capability Matrices
+- Do not create duplicate runtime state
+- Do not create duplicate Agent registries
+- Do not create duplicate permission systems
+- Do not hardcode frontend authorization
+- Do not trust frontend controls for security
+- Do not expose Secrets
+- Do not log JWTs
+- Do not log signed provider requests
+- Do not use unauthenticated internal execution routes
+- Do not use hidden bypass tokens
+- Do not silently force Live into Demo and report success
+- Do not enable Live during normal tests
+- Do not clear Emergency Stop during normal tests
+- Do not perform an irreversible financial operation in automated tests
+- Do not call a real provider unless explicitly authorized
+- Do not send real notifications unless explicitly authorized
+- Do not approve fake or placeholder values
+- Do not leave raw i18n keys
+- Do not leave undefined/null
+- Do not leave dead buttons
+- Do not leave endless loading
+- Do not leave retry spam
+- Do not treat PM2 online as proof of health
+- Do not claim Production verification on Staging
+- Do not claim Browser QA from code inspection
+- Do not claim Human QA from Playwright
+- Do not leave completed work uncommitted
+- Do not leave completed work unpushed
+- Do not leave runtime different from Git without an explicit explanation
+- Do not move to the next outcome before the current milestone and closeout
+- Do not create pointer or stamp commit chains
+- Do not ask the user for repeated approval for low-risk fixes already inside
+  the approved outcome
+- Do not fragment one useful workflow into unnecessary micro-slices
+- Do not let an analytical Agent place or trigger an order directly
+- Do not treat all Agent outputs as equal votes
+- Do not hardcode equal Agent weights
+- Do not count correlated evidence as independent confirmation
+- Do not treat stale, unavailable or incompatible evidence as neutral evidence
+- Do not allow Artemis to bypass Risk, Portfolio, Liquidity or runtime-safety
+  gates
+- Do not allow Order Management to decide market direction or profitability
+- Do not claim Artemis integration from UI wiring alone
+- Do not claim automated-trading readiness before the required maturity stage
+  is verified
+- Do not enable Live automated trading without explicit Tier-4 authorization
+
+---
+
