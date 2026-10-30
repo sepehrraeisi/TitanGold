@@ -1,11 +1,11 @@
 ---
-description: Artemis Core Stage 10 CLOSED / FROZEN / VERIFIED (Final Completion Closeout) · base main `c40e98d6e7efde6e8a5a0d3726854cea3c9e572b` · Owner Decision PR #170 · Promotion CLOSED/VERIFIED at `7a1c9e2ee389e2a29412a5d37ba3ecfe368994c2` PR #168 · STAGE10_FORMAL_CLOSEOUT=COMPLETE · STAGE10_COMPLETION_GOVERNANCE=COMPLETE / VERIFIED · MANDATORY_REQUIREMENTS_COMPLETE=YES · REQUIRED_IMPLEMENTATION_BLOCKERS=NONE · Demotion=DEFERRED / SEPARATE DOWNSTREAM · Promotion Lifecycle=FUTURE OWNER-GATED · Calibration=DORMANT / NOT_CURRENTLY_TRIGGERED · AUTHORIZED_SLICE=NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION (Artemis) · STAGE10_IMPLEMENTATION_AUTHORIZED=NO / NO_ACTIVE_SLICE · STAGE11_IMPLEMENTATION_AUTHORIZED=NO / GOVERNANCE_DISCOVERY_ONLY · NEXT_GATE=STAGE11_GOVERNANCE_DISCOVERY NOT_AUTHORIZED · OWNER_INPUT_REQUIRED=YES · PROJECT_PROGRESS=4/10 · CURRENT_STAGE_PROGRESS=11/15 · REMAINING_STAGES=5 · PROGRESS_ADVANCEMENT=PROVEN_BY_CORE_RULE_§107_AND_STAGE9_PRECEDENT · All Stage10 owners READ_REFERENCE_ONLY · TECP-003-SERVICE-SKELETON=CLOSED / FROZEN / CONSUMED · TECP-003 merge `92e8c2fde897a93f50b723f7013104825d0b630b` PR #173 · TECP-003 HUMAN_QA=PASS · TECP-003 DEPLOY_REQUIRED=NO · TECP-004-DATABASE-FOUNDATION=CLOSED / FROZEN / VERIFIED · TECP-004 implementation `c2276260aa1f55bdc13370cb9f5f21db9a210100` · TECP-004 merge `666ef86aa62970460ca95d8a384bd1228f2a768a` PR #175 · TECP-004 HUMAN_QA=PASS · TECP-004 PRODUCTION_DB_MUTATION=NO · TECP-004 DEPLOY=NO · TECP_IMPLEMENTATION_AUTHORIZED=NO / UNTIL_THIS_GOVERNANCE_PR_MERGES · TECP_005_STATUS=CLOSED / FROZEN / VERIFIED · TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION=CONSUMED / NON-ACTIVE · LIFECYCLE_PRECEDENCE_RULE=CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION · TECP-005T-RULE02-PARSER-TEST-DECOUPLING=CLOSED / FROZEN / VERIFIED · TECP-005T implementation `940af9a465fd3431b47992b8244b6c32671ad26a` · TECP-005T merge `101b73bbc614de1d7b12482d3a76369e5540deab` PR #180 · TECP-005T HUMAN_QA=PASS · TECP-005T TESTS=17/17 PASS · TECP-005T PARSER_SOURCE=UNCHANGED · TECP-005T DEPLOY=NO · TECP-005T PRODUCTION_MUTATION=NO · TECP005T_PRIOR_IMPLEMENTATION_AUTHORIZATION=CONSUMED / NON-ACTIVE · TECP005T_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP_NEXT_GATE=TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF / OWNER_MERGE_GATE · TECP005A_STATUS=CLOSED / FROZEN / VERIFIED · TECP005A_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP_006_STATUS=CLOSED / FROZEN / VERIFIED · TECP006_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP006_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP006_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_007_STATUS=CLOSED / FROZEN / VERIFIED · TECP007_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP007_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP007_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_008_STATUS=CLOSED / FROZEN / VERIFIED · TECP008_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP008_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP008_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_009_STATUS=CLOSED / FROZEN / VERIFIED · TECP009_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP009_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP009_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_010_STATUS=CLOSED / FROZEN / VERIFIED · TECP010_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP010_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP010_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_011_STATUS=CLOSED / FROZEN / VERIFIED · TECP011_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP011_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP011_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_012_STATUS=CLOSED / FROZEN / VERIFIED · TECP012_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP012_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP012_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_013_STATUS=CLOSED / FROZEN / VERIFIED · TECP013_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP013_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP013_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_014_STATUS=CLOSED / FROZEN / VERIFIED · TECP014_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP014_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP014_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_015_STATUS=CLOSED / FROZEN / VERIFIED · TECP015_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP015_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP015_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_016_STATUS=CLOSED / FROZEN / VERIFIED · TECP016_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP016_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP016_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_017_STATUS=CLOSED / FROZEN / VERIFIED · TECP017_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP017_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP017_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP_018_STATUS=CLOSED / FROZEN / VERIFIED · TECP018_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP005_IMPLEMENTATION_AUTHORIZED=YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES · TECP005_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP_STAGE11_SCOPE_COUPLING=NONE · DEPLOY_REQUIRED=NO · TECP_019_STATUS=CLOSED / FROZEN / VERIFIED · TECP019_IMPLEMENTATION_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP019_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE=NO · TECP019_IMPLEMENTATION_STARTED=YES / COMPLETE · TECP019_MERGED_PR=#218 · TECP019_MERGE_SHA=c3f05a7c6e4b5ad058708e48652eed846eddd87a · TECP019_FULL_TECP_TESTS=560/560 PASS · TECP019_HUMAN_QA=PASS / OWNER_ATTESTED · TECP_020_STATUS=CLOSED / FROZEN / VERIFIED / EFFECTIVE_AFTER_THIS_CLOSEOUT_GOVERNANCE_PR_MERGES · TECP020_IMPLEMENTATION_AUTHORIZED=NO · TECP_DLP001_IMPLEMENTATION_AUTHORIZED=YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES · TECP_DLP001_EFFECTIVE_BEFORE_MERGE=NO · TECP020_DISCOVERY_AUTHORIZED=CONSUMED / NON-ACTIVE · TECP021_PLUS_NOT_AUTHORIZED=YES · NO Production mutation
+description: 'Canonical Rule02 authority for Artemis and TECP. Stage 11 remains governance-discovery-only. The sole active TECP package is TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION, Tier 3, exact 32-file scope, effective only after this Governance PR is separately owner-approved and merged. TECP-DLP-001 is paused, superseded, and non-active; implementation never started. Historical and superseded sections are evidence only. The parser and validator do not grant authority.'
 alwaysApply: true
 ---
 
 # TitanGold Current Active Work (Rule 02)
 
-> CURRENT AUTHORITY PRECEDENCE: the Canonical Project Progress Snapshot and the current non-Historical Active Work Packages below are the active authority. Artemis/Stage 11 authority and TECP parallel-workstream authority are INDEPENDENT and MUST NOT replace each other. Any later block explicitly labeled Historical, Closeout, Superseded, or preserved evidence is non-authorizing even if it contains former AUTHORIZED_SLICE / IMPLEMENTATION_AUTHORIZED values. TECP-003-SERVICE-SKELETON is CLOSED / FROZEN / CONSUMED. TECP-004-DATABASE-FOUNDATION is CLOSED / FROZEN / VERIFIED at merge `666ef86aa62970460ca95d8a384bd1228f2a768a` (PR #175). TECP-005-RULE02-PARSER is CLOSED / FROZEN / VERIFIED at main `bc792a19ffb98b2949c040a23664ec7df10dc1cc` (PR #178). Prior TECP-005 IMPLEMENTATION_AUTHORIZED = YES remains visible as the raw locked token and is CONSUMED / NON-ACTIVE under the explicit lifecycle precedence rule CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS is CLOSED / FROZEN / VERIFIED. Prior TECP-005A implementation authorization is CONSUMED / NON-ACTIVE. TECP-006-GOVERNANCE-VALIDATOR is CLOSED / FROZEN / VERIFIED. Prior TECP-006 implementation authorization is CONSUMED / NON-ACTIVE. TECP-007-ACTOR-CAPABILITY-ENGINE is CLOSED / FROZEN / VERIFIED. Prior TECP-007 implementation authorization is CONSUMED / NON-ACTIVE. TECP-008-TASK-GRAPH is CLOSED / FROZEN / VERIFIED. Prior TECP-008 implementation authorization is CONSUMED / NON-ACTIVE. TECP-009-RESOURCE-CLAIMS is CLOSED / FROZEN / VERIFIED. TECP009_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-010-CONFLICT-ENGINE is CLOSED / FROZEN / VERIFIED. TECP010_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-011-LEASE-ENGINE is CLOSED / FROZEN / VERIFIED at merge `e612d7d2b1f36beb86b47322540e0ca2d6358f10` (PR #197) with remediation merge `bc1f672bab1181b18f8b4ebbbd20c42829309395` (PR #198). Prior TECP-011 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-012-SCOPE-EXPANSION is CLOSED / FROZEN / VERIFIED at merge `1ad0ca443e9afffccb561bf32870abc9aa64aade` (PR #200). Prior TECP-012 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-013-AUDIT-EVENT is CLOSED / FROZEN / VERIFIED at merge `92e23ceb05e0cfcef07bcffd9993886b1c70fbf9` (PR #202). Prior TECP-013 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-014-IDEMPOTENCY-OPS is CLOSED / FROZEN / VERIFIED at merge `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce` (PR #204). Prior TECP-014 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-016-EVIDENCE-LEDGER is CLOSED / FROZEN / VERIFIED at merge `ae64d2170cd0d09f73b0164af1ad6a366a98d89b` (PR #208). Prior TECP-016 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-017-TITAN-MCP is CLOSED / FROZEN / VERIFIED (PR #212, stdio protocol smoke PASS on clean canonical SHA, owner HUMAN_QA=PASS), with prior authorization CONSUMED / NON-ACTIVE. TECP-018-SINGLE-CURSOR completed implementation in merged PR #214 at 0b592537fa30a3559e9ac799076154ab70bf94c7; real Cursor MCP tool QA and owner HUMAN_QA=PASS on 2026-10-27. Its implementation authorization is CONSUMED / NON-ACTIVE. The current TECP-018 record is FROZEN and NOT implementation authority. TECP-019-LOCAL-GOVERNANCE-READ-MODEL was implemented only in its two authorized new files (PR #218, merged main c3f05a7c6e4b5ad058708e48652eed846eddd87a), with 9/9 focused tests and 560/560 full TECP regression tests PASS, owner Human QA approval, and no deploy or Production mutation. Its implementation authorization is CONSUMED / NON-ACTIVE and the TECP-019 structural work-package record is FROZEN, not a new permission. After a separately owner-approved governance PR merges, TECP-020 source-only evidence was owner-reviewed for formal closeout. Only after a separately owner-approved and tested closeout merge is it CLOSED / FROZEN / VERIFIED with discovery CONSUMED / NON-ACTIVE. The isolated Tier-3 six-file disposable Task/Lease WRITE-lease proof becomes executable ONLY after a separately owner-approved, tested merge of this governance PR. Until that merge the proof remains NOT_AUTHORIZED. No real worker, MCP, remote DB, production or deployment permissions are granted. TECP-020 implementation remains NOT_AUTHORIZED, and TECP-021+ remain NOT_AUTHORIZED. This governance PR does not run discovery or implement anything; it records only a bounded future read-only gate. No Production mutation or deploy. The parser does not authorize. STAGE11_IMPLEMENTATION = NO. TECP-005T-RULE02-PARSER-TEST-DECOUPLING is CLOSED / FROZEN / VERIFIED at merge `101b73bbc614de1d7b12482d3a76369e5540deab` (PR #180); prior TECP-005T implementation authorization is CONSUMED / NON-ACTIVE; TECP-005T is not current implementation authority.
+> CURRENT AUTHORITY PRECEDENCE: the Canonical Project Progress Snapshot and the current non-Historical Active Work Packages below are the active authority. Artemis/Stage 11 authority and TECP parallel-workstream authority are INDEPENDENT and MUST NOT replace each other. Any later block explicitly labeled Historical, Closeout, Superseded, or preserved evidence is non-authorizing even if it contains former AUTHORIZED_SLICE / IMPLEMENTATION_AUTHORIZED values. TECP-003-SERVICE-SKELETON is CLOSED / FROZEN / CONSUMED. TECP-004-DATABASE-FOUNDATION is CLOSED / FROZEN / VERIFIED at merge `666ef86aa62970460ca95d8a384bd1228f2a768a` (PR #175). TECP-005-RULE02-PARSER is CLOSED / FROZEN / VERIFIED at main `bc792a19ffb98b2949c040a23664ec7df10dc1cc` (PR #178). Prior TECP-005 IMPLEMENTATION_AUTHORIZED = YES remains visible as the raw locked token and is CONSUMED / NON-ACTIVE under the explicit lifecycle precedence rule CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-005A-RULE02-STRUCTURED-GOVERNANCE-FACTS is CLOSED / FROZEN / VERIFIED. Prior TECP-005A implementation authorization is CONSUMED / NON-ACTIVE. TECP-006-GOVERNANCE-VALIDATOR is CLOSED / FROZEN / VERIFIED. Prior TECP-006 implementation authorization is CONSUMED / NON-ACTIVE. TECP-007-ACTOR-CAPABILITY-ENGINE is CLOSED / FROZEN / VERIFIED. Prior TECP-007 implementation authorization is CONSUMED / NON-ACTIVE. TECP-008-TASK-GRAPH is CLOSED / FROZEN / VERIFIED. Prior TECP-008 implementation authorization is CONSUMED / NON-ACTIVE. TECP-009-RESOURCE-CLAIMS is CLOSED / FROZEN / VERIFIED. TECP009_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-010-CONFLICT-ENGINE is CLOSED / FROZEN / VERIFIED. TECP010_IMPLEMENTATION_AUTHORIZED is CONSUMED / NON-ACTIVE. TECP-011-LEASE-ENGINE is CLOSED / FROZEN / VERIFIED at merge `e612d7d2b1f36beb86b47322540e0ca2d6358f10` (PR #197) with remediation merge `bc1f672bab1181b18f8b4ebbbd20c42829309395` (PR #198). Prior TECP-011 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-012-SCOPE-EXPANSION is CLOSED / FROZEN / VERIFIED at merge `1ad0ca443e9afffccb561bf32870abc9aa64aade` (PR #200). Prior TECP-012 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-013-AUDIT-EVENT is CLOSED / FROZEN / VERIFIED at merge `92e23ceb05e0cfcef07bcffd9993886b1c70fbf9` (PR #202). Prior TECP-013 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-014-IDEMPOTENCY-OPS is CLOSED / FROZEN / VERIFIED at merge `9f4aec18150e3e8f1cfc4ca198fb73d987e8b0ce` (PR #204). Prior TECP-014 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-016-EVIDENCE-LEDGER is CLOSED / FROZEN / VERIFIED at merge `ae64d2170cd0d09f73b0164af1ad6a366a98d89b` (PR #208). Prior TECP-016 implementation authorization is CONSUMED / NON-ACTIVE under CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION. TECP-017-TITAN-MCP is CLOSED / FROZEN / VERIFIED (PR #212, stdio protocol smoke PASS on clean canonical SHA, owner HUMAN_QA=PASS), with prior authorization CONSUMED / NON-ACTIVE. TECP-018-SINGLE-CURSOR completed implementation in merged PR #214 at 0b592537fa30a3559e9ac799076154ab70bf94c7; real Cursor MCP tool QA and owner HUMAN_QA=PASS on 2026-10-27. Its implementation authorization is CONSUMED / NON-ACTIVE. The current TECP-018 record is FROZEN and NOT implementation authority. TECP-019-LOCAL-GOVERNANCE-READ-MODEL was implemented only in its two authorized new files (PR #218, merged main c3f05a7c6e4b5ad058708e48652eed846eddd87a), with 9/9 focused tests and 560/560 full TECP regression tests PASS, owner Human QA approval, and no deploy or Production mutation. Its implementation authorization is CONSUMED / NON-ACTIVE and the TECP-019 structural work-package record is FROZEN, not a new permission. After a separately owner-approved governance PR merges, TECP-020 source-only evidence was owner-reviewed for formal closeout. Only after a separately owner-approved and tested closeout merge is it CLOSED / FROZEN / VERIFIED with discovery CONSUMED / NON-ACTIVE. TECP-DLP-001's proposed Tier-3 six-file disposable Task/Lease WRITE-lease proof is PAUSED / SUPERSEDED / NON-ACTIVE; implementation never started and its prior authorization is consumed. The sole active TECP package is TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION, Tier 3, exact 32-file scope including Rule02 compaction and Rule01 modularization; its implementation becomes executable only after a separate owner-approved merge of this Governance PR. This PR changes Rule02 only. No real worker, MCP, remote DB, production or deployment permissions are granted. TECP-020 implementation remains NOT_AUTHORIZED, and TECP-021+ remain NOT_AUTHORIZED. This governance PR does not run discovery or implement anything; it records only a bounded future read-only gate. No Production mutation or deploy. The parser does not authorize. STAGE11_IMPLEMENTATION = NO. TECP-005T-RULE02-PARSER-TEST-DECOUPLING is CLOSED / FROZEN / VERIFIED at merge `101b73bbc614de1d7b12482d3a76369e5540deab` (PR #180); prior TECP-005T implementation authorization is CONSUMED / NON-ACTIVE; TECP-005T is not current implementation authority.
 
 ## Canonical Project Progress Snapshot (Core Rule §107)
 
@@ -30,14 +30,14 @@ alwaysApply: true
 **CURRENT_PHASE = STAGE10_FORMAL_FREEZE_COMPLETE / STAGE11_GOVERNANCE_DISCOVERY_ENTRY**
 **FORMAL_TECP_PARALLEL_WORKSTREAM_AUTHORIZATION = CONSUMED / TECP-003 CLOSED**
 **PARALLEL_PROGRAM = TITAN_ENGINEERING_CONTROL_PLANE**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-DLP-001 TIER3_EXACT_SIX_FILE_PROOF_AFTER_OWNER_MERGE**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION EXACT_32_FILE_CONTEXT_OPTIMIZATION_AFTER_OWNER_MERGE / TECP-DLP-001 PAUSED SUPERSEDED NON-ACTIVE**
 **TECP_PROGRAM_COUPLING_TO_ARTEMIS = NONE / INDEPENDENT_ENGINEERING_WORKSTREAM**
 **TECP_STAGE11_SCOPE_COUPLING = NONE**
 **TECP_STAGE11_OWNER_MUTATION = NO**
 **TECP_STAGE10_BASELINE_MUTATION = NO**
 **TECP_PROGRESS_COUNTER_COUPLING = NONE**
 **TECP_MAY_RUN_PARALLEL_WITH_STAGE11_GOVERNANCE_DISCOVERY = YES**
-**TECP_AUTHORIZED_SLICE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF**
+**TECP_AUTHORIZED_SLICE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
 **TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
 **TECP_IMPLEMENTATION = NO**
 **TECP_NO_OTHER_SLICE_AUTHORIZED = YES**
@@ -78,7 +78,7 @@ alwaysApply: true
 **TECP005_VERDICT = TECP005_CLOSED_FROZEN_VERIFIED**
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
-**TECP_NEXT_GATE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF / OWNER_MERGE_GATE**
+**TECP_NEXT_GATE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION / OWNER_MERGE_GATE**
 **TECP005T_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005T_IMPLEMENTATION_HEAD = `940af9a465fd3431b47992b8244b6c32671ad26a`**
 **TECP005T_MERGED_PR = #180**
@@ -232,13 +232,21 @@ alwaysApply: true
 **TECP019_COMPLETION_GATE_STATUS = REACHED / CLOSED / FROZEN**
 **TECP_020_STATUS = CLOSED / FROZEN / VERIFIED / EFFECTIVE_AFTER_THIS_CLOSEOUT_GOVERNANCE_PR_MERGES**
 **TECP020_IMPLEMENTATION_AUTHORIZED = NO**
-**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP_DLP001_EFFECTIVE_BEFORE_MERGE = NO**
 **TECP020_DISCOVERY_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP020_IMPLEMENTATION_STARTED = NO / NOT_AUTHORIZED**
 **TECP020_RECONCILIATION_STATUS = PROPOSED / READ_ONLY / GOVERNANCE_PR_REQUIRED**
 **TECP020_NEXT_IMPLEMENTATION_SLICE = NOT_AUTHORIZED / SEPARATE_OWNER_DECISION_REQUIRED**
 **TECP021_PLUS_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP_DLP001_STATUS = PAUSED / SUPERSEDED / NON-ACTIVE**
+**TECP_DLP001_IMPLEMENTATION_STARTED = NO**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_CURSOR_CONTEXT_001_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_STARTED = NO**
+**TECP_CURSOR_CONTEXT_001_FILE_SCOPE_COUNT = 32**
+**TECP_CURSOR_CONTEXT_001_DEPLOY_REQUIRED = NO**
+**TECP_CURSOR_CONTEXT_001_PRODUCTION_MUTATION = NO**
 **TECP009_BRANCH = `feat/tecp-009-resource-claims`**
 **TECP009_INITIAL_HEAD = `d9e257653e1c7ec795fa116e2afa6a3595c634ff`**
 **TECP009_HEAD = `11ade0b28054f7c5773044648ae021913cd5e9a3`**
@@ -321,7 +329,7 @@ alwaysApply: true
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **RULE02_AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 **ARTEMIS_AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
 **OFFICIAL_NAME = ARTEMIS_STAGE10_FINAL_COMPLETION_CLOSEOUT**
 **AUTHORIZATION_CLASS = FORMAL_AUTHORIZATION / EXACT_SLICE_ONLY**
 **IMPLEMENTATION_AUTHORIZED = NO / CONSUMED**
@@ -2992,7 +3000,8 @@ This governance transaction does not create `tecp/src/taskGraph.js` or `tecp/tes
 
 **SIDE-EFFECT LEDGER = IMPLEMENTATION=0 · TASK_GRAPH_SOURCE=0 · ENGINE_SOURCE=0 · VALIDATOR_SOURCE=0 · PARSER_MODIFIED=0 · TESTS_MODIFIED=0 · PRODUCTION_MUTATION=0 · DEPLOY=0 · DB_WRITES=0 · REDIS_WRITES=0 · NETWORK=0 · PROVIDER=0 · LLM=0 · RUNTIME_MUTATION=0 · CREDENTIAL_READ=0 · MIGRATION_CHANGE=0 · TECP009_PLUS=0**
 
-### Active Work Package — TECP-DLP-001 DISPOSABLE WRITE LEASE (PROPOSED EXACT-SCOPE IMPLEMENTATION AFTER OWNER-MERGED GOVERNANCE PR)
+### Historical — TECP-DLP-001 DISPOSABLE WRITE LEASE (PAUSED / SUPERSEDED AS ACTIVE AUTHORITY; IMPLEMENTATION NOT STARTED)
+> Historical authorization record retained as evidence. OD-CURSOR-CONTEXT-001-A supersedes this proposed package. Its six-file scope is preserved for audit, but no DLP-001 implementation permission remains active.
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_ARTEMIS_IMPLEMENTATION_AUTHORIZATION**
 **TECP_AUTHORIZED_SLICE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF**
@@ -3043,6 +3052,115 @@ Owner decision OD-DLP001-F. Full existing TECP regression and local disposable-D
 Owner decision OD-DLP001-G. TECP-DLP-001 is not historic TECP-021 or the historic TECP-020 Conflict Pilot; both remain NOT_AUTHORIZED. TECP-019/020 remain CLOSED/FROZEN/VERIFIED. TECP005_IMPLEMENTATION_AUTHORIZED is the frozen Parser compatibility alias for the CURRENT proposed AWP only, not a reopening of TECP-005; TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION remains consumed.
 
 Provenance: PR #222 formal TECP-020 closeout; owner-attested 109/109 focused and 560/560 full PASS. PRs #223 and #224 merged as Handoff and non-authorizing proposed six-file scope. Baseline main 8b5db50cd008e907ecd19803ab88c6a49bf8c5ea.
+### Active Work Package — TECP-CURSOR-CONTEXT-001 CONTEXT LOADING OPTIMIZATION (EXACT 32-FILE IMPLEMENTATION AFTER OWNER-MERGED GOVERNANCE PR)
+
+**AUTHORIZED_SLICE = NONE / NO_ACTIVE_ARTEMIS_IMPLEMENTATION_AUTHORIZATION**
+**TECP_AUTHORIZED_SLICE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
+**SLICE_ID = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
+**OFFICIAL_NAME = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION**
+**PRIOR_SLICE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = ENGINEERING_CONTROL_PLANE**
+**TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
+**LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
+**TECP_019_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP019_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_020_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP020_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP020_DISCOVERY_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP021_PLUS_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP_DLP001_STATUS = PAUSED / SUPERSEDED / NON-ACTIVE**
+**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP001_IMPLEMENTATION_STARTED = NO**
+**TECP_DLP001_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_STARTED = NO**
+**TECP_CURSOR_CONTEXT_001_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_CURSOR_CONTEXT_001_FILE_SCOPE_COUNT = 32**
+**TECP_CURSOR_CONTEXT_001_DEPLOY_REQUIRED = NO**
+**TECP_CURSOR_CONTEXT_001_PRODUCTION_MUTATION = NO**
+**IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP005_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION EXACT_32_FILE_CONTEXT_OPTIMIZATION_AFTER_OWNER_MERGE / TECP-DLP-001 PAUSED SUPERSEDED NON-ACTIVE**
+**TECP_NEXT_GATE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION / OWNER_MERGE_GATE**
+**TECP_IMPLEMENTATION = NO / UNTIL_OWNER_GOVERNANCE_MERGE**
+**TECP_NO_OTHER_SLICE_AUTHORIZED = YES**
+
+BASELINE_MAIN_SHA = d2f7559597852714a21d6c0dfce5f60ac14522ea
+RULE01_SOURCE_BLOB_SHA = 09e2853349f528254dec3e22745e8b9729c5e365
+RULE02_BASELINE_BLOB_SHA = 106f00a798b2175a072d5e752599abea2a445ead
+PARSER_SOURCE_BLOB_SHA = ee8f726dd948a23f583cc73a03acfbff293624e8
+GOVERNANCE_VALIDATOR_SOURCE_BLOB_SHA = b21b3ed5bb488306cb464fe3e7532e3392b2d2de
+PARSER_TEST_SOURCE_BLOB_SHA = aad41901f655a09d5fb35f7cb2ca88305e0d3029
+RULE01_SOURCE_CHAR_COUNT = 244849
+RULE02_SOURCE_CHAR_COUNT = 1412580
+RULE01_SOURCE_SECTION_COUNT = 109
+RULE01_MODULE_COUNT = 28
+RULE02_TOKEN_TARGET = 1000_TO_2500
+RULE01_INDEX_TOKEN_TARGET = BELOW_1000
+SAFETY_GUARD_TOKEN_TARGET = 500_TO_800
+ALWAYS_APPLIED_CONTEXT_TARGET = BELOW_5000_TOKENS
+CONTEXT_REDUCTION_TARGET = AT_LEAST_95_PERCENT_VS_MEASURED_BASELINE
+MAX_MODULE_LINES = 500
+RULE01_SECTION_PRESERVATION = ALL_109_SECTIONS_VERBATIM / ZERO_OMISSIONS / ZERO_DUPLICATIONS
+
+AUTHORIZED_FILE_SCOPE = .cursor/rules/titangold-current-active-work.mdc | .cursor/rules/titangold-core-engineering-rules.mdc | .cursor/rules/context-safety-guard.mdc | .cursor/rules/tg-core-governance-risk.mdc | .cursor/rules/tg-vertical-slice-capability.mdc | .cursor/rules/tg-repository-source-of-truth.mdc | .cursor/rules/tg-backend-security-provider-financial.mdc | .cursor/rules/tg-frontend-design-rtl.mdc | .cursor/rules/tg-agent-workflow-delivery-controls.mdc | .cursor/rules/tg-documentation-parallel-design-regression.mdc | .cursor/rules/tg-agent-productization-evidence.mdc | .cursor/rules/tg-artemis-core-agent-architecture.mdc | .cursor/rules/tg-artemis-decision-orchestration-risk.mdc | .cursor/rules/tg-artemis-trading-maturity-roadmap.mdc | .cursor/rules/tg-ai-provider-council.mdc | .cursor/rules/tg-memory-learning-self-sufficiency.mdc | .cursor/rules/tg-artemis-cognitive-foundation.mdc | .cursor/rules/tg-artemis-reasoning-decision-artifacts.mdc | .cursor/rules/tg-artemis-cognitive-evaluation-failure.mdc | .cursor/rules/tg-autonomous-operations-authority-intent.mdc | .cursor/rules/tg-autonomous-policy-tools-lifecycle.mdc | .cursor/rules/tg-data-source-agent-settings-approval.mdc | .cursor/rules/tg-autonomous-operations-safety.mdc | .cursor/rules/tg-delegation-operations-maturity.mdc | .cursor/rules/tg-conversational-control-plane.mdc | .cursor/rules/tg-conversational-memory-tasks-reporting.mdc | .cursor/rules/tg-conversational-approval-financial-mandates.mdc | .cursor/rules/tg-conversational-admin-product-ux.mdc | .cursor/rules/tg-conversational-security-evaluation.mdc | .cursor/rules/tg-progress-roadmap-governance.mdc | .cursor/rules/tg-runtime-deployment-provenance.mdc | .cursor/context-archive/CURSOR_CONTEXT_001_EVIDENCE_LEDGER.md
+PROTECTED_PATHS = .cursor/mcp.json | .cursor/commands/** | .cursor/skills/** | tecp/** | backend/** | .github/** | docs/** | .env | .env.local | .env.production | node_modules/** | dist/** | build/** | coverage/** | credentials/** | secrets/** | production/**
+STOP_CONDITIONS = RAW_RULE02_PARSE | PARSER_SOURCE_MUTATION | PACKAGE_CHANGE | FIXTURE_CHANGE | BACKEND_CHANGE | DB | NETWORK | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | RUNTIME | CREDENTIAL_READ | TASK_MUTATION | LEASE_ISSUANCE | CONFLICT_RESOLUTION | SELF_AUTHORIZATION | TECP007_PLUS | SECOND_PARSER_OWNER | EXTERNAL_DEPENDENCY_REQUIRED | RULE02_WRITE | MCP_CONFIG_MUTATION | DIRTY_WORKTREE_OVERWRITE | WORKSPACE_WIDE_AUTOMATION | UNVERIFIED_CONTEXT_MEASUREMENT | HISTORICAL_EVIDENCE_LOSS | SECTION_TEXT_MODIFICATION | SOURCE_SECTION_OMISSION | UNAPPROVED_PATH_OR_SCOPE | CROSS_WORKSPACE_MUTATION
+IMPLEMENTATION_START_CONDITIONS = THIS_GOVERNANCE_PR_TESTED_AND_EXPLICITLY_OWNER_APPROVED_FOR_MERGE / EXACT_32_FILE_SCOPE_ONLY / NO_PARSER_VALIDATOR_MCP_BACKEND_DATABASE_RUNTIME_OR_PRODUCTION_CHANGE / FULL_109_SECTION_PRESERVATION / RULE02_AUTHORITY_BLOCK_PRESERVED / CONTEXT_MEASUREMENT_AND_CURSOR_HUMAN_QA_REQUIRED / NO_DIRTY_WORKTREE_OVERWRITE
+COMPLETION_GATE = TECP_CURSOR_CONTEXT_001_CONTEXT_REDUCTION_AND_RULE_PRESERVATION_OWNER_HUMAN_QA
+COMPLETION_GATE_STATUS = NOT_REACHED
+
+Owner decision OD-CURSOR-CONTEXT-001-A. The owner approved preparation of this GOVERNANCE-ONLY PR. This PR changes Rule02 only and does not implement context optimization. TECP-DLP-001 is paused and superseded; implementation never started. Its original six-file proposal remains historical evidence only. No DLP-001 implementation authority remains active.
+
+Owner decision OD-CURSOR-CONTEXT-001-B. After this Governance PR is separately tested, explicitly owner-approved and merged, implementation is limited to the exact 32 paths in AUTHORIZED_FILE_SCOPE. Rule02 is included because it is an always-applied oversized context source and must be compacted while preserving its canonical current snapshot, sole active AWP, Next Owner gate, structured governance facts and parser compatibility.
+
+Owner decision OD-CURSOR-CONTEXT-001-C. Rule01 is modularized into 28 Agent Requested modules covering all 109 original sections. The original Rule01 source blob 09e2853349f528254dec3e22745e8b9729c5e365 remains preserved in Git history. Every section must be extracted verbatim, with a deterministic 109-section coverage ledger, no omissions, no duplication, and no weakening of normative language. The compact Rule01 index, Rule02 and context-safety guard remain always-applied; focused modules load on demand with precise descriptions.
+
+Owner decision OD-CURSOR-CONTEXT-001-D. Historical Rule02 records moved to .cursor/context-archive/CURSOR_CONTEXT_001_EVIDENCE_LEDGER.md must retain original text, section headings, provenance and source SHA. Rule02 is reduced to the canonical current authority, active work package, next-owner gate, and required structured fields. The parser and validator source files and tests are protected and must not be modified.
+
+Owner decision OD-CURSOR-CONTEXT-001-E. No MCP configuration or surface, package/dependency, fixture, backend, database, network, GitHub/Linear automation, worker, runtime, deployment, credential, production or workspace-wide mutation is authorized. Dirty or detached worktrees must never be reset, cleaned, overwritten or reassigned automatically.
+
+Owner decision OD-CURSOR-CONTEXT-001-F. Completion requires exact 109/109 Rule01 section preservation, parser compatibility, focused parser tests, full TECP regression PASS on the exact implementation SHA, actual Cursor context measurements using identical model/settings/prompts, at least 95% reduction against measured baseline, always-applied context below 5,000 tokens, Cursor Human QA and owner acceptance. Estimated character/token ratios are not accepted as measured context evidence.
+
+Owner decision OD-CURSOR-CONTEXT-001-G. TECP005_IMPLEMENTATION_AUTHORIZED is retained only as the frozen Parser compatibility alias for this current active AWP; it does not reopen TECP-005. TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION remains CONSUMED / NON-ACTIVE. Artemis Stage 11 remains independent and unchanged. No deployment or production mutation is authorized.
+
+### Module extraction map (verbatim section ranges)
+- `.cursor/rules/tg-core-governance-risk.mdc` — Rule01 sections 1–6
+- `.cursor/rules/tg-vertical-slice-capability.mdc` — Rule01 sections 7–12
+- `.cursor/rules/tg-repository-source-of-truth.mdc` — Rule01 sections 13–15
+- `.cursor/rules/tg-backend-security-provider-financial.mdc` — Rule01 sections 16–20
+- `.cursor/rules/tg-frontend-design-rtl.mdc` — Rule01 sections 21–23
+- `.cursor/rules/tg-agent-workflow-delivery-controls.mdc` — Rule01 sections 24–30
+- `.cursor/rules/tg-documentation-parallel-design-regression.mdc` — Rule01 sections 31–37
+- `.cursor/rules/tg-agent-productization-evidence.mdc` — Rule01 sections 38–44
+- `.cursor/rules/tg-artemis-core-agent-architecture.mdc` — Rule01 sections 45–48
+- `.cursor/rules/tg-artemis-decision-orchestration-risk.mdc` — Rule01 sections 49–52
+- `.cursor/rules/tg-artemis-trading-maturity-roadmap.mdc` — Rule01 sections 53–54
+- `.cursor/rules/tg-ai-provider-council.mdc` — Rule01 sections 55–56
+- `.cursor/rules/tg-memory-learning-self-sufficiency.mdc` — Rule01 sections 57–59
+- `.cursor/rules/tg-artemis-cognitive-foundation.mdc` — Rule01 sections 60–62
+- `.cursor/rules/tg-artemis-reasoning-decision-artifacts.mdc` — Rule01 sections 63–66
+- `.cursor/rules/tg-artemis-cognitive-evaluation-failure.mdc` — Rule01 sections 67–69
+- `.cursor/rules/tg-autonomous-operations-authority-intent.mdc` — Rule01 sections 70–72
+- `.cursor/rules/tg-autonomous-policy-tools-lifecycle.mdc` — Rule01 sections 73–76
+- `.cursor/rules/tg-data-source-agent-settings-approval.mdc` — Rule01 sections 77–79
+- `.cursor/rules/tg-autonomous-operations-safety.mdc` — Rule01 sections 80–83
+- `.cursor/rules/tg-delegation-operations-maturity.mdc` — Rule01 sections 84–87
+- `.cursor/rules/tg-conversational-control-plane.mdc` — Rule01 sections 88–92
+- `.cursor/rules/tg-conversational-memory-tasks-reporting.mdc` — Rule01 sections 93–95
+- `.cursor/rules/tg-conversational-approval-financial-mandates.mdc` — Rule01 sections 96–97
+- `.cursor/rules/tg-conversational-admin-product-ux.mdc` — Rule01 sections 98–102
+- `.cursor/rules/tg-conversational-security-evaluation.mdc` — Rule01 sections 103–106
+- `.cursor/rules/tg-progress-roadmap-governance.mdc` — Rule01 sections 107
+- `.cursor/rules/tg-runtime-deployment-provenance.mdc` — Rule01 sections 108–109
+- `.cursor/rules/titangold-core-engineering-rules.mdc` — compact always-applied index and module descriptions
+- `.cursor/rules/context-safety-guard.mdc` — always-applied safety boundary
+- `.cursor/rules/titangold-current-active-work.mdc` — compact canonical Rule02
+- `.cursor/context-archive/CURSOR_CONTEXT_001_EVIDENCE_LEDGER.md` — preserved historical Rule02 evidence and provenance
+
 ### Historical — TECP-020 FROZEN GOVERNANCE RECORD (CLOSED / VERIFIED / CONSUMED; PREVIOUS ACTIVE PACKAGE)
 
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_ARTEMIS_IMPLEMENTATION_AUTHORIZATION**
@@ -17203,8 +17321,8 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP005_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
 **TECP005_IMPLEMENTATION_STARTED = YES / COMPLETE**
 **TECP005_VERDICT = TECP005_CLOSED_FROZEN_VERIFIED**
-**TECP_NEXT_GATE = TECP-DLP-001-DISPOSABLE-ATOMIC-WRITE-LEASE-PROOF / OWNER_MERGE_GATE**
-**TECP_NEXT_GATE_STATUS = PROPOSED_TIER3_DISPOSABLE_PROOF / GOVERNANCE_PR_OWNER_MERGE_REQUIRED**
+**TECP_NEXT_GATE = TECP-CURSOR-CONTEXT-001-CONTEXT-LOADING-OPTIMIZATION / OWNER_MERGE_GATE**
+**TECP_NEXT_GATE_STATUS = PROPOSED_TIER3_CONTEXT_OPTIMIZATION / GOVERNANCE_PR_OWNER_MERGE_REQUIRED**
 **TECP005A_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP005A_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP005A_AUTHORIZATION_EFFECTIVE_BEFORE_MERGE = NO**
@@ -17282,8 +17400,16 @@ Telegram liveness production PASS; E6A targeted PASS; resource stabilization com
 **TECP019_IMPLEMENTATION_STARTED = YES / COMPLETE**
 **TECP_020_STATUS = CLOSED / FROZEN / VERIFIED / EFFECTIVE_AFTER_THIS_CLOSEOUT_GOVERNANCE_PR_MERGES**
 **TECP020_IMPLEMENTATION_AUTHORIZED = NO**
-**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP_DLP001_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_DLP001_STATUS = PAUSED / SUPERSEDED / NON-ACTIVE**
+**TECP_DLP001_IMPLEMENTATION_STARTED = NO**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_CURSOR_CONTEXT_001_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_STARTED = NO**
+**TECP_CURSOR_CONTEXT_001_FILE_SCOPE_COUNT = 32**
+**TECP_CURSOR_CONTEXT_001_DEPLOY_REQUIRED = NO**
+**TECP_CURSOR_CONTEXT_001_PRODUCTION_MUTATION = NO**
 **TECP020_DISCOVERY_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **TECP020_IMPLEMENTATION_STARTED = NO / NOT_AUTHORIZED**
 **TECP021_PLUS_IMPLEMENTATION_AUTHORIZED = NO**
