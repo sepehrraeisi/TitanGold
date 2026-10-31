@@ -12,11 +12,21 @@ import { after, before, test } from 'node:test';
 
 import {
   APPROVED_GOVERNANCE_REVISION,
+  PG_READY_FOR_QUERY_STATUS,
   WRITE_LEASE_DECISIONS,
+  WRITE_LEASE_TXN_OWNER_GUC,
+  WRITE_LEASE_TXN_OWNER_TOKEN,
   acquireWriteLease,
+  acquireWriteLeaseInTransaction,
+  assertClientIdleForOwnedWriteLeaseTransaction,
+  assertOwnedWriteLeaseTransaction,
+  readPgReadyForQueryStatus,
   releaseWriteLease,
+  releaseWriteLeaseInTransaction,
   renewWriteLease,
+  renewWriteLeaseInTransaction,
   validateWriteLease,
+  withOwnedWriteLeaseTransaction,
 } from '../src/writeLeaseRepository.js';
 import {
   HARNESS_ROOT_PREFIX,
@@ -385,6 +395,7 @@ test('mid-transaction failure rolls back; no ghost ownership or partial state', 
     const resource = { resourceType: 'task_worktree', resourceKey: 'rollback-1' };
     let updates = 0;
     const sabotaged = {
+      connection: client.connection,
       query: async (sql, params) => {
         const text = String(sql);
         if (/UPDATE dlp_write_resource_fence/i.test(text)) {
@@ -504,16 +515,381 @@ test('owner renew/release happy path with CAS version and fencing bind', async (
   }
 });
 
-test('exports are limited to four repository functions plus constants', async () => {
+test('exports include public API plus caller-owned in-transaction entry points', async () => {
   const mod = await import('../src/writeLeaseRepository.js');
   const fns = Object.keys(mod).filter((k) => typeof mod[k] === 'function');
   assert.deepEqual(fns.sort(), [
     'acquireWriteLease',
+    'acquireWriteLeaseInTransaction',
+    'assertClientIdleForOwnedWriteLeaseTransaction',
+    'assertOwnedWriteLeaseTransaction',
+    'readPgReadyForQueryStatus',
     'releaseWriteLease',
+    'releaseWriteLeaseInTransaction',
     'renewWriteLease',
+    'renewWriteLeaseInTransaction',
     'validateWriteLease',
+    'withOwnedWriteLeaseTransaction',
   ].sort());
   assert.equal(mod.APPROVED_GOVERNANCE_REVISION, 'DLP001_REACTIVATION_20261031');
+  assert.equal(mod.WRITE_LEASE_TXN_OWNER_GUC, WRITE_LEASE_TXN_OWNER_GUC);
+  assert.equal(mod.WRITE_LEASE_TXN_OWNER_TOKEN, WRITE_LEASE_TXN_OWNER_TOKEN);
+  assert.equal(
+    mod.WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP,
+    'DENY_NO_TRANSACTION_OWNERSHIP',
+  );
+  assert.equal(mod.WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE, 'DENY_CLIENT_NOT_IDLE');
+  assert.equal(
+    mod.WRITE_LEASE_DECISIONS.DENY_TRANSACTION_STATUS_UNVERIFIABLE,
+    'DENY_TRANSACTION_STATUS_UNVERIFIABLE',
+  );
+  assert.deepEqual(mod.PG_READY_FOR_QUERY_STATUS, {
+    IDLE: 'I',
+    IN_TRANSACTION: 'T',
+    IN_FAILED_TRANSACTION: 'E',
+  });
+});
+
+test('DLP-002: bare client / bare BEGIN denied; owned txn acquire works without nested COMMIT trap', async () => {
+  const client = await harness.createClient();
+  try {
+    const resource = { resourceType: 'task_worktree', resourceKey: 'owned-txn-1' };
+    const bare = await acquireWriteLeaseInTransaction(client, baseAcquire({
+      ...resource,
+      leaseKey: 'lease-bare',
+      actorId: 'actor-bare',
+      taskId: 'task-bare',
+      idempotencyKey: 'idem-bare',
+    }));
+    assert.equal(bare.decision, WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP);
+    assert.equal(await countActiveOwners(client, resource), 0);
+
+    await client.query('BEGIN');
+    const unmarked = await acquireWriteLeaseInTransaction(client, baseAcquire({
+      ...resource,
+      leaseKey: 'lease-unmarked',
+      actorId: 'actor-unmarked',
+      taskId: 'task-unmarked',
+      idempotencyKey: 'idem-unmarked',
+    }));
+    assert.equal(unmarked.decision, WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP);
+    await client.query('ROLLBACK');
+    assert.equal(await countActiveOwners(client, resource), 0);
+
+    const granted = await withOwnedWriteLeaseTransaction(client, async () => {
+      await assertOwnedWriteLeaseTransaction(client);
+      return acquireWriteLeaseInTransaction(client, baseAcquire({
+        ...resource,
+        leaseKey: 'lease-owned',
+        actorId: 'actor-owned',
+        taskId: 'task-owned',
+        idempotencyKey: 'idem-owned',
+      }));
+    });
+    assert.equal(granted.decision, WRITE_LEASE_DECISIONS.GRANTED);
+    assert.equal(await countActiveOwners(client, resource), 1);
+
+    // In-txn APIs must not execute BEGIN/COMMIT/ROLLBACK themselves.
+    const src = await import('node:fs').then((fs) => fs.readFileSync(
+      new URL('../src/writeLeaseRepository.js', import.meta.url),
+      'utf8',
+    ));
+    const inTxnBlock = src.slice(
+      src.indexOf('export async function acquireWriteLeaseInTransaction'),
+      src.indexOf('export async function acquireWriteLease('),
+    );
+    const codeOnly = inTxnBlock
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    assert.equal(/['"]BEGIN['"]/.test(codeOnly), false);
+    assert.equal(/['"]COMMIT['"]/.test(codeOnly), false);
+    assert.equal(/['"]ROLLBACK['"]/.test(codeOnly), false);
+    assert.equal(/query\(\s*['"]BEGIN['"]/i.test(codeOnly), false);
+    assert.equal(/query\(\s*['"]COMMIT['"]/i.test(codeOnly), false);
+    assert.equal(/query\(\s*['"]ROLLBACK['"]/i.test(codeOnly), false);
+  } finally {
+    await client.end();
+  }
+});
+
+test('DLP-002: failure after fencing bump inside owned txn rolls back; no ghost owner', async () => {
+  const client = await harness.createClient();
+  try {
+    const resource = { resourceType: 'task_worktree', resourceKey: 'owned-fence-rb' };
+    const epochBefore = await fenceEpoch(client, resource);
+    let bumped = 0;
+    const sabotaged = {
+      connection: client.connection,
+      query: async (sql, params) => {
+        const text = String(sql);
+        if (/UPDATE dlp_write_resource_fence/i.test(text)) {
+          bumped += 1;
+          const out = await client.query(sql, params);
+          throw new Error('injected owned-txn fencing failure');
+        }
+        return client.query(sql, params);
+      },
+    };
+
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(sabotaged, async () => (
+        acquireWriteLeaseInTransaction(sabotaged, baseAcquire({
+          ...resource,
+          leaseKey: 'lease-fence-rb',
+          actorId: 'actor-fence-rb',
+          taskId: 'task-fence-rb',
+          idempotencyKey: 'idem-fence-rb',
+        }))
+      )),
+      /injected owned-txn fencing failure/,
+    );
+
+    assert.ok(bumped >= 1);
+    assert.equal(await countActiveOwners(client, resource), 0);
+    const epochAfter = await fenceEpoch(client, resource);
+    assert.ok(epochAfter === null || epochAfter === 0 || epochAfter === epochBefore);
+  } finally {
+    await client.end();
+  }
+});
+
+test('DLP-002: composition DENY_OWNED aborts owned txn without committing a second owner', async () => {
+  const client = await harness.createClient();
+  try {
+    const resource = { resourceType: 'task_worktree', resourceKey: 'owned-deny-abort' };
+    const first = await acquireWriteLease(client, baseAcquire({
+      ...resource,
+      leaseKey: 'lease-first',
+      actorId: 'actor-first',
+      taskId: 'task-first',
+      idempotencyKey: 'idem-first',
+    }));
+    assert.equal(first.decision, WRITE_LEASE_DECISIONS.GRANTED);
+
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(client, async () => {
+        const denied = await acquireWriteLeaseInTransaction(client, baseAcquire({
+          ...resource,
+          leaseKey: 'lease-second',
+          actorId: 'actor-second',
+          taskId: 'task-second',
+          idempotencyKey: 'idem-second',
+        }));
+        assert.equal(denied.decision, WRITE_LEASE_DECISIONS.DENY_OWNED);
+        throw Object.assign(new Error('COMPOSITION_DENY'), { deny: denied });
+      }),
+      /COMPOSITION_DENY/,
+    );
+
+    assert.equal(await countActiveOwners(client, resource), 1);
+    const owner = await validateWriteLease(client, {
+      ...resource,
+      leaseKey: first.lease.leaseKey,
+      actorId: first.lease.actorId,
+      taskId: first.lease.taskId,
+      governanceRevision: APPROVED_GOVERNANCE_REVISION,
+      fencingEpoch: first.lease.fencingEpoch,
+    });
+    assert.equal(owner.decision, WRITE_LEASE_DECISIONS.VALID);
+  } finally {
+    await client.end();
+  }
+});
+
+test('B1: idle client begins valid owned transaction; protocol status I/T round-trip', async () => {
+  const client = await harness.createClient();
+  try {
+    assert.equal(await readPgReadyForQueryStatus(client), PG_READY_FOR_QUERY_STATUS.IDLE);
+    await assertClientIdleForOwnedWriteLeaseTransaction(client);
+
+    const granted = await withOwnedWriteLeaseTransaction(client, async () => {
+      assert.equal(await readPgReadyForQueryStatus(client), PG_READY_FOR_QUERY_STATUS.IN_TRANSACTION);
+      await assertOwnedWriteLeaseTransaction(client);
+      return acquireWriteLeaseInTransaction(client, baseAcquire({
+        resourceKey: 'b1-idle-ok',
+        leaseKey: 'lease-b1-idle',
+        actorId: 'actor-b1-idle',
+        taskId: 'task-b1-idle',
+        idempotencyKey: 'idem-b1-idle',
+      }));
+    });
+    assert.equal(granted.decision, WRITE_LEASE_DECISIONS.GRANTED);
+    assert.equal(await readPgReadyForQueryStatus(client), PG_READY_FOR_QUERY_STATUS.IDLE);
+  } finally {
+    await client.end();
+  }
+});
+
+test('B1: unmarked BEGIN rejected before inner BEGIN; no nested COMMIT of outer writes', async () => {
+  const owner = await harness.createClient();
+  const observer = await harness.createClient();
+  try {
+    await owner.query('BEGIN');
+    await owner.query(
+      `INSERT INTO dlp_write_resource_fence (resource_type, resource_key, fencing_epoch)
+       VALUES ('task_worktree', 'b1-outer-unmarked', 0)`,
+    );
+
+    // Invisible to second connection before commit.
+    const before = await observer.query(
+      `SELECT 1 FROM dlp_write_resource_fence
+        WHERE resource_type = 'task_worktree' AND resource_key = 'b1-outer-unmarked'`,
+    );
+    assert.equal(before.rowCount, 0);
+
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(owner, async () => 'should-not-run'),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE
+        && err.transactionStatus === PG_READY_FOR_QUERY_STATUS.IN_TRANSACTION,
+    );
+
+    const mid = await observer.query(
+      `SELECT 1 FROM dlp_write_resource_fence
+        WHERE resource_type = 'task_worktree' AND resource_key = 'b1-outer-unmarked'`,
+    );
+    assert.equal(mid.rowCount, 0);
+
+    await owner.query('ROLLBACK');
+    const after = await observer.query(
+      `SELECT 1 FROM dlp_write_resource_fence
+        WHERE resource_type = 'task_worktree' AND resource_key = 'b1-outer-unmarked'`,
+    );
+    assert.equal(after.rowCount, 0);
+  } finally {
+    try { await owner.query('ROLLBACK'); } catch { /* already idle */ }
+    await owner.end();
+    await observer.end();
+  }
+});
+
+test('B1: existing marked/owned transaction is rejected (reentrancy guard)', async () => {
+  const client = await harness.createClient();
+  try {
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(client, async () => (
+        withOwnedWriteLeaseTransaction(client, async () => 'nested-owned')
+      )),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE
+        && err.transactionStatus === PG_READY_FOR_QUERY_STATUS.IN_TRANSACTION,
+    );
+    assert.equal(await readPgReadyForQueryStatus(client), PG_READY_FOR_QUERY_STATUS.IDLE);
+  } finally {
+    await client.end();
+  }
+});
+
+test('B1: aborted transaction rejected without COMMIT of outer failed work', async () => {
+  const owner = await harness.createClient();
+  const observer = await harness.createClient();
+  try {
+    await owner.query('BEGIN');
+    await owner.query(
+      `INSERT INTO dlp_write_resource_fence (resource_type, resource_key, fencing_epoch)
+       VALUES ('task_worktree', 'b1-aborted-outer', 0)`,
+    );
+    await assert.rejects(
+      () => owner.query('SELECT * FROM definitely_missing_relation_b1_abort'),
+      /does not exist|definitely_missing_relation_b1_abort/,
+    );
+    assert.equal(
+      await readPgReadyForQueryStatus(owner),
+      PG_READY_FOR_QUERY_STATUS.IN_FAILED_TRANSACTION,
+    );
+
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(owner, async () => 'should-not-run'),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE
+        && err.transactionStatus === PG_READY_FOR_QUERY_STATUS.IN_FAILED_TRANSACTION,
+    );
+
+    const leaked = await observer.query(
+      `SELECT 1 FROM dlp_write_resource_fence
+        WHERE resource_type = 'task_worktree' AND resource_key = 'b1-aborted-outer'`,
+    );
+    assert.equal(leaked.rowCount, 0);
+
+    await owner.query('ROLLBACK');
+    assert.equal(await readPgReadyForQueryStatus(owner), PG_READY_FOR_QUERY_STATUS.IDLE);
+  } finally {
+    try { await owner.query('ROLLBACK'); } catch { /* already idle */ }
+    await owner.end();
+    await observer.end();
+  }
+});
+
+test('B1: unknown/unverifiable transaction status fails closed when probe is nonsensical', async () => {
+  const fake = {
+    query: async () => {
+      const err = new Error('synthetic probe failure');
+      err.code = 'XX000';
+      throw err;
+    },
+  };
+  await assert.rejects(
+    () => assertClientIdleForOwnedWriteLeaseTransaction(fake),
+    (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_TRANSACTION_STATUS_UNVERIFIABLE,
+  );
+  await assert.rejects(
+    () => withOwnedWriteLeaseTransaction(fake, async () => 'nope'),
+    (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_TRANSACTION_STATUS_UNVERIFIABLE,
+  );
+});
+
+test('B1: query-only wrapper without connection uses proven SAVEPOINT idle probe', async () => {
+  const real = await harness.createClient();
+  try {
+    const wrapper = {
+      query: (text, params) => real.query(text, params),
+    };
+    const granted = await withOwnedWriteLeaseTransaction(wrapper, async () => (
+      acquireWriteLeaseInTransaction(wrapper, baseAcquire({
+        resourceKey: 'b1-wrapper-idle',
+        leaseKey: 'lease-b1-wrap',
+        actorId: 'actor-b1-wrap',
+        taskId: 'task-b1-wrap',
+        idempotencyKey: 'idem-b1-wrap',
+      }))
+    ));
+    assert.equal(granted.decision, WRITE_LEASE_DECISIONS.GRANTED);
+
+    await real.query('BEGIN');
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(wrapper, async () => 'nope'),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE,
+    );
+    await real.query('ROLLBACK');
+  } finally {
+    try { await real.query('ROLLBACK'); } catch { /* idle */ }
+    await real.end();
+  }
+});
+
+test('B1: prior transaction marker cannot authorize a later unmarked transaction', async () => {
+  const client = await harness.createClient();
+  try {
+    await withOwnedWriteLeaseTransaction(client, async () => {
+      await assertOwnedWriteLeaseTransaction(client);
+      return 'ok';
+    });
+    await client.query('BEGIN');
+    const guc = await client.query(
+      'SELECT current_setting($1, true) AS owner',
+      [WRITE_LEASE_TXN_OWNER_GUC],
+    );
+    assert.ok(guc.rows[0].owner == null || guc.rows[0].owner === '');
+    await assert.rejects(
+      () => assertOwnedWriteLeaseTransaction(client),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP,
+    );
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(client, async () => 'nope'),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE,
+    );
+    await client.query('ROLLBACK');
+  } finally {
+    try { await client.query('ROLLBACK'); } catch { /* idle */ }
+    await client.end();
+  }
 });
 
 test('FINDING1: expired/released/superseded idempotency replay is never ACTIVE/usable', async () => {
