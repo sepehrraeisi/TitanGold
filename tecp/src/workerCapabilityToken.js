@@ -77,7 +77,18 @@ export const CAPABILITY_DECISIONS = Object.freeze({
   DENY_WRONG_FENCING_EPOCH: 'DENY_WRONG_FENCING_EPOCH',
   DENY_WRONG_LEASE: 'DENY_WRONG_LEASE',
   DENY_BOOTSTRAP_MUTATION: 'DENY_BOOTSTRAP_MUTATION',
+  DENY_INCOMPLETE_EXPECTATION: 'DENY_INCOMPLETE_EXPECTATION',
 });
+
+const REQUIRED_EXPECTATION_STRING_FIELDS = Object.freeze([
+  'audience',
+  'taskId',
+  'resourceType',
+  'resourceId',
+  'principalId',
+  'action',
+  'capabilityStage',
+]);
 
 export const SUPPORTED_ALGORITHMS = Object.freeze(['Ed25519']);
 
@@ -714,38 +725,37 @@ export function verifyCapability(token, expectation, deps) {
     ]);
   }
 
-  if (!isPlainObject(expectation)) {
-    return deny(CAPABILITY_DECISIONS.DENY_MISSING_OR_MALFORMED_CLAIMS, ['EXPECTATION_REQUIRED']);
+  // Fail closed: omitted/empty expectation fields are NEVER authorization wildcards.
+  const expectationGate = requireCompleteExpectation(expectation, parsed);
+  if (expectationGate) {
+    return expectationGate;
   }
 
-  if (isNonEmptyString(expectation.audience) && expectation.audience !== parsed.aud) {
+  if (expectation.audience !== parsed.aud) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_AUDIENCE, ['AUDIENCE_MISMATCH']);
   }
-  if (isNonEmptyString(expectation.taskId) && expectation.taskId !== parsed.taskId) {
+  if (expectation.taskId !== parsed.taskId) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_TASK, ['TASK_MISMATCH']);
   }
-  if (isNonEmptyString(expectation.resourceType) && expectation.resourceType !== parsed.resourceType) {
+  if (expectation.resourceType !== parsed.resourceType) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_RESOURCE, ['RESOURCE_TYPE_MISMATCH']);
   }
-  if (isNonEmptyString(expectation.resourceId) && expectation.resourceId !== parsed.resourceId) {
+  if (expectation.resourceId !== parsed.resourceId) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_RESOURCE, ['RESOURCE_ID_MISMATCH']);
   }
-  if (isNonEmptyString(expectation.principalId) && expectation.principalId !== parsed.principalId) {
+  if (expectation.principalId !== parsed.principalId) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_PRINCIPAL, ['PRINCIPAL_MISMATCH']);
   }
-  if (isNonEmptyString(expectation.action)) {
-    if (!parsed.allowedActions.includes(expectation.action)) {
-      return deny(CAPABILITY_DECISIONS.DENY_WRONG_ACTION, ['ACTION_NOT_PERMITTED']);
-    }
-  }
-  if (isNonEmptyString(expectation.capabilityStage)
-    && expectation.capabilityStage !== parsed.capabilityStage) {
+  if (expectation.capabilityStage !== parsed.capabilityStage) {
     return deny(CAPABILITY_DECISIONS.DENY_STAGE_VIOLATION, ['STAGE_MISMATCH']);
+  }
+  if (!parsed.allowedActions.includes(expectation.action)) {
+    return deny(CAPABILITY_DECISIONS.DENY_WRONG_ACTION, ['ACTION_NOT_PERMITTED']);
   }
 
   if (parsed.capabilityStage === CAPABILITY_STAGES.BOOTSTRAP_REQUEST) {
-    if (expectation.action
-      && LEASE_BOUND_FORBIDDEN_WITHOUT_FENCING.includes(expectation.action)) {
+    if (!BOOTSTRAP_ALLOWED_ACTIONS.includes(expectation.action)
+      || LEASE_BOUND_FORBIDDEN_WITHOUT_FENCING.includes(expectation.action)) {
       return deny(CAPABILITY_DECISIONS.DENY_BOOTSTRAP_MUTATION, [
         'BOOTSTRAP_CANNOT_AUTHORIZE_MUTATION_OR_EVIDENCE',
       ]);
@@ -753,13 +763,6 @@ export function verifyCapability(token, expectation, deps) {
   }
 
   if (parsed.capabilityStage === CAPABILITY_STAGES.LEASE_BOUND) {
-    if (!isPlainObject(expectation.leaseContext)
-      || !isNonEmptyString(expectation.leaseContext.leaseId)
-      || !isSafeInteger(expectation.leaseContext.fencingEpoch)) {
-      return deny(CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING, [
-        'EXPECTED_LEASE_FENCING_REQUIRED',
-      ]);
-    }
     if (expectation.leaseContext.leaseId !== parsed.leaseId) {
       return deny(CAPABILITY_DECISIONS.DENY_WRONG_LEASE, ['LEASE_MISMATCH']);
     }
@@ -769,6 +772,63 @@ export function verifyCapability(token, expectation, deps) {
   }
 
   return allow(parsed, null);
+}
+
+/**
+ * Require a complete verification expectation. Missing/empty/null/wrong-type fields DENY.
+ * Never treat omitted context as a wildcard.
+ */
+function requireCompleteExpectation(expectation, parsedClaims) {
+  if (!isPlainObject(expectation)) {
+    return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, ['EXPECTATION_REQUIRED']);
+  }
+
+  for (const field of REQUIRED_EXPECTATION_STRING_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(expectation, field)) {
+      return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, [`MISSING_EXPECTATION:${field}`]);
+    }
+    const value = expectation[field];
+    if (value === null || value === undefined) {
+      return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, [`NULL_EXPECTATION:${field}`]);
+    }
+    if (typeof value !== 'string') {
+      return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, [`INVALID_TYPE_EXPECTATION:${field}`]);
+    }
+    if (value.length === 0) {
+      return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, [`EMPTY_EXPECTATION:${field}`]);
+    }
+  }
+
+  if (
+    expectation.capabilityStage !== CAPABILITY_STAGES.BOOTSTRAP_REQUEST
+    && expectation.capabilityStage !== CAPABILITY_STAGES.LEASE_BOUND
+  ) {
+    return deny(CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION, ['INVALID_EXPECTATION_STAGE']);
+  }
+
+  // Stage on expectation must be explicit; if token stage is LEASE_BOUND, fencing is mandatory
+  // even when expectation.stage string is present but leaseContext omitted.
+  if (expectation.capabilityStage === CAPABILITY_STAGES.LEASE_BOUND
+    || parsedClaims.capabilityStage === CAPABILITY_STAGES.LEASE_BOUND) {
+    if (!isPlainObject(expectation.leaseContext)) {
+      return deny(CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING, [
+        'EXPECTED_LEASE_FENCING_REQUIRED',
+      ]);
+    }
+    if (!isNonEmptyString(expectation.leaseContext.leaseId)) {
+      return deny(CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING, [
+        'EXPECTED_LEASE_ID_REQUIRED',
+      ]);
+    }
+    if (!isSafeInteger(expectation.leaseContext.fencingEpoch)
+      || expectation.leaseContext.fencingEpoch < 0) {
+      return deny(CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING, [
+        'EXPECTED_FENCING_EPOCH_REQUIRED',
+      ]);
+    }
+  }
+
+  return null;
 }
 
 /**

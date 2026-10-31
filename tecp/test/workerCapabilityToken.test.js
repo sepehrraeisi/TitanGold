@@ -111,14 +111,8 @@ function leaseBoundRequest(h, principal, overrides = {}) {
   };
 }
 
-test('valid signed bootstrap capability ALLOW', () => {
-  const h = harness();
-  const principal = attestedPrincipal();
-  const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
-  assert.equal(issued.allowed, true);
-  assert.equal(typeof issued.token, 'string');
-
-  const verified = verifyCapability(issued.token, {
+function completeBootstrapExpectation(principal, overrides = {}) {
+  return {
     audience: 'tecp-task-control',
     taskId: 'task-1',
     resourceType: 'TASK',
@@ -126,7 +120,36 @@ test('valid signed bootstrap capability ALLOW', () => {
     principalId: principal.principalId,
     action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
     capabilityStage: CAPABILITY_STAGES.BOOTSTRAP_REQUEST,
-  }, h.deps);
+    ...overrides,
+  };
+}
+
+function completeLeaseExpectation(principal, overrides = {}) {
+  return {
+    audience: 'tecp-task-control',
+    taskId: 'task-1',
+    resourceType: 'TASK',
+    resourceId: 'task-1',
+    principalId: principal.principalId,
+    action: CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
+    capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
+    leaseContext: { leaseId: 'lease-1', fencingEpoch: 7 },
+    ...overrides,
+  };
+}
+
+test('valid signed bootstrap capability ALLOW', () => {
+  const h = harness();
+  const principal = attestedPrincipal();
+  const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
+  assert.equal(issued.allowed, true);
+  assert.equal(typeof issued.token, 'string');
+
+  const verified = verifyCapability(
+    issued.token,
+    completeBootstrapExpectation(principal),
+    h.deps,
+  );
   assert.equal(verified.allowed, true);
   assert.equal(verified.decision, CAPABILITY_DECISIONS.ALLOW);
 });
@@ -136,17 +159,83 @@ test('valid lease-bound capability with proof-supplied fencing ALLOW', () => {
   const principal = attestedPrincipal();
   const issued = issueCapability(leaseBoundRequest(h, principal), h.deps);
   assert.equal(issued.allowed, true);
-  const verified = verifyCapability(issued.token, {
-    audience: 'tecp-task-control',
-    taskId: 'task-1',
-    resourceType: 'TASK',
-    resourceId: 'task-1',
-    principalId: principal.principalId,
-    action: CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
-    capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
-    leaseContext: { leaseId: 'lease-1', fencingEpoch: 7 },
-  }, h.deps);
+  const verified = verifyCapability(
+    issued.token,
+    completeLeaseExpectation(principal),
+    h.deps,
+  );
   assert.equal(verified.allowed, true);
+});
+
+test('empty or incomplete expectation DENY — never wildcard', () => {
+  const h = harness();
+  const principal = attestedPrincipal();
+  const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
+  assert.equal(issued.allowed, true);
+
+  assert.equal(
+    verifyCapability(issued.token, {}, h.deps).decision,
+    CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION,
+  );
+
+  const required = [
+    'audience',
+    'taskId',
+    'resourceType',
+    'resourceId',
+    'principalId',
+    'action',
+    'capabilityStage',
+  ];
+  for (const field of required) {
+    const incomplete = completeBootstrapExpectation(principal);
+    delete incomplete[field];
+    assert.equal(
+      verifyCapability(issued.token, incomplete, h.deps).decision,
+      CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION,
+      `missing ${field}`,
+    );
+  }
+
+  for (const field of required) {
+    assert.equal(
+      verifyCapability(
+        issued.token,
+        completeBootstrapExpectation(principal, { [field]: '' }),
+        h.deps,
+      ).decision,
+      CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION,
+      `empty ${field}`,
+    );
+    assert.equal(
+      verifyCapability(
+        issued.token,
+        completeBootstrapExpectation(principal, { [field]: null }),
+        h.deps,
+      ).decision,
+      CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION,
+      `null ${field}`,
+    );
+    assert.equal(
+      verifyCapability(
+        issued.token,
+        completeBootstrapExpectation(principal, { [field]: 123 }),
+        h.deps,
+      ).decision,
+      CAPABILITY_DECISIONS.DENY_INCOMPLETE_EXPECTATION,
+      `wrong-type ${field}`,
+    );
+  }
+
+  // LEASE_BOUND missing fencing
+  const leaseIssued = issueCapability(leaseBoundRequest(h, principal), h.deps);
+  assert.equal(leaseIssued.allowed, true);
+  const noFence = completeLeaseExpectation(principal);
+  delete noFence.leaseContext;
+  assert.equal(
+    verifyCapability(leaseIssued.token, noFence, h.deps).decision,
+    CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING,
+  );
 });
 
 test('tampered payload / signature DENY', () => {
@@ -158,11 +247,11 @@ test('tampered payload / signature DENY', () => {
   const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
   payload.taskId = 'task-hijacked';
   const tampered = `${Buffer.from(canonicalJson(payload), 'utf8').toString('base64url')}.${sigB64}`;
-  const result = verifyCapability(tampered, {
-    audience: 'tecp-task-control',
-    taskId: 'task-hijacked',
-    action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-  }, h.deps);
+  const result = verifyCapability(
+    tampered,
+    completeBootstrapExpectation(principal, { taskId: 'task-hijacked' }),
+    h.deps,
+  );
   assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_INVALID_SIGNATURE);
 });
 
@@ -173,10 +262,11 @@ test('unknown issuer / kid DENY', () => {
   assert.equal(issued.allowed, true);
   const other = harness({ kid: 'kid-other' });
   // Use token from h but verify against empty/other registry without matching kid.
-  const result = verifyCapability(issued.token, {
-    audience: 'tecp-task-control',
-    action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-  }, other.deps);
+  const result = verifyCapability(
+    issued.token,
+    completeBootstrapExpectation(principal),
+    other.deps,
+  );
   assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_UNKNOWN_ISSUER_OR_KID);
 });
 
@@ -190,41 +280,54 @@ test('unsupported algorithm DENY', () => {
   assert.equal(denied.decision, CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ALGORITHM);
 });
 
-test('wrong audience / task / resource / action DENY', () => {
+test('wrong audience / task / resource / action / stage DENY', () => {
   const h = harness();
   const principal = attestedPrincipal();
   const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
   assert.equal(issued.allowed, true);
 
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'other-audience',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, { audience: 'other-audience' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_AUDIENCE,
   );
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      taskId: 'task-other',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, { taskId: 'task-other' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_TASK,
   );
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      resourceId: 'task-other',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, { resourceId: 'task-other' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_RESOURCE,
   );
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.MUTATE_TASK,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, { action: CAPABILITY_ACTIONS.MUTATE_TASK }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_ACTION,
+  );
+  assert.equal(
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, {
+        capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
+        leaseContext: { leaseId: 'lease-1', fencingEpoch: 7 },
+      }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_STAGE_VIOLATION,
   );
 });
 
@@ -233,11 +336,11 @@ test('wrong Worker principal DENY', () => {
   const principal = attestedPrincipal('worker-a');
   const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      principalId: 'worker-b',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, { principalId: 'worker-b' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_PRINCIPAL,
   );
 });
@@ -250,10 +353,11 @@ test('expired and not-yet-valid token DENY', () => {
 
   h.clock.advance(2_000);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_EXPIRED,
   );
 
@@ -262,15 +366,13 @@ test('expired and not-yet-valid token DENY', () => {
     bootstrapRequest(h2, principal, { nbf: h2.clock.now().nowMs + 10_000, ttlMs: 60_000 }),
     h2.deps,
   );
-  // nbf > iat is allowed by shape; verify should DENY_NOT_YET_VALID
-  // But issueCapability sets nbf from request - need exp = iat+ttl still > nbf
-  // Our issue uses exp = iat + ttl; if nbf = iat+10000 and ttl=60000, exp > nbf. Good.
   assert.equal(issuedFuture.allowed, true);
   assert.equal(
-    verifyCapability(issuedFuture.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h2.deps).decision,
+    verifyCapability(
+      issuedFuture.token,
+      completeBootstrapExpectation(principal),
+      h2.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_NOT_YET_VALID,
   );
 });
@@ -318,10 +420,11 @@ test('noncanonical or ambiguous encoding DENY', () => {
   const ambiguous = JSON.stringify(payloadObj, null, 2);
   const ambiguousToken = `${Buffer.from(ambiguous, 'utf8').toString('base64url')}.${sigB64}`;
   // Signature also fails, but noncanonical should be detected first after parse
-  const result = verifyCapability(ambiguousToken, {
-    audience: 'tecp-task-control',
-    action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-  }, h.deps);
+  const result = verifyCapability(
+    ambiguousToken,
+    completeBootstrapExpectation(principal),
+    h.deps,
+  );
   assert.ok([
     CAPABILITY_DECISIONS.DENY_NONCANONICAL_ENCODING,
     CAPABILITY_DECISIONS.DENY_INVALID_SIGNATURE,
@@ -336,10 +439,11 @@ test('revoked jti DENY', () => {
   assert.equal(issued.allowed, true);
   h.revocationRegistry.revokeJti('jti-1');
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_REVOKED_JTI,
   );
 });
@@ -351,10 +455,11 @@ test('stale principal generation DENY', () => {
   assert.equal(issued.allowed, true);
   h.revocationRegistry.invalidatePrincipalBelowGeneration('worker-a', 2);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_STALE_PRINCIPAL_GENERATION,
   );
 });
@@ -366,10 +471,11 @@ test('unavailable revocation registry FAIL CLOSED', () => {
   assert.equal(issued.allowed, true);
   h.revocationRegistry.setUnavailable(true);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_REVOCATION_UNAVAILABLE,
   );
 });
@@ -396,10 +502,11 @@ test('disabled or compromised issuer key DENY', () => {
     status: 'DISABLED',
   });
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h2.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal),
+      h2.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_DISABLED_ISSUER_KEY,
   );
 });
@@ -430,20 +537,22 @@ test('key rotation with explicitly trusted keys', () => {
     status: 'RETIRED',
   });
   assert.equal(
-    verifyCapability(oldIssued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      oldIssued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_DISABLED_ISSUER_KEY,
   );
 
   const newIssued = issueCapability(bootstrapRequest(h, principal, { kid: 'kid-new' }), h.deps);
   assert.equal(newIssued.allowed, true);
   assert.equal(
-    verifyCapability(newIssued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).allowed,
+    verifyCapability(
+      newIssued.token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).allowed,
     true,
   );
 });
@@ -461,10 +570,13 @@ test('bootstrap stage cannot authorize mutation / Evidence', () => {
 
   const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.SUBMIT_EVIDENCE,
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeBootstrapExpectation(principal, {
+        action: CAPABILITY_ACTIONS.SUBMIT_EVIDENCE,
+      }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_ACTION,
   );
 });
@@ -482,12 +594,10 @@ test('lease-bound stage requires proof-supplied fencing context', () => {
 
   const issued = issueCapability(leaseBoundRequest(h, principal), h.deps);
   assert.equal(issued.allowed, true);
+  const missingFence = completeLeaseExpectation(principal);
+  delete missingFence.leaseContext;
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
-      capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
-    }, h.deps).decision,
+    verifyCapability(issued.token, missingFence, h.deps).decision,
     CAPABILITY_DECISIONS.DENY_MISSING_LEASE_FENCING,
   );
 });
@@ -497,21 +607,23 @@ test('wrong / stale fencing epoch DENY', () => {
   const principal = attestedPrincipal();
   const issued = issueCapability(leaseBoundRequest(h, principal), h.deps);
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
-      capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
-      leaseContext: { leaseId: 'lease-1', fencingEpoch: 6 },
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeLeaseExpectation(principal, {
+        leaseContext: { leaseId: 'lease-1', fencingEpoch: 6 },
+      }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_FENCING_EPOCH,
   );
   assert.equal(
-    verifyCapability(issued.token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
-      capabilityStage: CAPABILITY_STAGES.LEASE_BOUND,
-      leaseContext: { leaseId: 'lease-other', fencingEpoch: 7 },
-    }, h.deps).decision,
+    verifyCapability(
+      issued.token,
+      completeLeaseExpectation(principal, {
+        leaseContext: { leaseId: 'lease-other', fencingEpoch: 7 },
+      }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_LEASE,
   );
 });
@@ -526,19 +638,19 @@ test('two distinct Workers cannot substitute principals via tokens', () => {
   assert.equal(tokenB.allowed, true);
 
   assert.equal(
-    verifyCapability(tokenA.token, {
-      audience: 'tecp-task-control',
-      principalId: 'worker-b',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      tokenA.token,
+      completeBootstrapExpectation(a, { principalId: 'worker-b' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_PRINCIPAL,
   );
   assert.equal(
-    verifyCapability(tokenB.token, {
-      audience: 'tecp-task-control',
-      principalId: 'worker-a',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      tokenB.token,
+      completeBootstrapExpectation(b, { principalId: 'worker-a' }),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_WRONG_PRINCIPAL,
   );
 });
@@ -547,15 +659,7 @@ test('retry semantics remain within the same scope (not single-use; not exactly-
   const h = harness();
   const principal = attestedPrincipal();
   const issued = issueCapability(bootstrapRequest(h, principal), h.deps);
-  const expectation = {
-    audience: 'tecp-task-control',
-    taskId: 'task-1',
-    resourceType: 'TASK',
-    resourceId: 'task-1',
-    principalId: principal.principalId,
-    action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    capabilityStage: CAPABILITY_STAGES.BOOTSTRAP_REQUEST,
-  };
+  const expectation = completeBootstrapExpectation(principal);
   const first = verifyCapability(issued.token, expectation, h.deps);
   const retry = verifyCapabilityRetry(issued.token, expectation, h.deps);
   assert.equal(first.allowed, true);
@@ -580,10 +684,11 @@ test('no credential / private-key disclosure in errors', () => {
 
   // Forged signature path
   const forgedSig = `${issued.token.split('.')[0]}.${Buffer.from('x').toString('base64url')}`;
-  const forged = verifyCapability(forgedSig, {
-    audience: 'tecp-task-control',
-    action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-  }, h.deps);
+  const forged = verifyCapability(
+    forgedSig,
+    completeBootstrapExpectation(principal),
+    h.deps,
+  );
   const forgedBlob = JSON.stringify(forged);
   assert.equal(forgedBlob.includes('BEGIN PRIVATE KEY'), false);
   assert.equal(forgedBlob.includes(h.keys.privateKeyPem.split('\n')[1] || 'PRIVATE'), false);
@@ -714,10 +819,11 @@ test('foreign signature over valid claims DENY', () => {
   // Wrong: signing the raw b64 bytes instead of payload — still DENY
   const token = `${payloadB64}.${Buffer.from(sig).toString('base64url')}`;
   assert.equal(
-    verifyCapability(token, {
-      audience: 'tecp-task-control',
-      action: CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
-    }, h.deps).decision,
+    verifyCapability(
+      token,
+      completeBootstrapExpectation(principal),
+      h.deps,
+    ).decision,
     CAPABILITY_DECISIONS.DENY_INVALID_SIGNATURE,
   );
 });
