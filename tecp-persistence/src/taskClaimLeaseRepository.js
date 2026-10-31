@@ -12,6 +12,7 @@ import {
   APPROVED_GOVERNANCE_REVISION,
   WRITE_LEASE_DECISIONS,
   acquireWriteLeaseInTransaction,
+  assertOwnedWriteLeaseTransaction,
   releaseWriteLeaseInTransaction,
   withOwnedWriteLeaseTransaction,
 } from './writeLeaseRepository.js';
@@ -30,6 +31,7 @@ export const COMPOSITION_DECISIONS = Object.freeze({
   DENY_NOT_FOUND: 'DENY_NOT_FOUND',
   DENY_BINDING_MISMATCH: 'DENY_BINDING_MISMATCH',
   DENY_ALREADY_RELEASED: 'DENY_ALREADY_RELEASED',
+  DENY_NO_TRANSACTION_OWNERSHIP: 'DENY_NO_TRANSACTION_OWNERSHIP',
   BLOCKED_DB_FAILURE: 'BLOCKED_DB_FAILURE',
 });
 
@@ -484,6 +486,68 @@ function mapCaughtError(error) {
     });
   }
   return null;
+}
+
+function mapOwnershipOrDbFailure(error) {
+  if (!error) return null;
+  if (error.code === WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP
+    || error.message === WRITE_LEASE_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP) {
+    return compositionResult(COMPOSITION_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP);
+  }
+  if (isDbFailure(error)) {
+    return compositionResult(COMPOSITION_DECISIONS.BLOCKED_DB_FAILURE, {
+      errorClass: error.code || error.name || 'DB_FAILURE',
+    });
+  }
+  return null;
+}
+
+/**
+ * Bind Task + WRITE Claim + WRITE Lease inside a verified caller-owned transaction.
+ * Never issues BEGIN/COMMIT/ROLLBACK. Composition DENY/unique failures rethrow so
+ * the outer owned transaction ROLLBACKs; soft returns are only for pre-write checks.
+ */
+export async function bindTaskClaimLeaseInTransaction(client, input) {
+  requireClient(client);
+  if (!validateBindInput(input)) {
+    return compositionResult(COMPOSITION_DECISIONS.DENY_INVALID_INPUT);
+  }
+  if (input.governanceRevision !== APPROVED_GOVERNANCE_REVISION) {
+    return compositionResult(COMPOSITION_DECISIONS.DENY_INVALID_GOVERNANCE_REVISION);
+  }
+  try {
+    await assertOwnedWriteLeaseTransaction(client);
+  } catch (error) {
+    const mapped = mapOwnershipOrDbFailure(error);
+    if (mapped) return mapped;
+    throw error;
+  }
+  // Intentionally do not catch CompositionAbort / unique violations: rethrow for outer ROLLBACK.
+  return bindTaskClaimLeaseWork(client, input);
+}
+
+/**
+ * Release Lease + Claim + Task inside a verified caller-owned transaction.
+ * Never issues BEGIN/COMMIT/ROLLBACK. Composition DENY/unique failures rethrow so
+ * the outer owned transaction ROLLBACKs; soft returns are only for pre-write checks.
+ */
+export async function releaseTaskClaimLeaseInTransaction(client, input) {
+  requireClient(client);
+  if (!validateReleaseInput(input)) {
+    return compositionResult(COMPOSITION_DECISIONS.DENY_INVALID_INPUT);
+  }
+  if (input.governanceRevision !== APPROVED_GOVERNANCE_REVISION) {
+    return compositionResult(COMPOSITION_DECISIONS.DENY_INVALID_GOVERNANCE_REVISION);
+  }
+  try {
+    await assertOwnedWriteLeaseTransaction(client);
+  } catch (error) {
+    const mapped = mapOwnershipOrDbFailure(error);
+    if (mapped) return mapped;
+    throw error;
+  }
+  // Intentionally do not catch CompositionAbort / unique violations: rethrow for outer ROLLBACK.
+  return releaseTaskClaimLeaseWork(client, input);
 }
 
 /**

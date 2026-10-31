@@ -13,11 +13,14 @@ import {
   APPROVED_GOVERNANCE_REVISION,
   COMPOSITION_DECISIONS,
   bindTaskClaimLease,
+  bindTaskClaimLeaseInTransaction,
   releaseTaskClaimLease,
+  releaseTaskClaimLeaseInTransaction,
 } from '../src/taskClaimLeaseRepository.js';
 import {
   WRITE_LEASE_DECISIONS,
   validateWriteLease,
+  withOwnedWriteLeaseTransaction,
 } from '../src/writeLeaseRepository.js';
 import {
   createDisposablePgHarness,
@@ -522,5 +525,112 @@ test('source does not duplicate WRITE lease SQL algorithm', async () => {
   assert.match(src, /acquireWriteLeaseInTransaction/);
   assert.match(src, /releaseWriteLeaseInTransaction/);
   assert.match(src, /withOwnedWriteLeaseTransaction/);
+  assert.match(src, /assertOwnedWriteLeaseTransaction/);
+  assert.match(src, /bindTaskClaimLeaseInTransaction/);
+  assert.match(src, /releaseTaskClaimLeaseInTransaction/);
   assert.match(src, /NON_OPERATIONAL/);
+  const codeOnly = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  // In-transaction exports must not manage transaction boundaries themselves.
+  const inTxnBind = codeOnly.slice(
+    codeOnly.indexOf('export async function bindTaskClaimLeaseInTransaction'),
+    codeOnly.indexOf('export async function releaseTaskClaimLeaseInTransaction'),
+  );
+  const inTxnRelease = codeOnly.slice(
+    codeOnly.indexOf('export async function releaseTaskClaimLeaseInTransaction'),
+    codeOnly.indexOf('export async function bindTaskClaimLease'),
+  );
+  assert.doesNotMatch(inTxnBind, /['"`]BEGIN['"`]/i);
+  assert.doesNotMatch(inTxnBind, /['"`]COMMIT['"`]/i);
+  assert.doesNotMatch(inTxnBind, /['"`]ROLLBACK['"`]/i);
+  assert.doesNotMatch(inTxnRelease, /['"`]BEGIN['"`]/i);
+  assert.doesNotMatch(inTxnRelease, /['"`]COMMIT['"`]/i);
+  assert.doesNotMatch(inTxnRelease, /['"`]ROLLBACK['"`]/i);
+});
+
+test('DLP-004 prep: InTransaction bind/release require owned txn; public APIs unchanged', async () => {
+  const client = await harness.createClient();
+  try {
+    const bare = await bindTaskClaimLeaseInTransaction(client, baseBind({
+      taskId: 'task-intxn-bare',
+      actorId: 'actor-intxn-bare',
+      resourceKey: 'comp-intxn-bare',
+      claimKey: 'claim-intxn-bare',
+      leaseKey: 'lease-intxn-bare',
+      compositionIdempotencyKey: 'comp-idem-intxn-bare',
+      leaseIdempotencyKey: 'lease-idem-intxn-bare',
+    }));
+    assert.equal(bare.decision, COMPOSITION_DECISIONS.DENY_NO_TRANSACTION_OWNERSHIP);
+    assert.equal(bare.ok, false);
+
+    const input = baseBind({
+      taskId: 'task-intxn',
+      actorId: 'actor-intxn',
+      resourceKey: 'comp-intxn',
+      claimKey: 'claim-intxn',
+      leaseKey: 'lease-intxn',
+      compositionIdempotencyKey: 'comp-idem-intxn',
+      leaseIdempotencyKey: 'lease-idem-intxn',
+    });
+    const bound = await withOwnedWriteLeaseTransaction(client, async () => (
+      bindTaskClaimLeaseInTransaction(client, input)
+    ));
+    assert.equal(bound.decision, COMPOSITION_DECISIONS.BOUND);
+    assert.equal(bound.ok, true);
+    assert.equal(bound.operational, false);
+    assert.equal(await countHeldClaims(client, input.resourceType, input.resourceKey), 1);
+
+    const released = await withOwnedWriteLeaseTransaction(client, async () => (
+      releaseTaskClaimLeaseInTransaction(client, {
+        taskId: input.taskId,
+        actorId: input.actorId,
+        resourceType: input.resourceType,
+        resourceKey: input.resourceKey,
+        claimKey: input.claimKey,
+        leaseKey: input.leaseKey,
+        governanceRevision: APPROVED_GOVERNANCE_REVISION,
+        fencingEpoch: bound.lease.fencingEpoch,
+        expectedVersion: bound.lease.version,
+      })
+    ));
+    assert.equal(released.decision, COMPOSITION_DECISIONS.RELEASED);
+    assert.equal(await countHeldClaims(client, input.resourceType, input.resourceKey), 0);
+
+    // Public self-managing API still works independently.
+    const pub = await bindTaskClaimLease(client, baseBind({
+      taskId: 'task-intxn-pub',
+      actorId: 'actor-intxn-pub',
+      resourceKey: 'comp-intxn-pub',
+      claimKey: 'claim-intxn-pub',
+      leaseKey: 'lease-intxn-pub',
+      compositionIdempotencyKey: 'comp-idem-intxn-pub',
+      leaseIdempotencyKey: 'lease-idem-intxn-pub',
+    }));
+    assert.equal(pub.decision, COMPOSITION_DECISIONS.BOUND);
+  } finally {
+    await client.end();
+  }
+});
+
+test('DLP-004 prep: nested public bind inside owned txn DENY_CLIENT_NOT_IDLE', async () => {
+  const client = await harness.createClient();
+  try {
+    await assert.rejects(
+      () => withOwnedWriteLeaseTransaction(client, async () => (
+        bindTaskClaimLease(client, baseBind({
+          taskId: 'task-nested-pub',
+          actorId: 'actor-nested-pub',
+          resourceKey: 'comp-nested-pub',
+          claimKey: 'claim-nested-pub',
+          leaseKey: 'lease-nested-pub',
+          compositionIdempotencyKey: 'comp-idem-nested-pub',
+          leaseIdempotencyKey: 'lease-idem-nested-pub',
+        }))
+      )),
+      (err) => err && err.code === WRITE_LEASE_DECISIONS.DENY_CLIENT_NOT_IDLE,
+    );
+  } finally {
+    await client.end();
+  }
 });
