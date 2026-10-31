@@ -41,11 +41,21 @@ export const BOOTSTRAP_ALLOWED_ACTIONS = Object.freeze([
   CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
 ]);
 
-export const LEASE_BOUND_FORBIDDEN_WITHOUT_FENCING = Object.freeze([
+/** Explicit LEASE_BOUND action allowlist. Bootstrap-only actions are excluded. */
+export const LEASE_BOUND_ALLOWED_ACTIONS = Object.freeze([
   CAPABILITY_ACTIONS.MUTATE_TASK,
   CAPABILITY_ACTIONS.SUBMIT_EVIDENCE,
   CAPABILITY_ACTIONS.RELEASE_TASK,
   CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
+]);
+
+export const LEASE_BOUND_FORBIDDEN_WITHOUT_FENCING = Object.freeze([
+  ...LEASE_BOUND_ALLOWED_ACTIONS,
+]);
+
+export const ALL_KNOWN_CAPABILITY_ACTIONS = Object.freeze([
+  ...BOOTSTRAP_ALLOWED_ACTIONS,
+  ...LEASE_BOUND_ALLOWED_ACTIONS,
 ]);
 
 export const CAPABILITY_DECISIONS = Object.freeze({
@@ -78,6 +88,7 @@ export const CAPABILITY_DECISIONS = Object.freeze({
   DENY_WRONG_LEASE: 'DENY_WRONG_LEASE',
   DENY_BOOTSTRAP_MUTATION: 'DENY_BOOTSTRAP_MUTATION',
   DENY_INCOMPLETE_EXPECTATION: 'DENY_INCOMPLETE_EXPECTATION',
+  DENY_UNSUPPORTED_ACTION: 'DENY_UNSUPPORTED_ACTION',
 });
 
 const REQUIRED_EXPECTATION_STRING_FIELDS = Object.freeze([
@@ -288,6 +299,14 @@ function validateClaimShape(claims) {
     if (!isNonEmptyString(claims.leaseId)) return 'LEASE_ID_REQUIRED';
     if (!isSafeInteger(claims.fencingEpoch) || claims.fencingEpoch < 0) return 'FENCING_EPOCH_REQUIRED';
     if (actions.length === 0) return 'LEASE_BOUND_ACTIONS_REQUIRED';
+    for (const action of actions) {
+      if (BOOTSTRAP_ALLOWED_ACTIONS.includes(action)) {
+        return 'BOOTSTRAP_ACTION_IN_LEASE_BOUND';
+      }
+      if (!LEASE_BOUND_ALLOWED_ACTIONS.includes(action)) {
+        return 'UNSUPPORTED_LEASE_BOUND_ACTION';
+      }
+    }
   } else {
     return 'INVALID_CAPABILITY_STAGE';
   }
@@ -567,6 +586,12 @@ export function issueCapability(request, deps) {
     if (built.error === 'BOOTSTRAP_ACTION_FORBIDDEN') {
       return deny(CAPABILITY_DECISIONS.DENY_BOOTSTRAP_MUTATION, [built.error]);
     }
+    if (
+      built.error === 'BOOTSTRAP_ACTION_IN_LEASE_BOUND'
+      || built.error === 'UNSUPPORTED_LEASE_BOUND_ACTION'
+    ) {
+      return deny(CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION, [built.error]);
+    }
     if (built.error === 'EXCESSIVE_TTL') {
       return deny(CAPABILITY_DECISIONS.DENY_EXCESSIVE_TTL, [built.error]);
     }
@@ -639,7 +664,7 @@ export function verifyCapability(token, expectation, deps) {
 
   const shapeError = validateClaimShape(parsed);
   if (shapeError) {
-    if (shapeError === 'UNSUPPORTED_ALGORITHM' || shapeError.startsWith('UNSUPPORTED')) {
+    if (shapeError === 'UNSUPPORTED_ALGORITHM') {
       return deny(CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ALGORITHM, [shapeError]);
     }
     if (shapeError === 'EXCESSIVE_TTL') {
@@ -647,6 +672,12 @@ export function verifyCapability(token, expectation, deps) {
     }
     if (shapeError === 'BOOTSTRAP_ACTION_FORBIDDEN') {
       return deny(CAPABILITY_DECISIONS.DENY_BOOTSTRAP_MUTATION, [shapeError]);
+    }
+    if (
+      shapeError === 'BOOTSTRAP_ACTION_IN_LEASE_BOUND'
+      || shapeError === 'UNSUPPORTED_LEASE_BOUND_ACTION'
+    ) {
+      return deny(CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION, [shapeError]);
     }
     return deny(CAPABILITY_DECISIONS.DENY_MISSING_OR_MALFORMED_CLAIMS, [shapeError]);
   }
@@ -753,11 +784,18 @@ export function verifyCapability(token, expectation, deps) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_ACTION, ['ACTION_NOT_PERMITTED']);
   }
 
+  // Stage-specific expectation action allowlist (defense in depth beyond token claims).
   if (parsed.capabilityStage === CAPABILITY_STAGES.BOOTSTRAP_REQUEST) {
-    if (!BOOTSTRAP_ALLOWED_ACTIONS.includes(expectation.action)
-      || LEASE_BOUND_FORBIDDEN_WITHOUT_FENCING.includes(expectation.action)) {
+    if (!BOOTSTRAP_ALLOWED_ACTIONS.includes(expectation.action)) {
       return deny(CAPABILITY_DECISIONS.DENY_BOOTSTRAP_MUTATION, [
         'BOOTSTRAP_CANNOT_AUTHORIZE_MUTATION_OR_EVIDENCE',
+      ]);
+    }
+  } else if (parsed.capabilityStage === CAPABILITY_STAGES.LEASE_BOUND) {
+    if (BOOTSTRAP_ALLOWED_ACTIONS.includes(expectation.action)
+      || !LEASE_BOUND_ALLOWED_ACTIONS.includes(expectation.action)) {
+      return deny(CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION, [
+        'LEASE_BOUND_ACTION_NOT_ALLOWLISTED',
       ]);
     }
   }

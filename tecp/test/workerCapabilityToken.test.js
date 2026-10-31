@@ -16,6 +16,7 @@ import {
   CAPABILITY_ACTIONS,
   CAPABILITY_DECISIONS,
   CAPABILITY_STAGES,
+  LEASE_BOUND_ALLOWED_ACTIONS,
   MAX_CAPABILITY_TTL_MS,
   canonicalJson,
   createInMemoryIssuerKeyRegistry,
@@ -165,6 +166,82 @@ test('valid lease-bound capability with proof-supplied fencing ALLOW', () => {
     h.deps,
   );
   assert.equal(verified.allowed, true);
+});
+
+test('LEASE_BOUND unknown / invented / bootstrap-only / mixed actions DENY', () => {
+  const h = harness();
+  const principal = attestedPrincipal();
+
+  assert.equal(
+    issueCapability(
+      leaseBoundRequest(h, principal, { allowedActions: ['TOTALLY_MADE_UP_PRIVILEGE'] }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION,
+  );
+
+  assert.equal(
+    issueCapability(
+      leaseBoundRequest(h, principal, { allowedActions: ['APPROVE_MERGE_AND_DEPLOY'] }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION,
+  );
+
+  assert.equal(
+    issueCapability(
+      leaseBoundRequest(h, principal, {
+        allowedActions: [CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE],
+      }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION,
+  );
+
+  assert.equal(
+    issueCapability(
+      leaseBoundRequest(h, principal, {
+        allowedActions: [
+          CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
+          CAPABILITY_ACTIONS.REQUEST_ELIGIBLE_TASK_LEASE,
+        ],
+      }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_UNSUPPORTED_ACTION,
+  );
+
+  // Duplicate actions rejected by normalizeActions
+  assert.equal(
+    issueCapability(
+      leaseBoundRequest(h, principal, {
+        allowedActions: [
+          CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
+          CAPABILITY_ACTIONS.EXECUTE_LEASE_SCOPED_WORK,
+        ],
+      }),
+      h.deps,
+    ).decision,
+    CAPABILITY_DECISIONS.DENY_MISSING_OR_MALFORMED_CLAIMS,
+  );
+
+  // Each approved LEASE_BOUND action alone issues and verifies
+  for (const action of LEASE_BOUND_ALLOWED_ACTIONS) {
+    const issued = issueCapability(
+      leaseBoundRequest(h, principal, { allowedActions: [action] }),
+      h.deps,
+    );
+    assert.equal(issued.allowed, true, action);
+    assert.equal(
+      verifyCapability(
+        issued.token,
+        completeLeaseExpectation(principal, { action }),
+        h.deps,
+      ).allowed,
+      true,
+      action,
+    );
+  }
 });
 
 test('empty or incomplete expectation DENY — never wildcard', () => {
