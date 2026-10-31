@@ -1,0 +1,19 @@
+{
+  "name": "tecp-persistence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TECP-DLP-001 disposable atomic WRITE lease and fencing proof. NON_OPERATIONAL test-only package.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    "./writeLeaseRepository.js": "./src/writeLeaseRepository.js"
+  },
+  "scripts": {
+    "test": "node --test test/writeLeaseRepository.test.js"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  }
+}
