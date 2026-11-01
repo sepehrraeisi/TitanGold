@@ -20,10 +20,10 @@ Only the canonical Snapshot, sole active AWP and Next Owner gate authorize curre
 **CURRENT_STAGE_PROGRESS = 11/15**
 **REMAINING_STAGES = 5**
 **CURRENT_PHASE = STAGE10_FORMAL_FREEZE_COMPLETE / STAGE11_GOVERNANCE_DISCOVERY_ENTRY**
-**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-CURSOR-CONTEXT-001 CLOSED FROZEN VERIFIED / TECP-DLP-001 CLOSED FROZEN VERIFIED / TECP-DLP-002 CLOSED FROZEN VERIFIED / TECP-DLP-003 CLOSED FROZEN VERIFIED / TECP-DLP-004 CLOSED FROZEN VERIFIED / TECP-DLP-005 CLOSED FROZEN VERIFIED**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-CURSOR-CONTEXT-001 CLOSED FROZEN VERIFIED / TECP-DLP-001 CLOSED FROZEN VERIFIED / TECP-DLP-002 CLOSED FROZEN VERIFIED / TECP-DLP-003 CLOSED FROZEN VERIFIED / TECP-DLP-004 CLOSED FROZEN VERIFIED / TECP-DLP-005 CLOSED FROZEN VERIFIED / TECP-DLP-006 AUTHORIZATION PROPOSED AFTER_OWNER_MERGE**
 **TECP_PROGRAM_COUPLING_TO_ARTEMIS = NONE / INDEPENDENT_ENGINEERING_WORKSTREAM**
 **TECP_STAGE11_SCOPE_COUPLING = NONE**
-**TECP_AUTHORIZED_SLICE = TECP-DLP-005-DISPOSABLE-TRUSTED-WORKER-IDENTITY-PROOF**
+**TECP_AUTHORIZED_SLICE = TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF**
 **TECP_NO_OTHER_SLICE_AUTHORIZED = YES**
 **TECP_DLP001_STATUS = CLOSED / FROZEN / VERIFIED**
 **TECP_DLP001_PRIOR_AUTHORIZATION = CONSUMED / NON-ACTIVE / PR225_SUPERSEDED_BY_PR226**
@@ -133,6 +133,31 @@ Only the canonical Snapshot, sole active AWP and Next Owner gate authorize curre
 **TECP_DLP005_AUTHORIZATION_GOVERNANCE_PR = #243 / MERGED / 30a3a8742ab943f8b265583072bef5c3d90abca5**
 **TECP_DLP005_IMPLEMENTATION_PR = #244 / MERGE_SHA_3ebb0666abb1f3c37c898d2c4eb33d8c2e8b9fca**
 **TECP_DLP005_IMPLEMENTATION_COMMIT = 6d94192d9857fc3df945eb6d7e742c2276281259**
+**TECP_DLP005_CLOSEOUT_GOVERNANCE_PR = #245 / MERGED / 9ca27f784ba045c3994024a6aac862a4957385d9**
+**TECP_DLP006_STATUS = AUTHORIZATION_PROPOSED / OWNER_GOVERNANCE_PR_PENDING / NOT_EFFECTIVE**
+**TECP_DLP006_AUTHORIZATION_REVISION = DLP006_AUTHORIZATION_20261101**
+**TECP_DLP006_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_DLP006_IMPLEMENTATION_STARTED = NO**
+**TECP_DLP006_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_DLP006_DEPLOY_REQUIRED = NO**
+**TECP_DLP006_PRODUCTION_MUTATION = NO**
+**TECP_DLP006_DATABASE_ACCESS = NONE / OFFLINE_PROOF_ONLY**
+**TECP_DLP006_RUNTIME_NETWORK = NONE / NO_NETWORK_AUTHENTICATION**
+**TECP_DLP006_BUILD_NETWORK = NONE / NO_NEW_DEPENDENCIES**
+**TECP_DLP006_DEPENDENCY_ALLOWLIST = NONE_NEW / REUSE_FROZEN_DLP005_APIS_ONLY**
+**TECP_DLP006_MCP_EXPANSION = NO**
+**TECP_DLP006_WORKER_EXECUTION = NO**
+**TECP_DLP006_MULTICURSOR = NO**
+**TECP_DLP006_ARCHITECTURE_OPTION = ALTERNATIVE_C / PURE_AUTHORIZATION_BOUNDARY_FIRST**
+**TECP_DLP006_FROZEN_BOUNDARY_EXCEPTION = FOUR_NEW_TECP_FILES_ONLY / ZERO_EXISTING_FILE_CHANGES / AFTER_MERGE**
+**TECP_DLP006_REAL_WORKER_AUTH_CLAIM = NO / NOT_AUTHORIZED**
+**TECP_DLP006_OS_PRINCIPAL_AUTH_CLAIM = NO / TEST_ATTESTED_PRINCIPAL_ONLY**
+**TECP_DLP006_PERSISTENCE_INTEGRATION = OUT_OF_SCOPE / SEPARATE_OWNER_DECISION_REQUIRED**
+**TECP_DLP006_MCP_MUTATION_CONTROL = OUT_OF_SCOPE / NOT_AUTHORIZED**
+**TECP_DLP006_LEASE_ACQUISITION = OUT_OF_SCOPE / NO_REAL_LEASE**
+**TECP_DLP006_RECOVERY_EXECUTION = OUT_OF_SCOPE / SEPARATE_OWNER_DECISION_REQUIRED**
+**TECP_DLP006_HASH_CHAIN_CLAIM = NO / NOT_AUTHORIZED**
+**TECP_DLP006_PROOF_STATUS = NON_OPERATIONAL**
 **TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_STARTED = YES / COMPLETE / MERGED_PR_227 / OWNER_HUMAN_QA_PASS**
 **TECP_CURSOR_CONTEXT_001_DEPLOY_REQUIRED = NO**
 **TECP_CURSOR_CONTEXT_001_PRODUCTION_MUTATION = NO**
@@ -140,11 +165,105 @@ Only the canonical Snapshot, sole active AWP and Next Owner gate authorize curre
 **TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
 **STAGE11_IMPLEMENTATION_AUTHORIZED = NO / GOVERNANCE_DISCOVERY_ONLY**
 **PROGRESS_BLOCKER = NONE**
-**TECP_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+**TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
 **TECP_CURSOR_CONTEXT_001_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
 
-### Active Work Package — TECP-DLP-005 FROZEN GOVERNANCE RECORD (CLOSED / NO IMPLEMENTATION AUTHORIZATION)
+### Active Work Package — TECP-DLP-006 DISPOSABLE AUTHORIZED INVOCATION BOUNDARY PROOF (AUTHORIZATION PROPOSAL / EFFECTIVE ONLY AFTER OWNER-APPROVED MERGE)
+**AUTHORIZED_SLICE = NONE / NO_ACTIVE_ARTEMIS_IMPLEMENTATION_AUTHORIZATION**
+**TECP_AUTHORIZED_SLICE = TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF**
+**TECP_PARALLEL_AUTHORIZED_SLICE = TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF**
+**SLICE_ID = TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF**
+**OFFICIAL_NAME = TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF**
+**PRIOR_SLICE = TECP-DLP-005-DISPOSABLE-TRUSTED-WORKER-IDENTITY-PROOF**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = ENGINEERING_CONTROL_PLANE**
+**TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
+**LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
+**TECP_019_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP019_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_020_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP020_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP020_DISCOVERY_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP021_PLUS_IMPLEMENTATION_AUTHORIZED = NO**
+**TECP_DLP001_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP_DLP001_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP001_PROOF_STATUS = NON_OPERATIONAL**
+**TECP_DLP002_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP_DLP002_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP002_PROOF_STATUS = NON_OPERATIONAL**
+**TECP_DLP003_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP_DLP003_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP003_PROOF_STATUS = NON_OPERATIONAL**
+**TECP_DLP004_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP_DLP004_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP004_PROOF_STATUS = NON_OPERATIONAL**
+**TECP_DLP005_STATUS = CLOSED / FROZEN / VERIFIED**
+**TECP_DLP005_IMPLEMENTATION_AUTHORIZED = CONSUMED / NON-ACTIVE**
+**TECP_DLP005_PROOF_STATUS = NON_OPERATIONAL**
+**TECP_DLP006_STATUS = AUTHORIZATION_PROPOSED / OWNER_GOVERNANCE_PR_PENDING / NOT_EFFECTIVE**
+**TECP_DLP006_AUTHORIZATION_REVISION = DLP006_AUTHORIZATION_20261101**
+**TECP_DLP006_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_DLP006_IMPLEMENTATION_STARTED = NO**
+**TECP_DLP006_EFFECTIVE_BEFORE_MERGE = NO**
+**TECP_DLP006_DEPLOY_REQUIRED = NO**
+**TECP_DLP006_PRODUCTION_MUTATION = NO**
+**TECP_DLP006_DATABASE_ACCESS = NONE / OFFLINE_PROOF_ONLY**
+**TECP_DLP006_RUNTIME_NETWORK = NONE / NO_NETWORK_AUTHENTICATION**
+**TECP_DLP006_BUILD_NETWORK = NONE / NO_NEW_DEPENDENCIES**
+**TECP_DLP006_DEPENDENCY_ALLOWLIST = NONE_NEW / REUSE_FROZEN_DLP005_APIS_ONLY**
+**TECP_DLP006_MCP_EXPANSION = NO**
+**TECP_DLP006_WORKER_EXECUTION = NO**
+**TECP_DLP006_MULTICURSOR = NO**
+**TECP_DLP006_ARCHITECTURE_OPTION = ALTERNATIVE_C / PURE_AUTHORIZATION_BOUNDARY_FIRST**
+**TECP_DLP006_FROZEN_BOUNDARY_EXCEPTION = FOUR_NEW_TECP_FILES_ONLY / ZERO_EXISTING_FILE_CHANGES / AFTER_MERGE**
+**TECP_DLP006_REAL_WORKER_AUTH_CLAIM = NO / NOT_AUTHORIZED**
+**TECP_DLP006_OS_PRINCIPAL_AUTH_CLAIM = NO / TEST_ATTESTED_PRINCIPAL_ONLY**
+**TECP_DLP006_PERSISTENCE_INTEGRATION = OUT_OF_SCOPE / SEPARATE_OWNER_DECISION_REQUIRED**
+**TECP_DLP006_MCP_MUTATION_CONTROL = OUT_OF_SCOPE / NOT_AUTHORIZED**
+**TECP_DLP006_LEASE_ACQUISITION = OUT_OF_SCOPE / NO_REAL_LEASE**
+**TECP_DLP006_RECOVERY_EXECUTION = OUT_OF_SCOPE / SEPARATE_OWNER_DECISION_REQUIRED**
+**TECP_DLP006_HASH_CHAIN_CLAIM = NO / NOT_AUTHORIZED**
+**TECP_DLP006_PROOF_STATUS = NON_OPERATIONAL**
+**IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP005_IMPLEMENTATION_AUTHORIZED = YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES**
+**TECP_WORKSTREAM_STATUS = ACTIVE / TECP-020 FROZEN VERIFIED / TECP-CURSOR-CONTEXT-001 CLOSED FROZEN VERIFIED / TECP-DLP-001 CLOSED FROZEN VERIFIED / TECP-DLP-002 CLOSED FROZEN VERIFIED / TECP-DLP-003 CLOSED FROZEN VERIFIED / TECP-DLP-004 CLOSED FROZEN VERIFIED / TECP-DLP-005 CLOSED FROZEN VERIFIED / TECP-DLP-006 AUTHORIZATION PROPOSED AFTER_OWNER_MERGE**
+**TECP_NEXT_GATE = TECP-DLP-006-OWNER-GOVERNANCE-APPROVAL / IMPLEMENTATION_NOT_STARTED**
+**TECP_IMPLEMENTATION = AUTHORIZATION_PROPOSED / NOT_STARTED / PR_PENDING**
+**TECP_NO_OTHER_SLICE_AUTHORIZED = YES**
+**GOVERNANCE_REVISION = DLP006_AUTHORIZATION_20261101**
+**GOVERNANCE_BASE_MAIN_SHA = 9ca27f784ba045c3994024a6aac862a4957385d9**
+AUTHORIZED_FILE_SCOPE = tecp/src/authorizedInvocation.js | tecp/src/trustedLeaseSnapshot.js | tecp/test/authorizedInvocation.test.js | tecp/test/trustedLeaseSnapshot.test.js
+PROTECTED_PATHS = .cursor/rules/** | .cursor/context-archive/** | .cursor/mcp.json | .cursor/commands/** | .cursor/skills/** | tecp/package.json | tecp/package-lock.json | tecp/README.md | tecp/src/actorCapabilityEngine.js | tecp/src/auditEvent.js | tecp/src/config.js | tecp/src/conflictEngine.js | tecp/src/evidenceLedger.js | tecp/src/governanceReadModel.js | tecp/src/governanceValidator.js | tecp/src/health.js | tecp/src/idempotencyOps.js | tecp/src/index.js | tecp/src/leaseEngine.js | tecp/src/mcpServer.js | tecp/src/mcpStdio.js | tecp/src/ports/** | tecp/src/recovery.js | tecp/src/resourceClaims.js | tecp/src/rule02Parser.js | tecp/src/scopeExpansion.js | tecp/src/service.js | tecp/src/taskGraph.js | tecp/src/workerIdentity.js | tecp/src/workerCapabilityToken.js | tecp/test/actorCapabilityEngine.test.js | tecp/test/auditEvent.test.js | tecp/test/conflictEngine.test.js | tecp/test/evidenceLedger.test.js | tecp/test/fixtures/** | tecp/test/governanceReadModel.test.js | tecp/test/governanceValidator.test.js | tecp/test/idempotencyOps.test.js | tecp/test/leaseEngine.test.js | tecp/test/mcpServer.test.js | tecp/test/recovery.test.js | tecp/test/resourceClaims.test.js | tecp/test/rule02Parser.test.js | tecp/test/scopeExpansion.test.js | tecp/test/serviceSkeleton.test.js | tecp/test/singleCursorIntegration.test.js | tecp/test/taskGraph.test.js | tecp/test/workerIdentity.test.js | tecp/test/workerCapabilityToken.test.js | backend/** | .github/** | docs/** | .env | .env.local | .env.production | node_modules/** | dist/** | build/** | coverage/** | credentials/** | secrets/** | production/** | tecp-persistence/package.json | tecp-persistence/package-lock.json | tecp-persistence/src/writeLeaseRepository.js | tecp-persistence/test/writeLeaseRepository.test.js | tecp-persistence/test/disposableSchema.sql | tecp-persistence/test/disposablePgHarness.js | tecp-persistence/src/taskClaimLeaseRepository.js | tecp-persistence/test/taskClaimLeaseRepository.test.js | tecp-persistence/test/disposableTaskClaimLeaseSchema.sql | tecp-persistence/src/auditEvidenceRepository.js | tecp-persistence/test/disposableAuditEvidenceSchema.sql | tecp-persistence/test/auditEvidenceRepository.test.js | tecp-persistence/src/taskClaimLeaseAuditRepository.js | tecp-persistence/test/disposableTaskClaimLeaseAuditSchema.sql | tecp-persistence/test/taskClaimLeaseAuditRepository.test.js | Data Hub | AI Shared Foundation | Agents Shell | Artemis Stage 11 | /home/ubuntu/webapp/TitanGold | production databases
+STOP_CONDITIONS = RAW_RULE02_PARSE | PARSER_SOURCE_MUTATION | FIXTURE_CHANGE | BACKEND_CHANGE | NETWORK | GITHUB | LINEAR | DEPLOY | PRODUCTION_MUTATION | RUNTIME | CREDENTIAL_READ | TASK_MUTATION | LEASE_ISSUANCE | CONFLICT_RESOLUTION | SELF_AUTHORIZATION | TECP007_PLUS | SECOND_PARSER_OWNER | NON_DISPOSABLE_DB | REMOTE_DB | DB_URL_FROM_ENV | LIVE_WORKER_EXECUTION | MULTI_CURSOR_PILOT | MCP_SURFACE_EXPANSION | PRODUCTION_RUNTIME | MIGRATION_056_MUTATION | MIGRATION_057_OR_CANONICAL_SCHEMA | UNAPPROVED_DEPENDENCY_OR_SCOPE | SECRET_READ | RULE02_WRITE | RULE01_WRITE | FROZEN_EXISTING_TECP_SOURCE_MUTATION | FROZEN_DLP001_OR_DLP002_OR_DLP003_OR_DLP004_OR_DLP005_SOURCE_MUTATION | DATABASE_EXECUTION | REAL_WORKER_BOOTSTRAP | REAL_OS_PRINCIPAL_AUTH_CLAIM | PERSISTENT_PRODUCTION_ISSUER | PRODUCTION_SECRET_STORAGE | NETWORK_AUTHENTICATION | CURSOR_EXECUTION | TASK_CLAIM_LEASE_AUDIT_COMPOSITION_BINDING | HASH_CHAIN_INTEGRITY_CLAIM | PUBLIC_API_BEHAVIOR_CHANGE | PERSISTENCE_ADAPTER_INTEGRATION | MCP_MUTATION_TOOLING | DIRTY_WORKTREE_OVERWRITE | CROSS_WORKSPACE_MUTATION
+IMPLEMENTATION_START_CONDITIONS = THIS_GOVERNANCE_PR_TESTED_AND_EXPLICITLY_OWNER_APPROVED_FOR_MERGE | EXACT_FOUR_NEW_TECP_PATHS_ONLY | ZERO_EXISTING_FROZEN_FILE_CHANGES | BOUNDED_TECP_NEW_FILE_EXCEPTION_ONLY | NO_NEW_DEPENDENCIES | REUSE_FROZEN_DLP005_VERIFY_CAPABILITY_ONLY | OFFLINE_UNIT_TESTS_ONLY | TEST_ONLY_TEMPORARY_KEYS | INJECTED_DETERMINISTIC_CLOCK_ALLOWED | IN_MEMORY_REVOCATION_AND_LEASE_SNAPSHOT_TEST_DOUBLES_ALLOWED | SERVER_BUILT_EXPECTATION_ONLY | NO_CALLER_SUPPLIED_EXPECTATION_AUTHORITY | DETERMINISTIC_ACTORID_FROM_VERIFIED_PRINCIPALID | PROOF_LOCAL_NONFORGEABLE_AUTHORIZED_INVOCATION_PROVENANCE | NO_REAL_KEY_OR_CREDENTIAL_READ | NO_DATABASE_CONNECTION | NO_REAL_LEASE_ACQUISITION | NO_MCP_WORKER_CURSOR_OR_PRODUCTION | NO_REAL_WORKER_AUTHENTICATION_CLAIM | DISTINGUISH_TEST_ATTESTED_VS_REAL_OS_PRINCIPAL | TWO_STAGE_BOOTSTRAP_THEN_LEASE_BOUND_AUTHORIZATION | NO_STAGE_ESCALATION | FRESH_VERIFICATION_PER_PHASE | TIER3_SECURITY_REVIEW | OWNER_HUMAN_QA
+COMPLETION_GATE = TECP_DLP006_DISPOSABLE_AUTHORIZED_INVOCATION_BOUNDARY_PROOF_OWNER_HUMAN_QA
+COMPLETION_GATE_STATUS = NOT_REACHED
+
+Owner decision OD-DLP006-R1. This is a NEW governance authorization for TECP-DLP-006-DISPOSABLE-AUTHORIZED-INVOCATION-BOUNDARY-PROOF under approved Architecture Alternative C (pure authorization boundary first). TECP-DLP-001, TECP-DLP-002, TECP-DLP-003, TECP-DLP-004 and TECP-DLP-005 remain CLOSED / FROZEN / VERIFIED. Prior residual acceptances and NON_OPERATIONAL proof status for DLP-001/002/003/004/005 are preserved and are not reopened. No DLP-006 implementation, frozen-boundary edit, dependency install, database execution, Worker/MCP/Cursor execution or credential read is authorized until this governance PR is separately owner-approved and merged. While this PR is unmerged, TECP_DLP006_EFFECTIVE_BEFORE_MERGE = NO and TECP_IMPLEMENTATION_AUTHORIZED remains NO / UNTIL_THIS_GOVERNANCE_PR_MERGES at the Snapshot layer.
+
+Owner decision OD-DLP006-R2. Architecture Alternative C is mandatory. After merge, implementation is limited to the FOUR exact NEW paths in AUTHORIZED_FILE_SCOPE: tecp/src/authorizedInvocation.js, tecp/src/trustedLeaseSnapshot.js, tecp/test/authorizedInvocation.test.js and tecp/test/trustedLeaseSnapshot.test.js. This is an explicit bounded exception authorizing only those four NEW files beneath the otherwise protected tecp package. No existing frozen tecp module (including DLP-005 workerIdentity.js and workerCapabilityToken.js), fixture, package.json, package-lock.json, README, port, DLP-001/002/003/004 persistence file, Rule01 module, backend, MCP config, migration or production path may be modified. No new npm dependencies. Reuse frozen DLP-005 verifyCapability and related exports by import only.
+
+Owner decision OD-DLP006-R3. Trusted operation intent: define a server-controlled authorization policy and operation-intent contract. Caller-supplied action, taskId, resource, scope, actorId, workerId or expectation objects MUST NEVER be sufficient to grant authority. The boundary MUST validate requested operations against a trusted allowlisted policy, governance revision and authenticated-principal context. For this proof, principal context remains TEST_ONLY and NON_OPERATIONAL.
+
+Owner decision OD-DLP006-R4. Capability verification: reuse the frozen DLP-005 verifyCapability API without modifying it. Build a complete verification expectation from trusted policy, verified test-attested principal context and trusted lease state where applicable. Never accept caller-supplied expectation as authorization authority. Do not construct expected principalId merely by copying a decoded, unverified token claim. Preserve issuer, audience, stage, Task, resource, action, expiry, revocation and principal-generation checks.
+
+Owner decision OD-DLP006-R5. Actor identity binding: derive actorId deterministically from the verified principalId. Do not treat a caller's actorId or workerId as authentication. Reject attempts to substitute a different actor. The authorization artifact MUST bind the verified principal to the exact approved Task, resource, action and stage. The artifact MUST be immutable and have proof-local, nonforgeable provenance (for example a module-private WeakSet brand). A shape-compatible object, copied object, JSON reconstruction or caller-created authorization envelope MUST NOT be accepted as trusted.
+
+Owner decision OD-DLP006-R6. Trusted lease snapshot: define an injected trusted lease-state reader contract. For LEASE_BOUND authorization, require current trusted taskId, resource identity, leaseId, owner principal/actor binding, fencingEpoch and lease validity/active state. Reject stale, expired, foreign-owned, missing or inconsistent lease state. A token fencingEpoch MUST only be compared against the trusted snapshot and MUST NOT establish lease authority. The offline test double MUST be clearly distinguished from a real database-backed trusted lease reader.
+
+Owner decision OD-DLP006-R7. Two-stage authorization: BOOTSTRAP_REQUEST may authorize only REQUEST_ELIGIBLE_TASK_LEASE under trusted policy. LEASE_BOUND may authorize only approved actions consistent with task, resource, owner and current trusted fencing state. No stage escalation. No unrestricted Task mutation or Evidence attribution. No real Task Claim, Lease mutation, database activity, MCP mutation tooling or persistence-adapter integration in this slice.
+
+Owner decision OD-DLP006-R8. AuthorizedInvocation artifact: return a narrowly scoped AuthorizedInvocation only after successful verification. Bind principalId, derived actorId, audience, taskId, resource, action, capabilityStage, credential identifier (jti), governance revision, and leaseId/fencingEpoch where applicable. No raw token, private key or sensitive credential may be embedded in the returned artifact or errors. Document that the artifact is a proof-local decision result, NOT operational execution authority. No persistence adapter is connected in this slice.
+
+Owner decision OD-DLP006-R9. Revocation and TOCTOU: require fresh verification for each proposed phase. A previously authorized invocation cannot authorize a later phase merely because it was once allowed. Unavailable clock, issuer trust, revocation or trusted lease state MUST FAIL CLOSED. Real mid-transaction revocation guarantees and atomic authenticated persistence enforcement remain deferred until a future separately authorized authenticated composition adapter.
+
+Owner decision OD-DLP006-R10. Required offline adversarial tests: forged operation intent DENY; caller-created authorization expectation DENY; forged AuthorizedInvocation DENY; copied/serialized authorization artifact DENY; spoofed actorId/workerId DENY; cross-principal substitution DENY; invalid governance revision DENY; wrong Task/resource/action/audience DENY; unsupported capability stage DENY; bootstrap mutation attempt DENY; missing/expired/revoked credential DENY; invalid principal generation DENY; foreign lease owner DENY; stale fencing epoch DENY; expired or missing lease DENY; forged lease snapshot DENY; trusted lease reader unavailable FAIL CLOSED; revocation registry unavailable FAIL CLOSED; key registry or clock unavailable FAIL CLOSED; cross-phase reuse without reauthorization DENY; no raw secrets in errors or artifacts; valid complete BOOTSTRAP_REQUEST ALLOW; valid complete LEASE_BOUND authorization ALLOW. All tests offline and fail closed. Frozen TECP regression must remain PASS.
+
+Owner decision OD-DLP006-R11. Non-operational boundary: DLP-006 MUST NOT claim real Worker authentication, actual blocking of direct DLP-004 API calls, live lease ownership, atomic authenticated persistence writes, real MCP mutation control, end-to-end Cursor authorization, production readiness or exactly-once execution. The proof remains disposable offline contract evidence only and NON_OPERATIONAL. Artemis PROJECT_PROGRESS, Stage 11 progress and STAGE11_IMPLEMENTATION_AUTHORIZED remain unchanged by this TECP slice. After implementation, the exact four-path diff, offline security tests, full frozen TECP regression, Tier 3 security review and owner Human QA must pass on the exact commit. A separate governance closeout must consume this authorization. No CI PASS is presumed. No next TECP slice is authorized by this proposal.
+
+### Historical — TECP-DLP-005 FROZEN GOVERNANCE RECORD (CLOSED / NO IMPLEMENTATION AUTHORIZATION)
 **AUTHORIZED_SLICE = NONE / NO_ACTIVE_ARTEMIS_IMPLEMENTATION_AUTHORIZATION**
 **TECP_AUTHORIZED_SLICE = TECP-DLP-005-DISPOSABLE-TRUSTED-WORKER-IDENTITY-PROOF**
 **TECP_PARALLEL_AUTHORIZED_SLICE = TECP-DLP-005-DISPOSABLE-TRUSTED-WORKER-IDENTITY-PROOF**
@@ -659,6 +778,6 @@ COMPLETION_GATE_STATUS = REACHED / CLOSED / FROZEN
 **NEXT_GATE = STAGE11_GOVERNANCE_DISCOVERY**
 **PROGRESS_BLOCKER = NONE**
 **STAGE11_IMPLEMENTATION_AUTHORIZED = NO / GOVERNANCE_DISCOVERY_ONLY**
-**TECP_IMPLEMENTATION_AUTHORIZED = NO / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
-**TECP_NEXT_GATE = TECP-OWNER-NEXT-SLICE-DECISION / NO_SLICE_AUTHORIZED**
-**TECP_NEXT_GATE_STATUS = DLP-005_CLOSED_FROZEN_VERIFIED / NO_ACTIVE_IMPLEMENTATION_SLICE / SEPARATE_OWNER_DECISION_REQUIRED**
+**TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
+**TECP_NEXT_GATE = TECP-DLP-006-OWNER-GOVERNANCE-APPROVAL / IMPLEMENTATION_NOT_STARTED**
+**TECP_NEXT_GATE_STATUS = DLP-006_AUTHORIZATION_PROPOSED / EFFECTIVE_ONLY_AFTER_OWNER_APPROVED_MERGE / NO_IMPLEMENTATION_STARTED**
