@@ -86,7 +86,8 @@ test('cutover helper retains no ambient connection URL / TCP permission / trust 
   assert.match(helper, /await closeClient\(bootstrap\)/);
   assert.match(helper, /await stop\(\)/);
   assert.doesNotMatch(helper, /listen_addresses\s*=\s*['"]\*['"]/);
-  assert.doesNotMatch(helper, /local\s+all\s+all\s+trust['"]/i);
+  // Bootstrap intentionally recognizes frozen TRUST; only restoration/writing TRUST is forbidden.
+  assert.doesNotMatch(helper, /writeFileSync\(\s*hbaPath\s*,\s*['"]local\s+all\s+all\s+trust/i);
   assert.doesNotMatch(helper, /process\.env\.PGPASSWORD\s*=/);
   assert.doesNotMatch(helper, /console\.(log|error|warn)\(/);
 });
