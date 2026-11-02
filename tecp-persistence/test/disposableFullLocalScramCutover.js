@@ -190,23 +190,26 @@ export async function createDisposableFullLocalScramProof(options = {}) {
   let harness;
   let bootstrap;
   let stopped = false;
+  let stopping = false;
   let cutoverVerified = false;
   const secrets = new Map();
 
   async function stop() {
     if (stopped) return Object.freeze({ cleaned: true, alreadyStopped: true });
-    stopped = true;
-    await closeClient(bootstrap);
-    bootstrap = null;
-    let cleanup;
+    if (stopping) throw blocked('CLEANUP_ALREADY_IN_PROGRESS');
+    stopping = true;
     try {
-      cleanup = harness ? harness.stop() : { cleaned: true, terminated: true };
+      await closeClient(bootstrap);
+      bootstrap = null;
+      const cleanup = harness ? harness.stop() : { cleaned: true, terminated: true };
+      if (!cleanup.cleaned || !cleanup.terminated) throw blocked('CLEANUP_NOT_PROVEN');
+      stopped = true; // Never report success before verified termination.
+      return Object.freeze({ cleaned: true, terminated: true });
     } finally {
+      stopping = false;
       // Map.clear drops references; JS string memory zeroization is NOT proven.
       secrets.clear();
     }
-    if (!cleanup.cleaned || !cleanup.terminated) throw blocked('CLEANUP_NOT_PROVEN');
-    return Object.freeze({ cleaned: true, terminated: true });
   }
 
   async function probeLogin(role, mode) {
