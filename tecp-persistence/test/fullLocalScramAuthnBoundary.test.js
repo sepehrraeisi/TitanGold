@@ -82,6 +82,7 @@ test('post-cutover all six LOGIN roles are SCRAM-authenticated on fresh sessions
     );
   }
   assert.equal(await proof.assertNoLegacySessions(), true);
+  assert.equal(await proof.assertTcpStillRejected(), true);
 });
 
 test('superuser/admin and alternate writers cannot be accessed without their credentials', async () => {
@@ -99,26 +100,23 @@ test('superuser/admin and alternate writers cannot be accessed without their cre
 });
 
 test('restricted caller retains SQLSTATE 42501 for every protected table', async () => {
+  const updateColumn = {
+    dlp_task: 'status',
+    dlp_task_claim: 'status',
+    dlp_task_claim_composition_idempotency: 'decision',
+    dlp_write_lease: 'status',
+    dlp_write_acquire_idempotency: 'decision',
+    dlp_write_resource_fence: 'fencing_epoch',
+    dlp_audit_event: 'event_type',
+    dlp_evidence_fact: 'evidence_type',
+  };
+  assert.deepEqual(Object.keys(updateColumn).sort(), [...PROTECTED].sort());
   await proof.withAuthenticatedClient(DLP009_RESTRICTED_ROLE, async (restricted) => {
     for (const table of PROTECTED) {
-      // No rows need be present; ACL check must still reject UPDATE.
+      const col = updateColumn[table];
       await expectPrivilegeDeny(
-        () => restricted.query('UPDATE ' + table + ' SET ' +
-          (table === 'dlp_write_resource_fence' ? 'fencing_epoch = fencing_epoch' : 'status = status') +
-          ' WHERE false'),
-      ).catch(async (error) => {
-        // Some audit/evidence tables have no status column; SQL must still
-        // hit privilege checks using a column-independent DELETE as fallback.
-        if (table === 'dlp_audit_event' || table === 'dlp_evidence_fact'
-          || table === 'dlp_write_acquire_idempotency'
-          || table === 'dlp_task_claim_composition_idempotency') {
-          await expectPrivilegeDeny(
-            () => restricted.query('DELETE FROM ' + table + ' WHERE false'),
-          );
-          return;
-        }
-        throw error;
-      });
+        () => restricted.query('UPDATE ' + table + ' SET ' + col + '=' + col + ' WHERE false'),
+      );
       await expectPrivilegeDeny(
         () => restricted.query('DELETE FROM ' + table + ' WHERE false'),
       );
@@ -128,6 +126,7 @@ test('restricted caller retains SQLSTATE 42501 for every protected table', async
     assert.equal(role.rows[0]?.name, DLP009_RESTRICTED_ROLE);
   });
   assert.equal(await proof.assertNoLegacySessions(), true);
+  assert.equal(await proof.assertTcpStillRejected(), true);
 });
 
 test('authenticated writer may perform scoped DML, restricted caller cannot', async () => {
@@ -279,6 +278,8 @@ test('frozen sealed gateway bind and release operate with SCRAM-authenticated wr
         leaseIdempotencyKey: 'lease-idem-dlp009-bind',
         auditIdempotencyKey: 'audit-dlp009-bind',
         auditEventId: 'evt-dlp009-bind',
+        evidenceIdempotencyKey: 'evd-idem-dlp009-bind',
+        evidenceId: 'evd-dlp009-bind',
       },
     });
     assert.equal(bindResult.ok, true, 'authenticated gateway bind must succeed');
@@ -300,6 +301,8 @@ test('frozen sealed gateway bind and release operate with SCRAM-authenticated wr
       idempotency: {
         auditIdempotencyKey: 'audit-dlp009-release',
         auditEventId: 'evt-dlp009-release',
+        evidenceIdempotencyKey: 'evd-idem-dlp009-release',
+        evidenceId: 'evd-dlp009-release',
       },
     });
     assert.equal(releaseResult.ok, true, 'authenticated gateway release must succeed');
@@ -330,7 +333,7 @@ test('malformed, interrupted bootstrap and partial HBA cutover fail closed and c
 
 test('no credential, client or raw SQL is exposed by the sealed proof public surface', () => {
   assert.deepEqual(Object.keys(proof).sort(), [
-    'architecture', 'assertNoLegacySessions', 'isolation', 'mode',
+    'architecture', 'assertNoLegacySessions', 'assertTcpStillRejected', 'isolation', 'mode',
     'probeLogin', 'roles', 'stop', 'withAuthenticatedClient',
   ].sort());
   const publicJson = JSON.stringify(proof);
