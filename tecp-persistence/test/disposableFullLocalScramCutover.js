@@ -391,6 +391,13 @@ export async function createDisposableFullLocalScramProof(options = {}) {
     await assertNoLegacySessions();
     await assertTcpStillRejected();
 
+    // Inspect disposable log before declaring success; never print its contents.
+    // A postmaster-side failed ALTER ROLE can otherwise echo SQL and credentials.
+    const privateLog = readFileSync(harness.logFile, 'utf8');
+    for (const credential of secrets.values()) {
+      if (privateLog.includes(credential)) throw blocked('CREDENTIAL_FOUND_IN_PG_LOG');
+    }
+
     // No production DB handle or credential escapes this test object.
     return Object.freeze({
       mode: 'NON_OPERATIONAL_DISPOSABLE_ONLY',
