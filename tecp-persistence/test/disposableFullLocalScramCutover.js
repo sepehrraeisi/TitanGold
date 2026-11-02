@@ -262,6 +262,36 @@ export async function createDisposableFullLocalScramProof(options = {}) {
     });
   }
 
+  async function assertTcpStillRejected() {
+    if (!cutoverVerified || stopped) throw blocked('SCRAM_CUTOVER_NOT_VERIFIED');
+    await withAuthenticatedClient('dlp_proof', async (admin) => {
+      const runtime = await admin.query('SHOW listen_addresses');
+      if (runtime.rows[0]?.listen_addresses !== '') {
+        throw blocked('TCP_LISTEN_ADDRESSES_CHANGED_AFTER_CUTOVER');
+      }
+    });
+    const tcp = new Client({
+      host: '127.0.0.1',
+      port: harness.socketPort,
+      user: 'dlp_proof',
+      database: PROOF_DATABASE,
+      password: secrets.get('dlp_proof'),
+      connectionTimeoutMillis: 1000,
+    });
+    try {
+      await tcp.connect();
+      throw blocked('TCP_CONNECTED_AFTER_CUTOVER');
+    } catch (error) {
+      if (error && String(error.message).includes('TCP_CONNECTED_AFTER_CUTOVER')) throw error;
+      if (!error || error.code !== 'ECONNREFUSED') {
+        throw blocked('TCP_NEGATIVE_PROBE_INCONCLUSIVE');
+      }
+      return true;
+    } finally {
+      await closeClient(tcp);
+    }
+  }
+
   try {
     harness = createDisposablePgHarness();
     if (typeof options.onHarnessCreated === 'function') {
@@ -359,6 +389,7 @@ export async function createDisposableFullLocalScramProof(options = {}) {
     }
     cutoverVerified = true;
     await assertNoLegacySessions();
+    await assertTcpStillRejected();
 
     // No production DB handle or credential escapes this test object.
     return Object.freeze({
@@ -369,6 +400,7 @@ export async function createDisposableFullLocalScramProof(options = {}) {
       withAuthenticatedClient,
       probeLogin,
       assertNoLegacySessions,
+      assertTcpStillRejected,
       stop,
     });
   } catch (error) {
