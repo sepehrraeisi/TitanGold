@@ -1389,14 +1389,91 @@ test('M4: SQLSTATE 40P01 deadlock cannot commit partial mutation', async () => {
     });
     assert.equal(out.ok, false);
     assert.equal(out.decision, AUTH_COMPOSITION_DECISIONS.DENY_DEADLOCK);
-    assert.equal(out.rolledBack, true);
+    // M5: adapter cannot prove ROLLBACK via frozen helper; must not claim confirmed.
+    assert.equal(out.rollbackConfirmed, false);
+    assert.equal(out.rollbackStatus, 'UNKNOWN');
+    assert.equal(out.rolledBack, false);
+    assert.notEqual(out.rolledBack, true);
     assert.equal(await countRows(client, 'dlp_task', 'WHERE task_id = $1', [taskId]), 0);
     assert.equal(await countRows(client, 'dlp_audit_event', 'WHERE event_id = $1', ['evt-deadlock']), 0);
     assert.equal(await countRows(client, 'dlp_write_lease', 'WHERE lease_key = $1', [leaseKey]), 0);
     assert.match(adapterSrc, /SQLSTATE 40P01/);
     assert.match(adapterSrc, /No unbounded retries/);
+    assert.match(adapterSrc, /rollbackStatus: 'UNKNOWN'/);
   } finally {
     await client.end();
+  }
+});
+
+test('M5: failed ROLLBACK confirmation after 40P01 is UNKNOWN, never success', async () => {
+  const client = createAuthzClient();
+  await client.connect();
+  try {
+    const taskId = 'task-m5-rb';
+    const resourceKey = 'res-m5-rb';
+    const leaseKey = 'lease-m5-rb';
+    const principal = attestedPrincipal('worker-m5-rb');
+    const h = capabilityHarness();
+
+    const origQuery = client.query.bind(client);
+    let sawBegin = false;
+    let rollbackAttempted = false;
+    let rollbackFailed = false;
+    client.query = async (...args) => {
+      const sql = typeof args[0] === 'string' ? args[0] : String(args[0]?.text || '');
+      if (/^\s*BEGIN\b/i.test(sql)) {
+        sawBegin = true;
+        return origQuery(...args);
+      }
+      if (sawBegin && /INSERT\s+INTO\s+dlp_task\b/i.test(sql)) {
+        const err = new Error('deadlock detected');
+        err.code = '40P01';
+        throw err;
+      }
+      // Simulate frozen-helper ROLLBACK attempt that itself fails (connection loss).
+      // withOwnedWriteLeaseTransaction swallows this; original 40P01 still rethrown.
+      if (/^\s*ROLLBACK\b/i.test(sql)) {
+        rollbackAttempted = true;
+        rollbackFailed = true;
+        const rbErr = new Error('Connection terminated unexpectedly');
+        rbErr.code = '57P01';
+        throw rbErr;
+      }
+      return origQuery(...args);
+    };
+
+    const adapter = createAuthenticatedTaskClaimLeaseAuditAdapter({
+      client,
+      getVerifiedPrincipal: () => principal,
+      policyProvider: createTrustedAuthorizationPolicyProvider(
+        bootstrapPolicy(taskId, resourceKey),
+      ),
+      capabilityDeps: h.deps,
+      operationContracts: {
+        'bootstrap-bind': bindContract(leaseKey, { includeEvidence: true }),
+      },
+    });
+
+    const out = await adapter.executeAuthenticatedBind({
+      capabilityToken: issueBootstrap(h, principal, taskId, resourceKey).token,
+      operationKey: 'bootstrap-bind',
+      idempotency: bindIdem('m5-rb'),
+    });
+
+    assert.equal(out.ok, false, 'unknown/failed rollback must never be success');
+    assert.equal(out.decision, AUTH_COMPOSITION_DECISIONS.DENY_DEADLOCK);
+    assert.equal(out.rollbackConfirmed, false);
+    assert.equal(out.rollbackStatus, 'UNKNOWN');
+    assert.equal(out.rolledBack, false);
+    assert.ok(rollbackAttempted);
+    assert.ok(rollbackFailed);
+    // No unauthorized committed writes regardless of ROLLBACK confirmation status.
+    assert.equal(await countRows(client, 'dlp_task', 'WHERE task_id = $1', [taskId]), 0);
+    assert.equal(await countRows(client, 'dlp_audit_event', 'WHERE event_id = $1', ['evt-m5-rb']), 0);
+    assert.equal(await countRows(client, 'dlp_evidence_fact', 'WHERE evidence_id = $1', ['evd-m5-rb']), 0);
+    assert.equal(await countRows(client, 'dlp_write_lease', 'WHERE lease_key = $1', [leaseKey]), 0);
+  } finally {
+    try { await client.end(); } catch { /* connection may already be dead */ }
   }
 });
 

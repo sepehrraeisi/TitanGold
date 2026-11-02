@@ -216,9 +216,14 @@ function isDbFailure(error) {
 }
 
 /**
- * M4: PostgreSQL deadlock SQLSTATE 40P01 (and message fallback) fail closed.
- * Detected deadlocks map to DENY_DEADLOCK after owned-txn ROLLBACK.
- * No unbounded retries. Coverage is bounded (not exhaustive concurrency proof).
+ * M4/M5: PostgreSQL deadlock SQLSTATE 40P01 (and message fallback) fail closed.
+ * Detected deadlocks map to DENY_DEADLOCK. No unbounded retries.
+ * Coverage is bounded (not exhaustive concurrency proof).
+ *
+ * M5: frozen withOwnedWriteLeaseTransaction attempts ROLLBACK on catch but
+ * suppresses ROLLBACK errors ("original error wins"). This adapter therefore
+ * cannot independently confirm rollback succeeded and MUST NOT report
+ * rolledBack:true / rollbackConfirmed:true for deadlocks. Use UNKNOWN.
  */
 function isDeadlock(error) {
   return Boolean(error) && (error.code === '40P01' || /deadlock detected/i.test(String(error.message || '')));
@@ -513,9 +518,15 @@ function mapCaughtError(error) {
     });
   }
   if (isDeadlock(error)) {
+    // M5: fail closed without claiming confirmed ROLLBACK. The frozen owned-txn
+    // helper may have attempted ROLLBACK, but its confirmation is unavailable
+    // to this adapter when ROLLBACK errors are swallowed.
     return compositionResult(AUTH_COMPOSITION_DECISIONS.DENY_DEADLOCK, {
       errorClass: error.code || '40P01',
-      rolledBack: true,
+      rollbackConfirmed: false,
+      rollbackStatus: 'UNKNOWN',
+      // Explicit: never assert rolledBack:true without independent evidence.
+      rolledBack: false,
     });
   }
   if (isUniqueViolation(error)) {
