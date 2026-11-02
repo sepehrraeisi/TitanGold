@@ -137,8 +137,11 @@ test('authenticated writer may perform scoped DML, restricted caller cannot', as
     );
     assert.equal(grants.rows[0]?.writer_can_insert, true);
     assert.equal(grants.rows[0]?.writer_can_audit, true);
-    assert.equal(await proof.assertNoLegacySessions().then(() => false).catch(() => true), true,
-      'a deliberately held privileged client must prevent clean-sessions attestation');
+    await assert.rejects(
+      () => proof.assertNoLegacySessions(),
+      /BLOCKED: DLP009_STALE_OR_UNACCOUNTED_CLIENT_SESSION/,
+      'a held privileged client must fail the session-clean gate specifically',
+    );
   });
   await proof.withAuthenticatedClient(DLP009_RESTRICTED_ROLE, async (restricted) => {
     const acl = await restricted.query(
