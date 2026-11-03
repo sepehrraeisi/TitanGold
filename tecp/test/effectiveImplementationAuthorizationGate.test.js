@@ -751,39 +751,125 @@ test('HIST-03 missing immutable historical fixture fails closed (no live fallbac
     () => verifyHistoricalRule02Text('too-short'),
     /HISTORICAL_RULE02_MISSING_OR_EMPTY/,
   );
-  // End-to-end integration: park fixture; git blob fallback remains off by default.
-  // Must fail closed without reading live workspace Rule02.
-  const { renameSync, existsSync } = await import('node:fs');
-  const { HISTORICAL_FIXTURE_PATH } = await import('./disposableMergeEffectivenessHarness.js');
-  const parked = `${HISTORICAL_FIXTURE_PATH}.parked-hist03`;
+
+  const { existsSync, mkdtempSync, writeFileSync, readFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { randomBytes } = await import('node:crypto');
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const {
+    HISTORICAL_FIXTURE_PATH,
+  } = await import('./disposableMergeEffectivenessHarness.js');
+
+  // Checked-in fixture must remain present and untouched throughout this test.
   assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
-  renameSync(HISTORICAL_FIXTURE_PATH, parked);
-  const prevGitFallback = process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
-  const prevGitDir = process.env.TECP_GIT_DIR;
-  delete process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
-  process.env.TECP_GIT_DIR = '/tmp/tecp-dlp011-nonexistent-git-dir-hist03';
+  const beforeDigest = digestRule02(readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8'));
+  assert.equal(beforeDigest, HISTORICAL_RULE02_SHA256);
+
+  const isolRoot = mkdtempSync(join(tmpdir(), `tecp-dlp011f-hist03-${process.pid}-`));
+  const missingPath = join(
+    isolRoot,
+    `absent-${randomBytes(8).toString('hex')}.mdc`,
+  );
+  const corruptedPath = join(isolRoot, `corrupted-${randomBytes(8).toString('hex')}.mdc`);
+  const wrongRevPath = join(isolRoot, `wrongrev-${randomBytes(8).toString('hex')}.mdc`);
+
   try {
+    // Missing fixture path: exercise real loader + verify path; never touch checked-in file.
     assert.throws(
-      () => loadHistoricalActivationRule02Text(),
+      () => loadHistoricalActivationRule02Text({
+        fixturePath: missingPath,
+        allowGitBlobFallback: false,
+      }),
       /HISTORICAL_RULE02_UNAVAILABLE/,
     );
+
+    // Corrupted fixture content at isolated path → digest mismatch (same verify path).
+    writeFileSync(corruptedPath, '# not-the-pinned-historical-rule02\n', 'utf8');
+    assert.throws(
+      () => loadHistoricalActivationRule02Text({
+        fixturePath: corruptedPath,
+        allowGitBlobFallback: false,
+      }),
+      /HISTORICAL_RULE02_MISSING_OR_EMPTY|HISTORICAL_RULE02_DIGEST_MISMATCH/,
+    );
+
+    // Wrong revision at isolated path → digest/revision reject (still no live fallback).
+    const good = loadHistoricalActivationRule02Text();
+    const wrongRev = good.replaceAll(
+      `**GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}**`,
+      '**GOVERNANCE_REVISION = DLP011_CLOSEOUT_20261103**',
+    );
+    writeFileSync(wrongRevPath, wrongRev, 'utf8');
+    assert.throws(
+      () => loadHistoricalActivationRule02Text({
+        fixturePath: wrongRevPath,
+        allowGitBlobFallback: false,
+      }),
+      /HISTORICAL_RULE02_DIGEST_MISMATCH|HISTORICAL_RULE02_REVISION_MISSING/,
+    );
+
+    // Live Rule02 is available but must never substitute for a missing historical fixture.
+    const live = loadLiveWorkspaceRule02Text();
+    assert.match(live, /DLP011_CLOSEOUT_20261103/);
+    assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+
+    // Concurrent child processes: each uses its own missing path; parent still loads pin.
+    const harnessUrl = new URL('./disposableMergeEffectivenessHarness.js', import.meta.url).href;
+    const childScript = `
+      import { loadHistoricalActivationRule02Text } from ${JSON.stringify(harnessUrl)};
+      const missing = process.env.TECP_HIST03_MISSING_PATH;
+      try {
+        loadHistoricalActivationRule02Text({ fixturePath: missing, allowGitBlobFallback: false });
+        console.log('UNEXPECTED_ALLOW');
+        process.exit(2);
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (!/HISTORICAL_RULE02_UNAVAILABLE/.test(msg)) {
+          console.error(msg);
+          process.exit(3);
+        }
+        process.exit(0);
+      }
+    `;
+    const children = [];
+    for (let i = 0; i < 4; i += 1) {
+      const childMissing = join(
+        isolRoot,
+        `child-missing-${i}-${randomBytes(4).toString('hex')}.mdc`,
+      );
+      children.push(spawnSync(
+        process.execPath,
+        ['--input-type=module', '-e', childScript],
+        {
+          env: {
+            ...process.env,
+            TECP_HIST03_MISSING_PATH: childMissing,
+            TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK: '',
+          },
+          encoding: 'utf8',
+          timeout: 15_000,
+          cwd: fileURLToPath(new URL('.', import.meta.url)),
+        },
+      ));
+    }
+    for (const child of children) {
+      assert.equal(child.status, 0, `child stderr=${child.stderr || ''}`);
+    }
+    assert.equal(
+      digestRule02(loadHistoricalActivationRule02Text()),
+      HISTORICAL_RULE02_SHA256,
+    );
   } finally {
-    if (prevGitFallback === undefined) {
-      delete process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
-    } else {
-      process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK = prevGitFallback;
-    }
-    if (prevGitDir === undefined) {
-      delete process.env.TECP_GIT_DIR;
-    } else {
-      process.env.TECP_GIT_DIR = prevGitDir;
-    }
-    renameSync(parked, HISTORICAL_FIXTURE_PATH);
+    rmSync(isolRoot, { recursive: true, force: true });
   }
-  // Live workspace Rule02 remains readable but must not be used as historical fallback.
-  const live = loadLiveWorkspaceRule02Text();
-  assert.match(live, /DLP011_CLOSEOUT_20261103/);
-  assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+
+  // Checked-in fixture still present and byte-identical after failure injection.
+  assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
+  const afterDigest = digestRule02(readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8'));
+  assert.equal(afterDigest, HISTORICAL_RULE02_SHA256);
+  assert.equal(afterDigest, beforeDigest);
   assert.equal(digestRule02(loadHistoricalActivationRule02Text()), HISTORICAL_RULE02_SHA256);
 });
 

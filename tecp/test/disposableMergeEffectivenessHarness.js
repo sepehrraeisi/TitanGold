@@ -98,25 +98,49 @@ export function verifyHistoricalRule02Text(text, sourceLabel = 'CALLER') {
   return text;
 }
 
-function tryReadHistoricalFixtureFile() {
-  if (!existsSync(HISTORICAL_FIXTURE_PATH)) {
+/**
+ * Resolve fixture path for TEST_ONLY historical loading.
+ * Default: checked-in HISTORICAL_FIXTURE_PATH.
+ * Optional fixturePath is a non-mutating failure-injection / isolation seam only —
+ * it does not grant operational trust and still runs through verifyHistoricalRule02Text.
+ */
+function resolveHistoricalFixturePath(options = {}) {
+  if (options.fixturePath == null || options.fixturePath === '') {
+    return HISTORICAL_FIXTURE_PATH;
+  }
+  if (typeof options.fixturePath !== 'string') {
+    throw new Error('HISTORICAL_FIXTURE_PATH_INVALID:non_string');
+  }
+  return options.fixturePath;
+}
+
+function tryReadHistoricalFixtureFile(fixturePath) {
+  if (!existsSync(fixturePath)) {
     return null;
   }
   return verifyHistoricalRule02Text(
-    readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8'),
+    readFileSync(fixturePath, 'utf8'),
     'FIXTURE_FILE',
   );
 }
 
-function gitBlobFallbackEnabled() {
+function gitBlobFallbackEnabled(options = {}) {
+  if (options.allowGitBlobFallback === true) {
+    return true;
+  }
+  if (options.allowGitBlobFallback === false) {
+    return false;
+  }
   return process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK === '1';
 }
 
-function tryReadHistoricalGitBlob() {
-  if (!gitBlobFallbackEnabled()) {
+function tryReadHistoricalGitBlob(options = {}) {
+  if (!gitBlobFallbackEnabled(options)) {
     return null;
   }
-  const gitDir = process.env.TECP_GIT_DIR || ROOT;
+  const gitDir = options.gitDir
+    || process.env.TECP_GIT_DIR
+    || ROOT;
   try {
     const text = execFileSync(
       'git',
@@ -140,15 +164,21 @@ function tryReadHistoricalGitBlob() {
 /**
  * Immutable activation-era Rule02 for historical DLP-011 disposable proof.
  * Primary source: checked-in fixture (offline, CI-reproducible).
- * Optional secondary: git blob when TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK=1.
+ * Optional secondary: git blob when allowGitBlobFallback / TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK=1.
  * Fail closed: never silently falls back to live workspace Rule02.
+ *
+ * @param {object} [options]
+ * @param {string} [options.fixturePath] TEST_ONLY alternate fixture path (same verify path; no live fallback)
+ * @param {boolean} [options.allowGitBlobFallback] local opt-in/out for git blob secondary source
+ * @param {string} [options.gitDir] optional git cwd when blob fallback is enabled
  */
-export function loadHistoricalActivationRule02Text() {
-  const fromFixture = tryReadHistoricalFixtureFile();
+export function loadHistoricalActivationRule02Text(options = {}) {
+  const fixturePath = resolveHistoricalFixturePath(options);
+  const fromFixture = tryReadHistoricalFixtureFile(fixturePath);
   if (fromFixture != null) {
     return fromFixture;
   }
-  const fromGit = tryReadHistoricalGitBlob();
+  const fromGit = tryReadHistoricalGitBlob(options);
   if (fromGit != null) {
     return fromGit;
   }
