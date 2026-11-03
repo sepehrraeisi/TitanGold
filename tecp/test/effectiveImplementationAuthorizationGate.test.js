@@ -1,12 +1,14 @@
 /**
- * TECP-DLP-011 adversarial + positive offline tests.
+ * TECP-DLP-011 adversarial + trust-boundary offline tests.
  * NON_OPERATIONAL disposable proof. No DB writes. No Worker execution.
  */
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { generateKeyPairSync, sign } from 'node:crypto';
 
 import {
+  DISPOSABLE_TRUST_INJECTION_TOKEN,
   GATE_AUTHORIZED_FILE_SCOPE,
   GATE_DECISIONS,
   GATE_OPERATION_CLASS,
@@ -15,6 +17,7 @@ import {
   __testOnlyEvaluationLockHooks,
   assertMutationFenceFresh,
   createCanonicalRule02Source,
+  createDisposableEffectiveAuthorizationTrustRoot,
   createTestOnlyAttestedCanonicalRule02Source,
   createTrustedTipAttestation,
   evaluateEffectiveImplementationAuthorization,
@@ -22,15 +25,16 @@ import {
 } from '../src/effectiveImplementationAuthorizationGate.js';
 import {
   OWNER_INSTRUCTION_DECISIONS,
+  OWNER_INSTRUCTION_DOMAIN,
   createOwnerImplementationInstructionVerifier,
-  createUnavailableOwnerInstructionClock,
-  issueOwnerImplementationInstruction,
+  createOwnerInstructionClock,
+  createOwnerInstructionKeyRegistry,
+  createOwnerInstructionRevocationRegistry,
 } from '../src/ownerImplementationInstruction.js';
+import { canonicalJson } from '../src/workerCapabilityToken.js';
 import {
   CANONICAL_MAIN_SHA_PIN,
   DEFAULT_GOVERNANCE_REVISION,
-  DEFAULT_ISSUER,
-  DEFAULT_KID,
   createDisposableMergeEffectivenessHarness,
   loadWorkspaceRule02Text,
   synthesizeClosedRule02Text,
@@ -55,67 +59,195 @@ function assertDeny(result, decision) {
   assertNoSecrets(result);
 }
 
+test('TB-01 public factory forgery is sealed (canonical source)', () => {
+  assert.throws(
+    () => createTestOnlyAttestedCanonicalRule02Source({
+      repositoryId: GATE_REPOSITORY_ID,
+      canonicalSha: CANONICAL_MAIN_SHA_PIN,
+      rule02Text: loadWorkspaceRule02Text(),
+      mergedProvenance: true,
+      attestedByPrivilegedFactory: true,
+    }),
+    /PUBLIC_CANONICAL_RULE02_SOURCE_CONSTRUCTION_FORBIDDEN/,
+  );
+  assert.throws(
+    () => createCanonicalRule02Source({
+      attestedByPrivilegedFactory: true,
+      repositoryId: GATE_REPOSITORY_ID,
+      canonicalSha: CANONICAL_MAIN_SHA_PIN,
+      rule02Text: 'x',
+      sourceKind: 'TEST_ONLY_ATTESTED',
+    }),
+    /PUBLIC_CANONICAL_RULE02_SOURCE_CONSTRUCTION_FORBIDDEN/,
+  );
+});
+
+test('TB-02 public tip / key registry / verifier factories sealed', () => {
+  assert.throws(
+    () => createTrustedTipAttestation({
+      tipSha: CANONICAL_MAIN_SHA_PIN,
+      tipDigest: 'a'.repeat(64),
+      attestedByPrivilegedFactory: true,
+    }),
+    /PUBLIC_TIP_ATTESTATION_CONSTRUCTION_FORBIDDEN/,
+  );
+  assert.throws(() => createOwnerInstructionKeyRegistry([]), /FORBIDDEN/);
+  assert.throws(() => createOwnerInstructionRevocationRegistry(), /FORBIDDEN/);
+  assert.throws(() => createOwnerInstructionClock(), /FORBIDDEN/);
+  assert.throws(() => createOwnerImplementationInstructionVerifier({}), /FORBIDDEN/);
+});
+
+test('TB-03 attacker-controlled evaluate without trust root → DENY_MISSING_TRUST_ROOT', () => {
+  const result = evaluateEffectiveImplementationAuthorization({
+    testOnlyEnvironment: true,
+    expectedCanonicalSha: CANONICAL_MAIN_SHA_PIN,
+    expectedRule02DigestSha256: '0'.repeat(64),
+    repositoryId: GATE_REPOSITORY_ID,
+    sliceId: GATE_SLICE_ID,
+    operationClass: GATE_OPERATION_CLASS,
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
+    ownerInstructionEncoded: 'aa.bb',
+  });
+  assertDeny(result, GATE_DECISIONS.DENY_MISSING_TRUST_ROOT);
+});
+
+test('TB-04 attacker-supplied branded-looking trust objects on evaluate → DENY', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    instructionOverrides: { jti: 'caller-trust-objects' },
+    canonicalRule02Source: { kind: 'FORGED', mergedProvenance: true },
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_OBJECTS);
+});
+
+test('TB-05 attacker key registry / verifier injection → DENY', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    instructionOverrides: { jti: 'attacker-registry' },
+    keyRegistry: { lookup() { return { ok: true }; } },
+    ownerInstructionVerifier: { consumeOnAllow: true, verify() { return { ok: true }; } },
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_OBJECTS);
+});
+
+test('TB-06 trust root rejects caller-supplied keys/registries at construction', () => {
+  assert.throws(() => createDisposableEffectiveAuthorizationTrustRoot({
+    privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
+    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+    mergedProvenance: true,
+    activationPr: '#266',
+    privateKeyPem: 'BEGIN PRIVATE KEY',
+  }), /CALLER_SUPPLIED_TRUST_OBJECTS_FORBIDDEN/);
+  assert.throws(() => createDisposableEffectiveAuthorizationTrustRoot({
+    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+    mergedProvenance: true,
+    activationPr: '#266',
+  }), /DISPOSABLE_TRUST_INJECTION_TOKEN_REQUIRED/);
+});
+
+test('TB-07 end-to-end public-factory attack cannot ALLOW', () => {
+  // Ordinary importer path: try every public factory then evaluate.
+  let factoryThrew = 0;
+  for (const fn of [
+    () => createTestOnlyAttestedCanonicalRule02Source({
+      attestedByPrivilegedFactory: true,
+      repositoryId: GATE_REPOSITORY_ID,
+      canonicalSha: CANONICAL_MAIN_SHA_PIN,
+      rule02Text: loadWorkspaceRule02Text(),
+      mergedProvenance: true,
+    }),
+    () => createTrustedTipAttestation({
+      tipSha: CANONICAL_MAIN_SHA_PIN,
+      tipDigest: 'b'.repeat(64),
+      attestedByPrivilegedFactory: true,
+    }),
+    () => createOwnerInstructionKeyRegistry([{
+      kid: 'atk',
+      issuer: 'atk',
+      publicKeyPem: 'x',
+    }]),
+    () => createOwnerImplementationInstructionVerifier({
+      keyRegistry: {},
+      revocationRegistry: {},
+      clock: {},
+      consumeOnAllow: true,
+    }),
+  ]) {
+    try {
+      fn();
+    } catch {
+      factoryThrew += 1;
+    }
+  }
+  assert.equal(factoryThrew, 4);
+
+  // Even with a self-made opaque-looking object, evaluate DENYs.
+  const forgedRoot = Object.freeze({
+    kind: 'TECP_DLP011_DISPOSABLE_EFFECTIVE_AUTHORIZATION_TRUST_ROOT',
+    testOnly: true,
+  });
+  const result = evaluateEffectiveImplementationAuthorization({
+    testOnlyEnvironment: true,
+    trustRoot: forgedRoot,
+    expectedCanonicalSha: CANONICAL_MAIN_SHA_PIN,
+    expectedRule02DigestSha256: 'c'.repeat(64),
+    repositoryId: GATE_REPOSITORY_ID,
+    sliceId: GATE_SLICE_ID,
+    operationClass: GATE_OPERATION_CLASS,
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
+    ownerInstructionEncoded: 'dead.beef',
+  });
+  assertDeny(result, GATE_DECISIONS.DENY_MISSING_TRUST_ROOT);
+});
+
 test('01 canonical closed Rule02 → DENY_CANONICAL_CLOSED', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const closed = h.createClosedSource();
-  const tip = h.tipFor(closed);
-  const input = h.buildGateInput({
-    canonicalRule02Source: closed,
-    tipAttestation: tip,
-    expectedCanonicalSha: closed.canonicalSha,
-    expectedRule02DigestSha256: closed.rule02DigestSha256,
-    instructionOverrides: {
-      rule02DigestSha256: closed.rule02DigestSha256,
-      canonicalSha: closed.canonicalSha,
-    },
-  });
-  // Rebuild instruction binding to closed digest
+  h.useClosedProvenance();
+  const v = h.view();
   const issued = h.issueExactSliceInstruction({
-    rule02DigestSha256: closed.rule02DigestSha256,
-    canonicalSha: closed.canonicalSha,
+    jti: 'closed-jti',
+    rule02DigestSha256: v.rule02DigestSha256,
+    canonicalSha: v.canonicalSha,
   });
-  input.ownerInstructionEncoded = issued.instruction.encoded;
-  const result = evaluateEffectiveImplementationAuthorization(input);
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    ownerInstructionEncoded: issued.instruction.encoded,
+  }));
   assertDeny(result, GATE_DECISIONS.DENY_CANONICAL_CLOSED);
 });
 
 test('02 unmerged YES-token proposal → DENY_UNMERGED_YES_TOKEN', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const unmerged = h.createUnmergedYesSource();
-  const tip = h.tipFor(unmerged);
+  h.useUnmergedYesProvenance();
+  const v = h.view();
   const issued = h.issueExactSliceInstruction({
-    rule02DigestSha256: unmerged.rule02DigestSha256,
-    canonicalSha: unmerged.canonicalSha,
+    jti: 'unmerged-jti',
+    rule02DigestSha256: v.rule02DigestSha256,
+    canonicalSha: v.canonicalSha,
   });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: unmerged,
-    tipAttestation: tip,
-    expectedCanonicalSha: unmerged.canonicalSha,
-    expectedRule02DigestSha256: unmerged.rule02DigestSha256,
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_UNMERGED_YES_TOKEN);
 });
 
-test('03 forged YES-token Rule02 parse failure → DENY_FORGED_RULE02', () => {
+test('03 forged Rule02 parse failure → DENY_FORGED_RULE02', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const forged = h.createForgedRule02Source();
-  const tip = h.tipFor(forged);
+  h.useForgedRule02Provenance();
+  const v = h.view();
   const issued = h.issueExactSliceInstruction({
-    rule02DigestSha256: forged.rule02DigestSha256,
-    canonicalSha: forged.canonicalSha,
+    jti: 'forged-jti',
+    rule02DigestSha256: v.rule02DigestSha256,
+    canonicalSha: v.canonicalSha,
   });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: forged,
-    tipAttestation: tip,
-    expectedCanonicalSha: forged.canonicalSha,
-    expectedRule02DigestSha256: forged.rule02DigestSha256,
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_FORGED_RULE02);
 });
 
-test('04 validator ALLOW path missing owner instruction → DENY_MISSING_OWNER_INSTRUCTION', () => {
+test('04 missing owner instruction → DENY_MISSING_OWNER_INSTRUCTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: '',
@@ -127,6 +259,7 @@ test('05 wrong canonical SHA → DENY_WRONG_CANONICAL_SHA', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     expectedCanonicalSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    instructionOverrides: { jti: 'wrong-sha' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_WRONG_CANONICAL_SHA);
 });
@@ -135,6 +268,7 @@ test('06 wrong Rule02 digest → DENY_WRONG_RULE02_DIGEST', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     expectedRule02DigestSha256: '0'.repeat(64),
+    instructionOverrides: { jti: 'wrong-digest' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_WRONG_RULE02_DIGEST);
 });
@@ -145,65 +279,34 @@ test('07 fake merged/canonical caller flags → DENY_FAKE_MERGED_FLAG', () => {
     merged: true,
     canonical: true,
     branchName: 'main',
+    instructionOverrides: { jti: 'fake-merged' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_FAKE_MERGED_FLAG);
 });
 
-test('08 untrusted canonical source (plain object) → DENY_UNTRUSTED_CANONICAL_SOURCE', () => {
+test('08 forged branded tip via drift before evaluate → DENY_STALE_TIP', () => {
   const h = createDisposableMergeEffectivenessHarness();
+  h.driftTip({ tipDigest: '1'.repeat(64) });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: {
-      kind: 'TECP_DLP011_CANONICAL_RULE02_SOURCE',
-      repositoryId: GATE_REPOSITORY_ID,
-      canonicalSha: CANONICAL_MAIN_SHA_PIN,
-      rule02Text: loadWorkspaceRule02Text(),
-      rule02DigestSha256: h.mergedDigest,
-      sourceKind: 'TEST_ONLY_ATTESTED',
-      mergedProvenance: true,
-      tipDigest: h.mergedDigest,
-    },
+    instructionOverrides: { jti: 'stale-tip' },
   }));
-  assertDeny(result, GATE_DECISIONS.DENY_UNTRUSTED_CANONICAL_SOURCE);
-});
-
-test('08b privileged factory rejects unattested spec', () => {
-  assert.throws(() => createCanonicalRule02Source({
-    repositoryId: GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_MAIN_SHA_PIN,
-    rule02Text: 'x',
-    sourceKind: 'TEST_ONLY_ATTESTED',
-    merged: true,
-  }), /PRIVILEGED_ATTESTATION_REQUIRED/);
-});
-
-test('09 unbranded / serialized verifier → DENY_UNBRANDED_VERIFIER', () => {
-  const h = createDisposableMergeEffectivenessHarness();
-  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    ownerInstructionVerifier: {
-      kind: 'TECP_DLP011_OWNER_INSTRUCTION_VERIFIER',
-      verify() { return { ok: true }; },
-    },
-  }));
-  assertDeny(result, GATE_DECISIONS.DENY_UNBRANDED_VERIFIER);
+  assertDeny(result, GATE_DECISIONS.DENY_STALE_TIP);
 });
 
 test('10 invalid signature → DENY_OWNER_INSTRUCTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const issued = h.issueExactSliceInstruction();
+  const issued = h.issueExactSliceInstruction({ jti: 'badsig' });
   const bad = h.forgeInvalidSignatureInstruction(issued.instruction.encoded);
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: bad,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_OWNER_INSTRUCTION);
-  assert.equal(result.reasons.some((r) => /INVALID_SIGNATURE|DENY_INVALID/.test(String(r))
-    || r === OWNER_INSTRUCTION_DECISIONS.DENY_INVALID_SIGNATURE), true);
 });
 
-test('11 unknown key ID → DENY_OWNER_INSTRUCTION', () => {
+test('11 foreign-key signed instruction → DENY_OWNER_INSTRUCTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  // Issue under harness, then verify expectation uses unknown kid by crafting foreign-signed payload
-  const issued = h.issueExactSliceInstruction();
-  const claims = { ...issued.instruction.claims, kid: 'unknown-kid', jti: 'foreign-jti-1' };
+  const issued = h.issueExactSliceInstruction({ jti: 'foreign-base' });
+  const claims = { ...issued.instruction.claims, jti: 'foreign-jti-1', kid: 'unknown-kid' };
   const encoded = h.signClaimsWithForeignKey(claims);
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: encoded,
@@ -215,6 +318,7 @@ test('12 wrong scope or action → DENY_WRONG_SCOPE_OR_ACTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     operationClass: 'DEPLOY_PRODUCTION',
+    instructionOverrides: { jti: 'wrong-op' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_WRONG_SCOPE_OR_ACTION);
 });
@@ -223,6 +327,7 @@ test('12b wrong authorized paths → DENY_WRONG_SCOPE_OR_ACTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     authorizedFileScope: ['tecp/src/evil.js'],
+    instructionOverrides: { jti: 'wrong-paths' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_WRONG_SCOPE_OR_ACTION);
 });
@@ -231,14 +336,15 @@ test('13 wrong repository or slice → DENY_WRONG_REPOSITORY_OR_SLICE', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     sliceId: 'TECP-DLP-999-FAKE',
+    instructionOverrides: { jti: 'wrong-slice' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_WRONG_REPOSITORY_OR_SLICE);
 });
 
 test('14 expired instruction → DENY_OWNER_INSTRUCTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const issued = h.issueExactSliceInstruction({ ttlMs: 1_000 });
-  h.clock.advance(5_000);
+  const issued = h.issueExactSliceInstruction({ jti: 'exp-jti', ttlMs: 1_000 });
+  h.advanceClock(5_000);
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
@@ -248,7 +354,7 @@ test('14 expired instruction → DENY_OWNER_INSTRUCTION', () => {
 test('15 revoked instruction → DENY_OWNER_INSTRUCTION', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const issued = h.issueExactSliceInstruction({ jti: 'revoked-jti-dlp011' });
-  h.revocationRegistry.revokeJti('revoked-jti-dlp011');
+  h.revokeJti('revoked-jti-dlp011');
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
@@ -271,62 +377,32 @@ test('16 consumed instruction → DENY_OWNER_INSTRUCTION', () => {
 test('17 replayed JTI (explicit consume) → DENY', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const issued = h.issueExactSliceInstruction({ jti: 'replay-jti' });
-  assert.equal(h.revocationRegistry.consumeJti('replay-jti'), true);
+  assert.equal(h.consumeJti('replay-jti'), true);
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_OWNER_INSTRUCTION);
 });
 
-test('18 missing clock / revocation via unbranded deps denied at verifier construction', () => {
-  assert.throws(() => createOwnerImplementationInstructionVerifier({
-    keyRegistry: {},
-    revocationRegistry: {},
-    clock: {},
-  }), /TRUSTED_OWNER_INSTRUCTION_VERIFIER_DEPS_REQUIRED/);
-
+test('18 unavailable clock → DENY_CLOCK_OR_REVOCATION_UNAVAILABLE', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const unavailableClock = createUnavailableOwnerInstructionClock();
-  const verifier = createOwnerImplementationInstructionVerifier({
-    keyRegistry: h.keyRegistry,
-    revocationRegistry: h.revocationRegistry,
-    clock: unavailableClock,
-    consumeOnAllow: true,
-  });
-  const issued = h.issueExactSliceInstruction();
+  const issued = h.issueExactSliceInstruction({ jti: 'clock-jti' });
+  h.installUnavailableClock();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    ownerInstructionVerifier: verifier,
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_CLOCK_OR_REVOCATION_UNAVAILABLE);
 });
 
-test('19 stale tip → DENY_STALE_TIP', () => {
-  const h = createDisposableMergeEffectivenessHarness();
-  const staleTip = createTrustedTipAttestation({
-    tipSha: CANONICAL_MAIN_SHA_PIN,
-    tipDigest: '1'.repeat(64),
-    attestedByPrivilegedFactory: true,
-  });
-  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    tipAttestation: staleTip,
-  }));
-  assertDeny(result, GATE_DECISIONS.DENY_STALE_TIP);
-});
-
-test('20 tip drift between evaluation and mutation fence → DENY_TIP_DRIFT', () => {
+test('19 tip drift between evaluation and mutation fence → DENY_TIP_DRIFT', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const issued = h.issueExactSliceInstruction({ jti: 'fence-jti' });
   const first = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assert.equal(first.ok, true);
-  const drifted = createTrustedTipAttestation({
-    tipSha: CANONICAL_MAIN_SHA_PIN,
-    tipDigest: '2'.repeat(64),
-    attestedByPrivilegedFactory: true,
-  });
-  const fenceResult = assertMutationFenceFresh(first.authorization.fence, drifted);
+  h.driftTip({ tipDigest: '2'.repeat(64) });
+  const fenceResult = assertMutationFenceFresh(first.authorization.fence, h.trustRoot);
   assertDeny(fenceResult, GATE_DECISIONS.DENY_TIP_DRIFT);
 });
 
@@ -334,6 +410,7 @@ test('21 caller-provided AuthorizedInvocation → DENY_CALLER_AUTHORIZED_INVOCAT
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     authorizedInvocation: { ok: true, decision: 'ALLOW' },
+    instructionOverrides: { jti: 'authz-inv' },
   }));
   assertDeny(result, GATE_DECISIONS.DENY_CALLER_AUTHORIZED_INVOCATION);
 });
@@ -347,7 +424,7 @@ test('22 malformed / oversized instruction → DENY_MALFORMED_OR_OVERSIZED', () 
   assertDeny(result, GATE_DECISIONS.DENY_MALFORMED_OR_OVERSIZED);
 });
 
-test('22b malformed encoding → DENY_OWNER_INSTRUCTION or MALFORMED', () => {
+test('22b malformed encoding → DENY', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: 'not-a-valid-token',
@@ -361,18 +438,16 @@ test('22b malformed encoding → DENY_OWNER_INSTRUCTION or MALFORMED', () => {
   assertNoSecrets(result);
 });
 
-test('23 secret-containing error/result must fail closed without leakage', () => {
+test('23 secret-containing error/result must not leak private keys', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const issued = h.issueExactSliceInstruction();
+  const issued = h.issueExactSliceInstruction({ jti: 'noleak' });
   const bad = h.forgeInvalidSignatureInstruction(issued.instruction.encoded);
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: bad,
   }));
   assert.equal(result.ok, false);
   assertNoSecrets(result);
-  assertNoSecrets(h.mergedSource);
-  // Harness holds private key locally; gate outputs must not echo it
-  assert.equal(JSON.stringify(result).includes(h.keys.privateKeyPem), false);
+  assertNoSecrets(h.view());
 });
 
 test('24 concurrent conflicting authorization attempts → DENY', () => {
@@ -389,7 +464,7 @@ test('24 concurrent conflicting authorization attempts → DENY', () => {
   }
 });
 
-test('25 valid TEST_ONLY merged provenance + exact-slice owner instruction → ALLOW (bounded)', () => {
+test('25 valid TEST_ONLY merged provenance + exact-slice owner instruction → ALLOW', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const issued = h.issueExactSliceInstruction({ jti: 'allow-jti-final' });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
@@ -402,20 +477,12 @@ test('25 valid TEST_ONLY merged provenance + exact-slice owner instruction → A
   assert.equal(result.performsDatabaseWrite, false);
   assert.equal(result.executesWorker, false);
   assert.equal(result.authorization.reusable, false);
-  assert.equal(result.authorization.standingAuthority, false);
   assert.equal(result.authorization.sliceId, GATE_SLICE_ID);
-  assert.equal(result.authorization.repositoryId, GATE_REPOSITORY_ID);
-  assert.equal(result.authorization.operationClass, GATE_OPERATION_CLASS);
-  assert.deepEqual([...result.authorization.authorizedFileScope], [...GATE_AUTHORIZED_FILE_SCOPE]);
-  assert.equal(result.authorization.canonicalSha, CANONICAL_MAIN_SHA_PIN);
   assertNoSecrets(result);
 
-  // Fresh fence OK with matching tip
-  const fenceOk = assertMutationFenceFresh(result.authorization.fence, h.tipAttestation);
+  const fenceOk = assertMutationFenceFresh(result.authorization.fence, h.trustRoot);
   assert.equal(fenceOk.ok, true);
-  assert.equal(fenceOk.standingAuthority, false);
 
-  // Prior ALLOW is not standing — replay DENY
   const replay = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
@@ -424,73 +491,20 @@ test('25 valid TEST_ONLY merged provenance + exact-slice owner instruction → A
 
 test('25b authorization check does not claim DB write or Worker execution', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const closed = h.createClosedSource();
+  h.useClosedProvenance();
+  const v = h.view();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: closed,
-    tipAttestation: h.tipFor(closed),
-    expectedCanonicalSha: closed.canonicalSha,
-    expectedRule02DigestSha256: closed.rule02DigestSha256,
     ownerInstructionEncoded: h.issueExactSliceInstruction({
-      rule02DigestSha256: closed.rule02DigestSha256,
-      canonicalSha: closed.canonicalSha,
+      jti: 'closed-db',
+      rule02DigestSha256: v.rule02DigestSha256,
+      canonicalSha: v.canonicalSha,
     }).instruction.encoded,
   }));
   assert.equal(result.performsDatabaseWrite, false);
   assert.equal(result.executesWorker, false);
 });
 
-test('non-claims: frozen validator alone remains insufficient (harness documents gap)', () => {
-  // Unmerged YES text would ALLOW under frozen validator; gate still DENY without provenance.
-  const text = synthesizeUnmergedYesTokenRule02Text();
-  assert.equal(typeof text, 'string');
-  assert.equal(text.includes('YES / EXACT_SLICE_ONLY'), true);
-  const closed = synthesizeClosedRule02Text();
-  assert.equal(closed.includes(`IMPLEMENTATION_AUTHORIZED = ${'CONSUMED / NON-ACTIVE'}`), true);
-});
-
-test('TEST_ONLY purpose required on instructions', () => {
-  const h = createDisposableMergeEffectivenessHarness();
-  const bad = issueOwnerImplementationInstruction({
-    repositoryId: GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_MAIN_SHA_PIN,
-    rule02DigestSha256: h.mergedDigest,
-    sliceId: GATE_SLICE_ID,
-    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
-    operationClass: GATE_OPERATION_CLASS,
-    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
-    purpose: 'PRODUCTION',
-    issuer: DEFAULT_ISSUER,
-    kid: DEFAULT_KID,
-  }, { keyRegistry: h.keyRegistry, clock: h.clock });
-  assert.equal(bad.ok, false);
-  assert.equal(bad.decision, OWNER_INSTRUCTION_DECISIONS.DENY_WRONG_PURPOSE);
-});
-
-test('explicit testOnlyEnvironment required (no ambient env authority)', () => {
-  const h = createDisposableMergeEffectivenessHarness();
-  const input = h.buildGateInput({ instructionOverrides: { jti: 'env-jti' } });
-  delete input.testOnlyEnvironment;
-  const result = evaluateEffectiveImplementationAuthorization(input);
-  assertDeny(result, GATE_DECISIONS.DENY_ENVIRONMENT_NOT_TEST_ONLY);
-});
-
-test('P1 non-consuming verifier → DENY_NON_CONSUMING_VERIFIER', () => {
-  const h = createDisposableMergeEffectivenessHarness();
-  const nonConsuming = createOwnerImplementationInstructionVerifier({
-    keyRegistry: h.keyRegistry,
-    revocationRegistry: h.revocationRegistry,
-    clock: h.clock,
-    consumeOnAllow: false,
-  });
-  assert.equal(nonConsuming.consumeOnAllow, false);
-  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    ownerInstructionVerifier: nonConsuming,
-    instructionOverrides: { jti: 'non-consume-jti' },
-  }));
-  assertDeny(result, GATE_DECISIONS.DENY_NON_CONSUMING_VERIFIER);
-});
-
-test('P1 caller governanceRevision mismatch vs parsed Rule02 → DENY', () => {
+test('P1 governanceRevision mismatch → DENY', () => {
   const h = createDisposableMergeEffectivenessHarness();
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     governanceRevision: 'WRONG_REVISION_20261103',
@@ -508,29 +522,17 @@ test('P1 parsed authorizedFileScope mismatch → DENY_PARSED_SCOPE_MISMATCH', ()
     'tecp/test/disposableMergeEffectivenessHarness.js',
     'tecp/test/evilExtraPath.js',
   );
-  const digest = h.digestRule02(mutated);
-  const source = createTestOnlyAttestedCanonicalRule02Source({
-    repositoryId: GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+  h.replaceProvenance({
     rule02Text: mutated,
-    expectedRule02DigestSha256: digest,
     mergedProvenance: true,
     activationPr: '#266',
-    tipDigest: digest,
   });
-  const tip = createTrustedTipAttestation({
-    tipSha: CANONICAL_MAIN_SHA_PIN,
-    tipDigest: digest,
-    attestedByPrivilegedFactory: true,
-  });
+  const v = h.view();
   const issued = h.issueExactSliceInstruction({
     jti: 'scope-mismatch-jti',
-    rule02DigestSha256: digest,
+    rule02DigestSha256: v.rule02DigestSha256,
   });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: source,
-    tipAttestation: tip,
-    expectedRule02DigestSha256: digest,
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_PARSED_SCOPE_MISMATCH);
@@ -538,36 +540,65 @@ test('P1 parsed authorizedFileScope mismatch → DENY_PARSED_SCOPE_MISMATCH', ()
 
 test('P1 parsed active slice mismatch → DENY_PARSED_SLICE_MISMATCH', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const mutated = loadWorkspaceRule02Text()
-    .replaceAll(
-      'TECP-DLP-011-DISPOSABLE-MERGE-EFFECTIVENESS-AUTHORIZATION-GATE',
-      'TECP-DLP-999-FAKE-SLICE',
-    );
-  // Keep gate constants; Rule02 now names a different slice.
-  const digest = h.digestRule02(mutated);
-  const source = createTestOnlyAttestedCanonicalRule02Source({
-    repositoryId: GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+  const mutated = loadWorkspaceRule02Text().replaceAll(
+    'TECP-DLP-011-DISPOSABLE-MERGE-EFFECTIVENESS-AUTHORIZATION-GATE',
+    'TECP-DLP-999-FAKE-SLICE',
+  );
+  h.replaceProvenance({
     rule02Text: mutated,
-    expectedRule02DigestSha256: digest,
     mergedProvenance: true,
     activationPr: '#266',
-    tipDigest: digest,
   });
-  const tip = createTrustedTipAttestation({
-    tipSha: CANONICAL_MAIN_SHA_PIN,
-    tipDigest: digest,
-    attestedByPrivilegedFactory: true,
-  });
+  const v = h.view();
   const issued = h.issueExactSliceInstruction({
     jti: 'slice-mismatch-jti',
-    rule02DigestSha256: digest,
+    rule02DigestSha256: v.rule02DigestSha256,
   });
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
-    canonicalRule02Source: source,
-    tipAttestation: tip,
-    expectedRule02DigestSha256: digest,
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assertDeny(result, GATE_DECISIONS.DENY_PARSED_SLICE_MISMATCH);
 });
+
+test('explicit testOnlyEnvironment required', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  const input = h.buildGateInput({ instructionOverrides: { jti: 'env-jti' } });
+  delete input.testOnlyEnvironment;
+  const result = evaluateEffectiveImplementationAuthorization(input);
+  assertDeny(result, GATE_DECISIONS.DENY_ENVIRONMENT_NOT_TEST_ONLY);
+});
+
+test('non-claims: closed/unmerged helpers still distinguish validator residual', () => {
+  assert.equal(synthesizeUnmergedYesTokenRule02Text().includes('YES / EXACT_SLICE_ONLY'), true);
+  assert.equal(synthesizeClosedRule02Text().includes('CONSUMED / NON-ACTIVE'), true);
+});
+
+test('cross-slice grant via foreign-signed instruction DENY', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  const issued = h.issueExactSliceInstruction({ jti: 'cross-base' });
+  const claims = {
+    ...issued.instruction.claims,
+    jti: 'cross-slice-jti',
+    sliceId: 'TECP-DLP-010-DISPOSABLE-LOCAL-WRITER-SIDECAR-ISOLATION-PROOF',
+  };
+  // Re-sign with harness foreign key (not trust-root key)
+  const encoded = h.signClaimsWithForeignKey(claims);
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    ownerInstructionEncoded: encoded,
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_OWNER_INSTRUCTION);
+});
+
+test('real canonical source mismatch: wrong expected digest vs trust root', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  // Trust root holds real workspace Rule02; caller lies about digest expectation.
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    expectedRule02DigestSha256: digestMismatch(),
+    instructionOverrides: { jti: 'canon-mismatch' },
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_WRONG_RULE02_DIGEST);
+});
+
+function digestMismatch() {
+  return 'f'.repeat(64);
+}

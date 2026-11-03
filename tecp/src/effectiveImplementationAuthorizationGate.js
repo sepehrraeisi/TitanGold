@@ -2,25 +2,22 @@
  * TECP-DLP-011 — Effective Implementation Authorization Gate
  * (TEST_ONLY / NON_OPERATIONAL / OPTION A additive).
  *
- * Frozen validateGovernance() is a NECESSARY input but NEVER sufficient to authorize
- * an execution. This gate independently requires trusted Rule02 provenance, merged
- * canonical SHA + digest binding, tip attestation, and a verified external signed
- * Owner implementation instruction. Never creates a reusable standing ALLOW token.
+ * Trust model (post PR #267 trust-boundary remediation):
+ * - Public component factories are sealed (throw). A boolean flag is NOT provenance.
+ * - Only `createDisposableEffectiveAuthorizationTrustRoot` may mint trust material.
+ *   That API owns the Owner keypair + verifier + Rule02 provenance tip internally.
+ * - `evaluateEffectiveImplementationAuthorization` accepts an opaque trustRoot handle
+ *   and rejects caller-supplied branded sources/verifiers/tips/key registries.
+ * - Same-process code that can call the trust-root constructor is the disposable
+ *   trust installer. This does NOT seal same-UID / same-process compromise.
  *
- * NON-CLAIMS:
- * - Does not repair the frozen governance validator.
- * - Additive authorization-decision primitive only; not an operationally integrated path.
- * - Future Worker/MCP mutation entry points must be explicitly wired through this gate.
- * - Public persistence APIs may still bypass any future operational path.
- * - Live GitHub provenance verification is NOT implemented.
- * - Real Owner key custody is NOT implemented.
- * - Same-UID/ptrace separation remains unsealed.
- * - Real OS Worker identity is unproven.
- * - Production R1 / C24 real PostgreSQL deadlock are unproven.
- * - Real Cursor operation remains unauthorized.
+ * Frozen validateGovernance() is necessary but NEVER sufficient.
+ *
+ * NON-CLAIMS: see file header residuals — no live GitHub, no real Owner custody,
+ * no MCP/Worker wiring, WeakSet ≠ crypto auth, production R1 unproven.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import { parseRule02 } from './rule02Parser.js';
 import {
@@ -28,10 +25,13 @@ import {
   validateGovernance,
 } from './governanceValidator.js';
 import {
-  createOwnerImplementationInstructionVerifier,
-  isBrandedOwnerImplementationInstructionVerifier,
+  OWNER_INSTRUCTION_PURPOSE,
+  generateEphemeralOwnerInstructionKeyPair,
+  getPrivilegedOwnerInstructionConstructors,
   isBrandedVerifiedOwnerInstruction,
+  issueOwnerImplementationInstruction,
   safeEqualHex,
+  withPrivilegedOwnerInstructionConstruction,
 } from './ownerImplementationInstruction.js';
 
 export const GATE_KIND = 'TECP_DLP011_EFFECTIVE_IMPLEMENTATION_AUTHORIZATION_GATE';
@@ -39,6 +39,7 @@ export const GATE_PURPOSE = 'TEST_ONLY';
 export const GATE_SLICE_ID = 'TECP-DLP-011-DISPOSABLE-MERGE-EFFECTIVENESS-AUTHORIZATION-GATE';
 export const GATE_OPERATION_CLASS = 'CREATE_AUTHORIZED_FOUR_PATH_DISPOSABLE_PROOF';
 export const GATE_REPOSITORY_ID = 'sepehrraeisi/TitanGold';
+export const DISPOSABLE_TRUST_INJECTION_TOKEN = 'TECP_DLP011_DISPOSABLE_TRUST_INJECTION_V1';
 
 export const GATE_AUTHORIZED_FILE_SCOPE = Object.freeze([
   'tecp/src/effectiveImplementationAuthorizationGate.js',
@@ -50,6 +51,8 @@ export const GATE_AUTHORIZED_FILE_SCOPE = Object.freeze([
 export const GATE_DECISIONS = Object.freeze({
   ALLOW: 'ALLOW',
   DENY_MISSING_INPUT: 'DENY_MISSING_INPUT',
+  DENY_MISSING_TRUST_ROOT: 'DENY_MISSING_TRUST_ROOT',
+  DENY_CALLER_SUPPLIED_TRUST_OBJECTS: 'DENY_CALLER_SUPPLIED_TRUST_OBJECTS',
   DENY_UNTRUSTED_CANONICAL_SOURCE: 'DENY_UNTRUSTED_CANONICAL_SOURCE',
   DENY_UNBRANDED_VERIFIER: 'DENY_UNBRANDED_VERIFIER',
   DENY_CANONICAL_CLOSED: 'DENY_CANONICAL_CLOSED',
@@ -76,6 +79,7 @@ export const GATE_DECISIONS = Object.freeze({
   DENY_GOVERNANCE_REVISION_MISMATCH: 'DENY_GOVERNANCE_REVISION_MISMATCH',
   DENY_PARSED_SCOPE_MISMATCH: 'DENY_PARSED_SCOPE_MISMATCH',
   DENY_PARSED_SLICE_MISMATCH: 'DENY_PARSED_SLICE_MISMATCH',
+  DENY_TRUST_INJECTION_REQUIRED: 'DENY_TRUST_INJECTION_REQUIRED',
 });
 
 const SOURCE_KINDS = Object.freeze({
@@ -84,12 +88,13 @@ const SOURCE_KINDS = Object.freeze({
   TEST_ONLY_ATTESTED: 'TEST_ONLY_ATTESTED',
 });
 
-const canonicalSourceBrand = new WeakSet();
-const tipAttestationBrand = new WeakSet();
+const DEFAULT_ISSUER = 'tecp-dlp011-test-owner-issuer';
+const DEFAULT_KID = 'dlp011-test-owner-ed25519-1';
+
+const trustRootPrivate = new WeakMap();
 const gateDecisionBrand = new WeakSet();
 const evaluationFenceBrand = new WeakSet();
 
-/** In-process exclusive evaluation lock for concurrent conflicting attempts. */
 let evaluationLock = null;
 
 function isPlainObject(value) {
@@ -99,6 +104,10 @@ function isPlainObject(value) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.length > 0;
+}
+
+function digestText(text) {
+  return createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
 function deny(decision, reasons = [decision], extras = {}) {
@@ -121,17 +130,12 @@ function deny(decision, reasons = [decision], extras = {}) {
 function sanitizeReasons(reasons) {
   return (reasons || []).map((r) => {
     const s = String(r);
-    // Strip anything that looks like PEM / private key material.
     if (/BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY/i.test(s) || /privateKeyPem/i.test(s)) {
       return 'REDACTED_SENSITIVE';
     }
     if (s.length > 512) return `${s.slice(0, 512)}…`;
     return s;
   });
-}
-
-function digestText(text) {
-  return createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
 function scopesMatch(a, b) {
@@ -144,93 +148,264 @@ function scopesMatch(a, b) {
   return true;
 }
 
-/**
- * Privileged factory for a branded CanonicalRule02Source.
- * Caller JSON / `merged:true` / `canonical:true` / branch name alone NEVER creates trust.
- */
-export function createCanonicalRule02Source(spec) {
-  if (!isPlainObject(spec)
-    || !isNonEmptyString(spec.repositoryId)
-    || !isNonEmptyString(spec.canonicalSha)
-    || !isNonEmptyString(spec.rule02Text)
-    || !isNonEmptyString(spec.sourceKind)
-    || !Object.values(SOURCE_KINDS).includes(spec.sourceKind)) {
-    throw new TypeError('INVALID_CANONICAL_RULE02_SOURCE_SPEC');
-  }
-  // Ambiguous caller flags alone must not establish trust — require privileged attestation.
-  if (spec.attestedByPrivilegedFactory !== true) {
-    throw new TypeError('PRIVILEGED_ATTESTATION_REQUIRED');
-  }
-  if (spec.sourceKind === SOURCE_KINDS.CANONICAL_MAIN
-    || spec.sourceKind === SOURCE_KINDS.PINNED_MERGED_SHA_VERIFIED) {
-    if (spec.mergedProvenance !== true || !isNonEmptyString(spec.activationPr)) {
-      throw new TypeError('MERGED_PROVENANCE_REQUIRED');
-    }
-  }
-  const rule02DigestSha256 = digestText(spec.rule02Text);
-  if (isNonEmptyString(spec.expectedRule02DigestSha256)
-    && !safeEqualHex(rule02DigestSha256, spec.expectedRule02DigestSha256)) {
-    throw new TypeError('RULE02_DIGEST_MISMATCH');
-  }
-
-  const source = Object.freeze({
-    kind: 'TECP_DLP011_CANONICAL_RULE02_SOURCE',
-    repositoryId: spec.repositoryId,
-    canonicalSha: spec.canonicalSha,
-    rule02Text: spec.rule02Text,
-    rule02DigestSha256,
-    sourceKind: spec.sourceKind,
-    mergedProvenance: spec.mergedProvenance === true,
-    activationPr: spec.activationPr || null,
-    tipDigest: isNonEmptyString(spec.tipDigest) ? spec.tipDigest : rule02DigestSha256,
-    testOnly: spec.sourceKind === SOURCE_KINDS.TEST_ONLY_ATTESTED,
-    // Explicit: WeakSet brand ≠ cryptographic authentication.
-    cryptographicAuthentication: false,
-  });
-  canonicalSourceBrand.add(source);
-  return source;
-}
-
-/**
- * TEST_ONLY attested canonical source factory for the disposable harness.
- * Does NOT establish production trust or live GitHub provenance.
- */
-export function createTestOnlyAttestedCanonicalRule02Source(spec) {
-  return createCanonicalRule02Source({
-    ...spec,
+function buildProvenanceState({
+  rule02Text,
+  canonicalSha,
+  mergedProvenance,
+  activationPr,
+  tipSha,
+  tipDigest,
+}) {
+  const digest = digestText(rule02Text);
+  return Object.freeze({
+    repositoryId: GATE_REPOSITORY_ID,
+    canonicalSha,
+    rule02Text,
+    rule02DigestSha256: digest,
     sourceKind: SOURCE_KINDS.TEST_ONLY_ATTESTED,
-    attestedByPrivilegedFactory: true,
-    mergedProvenance: spec.mergedProvenance === true,
+    mergedProvenance: mergedProvenance === true,
+    activationPr: activationPr || null,
+    tipSha: tipSha || canonicalSha,
+    tipDigest: tipDigest || digest,
+    cryptographicAuthentication: false,
   });
-}
-
-export function isBrandedCanonicalRule02Source(value) {
-  return canonicalSourceBrand.has(value);
 }
 
 /**
- * Privileged tip/provenance attestation. Branch name `main` alone is insufficient.
+ * Privileged disposable trust-root injector.
+ *
+ * Owns Owner key material and Rule02 provenance privately (WeakMap).
+ * Callers cannot pass an external key registry or branded tip into evaluate.
+ *
+ * RESIDUAL: any same-process caller that can invoke this function is the
+ * disposable trust installer. Same-UID/process isolation is NOT sealed.
  */
-export function createTrustedTipAttestation(spec) {
-  if (!isPlainObject(spec)
-    || !isNonEmptyString(spec.tipSha)
-    || !isNonEmptyString(spec.tipDigest)
-    || spec.attestedByPrivilegedFactory !== true) {
-    throw new TypeError('INVALID_TIP_ATTESTATION');
+export function createDisposableEffectiveAuthorizationTrustRoot(config = {}) {
+  if (!isPlainObject(config)) {
+    throw new TypeError('TRUST_ROOT_CONFIG_REQUIRED');
   }
-  const tip = Object.freeze({
-    kind: 'TECP_DLP011_TRUSTED_TIP_ATTESTATION',
-    tipSha: spec.tipSha,
-    tipDigest: spec.tipDigest,
-    observedAtMs: Number.isSafeInteger(spec.observedAtMs) ? spec.observedAtMs : null,
-    cryptographicAuthentication: false,
+  if (config.privilegedTrustInjection !== DISPOSABLE_TRUST_INJECTION_TOKEN) {
+    throw new TypeError('DISPOSABLE_TRUST_INJECTION_TOKEN_REQUIRED');
+  }
+  // Reject attacker-supplied verification material / registries.
+  if (config.keyRegistry != null
+    || config.ownerInstructionVerifier != null
+    || config.privateKeyPem != null
+    || config.publicKeyPem != null
+    || config.canonicalRule02Source != null
+    || config.tipAttestation != null) {
+    throw new TypeError('CALLER_SUPPLIED_TRUST_OBJECTS_FORBIDDEN');
+  }
+
+  const canonicalSha = isNonEmptyString(config.canonicalSha)
+    ? config.canonicalSha
+    : null;
+  if (!canonicalSha) {
+    throw new TypeError('CANONICAL_SHA_REQUIRED');
+  }
+
+  // Rule02 text must be injected by the disposable trust installer / harness.
+  // No filesystem read in this module (frozen TECP service-skeleton invariant).
+  if (!isNonEmptyString(config.disposableRule02Override)) {
+    throw new TypeError('DISPOSABLE_RULE02_OVERRIDE_REQUIRED');
+  }
+  const rule02Text = config.disposableRule02Override;
+  const mergedProvenance = config.mergedProvenance === true;
+  const activationPr = isNonEmptyString(config.activationPr) ? config.activationPr : null;
+  if (mergedProvenance && !activationPr) {
+    throw new TypeError('ACTIVATION_PR_REQUIRED_WHEN_MERGED');
+  }
+
+  const startMs = Number.isSafeInteger(config.startMs) ? config.startMs : 1_700_000_000_000;
+  const issuer = DEFAULT_ISSUER;
+  const kid = DEFAULT_KID;
+
+  const material = withPrivilegedOwnerInstructionConstruction(() => {
+    const ctors = getPrivilegedOwnerInstructionConstructors();
+    const keys = generateEphemeralOwnerInstructionKeyPair();
+    const clock = ctors.createOwnerInstructionClock(startMs);
+    const revocationRegistry = ctors.createOwnerInstructionRevocationRegistry();
+    const keyRegistry = ctors.createOwnerInstructionKeyRegistry([
+      {
+        kid,
+        issuer,
+        publicKeyPem: keys.publicKeyPem,
+        privateKeyPem: keys.privateKeyPem,
+        algorithm: 'Ed25519',
+        status: 'ACTIVE',
+      },
+    ]);
+    const ownerInstructionVerifier = ctors.createOwnerImplementationInstructionVerifier({
+      keyRegistry,
+      revocationRegistry,
+      clock,
+      consumeOnAllow: true,
+    });
+    return {
+      keys,
+      clock,
+      revocationRegistry,
+      keyRegistry,
+      ownerInstructionVerifier,
+      issuer,
+      kid,
+    };
   });
-  tipAttestationBrand.add(tip);
-  return tip;
+
+  let provenance = buildProvenanceState({
+    rule02Text,
+    canonicalSha,
+    mergedProvenance,
+    activationPr,
+  });
+
+  const root = Object.freeze({
+    kind: 'TECP_DLP011_DISPOSABLE_EFFECTIVE_AUTHORIZATION_TRUST_ROOT',
+    testOnly: true,
+    cryptographicAuthentication: false,
+    sameProcessTrustInstallerResidual: true,
+    productionTrustEstablished: false,
+  });
+
+  trustRootPrivate.set(root, {
+    material,
+    getProvenance() { return provenance; },
+    setProvenance(next) { provenance = next; },
+  });
+
+  return root;
 }
 
-export function isBrandedTrustedTipAttestation(value) {
-  return tipAttestationBrand.has(value);
+export function isDisposableEffectiveAuthorizationTrustRoot(value) {
+  return trustRootPrivate.has(value);
+}
+
+function requirePrivate(root) {
+  const priv = trustRootPrivate.get(root);
+  if (!priv) {
+    throw new TypeError('UNKNOWN_OR_FORGED_TRUST_ROOT');
+  }
+  return priv;
+}
+
+/**
+ * Issue an Owner instruction bound to the trust root's current provenance.
+ * Signing keys never leave the private bag as callable public factories.
+ */
+export function issueOwnerInstructionFromTrustRoot(trustRoot, overrides = {}) {
+  const priv = requirePrivate(trustRoot);
+  const provenance = priv.getProvenance();
+  const { material } = priv;
+  return issueOwnerImplementationInstruction({
+    repositoryId: GATE_REPOSITORY_ID,
+    canonicalSha: provenance.canonicalSha,
+    rule02DigestSha256: provenance.rule02DigestSha256,
+    sliceId: GATE_SLICE_ID,
+    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
+    operationClass: GATE_OPERATION_CLASS,
+    governanceRevision: overrides.governanceRevision,
+    purpose: OWNER_INSTRUCTION_PURPOSE,
+    issuer: material.issuer,
+    kid: material.kid,
+    ttlMs: 60_000,
+    ...overrides,
+    // Force binding to current provenance (ignore caller SHA/digest spoof in overrides unless explicit replaceProvenance).
+    canonicalSha: overrides.canonicalSha || provenance.canonicalSha,
+    rule02DigestSha256: overrides.rule02DigestSha256 || provenance.rule02DigestSha256,
+  }, { keyRegistry: material.keyRegistry, clock: material.clock });
+}
+
+/**
+ * Privileged scenario switch for disposable adversarial tests.
+ * Replaces Rule02 text / merged flag inside an existing trust root only.
+ */
+export function replaceTrustRootProvenance(trustRoot, spec) {
+  const priv = requirePrivate(trustRoot);
+  if (!isPlainObject(spec) || !isNonEmptyString(spec.rule02Text)) {
+    throw new TypeError('PROVENANCE_SPEC_REQUIRED');
+  }
+  if (spec.privilegedTrustInjection !== DISPOSABLE_TRUST_INJECTION_TOKEN) {
+    throw new TypeError('DISPOSABLE_TRUST_INJECTION_TOKEN_REQUIRED');
+  }
+  const current = priv.getProvenance();
+  const next = buildProvenanceState({
+    rule02Text: spec.rule02Text,
+    canonicalSha: isNonEmptyString(spec.canonicalSha) ? spec.canonicalSha : current.canonicalSha,
+    mergedProvenance: spec.mergedProvenance === true,
+    activationPr: isNonEmptyString(spec.activationPr) ? spec.activationPr : current.activationPr,
+    tipSha: isNonEmptyString(spec.tipSha) ? spec.tipSha : undefined,
+    tipDigest: isNonEmptyString(spec.tipDigest) ? spec.tipDigest : undefined,
+  });
+  priv.setProvenance(next);
+  return next;
+}
+
+export function getTrustRootPublicView(trustRoot) {
+  const priv = requirePrivate(trustRoot);
+  const provenance = priv.getProvenance();
+  return Object.freeze({
+    canonicalSha: provenance.canonicalSha,
+    rule02DigestSha256: provenance.rule02DigestSha256,
+    mergedProvenance: provenance.mergedProvenance,
+    tipSha: provenance.tipSha,
+    tipDigest: provenance.tipDigest,
+    publicKeyPem: priv.material.keys.publicKeyPem,
+    // Never expose privateKeyPem here.
+  });
+}
+
+export function advanceTrustRootClock(trustRoot, ms) {
+  requirePrivate(trustRoot).material.clock.advance(ms);
+}
+
+export function revokeTrustRootJti(trustRoot, jti) {
+  requirePrivate(trustRoot).material.revocationRegistry.revokeJti(jti);
+}
+
+export function consumeTrustRootJti(trustRoot, jti) {
+  return requirePrivate(trustRoot).material.revocationRegistry.consumeJti(jti);
+}
+
+export function installUnavailableClockOnTrustRoot(trustRoot) {
+  const priv = requirePrivate(trustRoot);
+  withPrivilegedOwnerInstructionConstruction(() => {
+    const ctors = getPrivilegedOwnerInstructionConstructors();
+    const badClock = ctors.createUnavailableOwnerInstructionClock();
+    const verifier = ctors.createOwnerImplementationInstructionVerifier({
+      keyRegistry: priv.material.keyRegistry,
+      revocationRegistry: priv.material.revocationRegistry,
+      clock: badClock,
+      consumeOnAllow: true,
+    });
+    priv.material.clock = badClock;
+    priv.material.ownerInstructionVerifier = verifier;
+  });
+}
+
+/** Drift tip digest/sha inside the private provenance bag for fence tests. */
+export function driftTrustRootTip(trustRoot, { tipSha, tipDigest }) {
+  const priv = requirePrivate(trustRoot);
+  const current = priv.getProvenance();
+  priv.setProvenance(Object.freeze({
+    ...current,
+    tipSha: isNonEmptyString(tipSha) ? tipSha : current.tipSha,
+    tipDigest: isNonEmptyString(tipDigest) ? tipDigest : current.tipDigest,
+  }));
+}
+
+/**
+ * Sealed public factories — untrusted importers cannot brand provenance.
+ */
+export function createCanonicalRule02Source() {
+  throw new TypeError('PUBLIC_CANONICAL_RULE02_SOURCE_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createTestOnlyAttestedCanonicalRule02Source() {
+  throw new TypeError('PUBLIC_CANONICAL_RULE02_SOURCE_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createTrustedTipAttestation() {
+  throw new TypeError('PUBLIC_TIP_ATTESTATION_CONSTRUCTION_FORBIDDEN');
 }
 
 export function isBrandedGateDecision(value) {
@@ -242,11 +417,10 @@ export function isBrandedEvaluationFence(value) {
 }
 
 /**
- * Evaluate effective implementation authorization.
- * Never returns a reusable standing ALLOW token. Each ALLOW is single-use (jti consumed).
+ * Evaluate effective implementation authorization against an opaque trust root.
+ * Caller-supplied sources/verifiers/tips/key registries are rejected.
  */
 export function evaluateEffectiveImplementationAuthorization(input) {
-  // Exclusive serialization for concurrent conflicting attempts.
   const lockToken = Object.create(null);
   if (evaluationLock !== null) {
     return deny(GATE_DECISIONS.DENY_CONFLICTING_AUTHORIZATION, [
@@ -254,9 +428,8 @@ export function evaluateEffectiveImplementationAuthorization(input) {
     ]);
   }
   evaluationLock = lockToken;
-
   try {
-    return evaluateEffectiveImplementationAuthorizationUnlocked(input);
+    return evaluateUnlocked(input);
   } finally {
     if (evaluationLock === lockToken) {
       evaluationLock = null;
@@ -264,12 +437,11 @@ export function evaluateEffectiveImplementationAuthorization(input) {
   }
 }
 
-function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
+function evaluateUnlocked(input) {
   if (!isPlainObject(input)) {
     return deny(GATE_DECISIONS.DENY_MISSING_INPUT, ['INPUT_REQUIRED']);
   }
 
-  // Reject ambient / caller-manufactured authority objects.
   if (Object.prototype.hasOwnProperty.call(input, 'AuthorizedInvocation')
     || Object.prototype.hasOwnProperty.call(input, 'authorizedInvocation')
     || input.callerAuthorizedInvocation != null) {
@@ -278,36 +450,32 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     ]);
   }
 
-  // TEST_ONLY environment constraint — no ambient env authority; explicit flag required.
   if (input.testOnlyEnvironment !== true) {
     return deny(GATE_DECISIONS.DENY_ENVIRONMENT_NOT_TEST_ONLY, [
       'EXPLICIT_TEST_ONLY_ENVIRONMENT_REQUIRED',
     ]);
   }
 
-  if (!isBrandedCanonicalRule02Source(input.canonicalRule02Source)) {
-    return deny(GATE_DECISIONS.DENY_UNTRUSTED_CANONICAL_SOURCE, [
-      'CANONICAL_SOURCE_NOT_BRANDED',
-    ]);
-  }
-  if (!isBrandedOwnerImplementationInstructionVerifier(input.ownerInstructionVerifier)) {
-    return deny(GATE_DECISIONS.DENY_UNBRANDED_VERIFIER, [
-      'OWNER_INSTRUCTION_VERIFIER_NOT_BRANDED',
-    ]);
-  }
-  // P1: reject non-consuming verifiers — no standing ALLOW / replayable jti.
-  if (input.ownerInstructionVerifier.consumeOnAllow !== true) {
-    return deny(GATE_DECISIONS.DENY_NON_CONSUMING_VERIFIER, [
-      'CONSUME_ON_ALLOW_REQUIRED',
-    ]);
-  }
-  if (!isBrandedTrustedTipAttestation(input.tipAttestation)) {
-    return deny(GATE_DECISIONS.DENY_PROVENANCE_UNAVAILABLE, [
-      'TIP_ATTESTATION_NOT_BRANDED',
-    ]);
+  // Reject any attempt to inject trust objects beside the opaque root.
+  const forbiddenTrustKeys = [
+    'canonicalRule02Source',
+    'ownerInstructionVerifier',
+    'tipAttestation',
+    'keyRegistry',
+    'revocationRegistry',
+    'clock',
+    'privateKeyPem',
+    'publicKeyPem',
+    'verificationKey',
+  ];
+  for (const key of forbiddenTrustKeys) {
+    if (Object.prototype.hasOwnProperty.call(input, key) && input[key] != null) {
+      return deny(GATE_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_OBJECTS, [
+        `FORBIDDEN_TRUST_KEY:${key}`,
+      ]);
+    }
   }
 
-  // Fake merged / canonical flags on the input object are ignored and treated as attack.
   if (Object.prototype.hasOwnProperty.call(input, 'merged')
     || Object.prototype.hasOwnProperty.call(input, 'canonical')
     || Object.prototype.hasOwnProperty.call(input, 'branchName')) {
@@ -316,8 +484,20 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     ]);
   }
 
-  const source = input.canonicalRule02Source;
-  const tip = input.tipAttestation;
+  if (!isDisposableEffectiveAuthorizationTrustRoot(input.trustRoot)) {
+    return deny(GATE_DECISIONS.DENY_MISSING_TRUST_ROOT, [
+      'OPAQUE_TRUST_ROOT_REQUIRED',
+    ]);
+  }
+
+  const priv = trustRootPrivate.get(input.trustRoot);
+  const provenance = priv.getProvenance();
+  const { material } = priv;
+  const verifier = material.ownerInstructionVerifier;
+
+  if (verifier.consumeOnAllow !== true) {
+    return deny(GATE_DECISIONS.DENY_NON_CONSUMING_VERIFIER, ['CONSUME_ON_ALLOW_REQUIRED']);
+  }
 
   if (!isNonEmptyString(input.expectedCanonicalSha)
     || !isNonEmptyString(input.expectedRule02DigestSha256)
@@ -331,7 +511,7 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
 
   if (input.repositoryId !== GATE_REPOSITORY_ID
     || input.sliceId !== GATE_SLICE_ID
-    || source.repositoryId !== GATE_REPOSITORY_ID) {
+    || provenance.repositoryId !== GATE_REPOSITORY_ID) {
     return deny(GATE_DECISIONS.DENY_WRONG_REPOSITORY_OR_SLICE);
   }
 
@@ -340,24 +520,24 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     return deny(GATE_DECISIONS.DENY_WRONG_SCOPE_OR_ACTION);
   }
 
-  // Tip / provenance freshness against branded source.
-  if (!safeEqualHex(tip.tipSha, source.canonicalSha)
-    || !safeEqualHex(tip.tipDigest, source.tipDigest)) {
-    return deny(GATE_DECISIONS.DENY_STALE_TIP, ['TIP_DOES_NOT_MATCH_CANONICAL_SOURCE']);
+  // Tip freshness against private provenance (fence tests drift tip AFTER ALLOW).
+  if (!safeEqualHex(provenance.tipSha, provenance.canonicalSha)) {
+    return deny(GATE_DECISIONS.DENY_STALE_TIP, ['TIP_SHA_MISMATCH']);
+  }
+  if (!safeEqualHex(provenance.tipDigest, provenance.rule02DigestSha256)) {
+    return deny(GATE_DECISIONS.DENY_STALE_TIP, ['TIP_DIGEST_MISMATCH']);
   }
 
-  // SHA + digest binding.
-  if (!safeEqualHex(source.canonicalSha, input.expectedCanonicalSha)) {
+  if (!safeEqualHex(provenance.canonicalSha, input.expectedCanonicalSha)) {
     return deny(GATE_DECISIONS.DENY_WRONG_CANONICAL_SHA);
   }
-  if (!safeEqualHex(source.rule02DigestSha256, input.expectedRule02DigestSha256)) {
+  if (!safeEqualHex(provenance.rule02DigestSha256, input.expectedRule02DigestSha256)) {
     return deny(GATE_DECISIONS.DENY_WRONG_RULE02_DIGEST);
   }
 
-  // Parse Rule02 + frozen validator (necessary, not sufficient).
   let parsed;
   try {
-    parsed = parseRule02(source.rule02Text);
+    parsed = parseRule02(provenance.rule02Text);
   } catch (err) {
     const code = err && err.code ? String(err.code) : 'RULE02_PARSE_FAILED';
     return deny(GATE_DECISIONS.DENY_FORGED_RULE02, sanitizeReasons([code]));
@@ -374,7 +554,6 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
   const parsedGovernanceRevision = parsed.authority
     && parsed.authority.governanceRevision;
 
-  // P1: bind parsed active slice to this exact DLP-011 gate slice.
   if (parsedSliceId !== GATE_SLICE_ID || tecpSliceId !== GATE_SLICE_ID) {
     return deny(GATE_DECISIONS.DENY_PARSED_SLICE_MISMATCH, [
       'PARSED_ACTIVE_SLICE_NOT_DLP011',
@@ -383,14 +562,12 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     ]);
   }
 
-  // P1: bind parsed authorized paths to the exact four-path gate scope.
   if (!scopesMatch(facts.authorizedFileScope, GATE_AUTHORIZED_FILE_SCOPE)) {
     return deny(GATE_DECISIONS.DENY_PARSED_SCOPE_MISMATCH, [
       'PARSED_AUTHORIZED_FILE_SCOPE_MISMATCH',
     ]);
   }
 
-  // P1: governance revision must come from parsed Rule02 and match caller binding.
   if (!isNonEmptyString(parsedGovernanceRevision)) {
     return deny(GATE_DECISIONS.DENY_GOVERNANCE_REVISION_MISMATCH, [
       'PARSED_GOVERNANCE_REVISION_MISSING',
@@ -419,7 +596,6 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     return deny(GATE_DECISIONS.DENY_FAIL_CLOSED, ['VALIDATOR_THREW']);
   }
 
-  // Canonical closed / not authorized: validator DENY_NOT_AUTHORIZED → closed taxonomy.
   if (!validatorResult || validatorResult.allowed !== true) {
     const vDecision = (validatorResult && validatorResult.decision) || 'UNKNOWN';
     if (vDecision === 'DENY_NOT_AUTHORIZED') {
@@ -434,15 +610,13 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     ]);
   }
 
-  // Unmerged / non-provenance YES-token: validator ALLOW is NOT sufficient.
-  if (source.mergedProvenance !== true) {
+  if (provenance.mergedProvenance !== true) {
     return deny(GATE_DECISIONS.DENY_UNMERGED_YES_TOKEN, [
       'VALIDATOR_ALLOW_WITHOUT_TRUSTED_MERGED_PROVENANCE',
       `VALIDATOR_${validatorResult.decision}`,
     ]);
   }
 
-  // Owner instruction required.
   if (!isNonEmptyString(input.ownerInstructionEncoded)) {
     return deny(GATE_DECISIONS.DENY_MISSING_OWNER_INSTRUCTION);
   }
@@ -464,10 +638,7 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
 
   let instructionResult;
   try {
-    instructionResult = input.ownerInstructionVerifier.verify(
-      input.ownerInstructionEncoded,
-      expectation,
-    );
+    instructionResult = verifier.verify(input.ownerInstructionEncoded, expectation);
   } catch (err) {
     const msg = err && err.message ? String(err.message) : 'VERIFIER_THREW';
     if (/UNAVAILABLE|CLOCK|REVOCATION/i.test(msg)) {
@@ -501,18 +672,21 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     ]);
   }
 
-  // Fresh provenance fence token — caller must re-check tip before mutation.
+  const tip = Object.freeze({
+    tipSha: provenance.tipSha,
+    tipDigest: provenance.tipDigest,
+  });
+
   const fence = Object.freeze({
     kind: 'TECP_DLP011_EVALUATION_FENCE',
     evaluationId: digestText(
-      `${source.canonicalSha}|${source.rule02DigestSha256}|${instructionResult.instruction.jti}|${Date.now()}`,
+      `${provenance.canonicalSha}|${provenance.rule02DigestSha256}|${instructionResult.instruction.jti}|${Date.now()}`,
     ),
     tipSha: tip.tipSha,
     tipDigest: tip.tipDigest,
-    canonicalSha: source.canonicalSha,
-    rule02DigestSha256: source.rule02DigestSha256,
+    canonicalSha: provenance.canonicalSha,
+    rule02DigestSha256: provenance.rule02DigestSha256,
     jti: instructionResult.instruction.jti,
-    // Not standing authority.
     standingAuthority: false,
   });
   evaluationFenceBrand.add(fence);
@@ -522,14 +696,13 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
     decision: GATE_DECISIONS.ALLOW,
     repositoryId: GATE_REPOSITORY_ID,
     sliceId: GATE_SLICE_ID,
-    canonicalSha: source.canonicalSha,
-    rule02DigestSha256: source.rule02DigestSha256,
+    canonicalSha: provenance.canonicalSha,
+    rule02DigestSha256: provenance.rule02DigestSha256,
     authorizedFileScope: GATE_AUTHORIZED_FILE_SCOPE,
     operationClass: GATE_OPERATION_CLASS,
     governanceRevision: parsedGovernanceRevision,
     jti: instructionResult.instruction.jti,
     fence,
-    // Explicit non-standing.
     standingAuthority: false,
     reusable: false,
     cryptographicAuthentication: false,
@@ -551,20 +724,20 @@ function evaluateEffectiveImplementationAuthorizationUnlocked(input) {
 }
 
 /**
- * Mutation-fence recheck: tip must still match the evaluation fence.
- * A prior ALLOW does NOT authorize mutation if tip drifted.
+ * Mutation-fence recheck against the trust root's current tip.
  */
-export function assertMutationFenceFresh(fence, currentTipAttestation) {
+export function assertMutationFenceFresh(fence, trustRoot) {
   if (!isBrandedEvaluationFence(fence)) {
     return deny(GATE_DECISIONS.DENY_TIP_DRIFT, ['FENCE_NOT_BRANDED']);
   }
-  if (!isBrandedTrustedTipAttestation(currentTipAttestation)) {
+  if (!isDisposableEffectiveAuthorizationTrustRoot(trustRoot)) {
     return deny(GATE_DECISIONS.DENY_PROVENANCE_UNAVAILABLE, [
-      'CURRENT_TIP_NOT_BRANDED',
+      'TRUST_ROOT_REQUIRED_FOR_FENCE',
     ]);
   }
-  if (!safeEqualHex(fence.tipSha, currentTipAttestation.tipSha)
-    || !safeEqualHex(fence.tipDigest, currentTipAttestation.tipDigest)) {
+  const provenance = trustRootPrivate.get(trustRoot).getProvenance();
+  if (!safeEqualHex(fence.tipSha, provenance.tipSha)
+    || !safeEqualHex(fence.tipDigest, provenance.tipDigest)) {
     return deny(GATE_DECISIONS.DENY_TIP_DRIFT, ['TIP_CHANGED_SINCE_EVALUATION']);
   }
   const ok = Object.freeze({
@@ -582,10 +755,6 @@ export function assertMutationFenceFresh(fence, currentTipAttestation) {
   return ok;
 }
 
-/**
- * TEST_ONLY contention hooks — prove concurrent conflicting attempts DENY.
- * Not operational API surface.
- */
 export const __testOnlyEvaluationLockHooks = Object.freeze({
   hold() {
     if (evaluationLock !== null) return false;
@@ -599,7 +768,6 @@ export const __testOnlyEvaluationLockHooks = Object.freeze({
 });
 
 export {
-  createOwnerImplementationInstructionVerifier,
   SOURCE_KINDS,
   digestText as gateDigestText,
 };

@@ -1,9 +1,12 @@
 /**
  * TECP-DLP-011 — Owner Implementation Instruction (TEST_ONLY / NON_OPERATIONAL).
  *
- * External signed Owner-instruction artifact for the additive merge-effectiveness gate.
- * Process-local brands are NOT cryptographic OS/Owner identity. Real Owner key custody
- * is NOT implemented. Disposable proof only.
+ * Cryptographic issue/verify primitives for Owner implementation instructions.
+ * Branding factories are module-private and reachable only through the sealed
+ * disposable trust-root injector in effectiveImplementationAuthorizationGate.js.
+ *
+ * Process-local brands are NOT cryptographic OS/Owner identity.
+ * Real Owner key custody is NOT implemented.
  */
 
 import {
@@ -56,10 +59,7 @@ export const OWNER_INSTRUCTION_DECISIONS = Object.freeze({
   DENY_CALLER_SUPPLIED_VERIFICATION_MATERIAL: 'DENY_CALLER_SUPPLIED_VERIFICATION_MATERIAL',
 });
 
-/** Maximum instruction lifetime (5 minutes). */
 export const MAX_OWNER_INSTRUCTION_TTL_MS = 5 * 60 * 1000;
-
-/** Hard upper bound on encoded instruction characters. */
 export const MAX_OWNER_INSTRUCTION_CHARS = 32 * 1024;
 
 const CLAIM_KEY_ORDER = Object.freeze([
@@ -88,6 +88,31 @@ const keyRegistryBrand = new WeakSet();
 const revocationBrand = new WeakSet();
 const clockBrand = new WeakSet();
 const verifiedInstructionBrand = new WeakSet();
+
+/** Sealed construction latch — only the gate trust-root injector may open it. */
+let privilegedConstructionDepth = 0;
+
+function assertPrivilegedConstruction() {
+  if (privilegedConstructionDepth <= 0) {
+    throw new TypeError('PRIVILEGED_OWNER_INSTRUCTION_CONSTRUCTION_REQUIRED');
+  }
+}
+
+/**
+ * Run `fn` with privileged branding factories enabled.
+ * Invoked only by the disposable trust-root injector (same-process privilege).
+ */
+export function withPrivilegedOwnerInstructionConstruction(fn) {
+  if (typeof fn !== 'function') {
+    throw new TypeError('CONSTRUCTION_CALLBACK_REQUIRED');
+  }
+  privilegedConstructionDepth += 1;
+  try {
+    return fn();
+  } finally {
+    privilegedConstructionDepth -= 1;
+  }
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -156,9 +181,6 @@ function signingPayload(claims) {
   return `${OWNER_INSTRUCTION_DOMAIN}\n${canonicalJson(orderedClaims(claims))}`;
 }
 
-/**
- * Generate ephemeral Ed25519 Owner-instruction key material for offline tests only.
- */
 export function generateEphemeralOwnerInstructionKeyPair() {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   return Object.freeze({
@@ -168,7 +190,8 @@ export function generateEphemeralOwnerInstructionKeyPair() {
   });
 }
 
-export function createOwnerInstructionKeyRegistry(entries = []) {
+function createOwnerInstructionKeyRegistryInternal(entries = []) {
+  assertPrivilegedConstruction();
   const byKid = new Map();
   for (const entry of entries) {
     if (!isPlainObject(entry) || !isNonEmptyString(entry.kid) || !isNonEmptyString(entry.issuer)
@@ -196,11 +219,8 @@ export function createOwnerInstructionKeyRegistry(entries = []) {
   return registry;
 }
 
-export function isBrandedOwnerInstructionKeyRegistry(value) {
-  return keyRegistryBrand.has(value);
-}
-
-export function createOwnerInstructionRevocationRegistry() {
+function createOwnerInstructionRevocationRegistryInternal() {
+  assertPrivilegedConstruction();
   const revoked = new Set();
   const consumed = new Set();
   const registry = Object.freeze({
@@ -226,11 +246,8 @@ export function createOwnerInstructionRevocationRegistry() {
   return registry;
 }
 
-export function isBrandedOwnerInstructionRevocationRegistry(value) {
-  return revocationBrand.has(value);
-}
-
-export function createOwnerInstructionClock(startMs = 1_700_000_000_000) {
+function createOwnerInstructionClockInternal(startMs = 1_700_000_000_000) {
+  assertPrivilegedConstruction();
   let now = startMs;
   const clock = Object.freeze({
     kind: 'TECP_DLP011_OWNER_INSTRUCTION_CLOCK',
@@ -248,12 +265,8 @@ export function createOwnerInstructionClock(startMs = 1_700_000_000_000) {
   return clock;
 }
 
-export function isBrandedOwnerInstructionClock(value) {
-  return clockBrand.has(value);
-}
-
-/** Branded clock that always fails closed (dependency unavailable). */
-export function createUnavailableOwnerInstructionClock() {
+function createUnavailableOwnerInstructionClockInternal() {
+  assertPrivilegedConstruction();
   const clock = Object.freeze({
     kind: 'TECP_DLP011_OWNER_INSTRUCTION_CLOCK',
     now() { throw new Error('CLOCK_UNAVAILABLE'); },
@@ -264,28 +277,92 @@ export function createUnavailableOwnerInstructionClock() {
   return clock;
 }
 
-/** Branded revocation registry that always fails closed. */
-export function createUnavailableOwnerInstructionRevocationRegistry() {
-  const registry = Object.freeze({
-    kind: 'TECP_DLP011_OWNER_INSTRUCTION_REVOCATION_REGISTRY',
-    revokeJti() { throw new Error('REVOCATION_UNAVAILABLE'); },
-    isRevoked() { throw new Error('REVOCATION_UNAVAILABLE'); },
-    consumeJti() { throw new Error('REVOCATION_UNAVAILABLE'); },
-    isConsumed() { throw new Error('REVOCATION_UNAVAILABLE'); },
+function createOwnerImplementationInstructionVerifierInternal(deps) {
+  assertPrivilegedConstruction();
+  if (!isPlainObject(deps)
+    || !keyRegistryBrand.has(deps.keyRegistry)
+    || !revocationBrand.has(deps.revocationRegistry)
+    || !clockBrand.has(deps.clock)) {
+    throw new TypeError('TRUSTED_OWNER_INSTRUCTION_VERIFIER_DEPS_REQUIRED');
+  }
+  const consumeOnAllow = deps.consumeOnAllow === true;
+  const verifier = Object.freeze({
+    kind: 'TECP_DLP011_OWNER_INSTRUCTION_VERIFIER',
+    testOnly: true,
+    consumeOnAllow,
+    verify(encodedInstruction, expectation) {
+      return verifyOwnerImplementationInstruction(encodedInstruction, expectation, {
+        keyRegistry: deps.keyRegistry,
+        revocationRegistry: deps.revocationRegistry,
+        clock: deps.clock,
+        consumeOnAllow,
+      });
+    },
   });
-  revocationBrand.add(registry);
-  return registry;
+  verifierBrand.add(verifier);
+  return verifier;
 }
 
 /**
- * Issue a signed Owner implementation instruction (TEST_ONLY harness).
+ * Privileged construction kit — only usable while withPrivilegedOwnerInstructionConstruction is open.
  */
+export function getPrivilegedOwnerInstructionConstructors() {
+  assertPrivilegedConstruction();
+  return Object.freeze({
+    createOwnerInstructionKeyRegistry: createOwnerInstructionKeyRegistryInternal,
+    createOwnerInstructionRevocationRegistry: createOwnerInstructionRevocationRegistryInternal,
+    createOwnerInstructionClock: createOwnerInstructionClockInternal,
+    createUnavailableOwnerInstructionClock: createUnavailableOwnerInstructionClockInternal,
+    createOwnerImplementationInstructionVerifier: createOwnerImplementationInstructionVerifierInternal,
+  });
+}
+
+/** Public stubs — untrusted importers cannot brand trust material. */
+export function createOwnerInstructionKeyRegistry() {
+  throw new TypeError('PUBLIC_OWNER_INSTRUCTION_KEY_REGISTRY_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createOwnerInstructionRevocationRegistry() {
+  throw new TypeError('PUBLIC_OWNER_INSTRUCTION_REVOCATION_REGISTRY_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createOwnerInstructionClock() {
+  throw new TypeError('PUBLIC_OWNER_INSTRUCTION_CLOCK_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createUnavailableOwnerInstructionClock() {
+  throw new TypeError('PUBLIC_OWNER_INSTRUCTION_CLOCK_CONSTRUCTION_FORBIDDEN');
+}
+
+export function createOwnerImplementationInstructionVerifier() {
+  throw new TypeError('PUBLIC_OWNER_INSTRUCTION_VERIFIER_CONSTRUCTION_FORBIDDEN');
+}
+
+export function isBrandedOwnerInstructionKeyRegistry(value) {
+  return keyRegistryBrand.has(value);
+}
+
+export function isBrandedOwnerInstructionRevocationRegistry(value) {
+  return revocationBrand.has(value);
+}
+
+export function isBrandedOwnerInstructionClock(value) {
+  return clockBrand.has(value);
+}
+
+export function isBrandedOwnerImplementationInstructionVerifier(value) {
+  return verifierBrand.has(value);
+}
+
+export function isBrandedVerifiedOwnerInstruction(value) {
+  return verifiedInstructionBrand.has(value);
+}
+
 export function issueOwnerImplementationInstruction(request, deps) {
   if (!isPlainObject(request) || !isPlainObject(deps)) {
     return deny(OWNER_INSTRUCTION_DECISIONS.DENY_MALFORMED, ['REQUEST_OR_DEPS_REQUIRED']);
   }
-  if (!isBrandedOwnerInstructionKeyRegistry(deps.keyRegistry)
-    || !isBrandedOwnerInstructionClock(deps.clock)) {
+  if (!keyRegistryBrand.has(deps.keyRegistry) || !clockBrand.has(deps.clock)) {
     return deny(OWNER_INSTRUCTION_DECISIONS.DENY_MISSING_DEPS, ['TRUSTED_DEPS_REQUIRED']);
   }
   const scope = stableScope(request.authorizedFileScope);
@@ -379,60 +456,18 @@ export function issueOwnerImplementationInstruction(request, deps) {
       encoded,
       claims: Object.freeze({ ...claims, authorizedFileScope: scope }),
     }),
-    // Never return private key material.
     operational: false,
     purpose: OWNER_INSTRUCTION_PURPOSE,
   });
 }
 
-/**
- * Create a branded Owner-instruction verifier. Callers cannot forge branding via JSON.
- */
-export function createOwnerImplementationInstructionVerifier(deps) {
-  if (!isPlainObject(deps)
-    || !isBrandedOwnerInstructionKeyRegistry(deps.keyRegistry)
-    || !isBrandedOwnerInstructionRevocationRegistry(deps.revocationRegistry)
-    || !isBrandedOwnerInstructionClock(deps.clock)) {
-    throw new TypeError('TRUSTED_OWNER_INSTRUCTION_VERIFIER_DEPS_REQUIRED');
-  }
-  const consumeOnAllow = deps.consumeOnAllow === true;
-  const verifier = Object.freeze({
-    kind: 'TECP_DLP011_OWNER_INSTRUCTION_VERIFIER',
-    testOnly: true,
-    /** Observable contract flag — gate MUST require true (no standing ALLOW). */
-    consumeOnAllow,
-    verify(encodedInstruction, expectation) {
-      return verifyOwnerImplementationInstruction(encodedInstruction, expectation, {
-        keyRegistry: deps.keyRegistry,
-        revocationRegistry: deps.revocationRegistry,
-        clock: deps.clock,
-        consumeOnAllow,
-      });
-    },
-  });
-  verifierBrand.add(verifier);
-  return verifier;
-}
-
-export function isBrandedOwnerImplementationInstructionVerifier(value) {
-  return verifierBrand.has(value);
-}
-
-export function isBrandedVerifiedOwnerInstruction(value) {
-  return verifiedInstructionBrand.has(value);
-}
-
-/**
- * Verify an encoded Owner instruction against an expectation built by the gate.
- */
 export function verifyOwnerImplementationInstruction(encodedInstruction, expectation, deps) {
   if (!isPlainObject(deps)
-    || !isBrandedOwnerInstructionKeyRegistry(deps.keyRegistry)
-    || !isBrandedOwnerInstructionRevocationRegistry(deps.revocationRegistry)
-    || !isBrandedOwnerInstructionClock(deps.clock)) {
+    || !keyRegistryBrand.has(deps.keyRegistry)
+    || !revocationBrand.has(deps.revocationRegistry)
+    || !clockBrand.has(deps.clock)) {
     return deny(OWNER_INSTRUCTION_DECISIONS.DENY_MISSING_DEPS, ['TRUSTED_DEPS_REQUIRED']);
   }
-  // Reject caller-supplied verification material smuggled beside deps.
   if (Object.prototype.hasOwnProperty.call(deps, 'publicKeyPem')
     || Object.prototype.hasOwnProperty.call(deps, 'privateKeyPem')
     || Object.prototype.hasOwnProperty.call(deps, 'verificationKey')) {
@@ -517,7 +552,6 @@ export function verifyOwnerImplementationInstruction(encodedInstruction, expecta
     return deny(OWNER_INSTRUCTION_DECISIONS.DENY_EXCESSIVE_TTL);
   }
 
-  // Expectation binding
   if (claims.repositoryId !== expectation.repositoryId) {
     return deny(OWNER_INSTRUCTION_DECISIONS.DENY_WRONG_REPOSITORY);
   }
@@ -638,7 +672,6 @@ export function verifyOwnerImplementationInstruction(encodedInstruction, expecta
     exp: claims.exp,
     workerId: claims.workerId || null,
     taskId: claims.taskId || null,
-    // Explicit: not standing authority.
     standingAuthority: false,
   });
   verifiedInstructionBrand.add(instruction);
