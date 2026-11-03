@@ -15,12 +15,20 @@
  * - Production R1 / C24 real deadlock = NOT_PROVEN
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, createConnection } from 'node:net';
 import { spawn } from 'node:child_process';
-import { unlinkSync, existsSync, chmodSync, createReadStream } from 'node:fs';
+import {
+  unlinkSync,
+  chmodSync,
+  createReadStream,
+  lstatSync,
+  realpathSync,
+  readFileSync,
+  fstatSync,
+} from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep, isAbsolute, basename } from 'node:path';
 import pg from 'pg';
 
 import {
@@ -76,6 +84,9 @@ export const SIDECAR_DECISIONS = Object.freeze({
   ...IPC_DECISIONS,
 });
 
+export const IPC_OWNERSHIP_MARKER = '.tecp-dlp010-sidecar-harness';
+export const IPC_OWNERSHIP_MAGIC = 'TECP-DLP-010-DISPOSABLE';
+const SOCKET_MODE = 0o600;
 const WORKER_FLAG = '--tecp-dlp010-sidecar-worker';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
@@ -117,6 +128,142 @@ function redactError() {
   return denyResult(SIDECAR_DECISIONS.DENY_OPERATION, ['FAIL_CLOSED_SANITIZED']);
 }
 
+function ownershipError(code) {
+  const err = new Error(`BLOCKED: DLP010_${code}`);
+  err.code = code;
+  return err;
+}
+
+/**
+ * Prove that candidatePath is a non-escaping absolute path under an owned
+ * harness root that contains the disposable ownership marker.
+ * Uses lstat/realpath and refuses symlinked roots or path escapes.
+ */
+export function assertOwnedIpcPath(ownedRoot, candidatePath) {
+  if (!isNonEmptyString(ownedRoot) || !isAbsolute(ownedRoot)) {
+    throw ownershipError('IPC_OWNED_ROOT_INVALID');
+  }
+  if (!isNonEmptyString(candidatePath) || !isAbsolute(candidatePath)) {
+    throw ownershipError('IPC_SOCKET_PATH_INVALID');
+  }
+  let rootStat;
+  try {
+    rootStat = lstatSync(ownedRoot);
+  } catch {
+    throw ownershipError('IPC_OWNED_ROOT_MISSING');
+  }
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw ownershipError('IPC_OWNED_ROOT_NOT_DIRECTORY');
+  }
+  let rootReal;
+  try {
+    rootReal = realpathSync(ownedRoot);
+  } catch {
+    throw ownershipError('IPC_OWNED_ROOT_REALPATH_FAILED');
+  }
+  const markerPath = join(rootReal, IPC_OWNERSHIP_MARKER);
+  let markerStat;
+  try {
+    markerStat = lstatSync(markerPath);
+  } catch {
+    throw ownershipError('IPC_OWNERSHIP_MARKER_MISSING');
+  }
+  if (!markerStat.isFile() || markerStat.isSymbolicLink()) {
+    throw ownershipError('IPC_OWNERSHIP_MARKER_INVALID');
+  }
+  const magic = readFileSync(markerPath, 'utf8');
+  if (!magic.startsWith(IPC_OWNERSHIP_MAGIC)) {
+    throw ownershipError('IPC_OWNERSHIP_MARKER_MAGIC_MISMATCH');
+  }
+  const base = basename(candidatePath);
+  if (!base || base === '.' || base === '..' || base.includes('\0') || base.includes(sep)) {
+    throw ownershipError('IPC_SOCKET_BASENAME_INVALID');
+  }
+  let parentReal;
+  try {
+    parentReal = realpathSync(dirname(candidatePath));
+  } catch {
+    throw ownershipError('IPC_SOCKET_PARENT_MISSING');
+  }
+  if (parentReal !== rootReal) {
+    throw ownershipError('IPC_SOCKET_OUTSIDE_OWNED_ROOT');
+  }
+  return Object.freeze({
+    ownedRootReal: rootReal,
+    socketPath: join(rootReal, base),
+    markerPath,
+  });
+}
+
+/**
+ * Remove a path only when it is a non-symlink Unix socket under the verified
+ * owned root and owned by the current uid. Unexpected types/symlinks fail closed.
+ */
+export function safeUnlinkOwnedSocket(ownedRoot, candidatePath) {
+  const owned = assertOwnedIpcPath(ownedRoot, candidatePath);
+  let st;
+  try {
+    st = lstatSync(owned.socketPath);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return Object.freeze({ removed: false, reason: 'ABSENT' });
+    }
+    throw ownershipError('IPC_SOCKET_LSTAT_FAILED');
+  }
+  if (st.isSymbolicLink()) {
+    throw ownershipError('IPC_SOCKET_IS_SYMLINK');
+  }
+  if (!st.isSocket()) {
+    throw ownershipError('IPC_PATH_NOT_SOCKET');
+  }
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
+    throw ownershipError('IPC_SOCKET_UID_MISMATCH');
+  }
+  // Re-lstat immediately before unlink; require stable inode identity.
+  const st2 = lstatSync(owned.socketPath);
+  if (st2.isSymbolicLink() || !st2.isSocket()
+    || (typeof process.getuid === 'function' && st2.uid !== process.getuid())
+    || st2.ino !== st.ino || st2.dev !== st.dev) {
+    throw ownershipError('IPC_SOCKET_RACE_OR_TYPE_CHANGE');
+  }
+  unlinkSync(owned.socketPath);
+  return Object.freeze({ removed: true, reason: 'OWNED_SOCKET_REMOVED' });
+}
+
+/**
+ * Verify socket mode/owner after listen. Fail closed if not exclusive to uid.
+ */
+export function assertSocketPermissions(socketPath, expectedUid = process.getuid?.()) {
+  let st;
+  try {
+    st = lstatSync(socketPath);
+  } catch {
+    throw ownershipError('IPC_SOCKET_MISSING_AFTER_LISTEN');
+  }
+  if (st.isSymbolicLink()) {
+    throw ownershipError('IPC_SOCKET_BECAME_SYMLINK');
+  }
+  if (!st.isSocket()) {
+    throw ownershipError('IPC_PATH_NOT_SOCKET_AFTER_LISTEN');
+  }
+  if (expectedUid != null && st.uid !== expectedUid) {
+    throw ownershipError('IPC_SOCKET_UID_MISMATCH_AFTER_LISTEN');
+  }
+  const mode = st.mode & 0o777;
+  if (mode !== SOCKET_MODE) {
+    throw ownershipError('IPC_SOCKET_MODE_NOT_0600');
+  }
+  return Object.freeze({ mode, uid: st.uid });
+}
+
+function tokensEqual(a, b) {
+  if (!isNonEmptyString(a) || !isNonEmptyString(b)) return false;
+  const ba = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Child worker                                                               */
 /* -------------------------------------------------------------------------- */
@@ -156,6 +303,46 @@ async function runSidecarWorker() {
     const run = writerChain.then(fn, fn);
     writerChain = run.then(() => undefined, () => undefined);
     return run;
+  }
+
+  async function shutdownWorker(exitCode = 0) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      for (const sock of sockets) {
+        try { sock.destroy(); } catch { /* ignore */ }
+      }
+      sockets.clear();
+      if (server) {
+        await new Promise((resolve) => server.close(() => resolve()));
+        server = null;
+      }
+      try {
+        if (cfg.ipcOwnedRoot && cfg.ipcSocketPath) {
+          safeUnlinkOwnedSocket(cfg.ipcOwnedRoot, cfg.ipcSocketPath);
+        }
+      } catch { /* best-effort owned unlink */ }
+      await safeEndClient(writerClient);
+      writerClient = null;
+      gateway = null;
+    } finally {
+      process.exit(exitCode);
+    }
+  }
+
+  // Keepalive fd3 must be bound BEFORE privileged PG connect / READY.
+  try {
+    const st = fstatSync(3);
+    if (!st.isFIFO() && !st.isSocket()) {
+      throw new Error('KEEPALIVE_FD_NOT_PIPE');
+    }
+    const keepalive = createReadStream(null, { fd: 3, autoClose: true });
+    keepalive.on('end', () => { void shutdownWorker(0); });
+    keepalive.on('error', () => { void shutdownWorker(0); });
+    keepalive.resume();
+  } catch {
+    process.stderr.write('DLP010_SIDECAR_KEEPALIVE_REQUIRED\n');
+    process.exit(4);
   }
 
   const verifier = createTestOnlyAttestationVerifier();
@@ -324,6 +511,12 @@ async function runSidecarWorker() {
       }));
     }
     if (op === IPC_OPS.SHUTDOWN) {
+      if (!tokensEqual(body.shutdownToken, cfg.shutdownToken)) {
+        return buildIpcResponse(requestId, denyResult(
+          IPC_DECISIONS.DENY_UNAUTHENTICATED_SHUTDOWN,
+          ['SHUTDOWN_TOKEN_MISMATCH'],
+        ));
+      }
       // Respond first; actual exit scheduled after write.
       setImmediate(() => {
         void shutdownWorker();
@@ -378,36 +571,37 @@ async function runSidecarWorker() {
     return buildIpcResponse(requestId, denyResult(IPC_DECISIONS.DENY_UNKNOWN_OP));
   }
 
-  async function shutdownWorker() {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    try {
-      for (const sock of sockets) {
-        try { sock.destroy(); } catch { /* ignore */ }
-      }
-      sockets.clear();
-      if (server) {
-        await new Promise((resolve) => server.close(() => resolve()));
-        server = null;
-      }
-      try {
-        if (cfg.ipcSocketPath && existsSync(cfg.ipcSocketPath)) {
-          unlinkSync(cfg.ipcSocketPath);
-        }
-      } catch { /* ignore */ }
-      await safeEndClient(writerClient);
-      writerClient = null;
-      gateway = null;
-    } finally {
-      process.exit(0);
-    }
+  try {
+    const ownedSocket = assertOwnedIpcPath(cfg.ipcOwnedRoot, cfg.ipcSocketPath);
+    cfg.ipcSocketPath = ownedSocket.socketPath;
+    // Stale owned socket only; symlinks / non-sockets throw and abort startup.
+    safeUnlinkOwnedSocket(cfg.ipcOwnedRoot, cfg.ipcSocketPath);
+  } catch {
+    process.stderr.write('DLP010_SIDECAR_SOCKET_OWNERSHIP_FAILED\n');
+    await safeEndClient(writerClient);
+    process.exit(5);
   }
 
+  // Create the server without a connection listener first so no peer can be
+  // accepted until mode 0600 is proven. Bind under a restrictive umask.
+  server = createServer();
+  const previousUmask = process.umask(0o177);
   try {
-    if (existsSync(cfg.ipcSocketPath)) unlinkSync(cfg.ipcSocketPath);
-  } catch { /* ignore */ }
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(cfg.ipcSocketPath, () => resolve());
+    });
+    chmodSync(cfg.ipcSocketPath, SOCKET_MODE);
+    assertSocketPermissions(cfg.ipcSocketPath);
+  } catch {
+    process.umask(previousUmask);
+    process.stderr.write('DLP010_SIDECAR_SOCKET_PERMISSION_FAILED\n');
+    await shutdownWorker(6);
+    return;
+  }
+  process.umask(previousUmask);
 
-  server = createServer((socket) => {
+  function attachIpcSocket(socket) {
     sockets.add(socket);
     try {
       socket.setNoDelay?.(true);
@@ -447,31 +641,15 @@ async function runSidecarWorker() {
     socket.on('error', () => {
       sockets.delete(socket);
     });
-  });
+  }
 
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(cfg.ipcSocketPath, () => {
-      try { chmodSync(cfg.ipcSocketPath, 0o600); } catch { /* ignore */ }
-      resolve();
-    });
-  });
-
-  process.stdout.write('DLP010_SIDECAR_READY\n');
+  // Arm connection handling only after exclusive 0600 mode is proven.
+  server.on('connection', attachIpcSocket);
 
   process.on('SIGTERM', () => { void shutdownWorker(); });
   process.on('SIGINT', () => { void shutdownWorker(); });
 
-  // Keepalive pipe (fd 3): if the parent exits, the pipe closes and we shut down
-  // the privileged writer rather than retaining SCRAM credentials orphaned.
-  try {
-    const keepalive = createReadStream(null, { fd: 3, autoClose: true });
-    keepalive.on('end', () => { void shutdownWorker(); });
-    keepalive.on('error', () => { void shutdownWorker(); });
-    keepalive.resume();
-  } catch {
-    // If fd 3 is unavailable, continue; parent still has explicit shutdown/SIGKILL path.
-  }
+  process.stdout.write('DLP010_SIDECAR_READY\n');
 }
 
 function validateBootstrap(bootstrap) {
@@ -480,7 +658,10 @@ function validateBootstrap(bootstrap) {
     || bootstrap.protocolVersion !== IPC_PROTOCOL_VERSION
     || !isPlainObject(bootstrap.pg)
     || !isPlainObject(bootstrap.trust)
-    || !isNonEmptyString(bootstrap.ipcSocketPath)) {
+    || !isNonEmptyString(bootstrap.ipcSocketPath)
+    || !isNonEmptyString(bootstrap.ipcOwnedRoot)
+    || !isNonEmptyString(bootstrap.shutdownToken)
+    || bootstrap.shutdownToken.length < 32) {
     return { ok: false };
   }
   const pgCfg = bootstrap.pg;
@@ -522,10 +703,17 @@ function validateBootstrap(bootstrap) {
       return { ok: false };
     }
   }
+  try {
+    assertOwnedIpcPath(bootstrap.ipcOwnedRoot, bootstrap.ipcSocketPath);
+  } catch {
+    return { ok: false };
+  }
   return {
     ok: true,
     config: {
       ipcSocketPath: bootstrap.ipcSocketPath,
+      ipcOwnedRoot: bootstrap.ipcOwnedRoot,
+      shutdownToken: bootstrap.shutdownToken,
       pg: {
         host: pgCfg.host,
         port: pgCfg.port,
@@ -613,7 +801,8 @@ export async function spawnLocalWriterSidecar(options) {
   if (!isPlainObject(options)
     || !isPlainObject(options.pg)
     || !isPlainObject(options.trust)
-    || !isNonEmptyString(options.ipcSocketPath)) {
+    || !isNonEmptyString(options.ipcSocketPath)
+    || !isNonEmptyString(options.ipcOwnedRoot)) {
     throw new TypeError('spawnLocalWriterSidecar: invalid options');
   }
   if (!isNonEmptyString(options.pg.password)) {
@@ -625,16 +814,20 @@ export async function spawnLocalWriterSidecar(options) {
 
   const modulePath = options.modulePath || join(HERE, 'localWriterSidecar.js');
   const requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
-  const ipcSocketPath = options.ipcSocketPath;
+  const owned = assertOwnedIpcPath(options.ipcOwnedRoot, options.ipcSocketPath);
+  const ipcSocketPath = owned.socketPath;
+  const ipcOwnedRoot = owned.ownedRootReal;
+  const shutdownToken = randomBytes(32).toString('hex');
 
-  if (existsSync(ipcSocketPath)) {
-    try { unlinkSync(ipcSocketPath); } catch { /* ignore */ }
-  }
+  // Only remove a verified owned stale socket; never unlink arbitrary/symlink paths.
+  safeUnlinkOwnedSocket(ipcOwnedRoot, ipcSocketPath);
 
   const bootstrap = {
     kind: SIDECAR_KIND,
     protocolVersion: IPC_PROTOCOL_VERSION,
     ipcSocketPath,
+    ipcOwnedRoot,
+    shutdownToken,
     pg: {
       host: options.pg.host,
       port: options.pg.port,
@@ -671,6 +864,11 @@ export async function spawnLocalWriterSidecar(options) {
     detached: false,
   });
 
+  if (!child.stdio || !child.stdio[3]) {
+    try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    throw new Error('DLP010_SIDECAR_KEEPALIVE_FD_MISSING');
+  }
+
   let stderrBuf = '';
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', (chunk) => {
@@ -680,17 +878,36 @@ export async function spawnLocalWriterSidecar(options) {
 
   child.stdin.write(JSON.stringify(bootstrap));
   child.stdin.end();
-  // Drop bootstrap password from parent heap ASAP.
+  // Drop bootstrap password / shutdown token copies from parent bootstrap object.
   bootstrap.pg.password = null;
 
-  await waitForReady(child, 20_000);
+  try {
+    await waitForReady(child, 20_000);
+  } catch (err) {
+    try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    try { safeUnlinkOwnedSocket(ipcOwnedRoot, ipcSocketPath); } catch { /* ignore */ }
+    throw err;
+  }
+
+  // Prove restrictive socket mode before handing out a caller handle.
+  try {
+    assertSocketPermissions(ipcSocketPath);
+  } catch (err) {
+    try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    try { safeUnlinkOwnedSocket(ipcOwnedRoot, ipcSocketPath); } catch { /* ignore */ }
+    throw err;
+  }
 
   const session = createParentSession({
     ipcSocketPath,
+    ipcOwnedRoot,
     child,
     requestTimeoutMs,
     keepaliveFd: child.stdio[3],
+    shutdownToken,
   });
+  // Clear local token binding after capture into session closure.
+  // (session holds the only parent copy used for authenticated SHUTDOWN.)
 
   // Prove HELLO before returning handle.
   const hello = await session.request(IPC_OPS.HELLO, {});
@@ -699,7 +916,7 @@ export async function spawnLocalWriterSidecar(options) {
     throw new Error('DLP010_SIDECAR_HELLO_FAILED');
   }
 
-  return Object.freeze({
+  const handle = {
     kind: SIDECAR_KIND,
     architecture: SIDECAR_ARCHITECTURE,
     governanceRevision: APPROVED_GOVERNANCE_REVISION,
@@ -709,6 +926,7 @@ export async function spawnLocalWriterSidecar(options) {
     productionSealed: false,
     pid: child.pid,
     ipcSocketPath,
+    ipcOwnedRoot,
     /** @returns {Promise<object>} */
     bind: (body) => session.request(IPC_OPS.BIND, body),
     /** @returns {Promise<object>} */
@@ -718,8 +936,24 @@ export async function spawnLocalWriterSidecar(options) {
     /** @returns {Promise<object>} */
     shutdown: () => session.shutdown(),
     getChildExitCode: () => child.exitCode,
-    // Explicit non-exports: no password, no writerClient, no trust private material.
-  });
+  };
+  if (options.enableTestHooks === true) {
+    handle.testHooks = Object.freeze({
+      /** TEST_ONLY: simulate abrupt parent death by closing keepalive fd3. */
+      endKeepalive: () => {
+        const fd = child.stdio[3];
+        if (fd && typeof fd.end === 'function') fd.end();
+        else if (fd && typeof fd.destroy === 'function') fd.destroy();
+      },
+      /** TEST_ONLY: raw SHUTDOWN without the parent session token helper. */
+      rawShutdownAttempt: (token) => session.request(
+        IPC_OPS.SHUTDOWN,
+        { shutdownToken: token },
+        { allowDuringShutdown: true },
+      ),
+    });
+  }
+  return Object.freeze(handle);
 }
 
 function waitForReady(child, timeoutMs) {
@@ -761,13 +995,21 @@ function waitForReady(child, timeoutMs) {
   });
 }
 
-function createParentSession({ ipcSocketPath, child, requestTimeoutMs, keepaliveFd = null }) {
+function createParentSession({
+  ipcSocketPath,
+  ipcOwnedRoot,
+  child,
+  requestTimeoutMs,
+  keepaliveFd = null,
+  shutdownToken,
+}) {
   let socket = null;
   let reader = createIpcFrameReader();
   let chain = Promise.resolve();
   const pending = new Map();
   let closed = false;
   let shutdownSent = false;
+  const parentShutdownToken = shutdownToken;
 
   function ensureConnected() {
     if (socket && !socket.destroyed) return Promise.resolve({ ok: true });
@@ -870,8 +1112,12 @@ function createParentSession({ ipcSocketPath, child, requestTimeoutMs, keepalive
       if (child.exitCode == null && !shutdownSent) {
         shutdownSent = true;
         try {
-          // Send SHUTDOWN while still accepting this privileged control request.
-          await request(IPC_OPS.SHUTDOWN, {}, { allowDuringShutdown: true });
+          // Authenticated SHUTDOWN — unauthenticated callers cannot supply this token.
+          await request(
+            IPC_OPS.SHUTDOWN,
+            { shutdownToken: parentShutdownToken },
+            { allowDuringShutdown: true },
+          );
         } catch { /* fall through to keepalive close / kill */ }
         await waitForChildExit(child, 5000);
       }
@@ -893,8 +1139,10 @@ function createParentSession({ ipcSocketPath, child, requestTimeoutMs, keepalive
         socket = null;
       }
       try {
-        if (existsSync(ipcSocketPath)) unlinkSync(ipcSocketPath);
-      } catch { /* ignore */ }
+        if (ipcOwnedRoot && ipcSocketPath) {
+          safeUnlinkOwnedSocket(ipcOwnedRoot, ipcSocketPath);
+        }
+      } catch { /* ignore after best-effort owned unlink */ }
     }
     return Object.freeze({
       ok: true,
@@ -930,6 +1178,11 @@ export const SIDECAR_PUBLIC_API = Object.freeze([
   'SIDECAR_ARCHITECTURE',
   'APPROVED_GOVERNANCE_REVISION',
   'SIDECAR_DECISIONS',
+  'IPC_OWNERSHIP_MARKER',
+  'IPC_OWNERSHIP_MAGIC',
+  'assertOwnedIpcPath',
+  'safeUnlinkOwnedSocket',
+  'assertSocketPermissions',
   'spawnLocalWriterSidecar',
   'SIDECAR_PUBLIC_API',
 ]);

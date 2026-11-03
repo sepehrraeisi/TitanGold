@@ -9,9 +9,17 @@
  */
 
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createConnection } from 'node:net';
-import { existsSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+  mkdirSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
@@ -31,6 +39,9 @@ import {
 import {
   SIDECAR_ARCHITECTURE,
   SIDECAR_KIND,
+  assertOwnedIpcPath,
+  safeUnlinkOwnedSocket,
+  assertSocketPermissions,
   spawnLocalWriterSidecar,
 } from '../src/localWriterSidecar.js';
 import {
@@ -128,6 +139,15 @@ test('protocol: versioned schemas reject unknown ops, forbidden fields, oversize
   const over = reader.push(huge);
   assert.ok(over.error);
   assert.equal(over.error.decision, IPC_DECISIONS.DENY_OVERSIZED_FRAME);
+
+  const shutdownMissing = validateIpcRequest(buildIpcRequest(IPC_OPS.SHUTDOWN, randomUUID(), {}));
+  assert.equal(shutdownMissing.ok, false);
+  assert.equal(shutdownMissing.decision, IPC_DECISIONS.DENY_UNAUTHENTICATED_SHUTDOWN);
+
+  const shutdownOkShape = validateIpcRequest(buildIpcRequest(IPC_OPS.SHUTDOWN, randomUUID(), {
+    shutdownToken: randomBytes(32).toString('hex'),
+  }));
+  assert.equal(shutdownOkShape.ok, true);
 });
 
 test('isolation: sidecar is a separate process; PG unix-only SCRAM; no ambient DATABASE_URL', async () => {
@@ -147,6 +167,10 @@ test('isolation: sidecar is a separate process; PG unix-only SCRAM; no ambient D
   const ping = await sidecar.ping();
   assert.equal(ping.ok, true);
   assert.equal(ping.pid, sidecar.pid);
+  // Socket permissions verified before READY / handle return.
+  const perms = assertSocketPermissions(sidecar.ipcSocketPath);
+  assert.equal(perms.mode, 0o600);
+  assert.equal(perms.uid, process.getuid());
 });
 
 test('positive: valid capability bind + release through sidecar; restricted caller 42501', async () => {
@@ -467,6 +491,162 @@ test('crash/cleanup: sidecar crash does not permissive-fallback; shutdown remove
     idempotency: bindIdem('recover-1'),
   });
   assert.equal(bindOut.ok, true, `recover bind: ${bindOut.decision}`);
+});
+
+test('security: owned-path unlink refuses symlinks and foreign files', () => {
+  const root = proof.ipcOwnedRoot;
+  const sockPath = join(root, `deny-${randomUUID()}.sock`);
+  assertOwnedIpcPath(root, sockPath);
+
+  const filePath = join(root, `not-a-socket-${randomUUID()}`);
+  writeFileSync(filePath, 'nope', { mode: 0o600 });
+  assert.throws(
+    () => safeUnlinkOwnedSocket(root, filePath),
+    /IPC_PATH_NOT_SOCKET|BLOCKED: DLP010_IPC_PATH_NOT_SOCKET/,
+  );
+
+  const linkPath = join(root, `symlink-${randomUUID()}.sock`);
+  const target = join(root, `symlink-target-${randomUUID()}`);
+  writeFileSync(target, 'x', { mode: 0o600 });
+  symlinkSync(target, linkPath);
+  assert.throws(
+    () => safeUnlinkOwnedSocket(root, linkPath),
+    /IPC_SOCKET_IS_SYMLINK|BLOCKED: DLP010_IPC_SOCKET_IS_SYMLINK/,
+  );
+
+  // Outside owned root fails closed.
+  const outside = join('/tmp', `tecp-dlp010-foreign-${randomUUID()}.sock`);
+  assert.throws(() => assertOwnedIpcPath(root, outside), /OUTSIDE_OWNED_ROOT|BLOCKED/);
+});
+
+test('security: unauthenticated SHUTDOWN DENY; process remains alive', async () => {
+  await proof.spawnSidecar({
+    operations: [proof.bootstrapOperation('task-shut', 'res-shut')],
+    operationContracts: {
+      'bootstrap-bind': proof.bindContract('lease-shut'),
+      'lease-release': proof.releaseContract('claim-lease-shut'),
+    },
+  });
+  const sidecar = proof.getSidecar();
+  assert.ok(sidecar.testHooks);
+
+  const missing = await sidecar.testHooks.rawShutdownAttempt('');
+  assertDeny(missing, 'empty shutdown token');
+  assert.equal(
+    missing.decision === IPC_DECISIONS.DENY_UNAUTHENTICATED_SHUTDOWN
+      || missing.decision === IPC_DECISIONS.DENY_MALFORMED_MESSAGE
+      || String(missing.decision).includes('UNAUTHENTICATED'),
+    true,
+    `unexpected decision ${missing.decision}`,
+  );
+
+  const wrong = await sidecar.testHooks.rawShutdownAttempt(randomBytes(32).toString('hex'));
+  assertDeny(wrong, 'wrong shutdown token');
+  assert.equal(wrong.decision, IPC_DECISIONS.DENY_UNAUTHENTICATED_SHUTDOWN);
+
+  // Sidecar must still be alive after unauthorized attempts.
+  const ping = await sidecar.ping();
+  assert.equal(ping.ok, true);
+  assert.equal(sidecar.getChildExitCode(), null);
+});
+
+test('security: parent keepalive close terminates privileged child', async () => {
+  await proof.spawnSidecar({
+    operations: [proof.bootstrapOperation('task-keep', 'res-keep')],
+    operationContracts: {
+      'bootstrap-bind': proof.bindContract('lease-keep'),
+      'lease-release': proof.releaseContract('claim-lease-keep'),
+    },
+  });
+  const sidecar = proof.getSidecar();
+  const pid = sidecar.pid;
+  const sock = sidecar.ipcSocketPath;
+  assert.ok(existsSync(sock));
+  sidecar.testHooks.endKeepalive();
+
+  let exited = false;
+  for (let i = 0; i < 50; i += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      exited = true;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(exited, true, 'child must exit after keepalive close');
+  // Parent shutdown should still complete cleanup of owned socket path.
+  const shutdown = await sidecar.shutdown();
+  assert.equal(shutdown.ok, true);
+  assert.equal(existsSync(sock), false);
+});
+
+test('security: missing keepalive fd3 fails closed before READY', async () => {
+  const modulePath = join(here, '../src/localWriterSidecar.js');
+  const root = proof.ipcOwnedRoot;
+  const sockPath = join(root, `nokeep-${randomUUID()}.sock`);
+  const bootstrap = {
+    kind: SIDECAR_KIND,
+    protocolVersion: IPC_PROTOCOL_VERSION,
+    ipcSocketPath: sockPath,
+    ipcOwnedRoot: root,
+    shutdownToken: randomBytes(32).toString('hex'),
+    pg: {
+      host: '/tmp',
+      port: 1,
+      user: 'dlp_authz_composition_proof',
+      database: 'dlp_proof',
+      password: randomBytes(16).toString('hex'),
+    },
+    trust: {
+      audience: 'tecp-dlp010-proof',
+      issuer: 'tecp-dlp010-issuer',
+      kid: 'kid-dlp010',
+      publicKeyPem: proof.publicKeyPem,
+      acceptedAttestations: [{
+        attestationKind: 'TEST_ONLY',
+        bootstrapIssuer: 'test-bootstrap-issuer-dlp010',
+        principalId: proof.principalId,
+        principalGeneration: 1,
+        attestedAt: 1_700_000_000_000,
+      }],
+      operations: [proof.bootstrapOperation('task-nokeep', 'res-nokeep')],
+      operationContracts: {
+        'bootstrap-bind': proof.bindContract('lease-nokeep'),
+        'lease-release': proof.releaseContract('claim-lease-nokeep'),
+      },
+      clockStartMs: 1_700_000_000_000,
+      revocationGeneration: 0,
+      revokedJtis: [],
+    },
+  };
+  const child = spawn(process.execPath, [modulePath, '--tecp-dlp010-sidecar-worker'], {
+    // fd3 = /dev/null (not a pipe) — must fail closed at keepalive gate before PG/READY.
+    stdio: ['pipe', 'pipe', 'pipe', 'ignore'],
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      LANG: process.env.LANG,
+      NODE_OPTIONS: '',
+    },
+  });
+  child.stdin.write(JSON.stringify(bootstrap));
+  child.stdin.end();
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (c) => { stdout += c; });
+  child.stderr.on('data', (c) => { stderr += c; });
+  const code = await new Promise((resolve) => {
+    child.on('exit', (c) => resolve(c));
+    setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    }, 5000);
+  });
+  assert.equal(stdout.includes('DLP010_SIDECAR_READY'), false);
+  assert.match(stderr, /DLP010_SIDECAR_KEEPALIVE_REQUIRED/);
+  assert.equal(code, 4);
 });
 
 test('source: no private keys or password literals committed; Option C markers present', () => {

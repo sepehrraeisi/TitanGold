@@ -41,7 +41,12 @@ import {
   verifyWorkerPrincipal,
 } from '../../tecp/src/workerIdentity.js';
 import { OPERATION_PHASES } from '../src/authenticatedTaskClaimLeaseAuditAdapter.js';
-import { spawnLocalWriterSidecar, SIDECAR_KIND } from '../src/localWriterSidecar.js';
+import {
+  spawnLocalWriterSidecar,
+  SIDECAR_KIND,
+  IPC_OWNERSHIP_MARKER,
+  IPC_OWNERSHIP_MAGIC,
+} from '../src/localWriterSidecar.js';
 import { createDisposablePgHarness } from './disposablePgHarness.js';
 import {
   assertFullLocalScramHba,
@@ -56,7 +61,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const PROOF_DATABASE = 'dlp_proof';
 const AUDIENCE = 'tecp-dlp010-proof';
 const RESOURCE_TYPE = 'task_worktree';
-const HARNESS_MARKER = '.tecp-dlp010-sidecar-harness';
+const HARNESS_MARKER = IPC_OWNERSHIP_MARKER;
 
 const SCHEMA_FILES = Object.freeze([
   'disposableTaskClaimLeaseSchema.sql',
@@ -204,7 +209,7 @@ export async function createDisposableLocalWriterSidecarProof(options = {}) {
   const ownedPaths = new Set();
   const ipcRoot = join(tmpdir(), `tecp-dlp010-${process.pid}-${randomBytes(6).toString('hex')}`);
   mkdirSync(ipcRoot, { recursive: true, mode: 0o700 });
-  writeFileSync(join(ipcRoot, HARNESS_MARKER), 'TECP-DLP-010-DISPOSABLE', { flag: 'wx', mode: 0o600 });
+  writeFileSync(join(ipcRoot, HARNESS_MARKER), IPC_OWNERSHIP_MAGIC, { flag: 'wx', mode: 0o600 });
   ownedPaths.add(ipcRoot);
 
   const keys = options.keys || generateEphemeralEd25519KeyPair();
@@ -391,6 +396,8 @@ export async function createDisposableLocalWriterSidecarProof(options = {}) {
 
     sidecar = await spawnLocalWriterSidecar({
       ipcSocketPath,
+      ipcOwnedRoot: ipcRoot,
+      enableTestHooks: true,
       pg: {
         host: harness.socketDir,
         port: harness.socketPort,
@@ -540,6 +547,7 @@ export async function createDisposableLocalWriterSidecarProof(options = {}) {
       // and must never be sent to the sidecar. Tests may use issue* helpers instead.
       dlp006GovernanceRevision: DLP006_REV,
       isolation: Object.freeze({ unixOnly: true, tcpRejected: true, scramCutover: true }),
+      ipcOwnedRoot: ipcRoot,
       sidecarPid: () => (sidecar ? sidecar.pid : null),
       getSidecar: () => sidecar,
       spawnSidecar,

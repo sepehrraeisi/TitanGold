@@ -48,12 +48,16 @@ export const IPC_DECISIONS = Object.freeze({
   DENY_FORBIDDEN_FIELD: 'DENY_FORBIDDEN_FIELD',
   DENY_REPLAY: 'DENY_REPLAY',
   DENY_UNAUTHENTICATED_WRITE: 'DENY_UNAUTHENTICATED_WRITE',
+  DENY_UNAUTHENTICATED_SHUTDOWN: 'DENY_UNAUTHENTICATED_SHUTDOWN',
   DENY_PRIVILEGED_OBJECT: 'DENY_PRIVILEGED_OBJECT',
   DENY_SERIALIZED_INVOCATION: 'DENY_SERIALIZED_INVOCATION',
   DENY_TIMEOUT: 'DENY_TIMEOUT',
   DENY_DISCONNECT: 'DENY_DISCONNECT',
   DENY_SIDECAR_UNAVAILABLE: 'DENY_SIDECAR_UNAVAILABLE',
   DENY_OPERATION: 'DENY_OPERATION',
+  DENY_SOCKET_OWNERSHIP: 'DENY_SOCKET_OWNERSHIP',
+  DENY_SOCKET_PERMISSIONS: 'DENY_SOCKET_PERMISSIONS',
+  DENY_KEEPALIVE_REQUIRED: 'DENY_KEEPALIVE_REQUIRED',
 });
 
 /** Fields that must never appear on an untrusted IPC request body. */
@@ -93,6 +97,10 @@ const BIND_RELEASE_BODY_FIELDS = Object.freeze([
   'capabilityToken',
   'operationKey',
   'idempotency',
+]);
+
+const SHUTDOWN_BODY_FIELDS = Object.freeze([
+  'shutdownToken',
 ]);
 
 function isPlainObject(value) {
@@ -280,8 +288,17 @@ export function validateIpcRequest(message) {
     if (message.body.idempotency !== undefined && !isPlainObject(message.body.idempotency)) {
       return deny(IPC_DECISIONS.DENY_MALFORMED_MESSAGE, ['IDEMPOTENCY_NOT_OBJECT']);
     }
-  } else if (message.op === IPC_OPS.HELLO || message.op === IPC_OPS.PING
-    || message.op === IPC_OPS.SHUTDOWN) {
+  } else if (message.op === IPC_OPS.SHUTDOWN) {
+    for (const key of Object.keys(message.body)) {
+      if (!SHUTDOWN_BODY_FIELDS.includes(key)) {
+        return deny(IPC_DECISIONS.DENY_FORBIDDEN_FIELD, [`UNKNOWN_BODY_FIELD:${key}`]);
+      }
+    }
+    // Presence-shaped only here; authentic token match is enforced inside the sidecar.
+    if (!isNonEmptyString(message.body.shutdownToken) || message.body.shutdownToken.length < 32) {
+      return deny(IPC_DECISIONS.DENY_UNAUTHENTICATED_SHUTDOWN, ['SHUTDOWN_TOKEN_REQUIRED']);
+    }
+  } else if (message.op === IPC_OPS.HELLO || message.op === IPC_OPS.PING) {
     if (Object.keys(message.body).length > 0) {
       return deny(IPC_DECISIONS.DENY_FORBIDDEN_FIELD, ['EMPTY_BODY_REQUIRED']);
     }
