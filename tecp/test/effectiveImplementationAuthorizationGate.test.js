@@ -21,17 +21,21 @@ import {
   createTestOnlyAttestedCanonicalRule02Source,
   createTrustedTipAttestation,
   evaluateEffectiveImplementationAuthorization,
+  getTrustRootPublicView,
   isBrandedGateDecision,
+  isTrustInstallerCapability,
+  issueOwnerInstructionFromTrustRoot,
+  replaceTrustRootProvenance,
+  revokeTrustRootJti,
 } from '../src/effectiveImplementationAuthorizationGate.js';
 import {
-  OWNER_INSTRUCTION_DECISIONS,
-  OWNER_INSTRUCTION_DOMAIN,
   createOwnerImplementationInstructionVerifier,
   createOwnerInstructionClock,
   createOwnerInstructionKeyRegistry,
   createOwnerInstructionRevocationRegistry,
+  getPrivilegedOwnerInstructionConstructors,
+  withPrivilegedOwnerInstructionConstruction,
 } from '../src/ownerImplementationInstruction.js';
-import { canonicalJson } from '../src/workerCapabilityToken.js';
 import {
   CANONICAL_MAIN_SHA_PIN,
   DEFAULT_GOVERNANCE_REVISION,
@@ -200,6 +204,104 @@ test('TB-07 end-to-end public-factory attack cannot ALLOW', () => {
     ownerInstructionEncoded: 'dead.beef',
   });
   assertDeny(result, GATE_DECISIONS.DENY_MISSING_TRUST_ROOT);
+});
+
+test('A1 same-process public trust-root self-install → ALLOW (installer residual, NOT sealed)', () => {
+  // Decisive reproduction: ordinary importer uses public installer APIs.
+  // This ALLOW is OUTSIDE the proven untrusted-request boundary (Disposition A).
+  const rule02Text = loadWorkspaceRule02Text();
+  const installed = createDisposableEffectiveAuthorizationTrustRoot({
+    privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
+    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+    disposableRule02Override: rule02Text,
+    mergedProvenance: true,
+    activationPr: '#266',
+  });
+  assert.equal(isTrustInstallerCapability(installed.installerCapability), true);
+  const view = getTrustRootPublicView(installed.trustRoot);
+  const issued = issueOwnerInstructionFromTrustRoot(installed.installerCapability, {
+    jti: 'self-install-allow',
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+  });
+  assert.equal(issued.ok, true);
+  const result = evaluateEffectiveImplementationAuthorization({
+    testOnlyEnvironment: true,
+    trustRoot: installed.trustRoot,
+    expectedCanonicalSha: view.canonicalSha,
+    expectedRule02DigestSha256: view.rule02DigestSha256,
+    repositoryId: GATE_REPOSITORY_ID,
+    sliceId: GATE_SLICE_ID,
+    operationClass: GATE_OPERATION_CLASS,
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
+    ownerInstructionEncoded: issued.instruction.encoded,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.decision, GATE_DECISIONS.ALLOW);
+  assert.equal(result.operational, false);
+  assert.equal(installed.trustRoot.sameProcessTrustInstallerResidual, true);
+});
+
+test('A2 public construction latch opens branding but cannot satisfy evaluate alone', () => {
+  let brandedRegistry = null;
+  withPrivilegedOwnerInstructionConstruction(() => {
+    const ctors = getPrivilegedOwnerInstructionConstructors();
+    brandedRegistry = ctors.createOwnerInstructionKeyRegistry([]);
+  });
+  assert.ok(brandedRegistry);
+  // Latch-minted registry cannot be injected into evaluate.
+  const h = createDisposableMergeEffectivenessHarness();
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    instructionOverrides: { jti: 'latch-inject' },
+    keyRegistry: brandedRegistry,
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_OBJECTS);
+});
+
+test('A3 opaque trustRoot alone cannot issue / mutate / revoke (installerCapability required)', () => {
+  const h = createDisposableMergeEffectivenessHarness();
+  const rootOnly = h.trustRoot;
+  assert.throws(
+    () => issueOwnerInstructionFromTrustRoot(rootOnly, {
+      governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+      jti: 'handle-only-issue',
+    }),
+    /TRUST_INSTALLER_CAPABILITY_REQUIRED/,
+  );
+  assert.throws(
+    () => replaceTrustRootProvenance(rootOnly, {
+      privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
+      rule02Text: synthesizeClosedRule02Text(),
+      mergedProvenance: true,
+      activationPr: '#266',
+    }),
+    /TRUST_INSTALLER_CAPABILITY_REQUIRED/,
+  );
+  assert.throws(
+    () => revokeTrustRootJti(rootOnly, 'any-jti'),
+    /TRUST_INSTALLER_CAPABILITY_REQUIRED/,
+  );
+  // Read/evaluate still work with root alone.
+  const view = getTrustRootPublicView(rootOnly);
+  assert.equal(typeof view.rule02DigestSha256, 'string');
+  const issued = h.issueExactSliceInstruction({ jti: 'root-only-eval' });
+  const allow = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    ownerInstructionEncoded: issued.instruction.encoded,
+  }));
+  assert.equal(allow.ok, true);
+  // Fence recheck uses trustRoot (unprivileged).
+  const fenceOk = assertMutationFenceFresh(allow.authorization.fence, rootOnly);
+  assert.equal(fenceOk.ok, true);
+});
+
+test('A4 forged installerCapability cannot bind to a foreign trustRoot', () => {
+  assert.throws(
+    () => issueOwnerInstructionFromTrustRoot({
+      kind: 'TECP_DLP011_TRUST_INSTALLER_CAPABILITY',
+      testOnly: true,
+    }, { governanceRevision: DEFAULT_GOVERNANCE_REVISION, jti: 'forged-cap' }),
+    /TRUST_INSTALLER_CAPABILITY_REQUIRED/,
+  );
 });
 
 test('01 canonical closed Rule02 → DENY_CANONICAL_CLOSED', () => {

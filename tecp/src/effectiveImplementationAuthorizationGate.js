@@ -2,19 +2,21 @@
  * TECP-DLP-011 — Effective Implementation Authorization Gate
  * (TEST_ONLY / NON_OPERATIONAL / OPTION A additive).
  *
- * Trust model (post PR #267 trust-boundary remediation):
- * - Public component factories are sealed (throw). A boolean flag is NOT provenance.
- * - Only `createDisposableEffectiveAuthorizationTrustRoot` may mint trust material.
- *   That API owns the Owner keypair + verifier + Rule02 provenance tip internally.
- * - `evaluateEffectiveImplementationAuthorization` accepts an opaque trustRoot handle
- *   and rejects caller-supplied branded sources/verifiers/tips/key registries.
- * - Same-process code that can call the trust-root constructor is the disposable
- *   trust installer. This does NOT seal same-UID / same-process compromise.
+ * ACCEPTANCE DISPOSITION A — disposable limited proof:
+ * - Proven only against a preinstalled privileged TEST_ONLY trust root.
+ * - Untrusted *request* objects cannot replace that root or inject verification keys.
+ * - Frozen validateGovernance() ALLOW is necessary but NEVER sufficient.
+ * - Same-process callers of createDisposableEffectiveAuthorizationTrustRoot are the
+ *   trust installer and are OUTSIDE the proven adversarial boundary.
+ * - DISPOSABLE_TRUST_INJECTION_TOKEN is an explicit acknowledgment string, NOT a
+ *   cryptographic or process-isolation security boundary.
+ * - Opaque trustRoot alone is evaluation/read-only; privileged mutate/issue APIs
+ *   require a separate installerCapability minted with the root.
  *
- * Frozen validateGovernance() is necessary but NEVER sufficient.
- *
- * NON-CLAIMS: see file header residuals — no live GitHub, no real Owner custody,
- * no MCP/Worker wiring, WeakSet ≠ crypto auth, production R1 unproven.
+ * NOT PROVEN / NOT CLAIMED:
+ * - Resistance to arbitrary same-process importers that can call the trust installer.
+ * - Live GitHub provenance, real Owner key custody, OS Worker identity.
+ * - MCP/persistence in-path enforcement, same-UID isolation, production R1/C24.
  */
 
 import { createHash } from 'node:crypto';
@@ -92,6 +94,9 @@ const DEFAULT_ISSUER = 'tecp-dlp011-test-owner-issuer';
 const DEFAULT_KID = 'dlp011-test-owner-ed25519-1';
 
 const trustRootPrivate = new WeakMap();
+/** installerCapability object → trustRoot */
+const installerCapabilityToRoot = new WeakMap();
+const installerCapabilityBrand = new WeakSet();
 const gateDecisionBrand = new WeakSet();
 const evaluationFenceBrand = new WeakSet();
 
@@ -172,13 +177,15 @@ function buildProvenanceState({
 }
 
 /**
- * Privileged disposable trust-root injector.
+ * Privileged disposable trust-root injector (TRUST INSTALLER API).
  *
- * Owns Owner key material and Rule02 provenance privately (WeakMap).
- * Callers cannot pass an external key registry or branded tip into evaluate.
+ * Returns { trustRoot, installerCapability }:
+ * - trustRoot: opaque evaluation/read handle (safe for evaluate / fence / public view).
+ * - installerCapability: required for issue/mutate/revoke/clock/tip APIs.
  *
- * RESIDUAL: any same-process caller that can invoke this function is the
- * disposable trust installer. Same-UID/process isolation is NOT sealed.
+ * RESIDUAL (Option A): any same-process caller that can invoke this function is a
+ * disposable trust installer and can self-approve TEST_ONLY ALLOW. That class is
+ * outside the proven untrusted-request boundary. Same-UID isolation is NOT sealed.
  */
 export function createDisposableEffectiveAuthorizationTrustRoot(config = {}) {
   if (!isPlainObject(config)) {
@@ -265,6 +272,15 @@ export function createDisposableEffectiveAuthorizationTrustRoot(config = {}) {
     cryptographicAuthentication: false,
     sameProcessTrustInstallerResidual: true,
     productionTrustEstablished: false,
+    /** Evaluation/read handle only — not sufficient for issue/mutate APIs. */
+    handleClass: 'EVALUATION_READ',
+  });
+
+  const installerCapability = Object.freeze({
+    kind: 'TECP_DLP011_TRUST_INSTALLER_CAPABILITY',
+    testOnly: true,
+    cryptographicAuthentication: false,
+    handleClass: 'PRIVILEGED_INSTALLER',
   });
 
   trustRootPrivate.set(root, {
@@ -272,12 +288,21 @@ export function createDisposableEffectiveAuthorizationTrustRoot(config = {}) {
     getProvenance() { return provenance; },
     setProvenance(next) { provenance = next; },
   });
+  installerCapabilityBrand.add(installerCapability);
+  installerCapabilityToRoot.set(installerCapability, root);
 
-  return root;
+  return Object.freeze({
+    trustRoot: root,
+    installerCapability,
+  });
 }
 
 export function isDisposableEffectiveAuthorizationTrustRoot(value) {
   return trustRootPrivate.has(value);
+}
+
+export function isTrustInstallerCapability(value) {
+  return installerCapabilityBrand.has(value);
 }
 
 function requirePrivate(root) {
@@ -288,12 +313,22 @@ function requirePrivate(root) {
   return priv;
 }
 
+function requireInstaller(installerCapability) {
+  if (!installerCapabilityBrand.has(installerCapability)) {
+    throw new TypeError('TRUST_INSTALLER_CAPABILITY_REQUIRED');
+  }
+  const root = installerCapabilityToRoot.get(installerCapability);
+  if (!root || !trustRootPrivate.has(root)) {
+    throw new TypeError('INSTALLER_CAPABILITY_UNBOUND');
+  }
+  return { root, priv: trustRootPrivate.get(root) };
+}
+
 /**
- * Issue an Owner instruction bound to the trust root's current provenance.
- * Signing keys never leave the private bag as callable public factories.
+ * Privileged: issue Owner instruction. Requires installerCapability (not trustRoot alone).
  */
-export function issueOwnerInstructionFromTrustRoot(trustRoot, overrides = {}) {
-  const priv = requirePrivate(trustRoot);
+export function issueOwnerInstructionFromTrustRoot(installerCapability, overrides = {}) {
+  const { priv } = requireInstaller(installerCapability);
   const provenance = priv.getProvenance();
   const { material } = priv;
   return issueOwnerImplementationInstruction({
@@ -309,18 +344,16 @@ export function issueOwnerInstructionFromTrustRoot(trustRoot, overrides = {}) {
     kid: material.kid,
     ttlMs: 60_000,
     ...overrides,
-    // Force binding to current provenance (ignore caller SHA/digest spoof in overrides unless explicit replaceProvenance).
     canonicalSha: overrides.canonicalSha || provenance.canonicalSha,
     rule02DigestSha256: overrides.rule02DigestSha256 || provenance.rule02DigestSha256,
   }, { keyRegistry: material.keyRegistry, clock: material.clock });
 }
 
 /**
- * Privileged scenario switch for disposable adversarial tests.
- * Replaces Rule02 text / merged flag inside an existing trust root only.
+ * Privileged: replace Rule02 provenance. Requires installerCapability.
  */
-export function replaceTrustRootProvenance(trustRoot, spec) {
-  const priv = requirePrivate(trustRoot);
+export function replaceTrustRootProvenance(installerCapability, spec) {
+  const { priv } = requireInstaller(installerCapability);
   if (!isPlainObject(spec) || !isNonEmptyString(spec.rule02Text)) {
     throw new TypeError('PROVENANCE_SPEC_REQUIRED');
   }
@@ -340,6 +373,7 @@ export function replaceTrustRootProvenance(trustRoot, spec) {
   return next;
 }
 
+/** Unprivileged read: public view of a trust root (no private key). */
 export function getTrustRootPublicView(trustRoot) {
   const priv = requirePrivate(trustRoot);
   const provenance = priv.getProvenance();
@@ -350,24 +384,27 @@ export function getTrustRootPublicView(trustRoot) {
     tipSha: provenance.tipSha,
     tipDigest: provenance.tipDigest,
     publicKeyPem: priv.material.keys.publicKeyPem,
-    // Never expose privateKeyPem here.
   });
 }
 
-export function advanceTrustRootClock(trustRoot, ms) {
-  requirePrivate(trustRoot).material.clock.advance(ms);
+/** Privileged: advance clock. */
+export function advanceTrustRootClock(installerCapability, ms) {
+  requireInstaller(installerCapability).priv.material.clock.advance(ms);
 }
 
-export function revokeTrustRootJti(trustRoot, jti) {
-  requirePrivate(trustRoot).material.revocationRegistry.revokeJti(jti);
+/** Privileged: revoke jti. */
+export function revokeTrustRootJti(installerCapability, jti) {
+  requireInstaller(installerCapability).priv.material.revocationRegistry.revokeJti(jti);
 }
 
-export function consumeTrustRootJti(trustRoot, jti) {
-  return requirePrivate(trustRoot).material.revocationRegistry.consumeJti(jti);
+/** Privileged: consume jti. */
+export function consumeTrustRootJti(installerCapability, jti) {
+  return requireInstaller(installerCapability).priv.material.revocationRegistry.consumeJti(jti);
 }
 
-export function installUnavailableClockOnTrustRoot(trustRoot) {
-  const priv = requirePrivate(trustRoot);
+/** Privileged: install unavailable clock (fail-closed test helper). */
+export function installUnavailableClockOnTrustRoot(installerCapability) {
+  const { priv } = requireInstaller(installerCapability);
   withPrivilegedOwnerInstructionConstruction(() => {
     const ctors = getPrivilegedOwnerInstructionConstructors();
     const badClock = ctors.createUnavailableOwnerInstructionClock();
@@ -382,9 +419,9 @@ export function installUnavailableClockOnTrustRoot(trustRoot) {
   });
 }
 
-/** Drift tip digest/sha inside the private provenance bag for fence tests. */
-export function driftTrustRootTip(trustRoot, { tipSha, tipDigest }) {
-  const priv = requirePrivate(trustRoot);
+/** Privileged: drift tip for fence tests. */
+export function driftTrustRootTip(installerCapability, { tipSha, tipDigest }) {
+  const { priv } = requireInstaller(installerCapability);
   const current = priv.getProvenance();
   priv.setProvenance(Object.freeze({
     ...current,

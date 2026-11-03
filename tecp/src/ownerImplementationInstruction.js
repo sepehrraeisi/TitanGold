@@ -2,11 +2,12 @@
  * TECP-DLP-011 — Owner Implementation Instruction (TEST_ONLY / NON_OPERATIONAL).
  *
  * Cryptographic issue/verify primitives for Owner implementation instructions.
- * Branding factories are module-private and reachable only through the sealed
- * disposable trust-root injector in effectiveImplementationAuthorizationGate.js.
+ * Branding factories are reachable only while withPrivilegedOwnerInstructionConstruction
+ * is open (used by the disposable trust-root injector). Public construction stubs throw.
  *
+ * withPrivilegedOwnerInstructionConstruction is an installer-class latch, NOT a
+ * process-isolation boundary. Real Owner key custody is NOT implemented.
  * Process-local brands are NOT cryptographic OS/Owner identity.
- * Real Owner key custody is NOT implemented.
  */
 
 import {

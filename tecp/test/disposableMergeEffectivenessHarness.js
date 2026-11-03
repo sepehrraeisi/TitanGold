@@ -1,10 +1,9 @@
 /**
  * TECP-DLP-011 disposable merge-effectiveness harness (TEST_ONLY / NON_OPERATIONAL).
  *
- * Constructs opaque trust roots via the privileged injector only.
- * Does NOT establish production trust, live GitHub provenance, or real Owner custody.
- * Same-process callers of createDisposableEffectiveAuthorizationTrustRoot are the
- * disposable trust installer residual (NOT sealed).
+ * Acts as the privileged trust installer for disposable proof scenarios.
+ * Option A residual: same-process callers of createDisposableEffectiveAuthorizationTrustRoot
+ * are outside the proven untrusted-request adversarial boundary.
  */
 
 import { readFileSync } from 'node:fs';
@@ -78,15 +77,12 @@ export function digestRule02(text) {
   return createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
-/**
- * Build a disposable harness around an opaque trust root.
- */
 export function createDisposableMergeEffectivenessHarness(options = {}) {
   const mergedRule02Text = options.mergedRule02Text || loadWorkspaceRule02Text();
   const canonicalSha = options.canonicalSha || CANONICAL_MAIN_SHA_PIN;
   const mergedProvenance = options.mergedProvenance !== false;
 
-  const trustRoot = createDisposableEffectiveAuthorizationTrustRoot({
+  const { trustRoot, installerCapability } = createDisposableEffectiveAuthorizationTrustRoot({
     privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
     canonicalSha,
     disposableRule02Override: mergedRule02Text,
@@ -100,7 +96,7 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
   }
 
   function issueExactSliceInstruction(overrides = {}) {
-    return issueOwnerInstructionFromTrustRoot(trustRoot, {
+    return issueOwnerInstructionFromTrustRoot(installerCapability, {
       governanceRevision: DEFAULT_GOVERNANCE_REVISION,
       ...overrides,
     });
@@ -160,7 +156,7 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
 
   function useClosedProvenance() {
     const text = synthesizeClosedRule02Text();
-    return replaceTrustRootProvenance(trustRoot, {
+    return replaceTrustRootProvenance(installerCapability, {
       privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
       rule02Text: text,
       mergedProvenance: true,
@@ -170,7 +166,7 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
 
   function useUnmergedYesProvenance() {
     const text = synthesizeUnmergedYesTokenRule02Text();
-    return replaceTrustRootProvenance(trustRoot, {
+    return replaceTrustRootProvenance(installerCapability, {
       privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
       rule02Text: text,
       mergedProvenance: false,
@@ -179,7 +175,7 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
 
   function useForgedRule02Provenance() {
     const text = '# not a valid rule02\n**FAKE = true**\n';
-    return replaceTrustRootProvenance(trustRoot, {
+    return replaceTrustRootProvenance(installerCapability, {
       privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
       rule02Text: text,
       mergedProvenance: true,
@@ -194,7 +190,9 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
     liveGithubProvenance: false,
     realOwnerKeyCustody: false,
     sameProcessTrustInstallerResidual: true,
+    acceptanceDisposition: 'A_DISPOSABLE_LIMITED',
     trustRoot,
+    installerCapability,
     view,
     get mergedDigest() { return view().rule02DigestSha256; },
     get canonicalSha() { return view().canonicalSha; },
@@ -206,12 +204,12 @@ export function createDisposableMergeEffectivenessHarness(options = {}) {
     useClosedProvenance,
     useUnmergedYesProvenance,
     useForgedRule02Provenance,
-    advanceClock: (ms) => advanceTrustRootClock(trustRoot, ms),
-    revokeJti: (jti) => revokeTrustRootJti(trustRoot, jti),
-    consumeJti: (jti) => consumeTrustRootJti(trustRoot, jti),
-    driftTip: (spec) => driftTrustRootTip(trustRoot, spec),
-    installUnavailableClock: () => installUnavailableClockOnTrustRoot(trustRoot),
-    replaceProvenance: (spec) => replaceTrustRootProvenance(trustRoot, {
+    advanceClock: (ms) => advanceTrustRootClock(installerCapability, ms),
+    revokeJti: (jti) => revokeTrustRootJti(installerCapability, jti),
+    consumeJti: (jti) => consumeTrustRootJti(installerCapability, jti),
+    driftTip: (spec) => driftTrustRootTip(installerCapability, spec),
+    installUnavailableClock: () => installUnavailableClockOnTrustRoot(installerCapability),
+    replaceProvenance: (spec) => replaceTrustRootProvenance(installerCapability, {
       privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
       ...spec,
     }),
