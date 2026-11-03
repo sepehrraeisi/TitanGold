@@ -36,13 +36,23 @@ import {
   getPrivilegedOwnerInstructionConstructors,
   withPrivilegedOwnerInstructionConstruction,
 } from '../src/ownerImplementationInstruction.js';
+import { parseRule02 } from '../src/rule02Parser.js';
+import { validateGovernance } from '../src/governanceValidator.js';
 import {
   CANONICAL_MAIN_SHA_PIN,
   DEFAULT_GOVERNANCE_REVISION,
+  HISTORICAL_GOVERNANCE_REVISION,
+  HISTORICAL_RULE02_GIT_BLOB_SHA,
+  HISTORICAL_RULE02_SHA256,
+  PRIVILEGED_HARNESS_RULE02_OVERRIDE,
   createDisposableMergeEffectivenessHarness,
+  digestRule02,
+  loadHistoricalActivationRule02Text,
+  loadLiveWorkspaceRule02Text,
   loadWorkspaceRule02Text,
   synthesizeClosedRule02Text,
   synthesizeUnmergedYesTokenRule02Text,
+  verifyHistoricalRule02Text,
 } from './disposableMergeEffectivenessHarness.js';
 
 function assertNoSecrets(value) {
@@ -68,7 +78,7 @@ test('TB-01 public factory forgery is sealed (canonical source)', () => {
     () => createTestOnlyAttestedCanonicalRule02Source({
       repositoryId: GATE_REPOSITORY_ID,
       canonicalSha: CANONICAL_MAIN_SHA_PIN,
-      rule02Text: loadWorkspaceRule02Text(),
+      rule02Text: loadHistoricalActivationRule02Text(),
       mergedProvenance: true,
       attestedByPrivilegedFactory: true,
     }),
@@ -158,7 +168,7 @@ test('TB-07 end-to-end public-factory attack cannot ALLOW', () => {
       attestedByPrivilegedFactory: true,
       repositoryId: GATE_REPOSITORY_ID,
       canonicalSha: CANONICAL_MAIN_SHA_PIN,
-      rule02Text: loadWorkspaceRule02Text(),
+      rule02Text: loadHistoricalActivationRule02Text(),
       mergedProvenance: true,
     }),
     () => createTrustedTipAttestation({
@@ -209,7 +219,7 @@ test('TB-07 end-to-end public-factory attack cannot ALLOW', () => {
 test('A1 same-process public trust-root self-install → ALLOW (installer residual, NOT sealed)', () => {
   // Decisive reproduction: ordinary importer uses public installer APIs.
   // This ALLOW is OUTSIDE the proven untrusted-request boundary (Disposition A).
-  const rule02Text = loadWorkspaceRule02Text();
+  const rule02Text = loadHistoricalActivationRule02Text();
   const installed = createDisposableEffectiveAuthorizationTrustRoot({
     privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
     canonicalSha: CANONICAL_MAIN_SHA_PIN,
@@ -620,7 +630,7 @@ test('P1 governanceRevision mismatch → DENY', () => {
 
 test('P1 parsed authorizedFileScope mismatch → DENY_PARSED_SCOPE_MISMATCH', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const mutated = loadWorkspaceRule02Text().replace(
+  const mutated = loadHistoricalActivationRule02Text().replace(
     'tecp/test/disposableMergeEffectivenessHarness.js',
     'tecp/test/evilExtraPath.js',
   );
@@ -642,7 +652,7 @@ test('P1 parsed authorizedFileScope mismatch → DENY_PARSED_SCOPE_MISMATCH', ()
 
 test('P1 parsed active slice mismatch → DENY_PARSED_SLICE_MISMATCH', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  const mutated = loadWorkspaceRule02Text().replaceAll(
+  const mutated = loadHistoricalActivationRule02Text().replaceAll(
     'TECP-DLP-011-DISPOSABLE-MERGE-EFFECTIVENESS-AUTHORIZATION-GATE',
     'TECP-DLP-999-FAKE-SLICE',
   );
@@ -693,7 +703,7 @@ test('cross-slice grant via foreign-signed instruction DENY', () => {
 
 test('real canonical source mismatch: wrong expected digest vs trust root', () => {
   const h = createDisposableMergeEffectivenessHarness();
-  // Trust root holds real workspace Rule02; caller lies about digest expectation.
+  // Trust root holds pinned historical activation Rule02; caller lies about digest expectation.
   const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
     expectedRule02DigestSha256: digestMismatch(),
     instructionOverrides: { jti: 'canon-mismatch' },
@@ -704,3 +714,212 @@ test('real canonical source mismatch: wrong expected digest vs trust root', () =
 function digestMismatch() {
   return 'f'.repeat(64);
 }
+
+
+test('HIST-01 historical fixture digest matches approved source', () => {
+  const text = loadHistoricalActivationRule02Text();
+  assert.equal(digestRule02(text), HISTORICAL_RULE02_SHA256);
+  assert.equal(HISTORICAL_RULE02_GIT_BLOB_SHA, 'fa8c90186e155f2d3386e4065a44f1dc5762cc1c');
+  assert.match(text, new RegExp(`GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}`));
+  const h = createDisposableMergeEffectivenessHarness();
+  assert.equal(h.historicalRule02Pinned, true);
+  assert.equal(h.historicalRule02Sha256, HISTORICAL_RULE02_SHA256);
+  assert.equal(h.view().rule02DigestSha256, HISTORICAL_RULE02_SHA256);
+});
+
+test('HIST-02 live closeout revision differs from historical pin without breaking historical proof', () => {
+  const live = loadLiveWorkspaceRule02Text();
+  const hist = loadHistoricalActivationRule02Text();
+  assert.notEqual(digestRule02(live), digestRule02(hist));
+  assert.match(live, /DLP011_CLOSEOUT_20261103/);
+  assert.doesNotMatch(hist, /DLP011_CLOSEOUT_20261103/);
+  const h = createDisposableMergeEffectivenessHarness();
+  const allow = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    instructionOverrides: { jti: 'hist-02-allow' },
+  }));
+  assert.equal(allow.ok, true);
+  assert.equal(allow.decision, GATE_DECISIONS.ALLOW);
+  assert.equal(allow.operational, false);
+});
+
+test('HIST-03 missing immutable historical fixture fails closed (no live fallback)', async () => {
+  assert.throws(
+    () => verifyHistoricalRule02Text(''),
+    /HISTORICAL_RULE02_MISSING_OR_EMPTY/,
+  );
+  assert.throws(
+    () => verifyHistoricalRule02Text('too-short'),
+    /HISTORICAL_RULE02_MISSING_OR_EMPTY/,
+  );
+  // End-to-end integration: park fixture; git blob fallback remains off by default.
+  // Must fail closed without reading live workspace Rule02.
+  const { renameSync, existsSync } = await import('node:fs');
+  const { HISTORICAL_FIXTURE_PATH } = await import('./disposableMergeEffectivenessHarness.js');
+  const parked = `${HISTORICAL_FIXTURE_PATH}.parked-hist03`;
+  assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
+  renameSync(HISTORICAL_FIXTURE_PATH, parked);
+  const prevGitFallback = process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
+  const prevGitDir = process.env.TECP_GIT_DIR;
+  delete process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
+  process.env.TECP_GIT_DIR = '/tmp/tecp-dlp011-nonexistent-git-dir-hist03';
+  try {
+    assert.throws(
+      () => loadHistoricalActivationRule02Text(),
+      /HISTORICAL_RULE02_UNAVAILABLE/,
+    );
+  } finally {
+    if (prevGitFallback === undefined) {
+      delete process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK;
+    } else {
+      process.env.TECP_DLP011_ALLOW_GIT_BLOB_FALLBACK = prevGitFallback;
+    }
+    if (prevGitDir === undefined) {
+      delete process.env.TECP_GIT_DIR;
+    } else {
+      process.env.TECP_GIT_DIR = prevGitDir;
+    }
+    renameSync(parked, HISTORICAL_FIXTURE_PATH);
+  }
+  // Live workspace Rule02 remains readable but must not be used as historical fallback.
+  const live = loadLiveWorkspaceRule02Text();
+  assert.match(live, /DLP011_CLOSEOUT_20261103/);
+  assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+  assert.equal(digestRule02(loadHistoricalActivationRule02Text()), HISTORICAL_RULE02_SHA256);
+});
+
+test('HIST-04 tampered historical fixture fails closed', () => {
+  const good = loadHistoricalActivationRule02Text();
+  const tampered = `${good}\n**TAMPERED_FOR_TEST = true**\n`;
+  assert.throws(
+    () => verifyHistoricalRule02Text(tampered),
+    /HISTORICAL_RULE02_DIGEST_MISMATCH/,
+  );
+  const wrongRev = good.replaceAll(
+    `**GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}**`,
+    '**GOVERNANCE_REVISION = DLP011_CLOSEOUT_20261103**',
+  );
+  assert.throws(
+    () => verifyHistoricalRule02Text(wrongRev),
+    /HISTORICAL_RULE02_DIGEST_MISMATCH|HISTORICAL_RULE02_REVISION_MISSING/,
+  );
+});
+
+test('HIST-05 historical fixture cannot authorize current live DLP-011 re-execution', () => {
+  const live = loadLiveWorkspaceRule02Text();
+  const hist = loadHistoricalActivationRule02Text();
+  assert.notEqual(digestRule02(live), digestRule02(hist));
+  const parsed = parseRule02(live);
+  // Closed DLP-011 slice id must not validate as the active work package.
+  const decision = validateGovernance(parsed, {
+    sliceId: GATE_SLICE_ID,
+    authorityClass: 'ENGINEERING_CONTROL_PLANE',
+    riskTier: 'Tier 3',
+    requestedPaths: [...GATE_AUTHORIZED_FILE_SCOPE],
+    operationClass: 'IMPLEMENT',
+    requiresDeploy: false,
+    requiresProductionMutation: false,
+  });
+  assert.equal(decision.allowed, false);
+  assert.match(decision.decision, /^DENY_/);
+  assert.equal(
+    parsed.lifecyclePrecedence.implementationAuthorizationEffective,
+    'CONSUMED / NON-ACTIVE',
+  );
+  // Live closeout provenance through the disposable gate still DENY for historical DLP-011 ALLOW path.
+  const closedHarness = createDisposableMergeEffectivenessHarness({
+    privilegedRule02Override: true,
+    mergedRule02Text: synthesizeClosedRule02Text(hist),
+  });
+  const gateDeny = evaluateEffectiveImplementationAuthorization(closedHarness.buildGateInput({
+    instructionOverrides: { jti: 'hist-05-closed-live-deny' },
+  }));
+  assertDeny(gateDeny, GATE_DECISIONS.DENY_CANONICAL_CLOSED);
+});
+
+test('HIST-06 live Rule02 keeps DLP-011 closed; Snapshot TECP_IMPLEMENTATION_AUTHORIZED remains NO*', () => {
+  const live = loadLiveWorkspaceRule02Text();
+  assert.match(live, /TECP_DLP011_STATUS = CLOSED \/ FROZEN \/ VERIFIED/);
+  assert.match(live, /TECP_DLP011_IMPLEMENTATION_AUTHORIZED = CONSUMED \/ NON-ACTIVE/);
+  assert.match(live, /\*\*IMPLEMENTATION_AUTHORIZED = CONSUMED \/ NON-ACTIVE\*\*/);
+  const parsed = parseRule02(live);
+  assert.match(String(parsed.tecp.TECP_IMPLEMENTATION_AUTHORIZED), /^NO\b/);
+  // Historical fixture must not equal live text and must not flip Snapshot to operational YES.
+  assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+  assert.equal(parsed.tecp.TECP_IMPLEMENTATION_AUTHORIZED.includes('YES'), false);
+  // Compatibility alias still resolves to historical pin, never live closeout.
+  assert.equal(digestRule02(loadWorkspaceRule02Text()), HISTORICAL_RULE02_SHA256);
+  assert.notEqual(digestRule02(loadWorkspaceRule02Text()), digestRule02(live));
+});
+
+test('HIST-07 foreign historical governance revision cannot silently substitute', () => {
+  const hist = loadHistoricalActivationRule02Text();
+  const substituted = hist.replaceAll(
+    `**GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}**`,
+    '**GOVERNANCE_REVISION = DLP010_CLOSEOUT_20261103**',
+  );
+  assert.throws(
+    () => verifyHistoricalRule02Text(substituted),
+    /HISTORICAL_RULE02_DIGEST_MISMATCH|HISTORICAL_RULE02_REVISION_MISSING/,
+  );
+  assert.throws(
+    () => createDisposableMergeEffectivenessHarness({
+      mergedRule02Text: substituted,
+    }),
+    /PRIVILEGED_HARNESS_RULE02_OVERRIDE_REQUIRED/,
+  );
+  const h = createDisposableMergeEffectivenessHarness({
+    privilegedRule02Override: true,
+    mergedRule02Text: substituted,
+  });
+  const result = evaluateEffectiveImplementationAuthorization(h.buildGateInput({
+    instructionOverrides: { jti: 'hist-07-wrong-rev' },
+  }));
+  assertDeny(result, GATE_DECISIONS.DENY_GOVERNANCE_REVISION_MISMATCH);
+  // Symbol latch also accepted; still TEST_ONLY / disposable-only.
+  const h2 = createDisposableMergeEffectivenessHarness({
+    privilegedRule02Override: PRIVILEGED_HARNESS_RULE02_OVERRIDE,
+    mergedRule02Text: substituted,
+  });
+  assert.equal(h2.privilegedRule02OverrideUsed, true);
+  assertDeny(
+    evaluateEffectiveImplementationAuthorization(h2.buildGateInput({
+      instructionOverrides: { jti: 'hist-07-symbol-override' },
+    })),
+    GATE_DECISIONS.DENY_GOVERNANCE_REVISION_MISMATCH,
+  );
+});
+
+test('HIST-08 approved A1 residual remains truthfully reported', () => {
+  const installed = createDisposableEffectiveAuthorizationTrustRoot({
+    privilegedTrustInjection: DISPOSABLE_TRUST_INJECTION_TOKEN,
+    canonicalSha: CANONICAL_MAIN_SHA_PIN,
+    disposableRule02Override: loadHistoricalActivationRule02Text(),
+    mergedProvenance: true,
+    activationPr: '#266',
+  });
+  assert.equal(installed.trustRoot.sameProcessTrustInstallerResidual, true);
+  const view = getTrustRootPublicView(installed.trustRoot);
+  const issued = issueOwnerInstructionFromTrustRoot(installed.installerCapability, {
+    jti: 'hist-08-a1',
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+  });
+  assert.equal(issued.ok, true);
+  const result = evaluateEffectiveImplementationAuthorization({
+    testOnlyEnvironment: true,
+    trustRoot: installed.trustRoot,
+    expectedCanonicalSha: view.canonicalSha,
+    expectedRule02DigestSha256: view.rule02DigestSha256,
+    repositoryId: GATE_REPOSITORY_ID,
+    sliceId: GATE_SLICE_ID,
+    operationClass: GATE_OPERATION_CLASS,
+    governanceRevision: DEFAULT_GOVERNANCE_REVISION,
+    authorizedFileScope: [...GATE_AUTHORIZED_FILE_SCOPE],
+    ownerInstructionEncoded: issued.instruction.encoded,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.decision, GATE_DECISIONS.ALLOW);
+  assert.equal(result.operational, false);
+  const live = loadLiveWorkspaceRule02Text();
+  assert.match(live, /SAME_PROCESS_INSTALLER_RESIDUAL = NOT_SEALED/);
+  assert.match(live, /A1_SELF_ALLOW_PROVEN/);
+});
