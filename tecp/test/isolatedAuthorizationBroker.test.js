@@ -7,7 +7,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createConnection } from 'node:net';
-import { existsSync, readFileSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +47,16 @@ import {
   createDisposableIsolatedBrokerHarness,
   CANONICAL_BASE_SHA,
   GOVERNANCE_REVISION,
+  HISTORICAL_FIXTURE_PATH,
+  HISTORICAL_GOVERNANCE_REVISION,
+  HISTORICAL_RULE02_GIT_BLOB_SHA,
+  HISTORICAL_RULE02_SHA256,
+  digestRule02,
+  loadHistoricalActivationRule02Text,
+  loadLiveWorkspaceRule02Text,
+  synthesizeClosedHistoricalRule02Text,
+  synthesizeWrongSliceHistoricalRule02Text,
+  verifyHistoricalRule02Text,
 } from './disposableIsolatedBrokerHarness.js';
 import {
   GATE_SLICE_ID,
@@ -50,6 +69,11 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../..');
+const DLP012F_THREE_PATH_SCOPE = Object.freeze([
+  'tecp/test/disposableIsolatedBrokerHarness.js',
+  'tecp/test/isolatedAuthorizationBroker.test.js',
+  'tecp/test/fixtures/dlp012ActivationEraRule02.mdc',
+]);
 
 async function withHarness(fn, options = {}) {
   const h = await createDisposableIsolatedBrokerHarness(options);
@@ -189,9 +213,14 @@ describe('TECP-DLP-012 isolated authorization broker / writer', () => {
 
     it('B04 Validator ALLOW without Owner instruction DENY', async () => {
       await withHarness(async (h) => {
-        const rule02 = readFileSync(join(ROOT, '.cursor/rules/titangold-current-active-work.mdc'), 'utf8');
-        const v = evaluateFrozenValidatorAllowOnly(rule02, [...DLP012_AUTHORIZED_FILE_SCOPE]);
-        assert.equal(v.allowed, true);
+        // Historical activation-era Rule02 may ALLOW the five-path DLP-012 request
+        // at the frozen validator boundary — still insufficient without Owner instruction.
+        const historical = loadHistoricalActivationRule02Text();
+        const histV = evaluateFrozenValidatorAllowOnly(
+          historical,
+          [...DLP012_AUTHORIZED_FILE_SCOPE],
+        );
+        assert.equal(histV.allowed, true);
         const mint = h.mintInProcess(undefined, {
           validatorAllowOnly: true,
           requestId: 'r1',
@@ -203,6 +232,16 @@ describe('TECP-DLP-012 isolated authorization broker / writer', () => {
           BROKER_DECISIONS.DENY_VALIDATOR_INSUFFICIENT,
           BROKER_DECISIONS.DENY_MISSING_OWNER_INSTRUCTION,
         ].includes(mint.decision));
+
+        // Independent live-governance separation: current Rule02 must DENY the
+        // consumed five-file DLP-012 implementation scope.
+        const live = loadLiveWorkspaceRule02Text();
+        assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+        const liveFive = evaluateFrozenValidatorAllowOnly(
+          live,
+          [...DLP012_AUTHORIZED_FILE_SCOPE],
+        );
+        assert.equal(liveFive.allowed, false);
       }, { spawnProcesses: false });
     });
 
@@ -271,15 +310,9 @@ describe('TECP-DLP-012 isolated authorization broker / writer', () => {
     });
 
     it('B08b closed Rule02 DENY_GOVERNANCE', async () => {
-      const live = readFileSync(
-        join(ROOT, '.cursor/rules/titangold-current-active-work.mdc'),
-        'utf8',
-      );
-      const closed = live
-        .replaceAll(
-          'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES',
-          'CONSUMED / NON-ACTIVE',
-        );
+      const historical = loadHistoricalActivationRule02Text();
+      const closed = synthesizeClosedHistoricalRule02Text(historical);
+      assert.notEqual(digestRule02(closed), HISTORICAL_RULE02_SHA256);
       await withHarness(async (h) => {
         const issued = h.issueDlp012OwnerInstruction();
         assert.equal(issued.ok, true);
@@ -287,32 +320,28 @@ describe('TECP-DLP-012 isolated authorization broker / writer', () => {
         assert.equal(mint.ok, false);
         assert.equal(mint.decision, BROKER_DECISIONS.DENY_GOVERNANCE);
       }, { spawnProcesses: false, rule02Text: closed });
+
+      // Live Rule02 independently denies the old five-file DLP-012 request.
+      const liveFive = evaluateFrozenValidatorAllowOnly(
+        loadLiveWorkspaceRule02Text(),
+        [...DLP012_AUTHORIZED_FILE_SCOPE],
+      );
+      assert.equal(liveFive.allowed, false);
     });
 
     it('B08c wrong-slice Rule02 DENY_GOVERNANCE', async () => {
-      const live = readFileSync(
-        join(ROOT, '.cursor/rules/titangold-current-active-work.mdc'),
-        'utf8',
-      );
-      const wrongSlice = live
-        .replaceAll(
-          'TECP-DLP-012-DISPOSABLE-ISOLATED-AUTHORIZATION-WRITER-BROKER-PROOF',
-          'TECP-DLP-999-WRONG-SLICE-FOR-NEGATIVE-TEST',
-        );
+      const wrongSlice = synthesizeWrongSliceHistoricalRule02Text();
+      assert.ok(!wrongSlice.includes(DLP012_SLICE_ID));
       await withHarness(async (h) => {
         const issued = h.issueDlp012OwnerInstruction();
-        // Owner instruction may fail construction or mint may DENY_GOVERNANCE/WRONG_SLICE.
-        if (issued.ok) {
-          const mint = h.mintInProcess(issued.instruction.encoded, { requestId: 'b08c' });
-          assert.equal(mint.ok, false);
-          assert.ok(
-            mint.decision === BROKER_DECISIONS.DENY_GOVERNANCE
-              || mint.decision === BROKER_DECISIONS.DENY_WRONG_SLICE,
-            mint.decision,
-          );
-        } else {
-          assert.ok(true);
-        }
+        assert.equal(issued.ok, true, 'Owner instruction must still construct for this DENY path');
+        const mint = h.mintInProcess(issued.instruction.encoded, { requestId: 'b08c' });
+        assert.equal(mint.ok, false);
+        assert.ok(
+          mint.decision === BROKER_DECISIONS.DENY_GOVERNANCE
+            || mint.decision === BROKER_DECISIONS.DENY_WRONG_SLICE,
+          mint.decision,
+        );
       }, { spawnProcesses: false, rule02Text: wrongSlice });
     });
   });
@@ -1678,6 +1707,147 @@ describe('TECP-DLP-012 isolated authorization broker / writer', () => {
 
     it('J05 Full TECP regression is executed out-of-band in QA phase', () => {
       assert.ok(true);
+    });
+  });
+
+  describe('HIST — DLP-012F pinned activation-era fixture (TEST_ONLY)', () => {
+    it('HIST-01 historical fixture loads with pinned digest and activation facts', () => {
+      const text = loadHistoricalActivationRule02Text();
+      assert.equal(digestRule02(text), HISTORICAL_RULE02_SHA256);
+      assert.equal(
+        HISTORICAL_RULE02_GIT_BLOB_SHA,
+        '94a617e07b55d513d3b87a575c8bae2f34b68600',
+      );
+      assert.match(text, new RegExp(`GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}`));
+      assert.ok(text.includes(DLP012_SLICE_ID));
+      for (const p of DLP012_AUTHORIZED_FILE_SCOPE) {
+        assert.ok(text.includes(p), p);
+      }
+      assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
+      assert.equal(
+        digestRule02(readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8')),
+        HISTORICAL_RULE02_SHA256,
+      );
+    });
+
+    it('HIST-02 live Rule02 is distinct and denies old five-file DLP-012 scope', () => {
+      const hist = loadHistoricalActivationRule02Text();
+      const live = loadLiveWorkspaceRule02Text();
+      assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+      assert.notEqual(digestRule02(live), digestRule02(hist));
+      const liveFive = evaluateFrozenValidatorAllowOnly(
+        live,
+        [...DLP012_AUTHORIZED_FILE_SCOPE],
+      );
+      assert.equal(liveFive.allowed, false);
+      // Format-only: live Rule02 may ALLOW the DLP-012F three repair paths.
+      // That ALLOW is NOT Broker mint authority and NOT a production Owner instruction.
+      const liveThree = evaluateFrozenValidatorAllowOnly(
+        live,
+        [...DLP012F_THREE_PATH_SCOPE],
+      );
+      // Slice mismatch expected (validator still asks for DLP012_SLICE_ID).
+      assert.equal(liveThree.allowed, false);
+      void ROOT;
+    });
+
+    it('HIST-03 missing / tampered / wrong-revision fixture fails closed (no live fallback)', () => {
+      assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
+      const before = digestRule02(readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8'));
+      assert.equal(before, HISTORICAL_RULE02_SHA256);
+
+      const tmp = mkdtempSync(join(tmpdir(), 'tecp-dlp012f-hist-'));
+      try {
+        const missingPath = join(tmp, 'missing-dlp012-fixture.mdc');
+        assert.throws(
+          () => loadHistoricalActivationRule02Text({
+            fixturePath: missingPath,
+            allowGitBlobFallback: false,
+          }),
+          /HISTORICAL_RULE02_UNAVAILABLE/,
+        );
+
+        const corruptedPath = join(tmp, 'corrupted.mdc');
+        writeFileSync(corruptedPath, 'not-a-valid-historical-rule02\n', 'utf8');
+        assert.throws(
+          () => loadHistoricalActivationRule02Text({
+            fixturePath: corruptedPath,
+            allowGitBlobFallback: false,
+          }),
+          /HISTORICAL_RULE02_MISSING_OR_EMPTY|HISTORICAL_RULE02_DIGEST_MISMATCH/,
+        );
+
+        const good = loadHistoricalActivationRule02Text();
+        const wrongRev = good.replaceAll(
+          `GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}`,
+          'GOVERNANCE_REVISION = DLP012F_WRONG_REVISION_FOR_TEST',
+        );
+        const wrongRevPath = join(tmp, 'wrong-rev.mdc');
+        writeFileSync(wrongRevPath, wrongRev, 'utf8');
+        assert.throws(
+          () => loadHistoricalActivationRule02Text({
+            fixturePath: wrongRevPath,
+            allowGitBlobFallback: false,
+          }),
+          /HISTORICAL_RULE02_DIGEST_MISMATCH|HISTORICAL_RULE02_REVISION_MISSING/,
+        );
+
+        const wrongScope = good.replaceAll(
+          'tecp/src/isolatedAuthorizationBroker.js',
+          'tecp/src/NOT_AUTHORIZED_broker.js',
+        );
+        const wrongScopePath = join(tmp, 'wrong-scope.mdc');
+        writeFileSync(wrongScopePath, wrongScope, 'utf8');
+        assert.throws(
+          () => loadHistoricalActivationRule02Text({
+            fixturePath: wrongScopePath,
+            allowGitBlobFallback: false,
+          }),
+          /HISTORICAL_RULE02_DIGEST_MISMATCH|HISTORICAL_RULE02_SCOPE_PATH_MISSING/,
+        );
+
+        // Live Rule02 exists but must never substitute for a missing historical fixture.
+        const live = loadLiveWorkspaceRule02Text();
+        assert.notEqual(digestRule02(live), HISTORICAL_RULE02_SHA256);
+        assert.throws(
+          () => loadHistoricalActivationRule02Text({
+            fixturePath: missingPath,
+            allowGitBlobFallback: false,
+          }),
+          /HISTORICAL_RULE02_UNAVAILABLE/,
+        );
+        assert.doesNotThrow(() => verifyHistoricalRule02Text(good));
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+
+      assert.equal(existsSync(HISTORICAL_FIXTURE_PATH), true);
+      assert.equal(
+        digestRule02(readFileSync(HISTORICAL_FIXTURE_PATH, 'utf8')),
+        HISTORICAL_RULE02_SHA256,
+      );
+      assert.equal(digestRule02(loadHistoricalActivationRule02Text()), HISTORICAL_RULE02_SHA256);
+    });
+
+    it('HIST-04 tampered historical bytes fail closed; fixture verification is not production auth', () => {
+      const good = loadHistoricalActivationRule02Text();
+      const tampered = `${good}\n**TAMPERED_FOR_TEST = true**\n`;
+      assert.throws(
+        () => verifyHistoricalRule02Text(tampered),
+        /HISTORICAL_RULE02_DIGEST_MISMATCH/,
+      );
+      // Fixture SHA-256 is integrity checking only — NOT OS isolation / production trust.
+      assert.equal(HISTORICAL_RULE02_SHA256.length, 64);
+      assert.ok(!tampered.includes('PRODUCTION_AUTHORIZATION = YES'));
+    });
+
+    it('HIST-05 harness default uses historical fixture (not live Rule02)', async () => {
+      await withHarness(async (h) => {
+        assert.equal(h.constants.rule02Digest, HISTORICAL_RULE02_SHA256);
+        const { mint } = await mintBound(h, { viaIpc: false, requestId: 'hist-05' });
+        assert.equal(mint.ok, true);
+        assert.equal(mint.decision, BROKER_DECISIONS.ALLOW);
+      }, { spawnProcesses: false });
     });
   });
 });

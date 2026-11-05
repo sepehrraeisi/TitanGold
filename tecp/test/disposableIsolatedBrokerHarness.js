@@ -3,6 +3,11 @@
  *
  * Owns ephemeral keys, tip/revocation authority, three-process spawn, cleanup.
  * Not real Owner custody. Same-UID residuals remain NOT_SEALED.
+ *
+ * DLP-012F H4: historical disposable positive-path proofs pin the activation-era
+ * Rule02 fixture (git blob 94a617e0… / SHA256 b056644f…). Live workspace Rule02
+ * is never a silent historical fallback. Optional git-blob secondary source is
+ * opt-in only (allowGitBlobFallback / TECP_DLP012_ALLOW_GIT_BLOB_FALLBACK=1).
  */
 
 import {
@@ -23,7 +28,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 import {
@@ -78,14 +83,205 @@ const ROOT = join(HERE, '../..');
 const BROKER_SRC = join(HERE, '../src/isolatedAuthorizationBroker.js');
 const WRITER_SRC = join(HERE, '../src/isolatedWriteExecutor.js');
 const HARNESS_SRC = fileURLToPath(import.meta.url);
+const LIVE_RULE02_PATH = join(ROOT, '.cursor/rules/titangold-current-active-work.mdc');
+const HISTORICAL_FIXTURE_PATH = join(HERE, 'fixtures/dlp012ActivationEraRule02.mdc');
 
 export const CANONICAL_BASE_SHA = '0a909515cbffc4e75ae685e2416a9dcdae8f2817';
 export const GOVERNANCE_REVISION = 'DLP012_CONDITIONAL_ACTIVATION_20261105';
+export const HISTORICAL_GOVERNANCE_REVISION = GOVERNANCE_REVISION;
+/** Immutable Git blob of Rule02 at DLP-012 activation-era baseline (pre-012F). */
+export const HISTORICAL_RULE02_GIT_BLOB_SHA = '94a617e07b55d513d3b87a575c8bae2f34b68600';
+/** SHA256 of that blob's UTF-8 bytes (must match checked-in fixture). */
+export const HISTORICAL_RULE02_SHA256 =
+  'b056644fab49c48247f86741b0a326dcb291827126b286c71fdde3df51561fe8';
+/** Historical Rule02 GOVERNANCE_BASE_MAIN_SHA recorded in the activation-era text. */
+export const HISTORICAL_GOVERNANCE_BASE_MAIN_SHA =
+  '6b682c282ae4fba28579a6a144a0617a8ca9a5bd';
+export const YES_TOKEN = 'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES';
+export const CONSUMED_TOKEN = 'CONSUMED / NON-ACTIVE';
 export const GOVERNANCE_PR = '#273';
 export const HARNESS_MARKER = 'TECP_DLP012_HARNESS_OWNED';
+export { HISTORICAL_FIXTURE_PATH, LIVE_RULE02_PATH };
 
-function readLiveRule02() {
-  return readFileSync(join(ROOT, '.cursor/rules/titangold-current-active-work.mdc'), 'utf8');
+/**
+ * Explicit latch for TEST_ONLY harness Rule02 text overrides.
+ * Untrusted callers cannot treat options.rule02Text as production authority.
+ * Does NOT grant operational mint authority; Broker + Owner instruction still apply.
+ */
+export const PRIVILEGED_HARNESS_RULE02_OVERRIDE = Symbol.for(
+  'TECP_DLP012_PRIVILEGED_HARNESS_RULE02_OVERRIDE',
+);
+
+export function digestRule02(text) {
+  return createHash('sha256').update(String(text), 'utf8').digest('hex');
+}
+
+export function verifyHistoricalRule02Text(text, sourceLabel = 'CALLER') {
+  if (typeof text !== 'string' || text.length < 100) {
+    throw new Error(`HISTORICAL_RULE02_MISSING_OR_EMPTY:${sourceLabel}`);
+  }
+  const digest = digestRule02(text);
+  if (digest !== HISTORICAL_RULE02_SHA256) {
+    throw new Error(
+      `HISTORICAL_RULE02_DIGEST_MISMATCH:${sourceLabel}:expected=${HISTORICAL_RULE02_SHA256}:actual=${digest}`,
+    );
+  }
+  if (!text.includes(`**GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}**`)
+    && !text.includes(`GOVERNANCE_REVISION = ${HISTORICAL_GOVERNANCE_REVISION}`)) {
+    throw new Error(`HISTORICAL_RULE02_REVISION_MISSING:${sourceLabel}`);
+  }
+  if (!text.includes(`**IMPLEMENTATION_AUTHORIZED = ${YES_TOKEN}**`)) {
+    throw new Error(`HISTORICAL_RULE02_YES_TOKEN_MISSING:${sourceLabel}`);
+  }
+  if (!text.includes(DLP012_SLICE_ID)) {
+    throw new Error(`HISTORICAL_RULE02_SLICE_MISSING:${sourceLabel}`);
+  }
+  for (const path of DLP012_AUTHORIZED_FILE_SCOPE) {
+    if (!text.includes(path)) {
+      throw new Error(`HISTORICAL_RULE02_SCOPE_PATH_MISSING:${sourceLabel}:${path}`);
+    }
+  }
+  if (!text.includes(HISTORICAL_GOVERNANCE_BASE_MAIN_SHA)
+    && !text.includes(CANONICAL_BASE_SHA)) {
+    throw new Error(`HISTORICAL_RULE02_CANONICAL_SHA_MISSING:${sourceLabel}`);
+  }
+  return text;
+}
+
+function resolveHistoricalFixturePath(options = {}) {
+  if (options.fixturePath == null || options.fixturePath === '') {
+    return HISTORICAL_FIXTURE_PATH;
+  }
+  if (typeof options.fixturePath !== 'string') {
+    throw new Error('HISTORICAL_FIXTURE_PATH_INVALID:non_string');
+  }
+  return options.fixturePath;
+}
+
+function tryReadHistoricalFixtureFile(fixturePath) {
+  if (!existsSync(fixturePath)) {
+    return null;
+  }
+  return verifyHistoricalRule02Text(
+    readFileSync(fixturePath, 'utf8'),
+    'FIXTURE_FILE',
+  );
+}
+
+function gitBlobFallbackEnabled(options = {}) {
+  if (options.allowGitBlobFallback === true) {
+    return true;
+  }
+  if (options.allowGitBlobFallback === false) {
+    return false;
+  }
+  return process.env.TECP_DLP012_ALLOW_GIT_BLOB_FALLBACK === '1';
+}
+
+function tryReadHistoricalGitBlob(options = {}) {
+  if (!gitBlobFallbackEnabled(options)) {
+    return null;
+  }
+  const gitDir = options.gitDir
+    || process.env.TECP_GIT_DIR
+    || ROOT;
+  try {
+    const text = execFileSync(
+      'git',
+      ['cat-file', '-p', HISTORICAL_RULE02_GIT_BLOB_SHA],
+      {
+        cwd: gitDir,
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    return verifyHistoricalRule02Text(text, 'GIT_BLOB');
+  } catch (err) {
+    if (err && String(err.message || err).startsWith('HISTORICAL_RULE02_')) {
+      throw err;
+    }
+    return null;
+  }
+}
+
+/**
+ * Immutable activation-era Rule02 for historical DLP-012 disposable proof.
+ * Primary: checked-in fixture. Optional secondary: git blob (explicit opt-in).
+ * Fail closed: never silently falls back to live workspace Rule02.
+ */
+export function loadHistoricalActivationRule02Text(options = {}) {
+  const fixturePath = resolveHistoricalFixturePath(options);
+  const fromFixture = tryReadHistoricalFixtureFile(fixturePath);
+  if (fromFixture != null) {
+    return fromFixture;
+  }
+  const fromGit = tryReadHistoricalGitBlob(options);
+  if (fromGit != null) {
+    return fromGit;
+  }
+  throw new Error(
+    'HISTORICAL_RULE02_UNAVAILABLE:missing_fixture;git_fallback_disabled_or_failed;no_live_fallback',
+  );
+}
+
+/**
+ * Current workspace Rule02 (live post-012F governance).
+ * Used only for current-live governance separation tests — never for historical proof defaults.
+ */
+export function loadLiveWorkspaceRule02Text() {
+  return readFileSync(LIVE_RULE02_PATH, 'utf8');
+}
+
+/** @deprecated Prefer loadLiveWorkspaceRule02Text — kept for explicit live reads. */
+export function readLiveRule02() {
+  return loadLiveWorkspaceRule02Text();
+}
+
+/**
+ * Build a deliberately closed activation-era Rule02 for DENY_GOVERNANCE negative tests.
+ * Source must be verified historical text (or an already-verified caller-supplied string).
+ */
+export function synthesizeClosedHistoricalRule02Text(
+  sourceText = loadHistoricalActivationRule02Text(),
+) {
+  const closed = String(sourceText)
+    .replaceAll(
+      `**IMPLEMENTATION_AUTHORIZED = ${YES_TOKEN}**`,
+      `**IMPLEMENTATION_AUTHORIZED = ${CONSUMED_TOKEN}**`,
+    )
+    .replaceAll(
+      `**TECP005_IMPLEMENTATION_AUTHORIZED = ${YES_TOKEN}**`,
+      `**TECP005_IMPLEMENTATION_AUTHORIZED = ${CONSUMED_TOKEN}**`,
+    )
+    .replaceAll(
+      `**TECP_DLP012_IMPLEMENTATION_AUTHORIZED = ${YES_TOKEN}**`,
+      `**TECP_DLP012_IMPLEMENTATION_AUTHORIZED = ${CONSUMED_TOKEN}**`,
+    );
+  if (closed === sourceText || closed.includes(`**IMPLEMENTATION_AUTHORIZED = ${YES_TOKEN}**`)) {
+    throw new Error('HISTORICAL_CLOSED_RULE02_TRANSFORM_INEFFECTIVE');
+  }
+  if (digestRule02(closed) === HISTORICAL_RULE02_SHA256) {
+    throw new Error('HISTORICAL_CLOSED_RULE02_DIGEST_UNCHANGED');
+  }
+  return closed;
+}
+
+/**
+ * Build a wrong-slice negative Rule02 from verified historical activation-era text.
+ */
+export function synthesizeWrongSliceHistoricalRule02Text(
+  sourceText = loadHistoricalActivationRule02Text(),
+  wrongSliceId = 'TECP-DLP-999-WRONG-SLICE-FOR-NEGATIVE-TEST',
+) {
+  if (!String(sourceText).includes(DLP012_SLICE_ID)) {
+    throw new Error('HISTORICAL_WRONG_SLICE_SOURCE_MISSING_DLP012_SLICE');
+  }
+  const wrong = String(sourceText).replaceAll(DLP012_SLICE_ID, wrongSliceId);
+  if (wrong === sourceText || wrong.includes(DLP012_SLICE_ID)) {
+    throw new Error('HISTORICAL_WRONG_SLICE_TRANSFORM_INEFFECTIVE');
+  }
+  return wrong;
 }
 
 function waitForListening(child, timeoutMs = 5000) {
@@ -188,7 +384,19 @@ export async function createDisposableIsolatedBrokerHarness(options = {}) {
   const wallOriginMs = Date.now();
   let assertionServeCount = 0;
 
-  const rule02Text = options.rule02Text || readLiveRule02();
+  // Historical default: pinned activation-era fixture (H4). Explicit options.rule02Text
+  // remains the TEST_ONLY negative-input override (malformed / closed / wrong-slice).
+  // Never silently substitute live workspace Rule02 for the historical default.
+  const rule02Text = Object.prototype.hasOwnProperty.call(options, 'rule02Text')
+    ? options.rule02Text
+    : loadHistoricalActivationRule02Text({
+      fixturePath: options.fixturePath,
+      allowGitBlobFallback: options.allowGitBlobFallback,
+      gitDir: options.gitDir,
+    });
+  if (typeof rule02Text !== 'string' || rule02Text.length < 1) {
+    throw new Error('HARNESS_RULE02_TEXT_REQUIRED');
+  }
   const rule02Digest = sha256Hex(rule02Text);
   const canonicalSha = options.canonicalSha || CANONICAL_BASE_SHA;
   const merged = options.merged !== false;
@@ -1425,5 +1633,4 @@ export {
   DLP012_NATIVE_OPERATION,
   DLP012_AUTHORIZED_FILE_SCOPE,
   sha256Hex,
-  readLiveRule02,
 };
