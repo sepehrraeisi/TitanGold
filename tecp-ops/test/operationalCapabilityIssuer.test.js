@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, createPrivateKey, randomBytes, sign } from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import {
+  CP1_ALG,
+  CP1_OPERATION_CLASS,
   CP1_PATHS,
+  CP1_PURPOSE,
   CP1_REPOSITORY_ID,
+  b64urlEncode,
+  canonicalJson,
 } from '../src/config.js';
 import {
   createTestOnlyAttestationVerifier,
@@ -108,6 +113,7 @@ function fullHarness() {
     privateKeyPem: capKeys.privateKeyPem,
     keyRegistry,
     replayRegistry,
+    clock,
   });
   return {
     clock,
@@ -117,6 +123,23 @@ function fullHarness() {
     replayRegistry,
     ownerIssuer,
     capIssuer,
+    capKeys,
+  };
+}
+
+function verifyDeps(h, { cap, id, approvalIssued }) {
+  return {
+    keyRegistry: h.keyRegistry,
+    clock: h.clock,
+    revocationRegistry: h.revocationRegistry,
+    replayRegistry: h.replayRegistry,
+    approvalToken: approvalIssued.token,
+    approvalDeps: {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    },
+    principal: id.principal,
   };
 }
 
@@ -543,5 +566,619 @@ describe('CP1 operationalCapabilityIssuer', () => {
   it('CP1-N23 default fail-closed', () => {
     const result = verifyCapability(null, {}, {});
     assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_DEFAULT_FAIL_CLOSED);
+  });
+
+  // --- Finding A: atomic replay enforcement ---
+  it('A1/A2/A10 valid registry first ALLOW second DENY_REPLAY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    const first = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(first.ok, true);
+    assert.equal(first.decision, CAPABILITY_DECISIONS.ALLOW);
+    const second = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(second.ok, false);
+    assert.equal(second.decision, CAPABILITY_DECISIONS.DENY_REPLAY);
+  });
+
+  it('A3 has()-only registry consumeOnVerify absent DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = { has: () => false };
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY);
+  });
+
+  it('A4 has()-only registry consumeOnVerify false DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = { has: () => false, consume: () => true };
+    const result = verifyCapability(chain.cap.token, { consumeOnVerify: false }, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY);
+  });
+
+  it('A5 markPresented returns undefined DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = { has: () => false, markPresented: () => undefined };
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_AMBIGUOUS_CONSUME);
+  });
+
+  it('A6 markPresented ambiguous throw DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = {
+      has: () => false,
+      markPresented() {
+        const err = new Error('AMBIGUOUS_CONSUME');
+        err.code = 'AMBIGUOUS_CONSUME';
+        throw err;
+      },
+    };
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_AMBIGUOUS_CONSUME);
+  });
+
+  it('A7 markPresented throws DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = {
+      has: () => false,
+      markPresented() {
+        throw new Error('boom');
+      },
+    };
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY);
+  });
+
+  it('A8 registry unavailable DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    h.replayRegistry.setAvailable(false);
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.decision, CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY);
+  });
+
+  it('A9 duplicate issue-time jti DENY', () => {
+    const h = fullHarness();
+    assert.equal(mintChain(h, { jti: 'dup-a9' }).cap.ok, true);
+    assert.equal(mintChain(h, { jti: 'dup-a9' }).cap.decision, CAPABILITY_DECISIONS.DENY_DUPLICATE_JTI);
+  });
+
+  it('A11 ambiguous presentation never yields ALLOW', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.replayRegistry = { has: () => false, markPresented: () => 'maybe' };
+    const result = verifyCapability(chain.cap.token, {}, deps);
+    assert.equal(result.ok, false);
+    assert.notEqual(result.decision, CAPABILITY_DECISIONS.ALLOW);
+  });
+
+  // --- Finding B: revocation fail-closed (capability path) ---
+  it('B5/B6 capability revoked=false ALLOW revoked=true DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const ok = verifyCapability(chain.cap.token, {}, verifyDeps(h, chain));
+    assert.equal(ok.ok, true);
+    const h2 = fullHarness();
+    const chain2 = mintChain(h2);
+    h2.revocationRegistry.revoke(chain2.cap.claims.jti);
+    const denied = verifyCapability(chain2.cap.token, {}, verifyDeps(h2, chain2));
+    assert.equal(denied.decision, CAPABILITY_DECISIONS.DENY_REVOKED);
+  });
+
+  it('B7 capability undefined/null/non-boolean revocation DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    for (const value of [undefined, null, 'no', 0, 1, {}]) {
+      const deps = verifyDeps(h, chain);
+      deps.revocationRegistry = { isRevoked: () => value };
+      // Fresh replay registry so prior loop iterations do not DENY_REPLAY
+      deps.replayRegistry = createInMemoryReplayRegistry();
+      deps.replayRegistry.reserveJti(chain.cap.claims.jti);
+      const result = verifyCapability(chain.cap.token, {}, deps);
+      assert.equal(result.ok, false, `expected DENY for ${String(value)}`);
+      assert.notEqual(result.decision, CAPABILITY_DECISIONS.ALLOW);
+    }
+  });
+
+  it('B8 capability revocation throws DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.revocationRegistry = {
+      isRevoked() {
+        throw Object.assign(new Error('x'), { code: 'REVOCATION_UNAVAILABLE' });
+      },
+    };
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, deps).decision,
+      CAPABILITY_DECISIONS.DENY_MISSING_REVOCATION,
+    );
+  });
+
+  it('B9 capability Promise revocation result DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    deps.revocationRegistry = { isRevoked: () => Promise.resolve(false) };
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, deps).decision,
+      CAPABILITY_DECISIONS.DENY_MISSING_REVOCATION,
+    );
+  });
+
+  // --- Finding C: task binding + principal expiry ---
+  it('C1 matching Task A chain ALLOW', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(verifyCapability(chain.cap.token, {}, verifyDeps(h, chain)).ok, true);
+  });
+
+  it('C2 Principal Task A + approval Task B DENY at issuance', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation({ taskId: 'task-A' }),
+      taskId: 'task-A',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    assert.equal(id.ok, true);
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-B',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 90_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 60_000,
+      taskId: 'task-B',
+    });
+    assert.equal(cap.decision, CAPABILITY_DECISIONS.DENY_WRONG_TASK);
+  });
+
+  it('C3 Principal Task A cannot verify Task B capability', () => {
+    const h = fullHarness();
+    // Mint a Task-B capability with a Task-B principal, then swap verify principal to Task-A.
+    const idB = verifyOperationalPrincipal({
+      attestation: makeAttestation({ taskId: 'task-B' }),
+      taskId: 'task-B',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-B',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 90_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: idB.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 60_000,
+      taskId: 'task-B',
+    });
+    assert.equal(cap.ok, true);
+    const idA = verifyOperationalPrincipal({
+      attestation: makeAttestation({ taskId: 'task-A' }),
+      taskId: 'task-A',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const deps = verifyDeps(h, { cap, id: idA, approvalIssued });
+    assert.equal(
+      verifyCapability(cap.token, {}, deps).decision,
+      CAPABILITY_DECISIONS.DENY_WRONG_TASK,
+    );
+  });
+
+  it('C4 expired principal DENY at issuance', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation({ exp: NOW + 30_000 }),
+      taskId: 'task-cp1-1',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    assert.equal(id.ok, true);
+    h.clock.setNowMs(NOW + 40_000);
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 240_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW + 40_000,
+      exp: NOW + 90_000,
+      taskId: 'task-cp1-1',
+    });
+    assert.equal(cap.decision, CAPABILITY_DECISIONS.DENY_EXPIRED);
+  });
+
+  it('C5 branded principal past exp DENY at verification', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation({ exp: NOW + 30_000 }),
+      taskId: 'task-cp1-1',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 240_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 180_000,
+      taskId: 'task-cp1-1',
+    });
+    assert.equal(cap.ok, true);
+    h.clock.setNowMs(NOW + 60_000);
+    assert.equal(
+      verifyCapability(cap.token, {}, verifyDeps(h, { cap, id, approvalIssued })).decision,
+      CAPABILITY_DECISIONS.DENY_EXPIRED,
+    );
+  });
+
+  it('C6 principal before nbf DENY', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation({ nbf: NOW + 10_000, exp: NOW + 120_000 }),
+      taskId: 'task-cp1-1',
+    }, {
+      clock: createInjectedClock(NOW + 10_000),
+      attestationVerifier: h.attestationVerifier,
+    });
+    // Re-brand at nbf, then rewind issuer/verify clock before nbf.
+    assert.equal(id.ok, true);
+    h.clock.setNowMs(NOW);
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 240_000,
+    });
+    // Approval verify needs clock >= approval.nbf; use future clock for approval only.
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: createInjectedClock(NOW + 10_000),
+      revocationRegistry: h.revocationRegistry,
+    });
+    // Issue with principal that is not yet valid on issuer clock (NOW).
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW + 10_000,
+      exp: NOW + 90_000,
+      taskId: 'task-cp1-1',
+    });
+    assert.equal(cap.decision, CAPABILITY_DECISIONS.DENY_NBF_VIOLATION);
+  });
+
+  it('C7 missing trusted clock at issuer construction DENY/throws', () => {
+    assert.throws(() => createTestOnlyCapabilityIssuer({
+      kid: 'cap-kid-1',
+      iss: 'test-cap-issuer',
+      aud: 'tecp-ops-cp1',
+      privateKeyPem: generateEphemeralCapabilityIssuerKeyPairForTests().privateKeyPem,
+      keyRegistry: createInMemoryKeyRegistry(),
+      replayRegistry: createInMemoryReplayRegistry(),
+      clock: null,
+    }), /CLOCK_REQUIRED/);
+  });
+
+  it('C8/C9 matching task but different baseline DENY at issue', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation(),
+      taskId: 'task-cp1-1',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 90_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    assert.equal(approvalVerified.ok, true);
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 60_000,
+      taskId: 'task-cp1-1',
+    });
+    assert.equal(cap.decision, CAPABILITY_DECISIONS.DENY_WRONG_SHA);
+  });
+
+  it('C10 copied non-branded principal DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const copy = { ...chain.id.principal };
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        principal: copy,
+      }).decision,
+      CAPABILITY_DECISIONS.DENY_UNBRANDED_IDENTITY,
+    );
+  });
+
+  it('C11 valid principal remains TEST_ATTESTED only', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(chain.id.principal.trustLevel, 'TEST_ATTESTED');
+    assert.equal(chain.id.principal.osPrincipalAuthenticated, false);
+    assert.equal(chain.id.principal.realWorkerAuthenticated, false);
+    assert.match(chain.cap.classification, /NOT_EXECUTION_AUTHORITY/);
+  });
+
+  // --- Finding D: Owner scope at verify ---
+  it('D1 capability subset of Owner approval ALLOW', () => {
+    const h = fullHarness();
+    const chain = mintChain(h, {
+      resourcePaths: [SCOPE[0], SCOPE[1]],
+    });
+    assert.equal(verifyCapability(chain.cap.token, {}, verifyDeps(h, chain)).ok, true);
+  });
+
+  it('D2/D3/D4 signed over-scope still inside CP1 allowlist DENY at verify', () => {
+    const h = fullHarness();
+    const narrow = [SCOPE[0], SCOPE[1]];
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation(),
+      taskId: 'task-cp1-1',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: narrow,
+      nbf: NOW,
+      exp: NOW + 240_000,
+    });
+    assert.equal(approvalIssued.ok, true);
+    // Privileged ephemeral issuer key crafts an over-scope capability (issue() would DENY).
+    const overScopePaths = [...SCOPE]; // includes SCOPE[2] outside narrow approval
+    const claims = {
+      action: 'CP1_OFFLINE_VERIFY',
+      alg: CP1_ALG,
+      aud: 'tecp-ops-cp1',
+      baselineSha: BASELINE_SHA,
+      exp: NOW + 60_000,
+      iss: 'test-cap-issuer',
+      jti: `overscope-${randomBytes(6).toString('hex')}`,
+      kid: 'cap-kid-1',
+      nbf: NOW,
+      operationClass: CP1_OPERATION_CLASS.CP1_OFFLINE_SECURITY_CONTRACT,
+      ownerApprovalJti: approvalIssued.claims.jti,
+      purpose: CP1_PURPOSE,
+      repositoryId: CP1_REPOSITORY_ID,
+      resourcePaths: overScopePaths,
+      sub: WORKER_ID,
+      taskId: 'task-cp1-1',
+      tokenType: 'TECP_OPS_CAPABILITY_V1',
+    };
+    const payload = canonicalJson(claims);
+    const privateKey = createPrivateKey(h.capKeys.privateKeyPem);
+    const token = `${b64urlEncode(Buffer.from(payload, 'utf8'))}.${b64urlEncode(sign(null, Buffer.from(payload, 'utf8'), privateKey))}`;
+    h.replayRegistry.reserveJti(claims.jti);
+    const verified = verifyCapability(token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+      replayRegistry: h.replayRegistry,
+      approvalToken: approvalIssued.token,
+      approvalDeps: {
+        keyRegistry: h.keyRegistry,
+        clock: h.clock,
+        revocationRegistry: h.revocationRegistry,
+      },
+      principal: id.principal,
+    });
+    assert.equal(verified.decision, CAPABILITY_DECISIONS.DENY_SCOPE_EXPANSION);
+  });
+
+  it('D5 forged or missing Owner approval DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        approvalToken: null,
+      }).decision,
+      CAPABILITY_DECISIONS.DENY_MISSING_OWNER_APPROVAL,
+    );
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        approvalToken: 'not.a.valid.token',
+      }).decision,
+      CAPABILITY_DECISIONS.DENY_INVALID_OWNER_APPROVAL,
+    );
+  });
+
+  it('D6 exact valid subset remains compatible', () => {
+    const h = fullHarness();
+    const chain = mintChain(h, { resourcePaths: [...SCOPE] });
+    const verified = verifyCapability(chain.cap.token, {
+      resourcePaths: [...SCOPE],
+    }, verifyDeps(h, chain));
+    assert.equal(verified.ok, true);
+  });
+
+  // --- Cross-finding composition ---
+  it('X1 full chain ALLOW once then replay DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const deps = verifyDeps(h, chain);
+    assert.equal(verifyCapability(chain.cap.token, {}, deps).ok, true);
+    assert.equal(verifyCapability(chain.cap.token, {}, deps).decision, CAPABILITY_DECISIONS.DENY_REPLAY);
+  });
+
+  it('X2 invalid Owner approval DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        approvalToken: 'aa.bb',
+      }).ok,
+      false,
+    );
+  });
+
+  it('X3 revoked Owner approval DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    h.revocationRegistry.revoke(chain.approvalIssued.claims.jti);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, verifyDeps(h, chain)).decision,
+      CAPABILITY_DECISIONS.DENY_INVALID_OWNER_APPROVAL,
+    );
+  });
+
+  it('X4 revoked capability DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    h.revocationRegistry.revoke(chain.cap.claims.jti);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, verifyDeps(h, chain)).decision,
+      CAPABILITY_DECISIONS.DENY_REVOKED,
+    );
+  });
+
+  it('X5 wrong task DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(
+      verifyCapability(chain.cap.token, { taskId: 'task-other' }, verifyDeps(h, chain)).decision,
+      CAPABILITY_DECISIONS.DENY_WRONG_TASK,
+    );
+  });
+
+  it('X6 expired principal DENY', () => {
+    const h = fullHarness();
+    const id = verifyOperationalPrincipal({
+      attestation: makeAttestation({ exp: NOW + 20_000 }),
+      taskId: 'task-cp1-1',
+    }, { clock: h.clock, attestationVerifier: h.attestationVerifier });
+    const approvalIssued = issueOwnerApprovalArtifactForTests(h.ownerIssuer, {
+      actorId: WORKER_ID,
+      taskId: 'task-cp1-1',
+      baselineSha: BASELINE_SHA,
+      authorizedFileScope: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 240_000,
+    });
+    const approvalVerified = verifyOwnerApprovalArtifact(approvalIssued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    const cap = issueCapabilityForTests(h.capIssuer, {
+      principal: id.principal,
+      approvalArtifact: approvalVerified.artifact,
+      action: 'CP1_OFFLINE_VERIFY',
+      resourcePaths: [...SCOPE],
+      nbf: NOW,
+      exp: NOW + 180_000,
+      taskId: 'task-cp1-1',
+    });
+    h.clock.setNowMs(NOW + 30_000);
+    assert.equal(
+      verifyCapability(cap.token, {}, verifyDeps(h, { cap, id, approvalIssued })).decision,
+      CAPABILITY_DECISIONS.DENY_EXPIRED,
+    );
+  });
+
+  it('X7 missing revocation DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        revocationRegistry: null,
+      }).decision,
+      CAPABILITY_DECISIONS.DENY_MISSING_REVOCATION,
+    );
+  });
+
+  it('X8 non-atomic replay provider DENY', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    assert.equal(
+      verifyCapability(chain.cap.token, {}, {
+        ...verifyDeps(h, chain),
+        replayRegistry: { has: () => false },
+      }).decision,
+      CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY,
+    );
+  });
+
+  it('X9 positive ALLOW never claims execution authority', () => {
+    const h = fullHarness();
+    const chain = mintChain(h);
+    const verified = verifyCapability(chain.cap.token, {}, verifyDeps(h, chain));
+    assert.equal(verified.ok, true);
+    assert.match(verified.classification, /NOT_EXECUTION_AUTHORITY/);
   });
 });

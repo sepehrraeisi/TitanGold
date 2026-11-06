@@ -25,8 +25,10 @@ import {
   validateExactCp1Scope,
 } from './config.js';
 import {
+  IDENTITY_DECISIONS,
   TRUST_LEVELS,
   isBrandedVerifiedOperationalPrincipal,
+  recheckBrandedPrincipalValidity,
 } from './operationalWorkerIdentity.js';
 import {
   isBrandedOwnerApprovalArtifact,
@@ -232,10 +234,62 @@ function validateClaims(claims) {
   return null;
 }
 
+function mapPrincipalValidityDeny(code) {
+  if (code === IDENTITY_DECISIONS.DENY_EXPIRED) {
+    return deny(CAPABILITY_DECISIONS.DENY_EXPIRED, ['PRINCIPAL_EXPIRED']);
+  }
+  if (code === IDENTITY_DECISIONS.DENY_NBF_VIOLATION) {
+    return deny(CAPABILITY_DECISIONS.DENY_NBF_VIOLATION, ['PRINCIPAL_NBF']);
+  }
+  if (code === IDENTITY_DECISIONS.DENY_MISSING_CLOCK) {
+    return deny(CAPABILITY_DECISIONS.DENY_MISSING_CLOCK, ['PRINCIPAL_CLOCK']);
+  }
+  if (code === IDENTITY_DECISIONS.DENY_FORGED_IDENTITY) {
+    return deny(CAPABILITY_DECISIONS.DENY_UNBRANDED_IDENTITY, ['PRINCIPAL_NOT_BRANDED']);
+  }
+  return deny(CAPABILITY_DECISIONS.DENY_MALFORMED, [code || 'PRINCIPAL_INVALID']);
+}
+
+function interpretRevocationResult(revoked) {
+  if (revoked === false) return { ok: true };
+  if (revoked === true) {
+    return { ok: false, decision: CAPABILITY_DECISIONS.DENY_REVOKED, reasons: ['REVOKED_JTI'] };
+  }
+  const kind = revoked === null
+    ? 'NULL'
+    : (revoked != null && typeof revoked.then === 'function' ? 'PROMISE' : typeof revoked);
+  return {
+    ok: false,
+    decision: CAPABILITY_DECISIONS.DENY_MISSING_REVOCATION,
+    reasons: ['REVOCATION_RESULT_NOT_EXPLICIT_FALSE', kind],
+  };
+}
+
+function interpretPresentationResult(firstPresentation) {
+  if (firstPresentation === true) return { ok: true };
+  if (firstPresentation === false) {
+    return {
+      ok: false,
+      decision: CAPABILITY_DECISIONS.DENY_REPLAY,
+      reasons: ['PRESENTATION_REPLAY'],
+    };
+  }
+  const kind = firstPresentation === null
+    ? 'NULL'
+    : (firstPresentation != null && typeof firstPresentation.then === 'function'
+      ? 'PROMISE'
+      : typeof firstPresentation);
+  return {
+    ok: false,
+    decision: CAPABILITY_DECISIONS.DENY_AMBIGUOUS_CONSUME,
+    reasons: ['PRESENTATION_RESULT_NOT_EXPLICIT_TRUE', kind],
+  };
+}
+
 export function createTestOnlyCapabilityIssuer(options = {}) {
   if (!isPlainObject(options)) throw new TypeError('ISSUER_OPTIONS_REQUIRED');
   const {
-    kid, iss, aud, privateKeyPem, keyRegistry, replayRegistry,
+    kid, iss, aud, privateKeyPem, keyRegistry, replayRegistry, clock,
   } = options;
   if (!isNonEmptyString(kid) || !isNonEmptyString(iss) || !isNonEmptyString(aud)) {
     throw new TypeError('KID_ISS_AUD_REQUIRED');
@@ -244,8 +298,11 @@ export function createTestOnlyCapabilityIssuer(options = {}) {
   if (keyRegistry == null || typeof keyRegistry.get !== 'function') {
     throw new TypeError('KEY_REGISTRY_REQUIRED');
   }
-  if (replayRegistry == null || typeof replayRegistry.consume !== 'function') {
+  if (replayRegistry == null || typeof replayRegistry.reserveJti !== 'function') {
     throw new TypeError('REPLAY_REGISTRY_REQUIRED');
+  }
+  if (clock == null || typeof clock.nowMs !== 'function') {
+    throw new TypeError('CLOCK_REQUIRED');
   }
   const privateKey = createPrivateKey(privateKeyPem);
   const issuer = Object.freeze({
@@ -269,6 +326,10 @@ export function createTestOnlyCapabilityIssuer(options = {}) {
       if (principal.trustLevel !== TRUST_LEVELS.TEST_ATTESTED) {
         return deny(CAPABILITY_DECISIONS.DENY_UNBRANDED_IDENTITY, ['TRUST_LEVEL']);
       }
+      const freshness = recheckBrandedPrincipalValidity(principal, clock);
+      if (freshness != null) {
+        return mapPrincipalValidityDeny(freshness);
+      }
       if (!isBrandedOwnerApprovalArtifact(approvalArtifact)) {
         return deny(CAPABILITY_DECISIONS.DENY_MISSING_OWNER_APPROVAL, [
           'APPROVAL_NOT_BRANDED',
@@ -280,6 +341,10 @@ export function createTestOnlyCapabilityIssuer(options = {}) {
       const taskId = taskIdInput || approvalArtifact.taskId;
       if (!isNonEmptyString(taskId) || approvalArtifact.taskId !== taskId) {
         return deny(CAPABILITY_DECISIONS.DENY_WRONG_TASK, ['APPROVAL_TASK_MISMATCH']);
+      }
+      // Task-scoped identity: principal.taskId must exactly match approval/capability task.
+      if (!isNonEmptyString(principal.taskId) || principal.taskId !== taskId) {
+        return deny(CAPABILITY_DECISIONS.DENY_WRONG_TASK, ['PRINCIPAL_TASK_MISMATCH']);
       }
       if (approvalArtifact.repositoryId !== principal.repositoryId
         || approvalArtifact.baselineSha !== principal.baselineSha) {
@@ -332,8 +397,13 @@ export function createTestOnlyCapabilityIssuer(options = {}) {
           e?.code || 'REPLAY_UNAVAILABLE',
         ]);
       }
-      if (reserved === false) {
-        return deny(CAPABILITY_DECISIONS.DENY_DUPLICATE_JTI, ['JTI_ALREADY_USED']);
+      if (reserved !== true) {
+        if (reserved === false) {
+          return deny(CAPABILITY_DECISIONS.DENY_DUPLICATE_JTI, ['JTI_ALREADY_USED']);
+        }
+        return deny(CAPABILITY_DECISIONS.DENY_AMBIGUOUS_CONSUME, [
+          'ISSUE_RESERVE_RESULT_NOT_EXPLICIT_TRUE',
+        ]);
       }
       const payload = canonicalJson(claims);
       const signature = b64urlEncode(sign(null, Buffer.from(payload, 'utf8'), privateKey));
@@ -505,8 +575,11 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
   if (revocationRegistry == null || typeof revocationRegistry.isRevoked !== 'function') {
     return deny(CAPABILITY_DECISIONS.DENY_MISSING_REVOCATION, ['REVOCATION_REQUIRED']);
   }
-  if (replayRegistry == null || typeof replayRegistry.has !== 'function') {
-    return deny(CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY, ['REPLAY_REQUIRED']);
+  // Single-use verify requires an atomic markPresented contract. has()-only is insufficient.
+  if (replayRegistry == null || typeof replayRegistry.markPresented !== 'function') {
+    return deny(CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY, [
+      'ATOMIC_MARK_PRESENTED_REQUIRED',
+    ]);
   }
   if (principal == null) {
     return deny(CAPABILITY_DECISIONS.DENY_MISSING_IDENTITY, ['PRINCIPAL_REQUIRED']);
@@ -519,6 +592,13 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
   }
   if (principal.repositoryId !== claims.repositoryId || principal.baselineSha !== claims.baselineSha) {
     return deny(CAPABILITY_DECISIONS.DENY_WRONG_SHA, ['PRINCIPAL_BINDING_MISMATCH']);
+  }
+  if (!isNonEmptyString(principal.taskId) || principal.taskId !== claims.taskId) {
+    return deny(CAPABILITY_DECISIONS.DENY_WRONG_TASK, ['PRINCIPAL_TASK_MISMATCH']);
+  }
+  const principalFreshness = recheckBrandedPrincipalValidity(principal, clock);
+  if (principalFreshness != null) {
+    return mapPrincipalValidityDeny(principalFreshness);
   }
 
   if (approvalToken == null) {
@@ -539,6 +619,15 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
   }
   if (approvalResult.artifact.jti !== claims.ownerApprovalJti) {
     return deny(CAPABILITY_DECISIONS.DENY_INVALID_OWNER_APPROVAL, ['APPROVAL_JTI_MISMATCH']);
+  }
+  // Finding D: independently enforce capability resourcePaths ⊆ verified Owner approval scope.
+  const verifiedApprovalScope = new Set(approvalResult.artifact.authorizedFileScope);
+  for (const path of claims.resourcePaths) {
+    if (!verifiedApprovalScope.has(path)) {
+      return deny(CAPABILITY_DECISIONS.DENY_SCOPE_EXPANSION, [
+        `NOT_IN_VERIFIED_APPROVAL_SCOPE:${path}`,
+      ]);
+    }
   }
 
   const keyEntry = keyRegistry.get(claims.kid);
@@ -579,8 +668,9 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
       err?.code || 'REVOCATION_UNAVAILABLE',
     ]);
   }
-  if (revoked === true) {
-    return deny(CAPABILITY_DECISIONS.DENY_REVOKED, ['REVOKED_JTI']);
+  const revocationGate = interpretRevocationResult(revoked);
+  if (!revocationGate.ok) {
+    return deny(revocationGate.decision, revocationGate.reasons);
   }
 
   // Expectation checks
@@ -604,19 +694,11 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
     }
   }
 
-  // Single-use presentation: first verify marks presented; second DENY_REPLAY.
+  // Single-use presentation is mandatory. Optional flags cannot disable it.
+  // consumeOnVerify=false is ignored: has()-only registries already rejected above.
+  let firstPresentation;
   try {
-    if (typeof replayRegistry.markPresented === 'function') {
-      const firstPresentation = replayRegistry.markPresented(claims.jti);
-      if (firstPresentation === false) {
-        return deny(CAPABILITY_DECISIONS.DENY_REPLAY, ['PRESENTATION_REPLAY']);
-      }
-    } else if (typeof replayRegistry.has === 'function' && expectation.consumeOnVerify === true) {
-      const first = replayRegistry.consume(claims.jti);
-      if (first === false) {
-        return deny(CAPABILITY_DECISIONS.DENY_REPLAY, ['JTI_ALREADY_CONSUMED']);
-      }
-    }
+    firstPresentation = replayRegistry.markPresented(claims.jti);
   } catch (err) {
     if (err?.code === 'AMBIGUOUS_CONSUME') {
       return deny(CAPABILITY_DECISIONS.DENY_AMBIGUOUS_CONSUME, ['VERIFY_PRESENT_AMBIGUOUS']);
@@ -624,6 +706,10 @@ export function verifyCapability(tokenOrRequest, expectation = {}, deps = {}) {
     return deny(CAPABILITY_DECISIONS.DENY_MISSING_REPLAY_REGISTRY, [
       err?.code || 'REPLAY_UNAVAILABLE',
     ]);
+  }
+  const presentationGate = interpretPresentationResult(firstPresentation);
+  if (!presentationGate.ok) {
+    return deny(presentationGate.decision, presentationGate.reasons);
   }
 
   return Object.freeze({

@@ -14,6 +14,7 @@ import {
   TRUST_LEVELS,
   createTestOnlyAttestationVerifier,
   isBrandedVerifiedOperationalPrincipal,
+  recheckBrandedPrincipalValidity,
   verifyOperationalPrincipal,
 } from '../src/operationalWorkerIdentity.js';
 import { createInjectedClock } from '../src/ownerApprovalArtifact.js';
@@ -241,5 +242,68 @@ describe('CP1 operationalWorkerIdentity', () => {
   it('import has no operational side effects marker', () => {
     // Smoke: hashing a constant proves module loaded without throw.
     assert.equal(createHash('sha256').update('cp1').digest('hex').length, 64);
+  });
+
+  it('C5 recheckBrandedPrincipalValidity expires branded principal', () => {
+    const clock = createInjectedClock(1_700_000_000_000);
+    const result = verifyOperationalPrincipal({
+      attestation: makeAttestation({ exp: 1_700_000_030_000 }),
+      taskId: 'task-cp1-1',
+    }, makeDeps({ clock }));
+    assert.equal(result.ok, true);
+    assert.equal(recheckBrandedPrincipalValidity(result.principal, clock), null);
+    clock.setNowMs(1_700_000_040_000);
+    assert.equal(
+      recheckBrandedPrincipalValidity(result.principal, clock),
+      IDENTITY_DECISIONS.DENY_EXPIRED,
+    );
+  });
+
+  it('C6 recheckBrandedPrincipalValidity nbf DENY', () => {
+    const clock = createInjectedClock(1_700_000_010_000);
+    const result = verifyOperationalPrincipal({
+      attestation: makeAttestation({
+        nbf: 1_700_000_010_000,
+        exp: 1_700_000_120_000,
+        attestedAt: 1_700_000_010_000,
+      }),
+      taskId: 'task-cp1-1',
+    }, makeDeps({ clock }));
+    assert.equal(result.ok, true);
+    clock.setNowMs(1_700_000_000_000);
+    assert.equal(
+      recheckBrandedPrincipalValidity(result.principal, clock),
+      IDENTITY_DECISIONS.DENY_NBF_VIOLATION,
+    );
+  });
+
+  it('C7 recheck missing clock DENY', () => {
+    const result = verifyOperationalPrincipal({
+      attestation: makeAttestation(),
+      taskId: 'task-cp1-1',
+    }, makeDeps());
+    assert.equal(result.ok, true);
+    assert.equal(
+      recheckBrandedPrincipalValidity(result.principal, null),
+      IDENTITY_DECISIONS.DENY_MISSING_CLOCK,
+    );
+  });
+
+  it('C10 recheck unbranded object DENY', () => {
+    assert.equal(
+      recheckBrandedPrincipalValidity({ principalId: WORKER_ID }, createInjectedClock(1)),
+      IDENTITY_DECISIONS.DENY_FORGED_IDENTITY,
+    );
+  });
+
+  it('C11 branded principal is TEST_ATTESTED never OS_AUTHENTICATED', () => {
+    const result = verifyOperationalPrincipal({
+      attestation: makeAttestation(),
+      taskId: 'task-cp1-1',
+    }, makeDeps());
+    assert.equal(result.ok, true);
+    assert.equal(result.principal.trustLevel, TRUST_LEVELS.TEST_ATTESTED);
+    assert.equal(result.principal.osPrincipalAuthenticated, false);
+    assert.equal(isBrandedVerifiedOperationalPrincipal(result.principal), true);
   });
 });

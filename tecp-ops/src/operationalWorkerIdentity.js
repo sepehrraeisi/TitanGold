@@ -109,6 +109,39 @@ export function isBrandedVerifiedOperationalPrincipal(principal) {
 }
 
 /**
+ * Re-validate a previously branded principal against a trusted injected clock.
+ * Brand alone is not standing authority after expiry / before nbf.
+ * Returns null on success, or an IDENTITY_DECISIONS deny code string.
+ */
+export function recheckBrandedPrincipalValidity(principal, clock) {
+  if (!isBrandedVerifiedOperationalPrincipal(principal)) {
+    return IDENTITY_DECISIONS.DENY_FORGED_IDENTITY;
+  }
+  if (clock == null || typeof clock.nowMs !== 'function') {
+    return IDENTITY_DECISIONS.DENY_MISSING_CLOCK;
+  }
+  let nowMs;
+  try {
+    nowMs = clock.nowMs();
+  } catch {
+    return IDENTITY_DECISIONS.DENY_MISSING_CLOCK;
+  }
+  if (!isSafeInteger(nowMs)) {
+    return IDENTITY_DECISIONS.DENY_MISSING_CLOCK;
+  }
+  if (!isSafeInteger(principal.nbf) || !isSafeInteger(principal.exp)) {
+    return IDENTITY_DECISIONS.DENY_MALFORMED;
+  }
+  if (nowMs < principal.nbf) {
+    return IDENTITY_DECISIONS.DENY_NBF_VIOLATION;
+  }
+  if (nowMs >= principal.exp) {
+    return IDENTITY_DECISIONS.DENY_EXPIRED;
+  }
+  return null;
+}
+
+/**
  * Privileged TEST_ONLY harness: create an attestation verifier bound to an allowlist.
  * Caller-supplied trust anchors on verify requests are rejected separately.
  */

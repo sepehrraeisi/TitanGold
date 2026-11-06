@@ -452,8 +452,15 @@ export function verifyOwnerApprovalArtifact(token, expectation = {}, deps = {}) 
       err?.code || 'REVOCATION_UNAVAILABLE',
     ]);
   }
+  // Only an explicit boolean false means NOT_REVOKED. Fail closed otherwise.
   if (revoked === true) {
     return deny(APPROVAL_DECISIONS.DENY_REVOKED, ['REVOKED_JTI']);
+  }
+  if (revoked !== false) {
+    return deny(APPROVAL_DECISIONS.DENY_MISSING_REVOCATION, [
+      'REVOCATION_RESULT_NOT_EXPLICIT_FALSE',
+      revoked === null ? 'NULL' : typeof revoked,
+    ]);
   }
 
   // Expectation bindings

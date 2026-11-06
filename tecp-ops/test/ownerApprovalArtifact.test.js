@@ -325,4 +325,83 @@ describe('CP1 ownerApprovalArtifact', () => {
     });
     assert.equal(verified.decision, APPROVAL_DECISIONS.DENY_DEFAULT_FAIL_CLOSED);
   });
+
+  it('B1 Owner approval revoked=false ALLOW', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    const verified = verifyOwnerApprovalArtifact(issued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: h.revocationRegistry,
+    });
+    assert.equal(verified.ok, true);
+    assert.equal(verified.decision, APPROVAL_DECISIONS.ALLOW);
+  });
+
+  it('B2 Owner approval revoked=true DENY', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    h.revocationRegistry.revoke(issued.claims.jti);
+    assert.equal(
+      verifyOwnerApprovalArtifact(issued.token, {}, {
+        keyRegistry: h.keyRegistry,
+        clock: h.clock,
+        revocationRegistry: h.revocationRegistry,
+      }).decision,
+      APPROVAL_DECISIONS.DENY_REVOKED,
+    );
+  });
+
+  it('B3 Owner approval undefined/null/non-boolean revocation DENY', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    for (const value of [undefined, null, 'no', 0, 1, { revoked: false }]) {
+      const verified = verifyOwnerApprovalArtifact(issued.token, {}, {
+        keyRegistry: h.keyRegistry,
+        clock: h.clock,
+        revocationRegistry: { isRevoked: () => value },
+      });
+      assert.equal(verified.ok, false, `expected DENY for ${String(value)}`);
+      assert.equal(verified.decision, APPROVAL_DECISIONS.DENY_MISSING_REVOCATION);
+    }
+  });
+
+  it('B4 Owner approval revocation throws DENY', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    const verified = verifyOwnerApprovalArtifact(issued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: {
+        isRevoked() {
+          throw Object.assign(new Error('x'), { code: 'REVOCATION_UNAVAILABLE' });
+        },
+      },
+    });
+    assert.equal(verified.decision, APPROVAL_DECISIONS.DENY_MISSING_REVOCATION);
+  });
+
+  it('B9 Owner approval Promise revocation DENY', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    const verified = verifyOwnerApprovalArtifact(issued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: { isRevoked: () => Promise.resolve(false) },
+    });
+    assert.equal(verified.decision, APPROVAL_DECISIONS.DENY_MISSING_REVOCATION);
+  });
+
+  it('B10 unknown revocation does not bypass signature/expiry', () => {
+    const h = harness();
+    const issued = issueValid(h);
+    h.clock.setNowMs(NOW + 120_000);
+    const verified = verifyOwnerApprovalArtifact(issued.token, {}, {
+      keyRegistry: h.keyRegistry,
+      clock: h.clock,
+      revocationRegistry: { isRevoked: () => undefined },
+    });
+    // Expired check runs before revocation; expect DENY_EXPIRED (not ALLOW via fail-open).
+    assert.equal(verified.decision, APPROVAL_DECISIONS.DENY_EXPIRED);
+  });
 });
