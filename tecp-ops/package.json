@@ -1,0 +1,18 @@
+{
+  "name": "@titangold/tecp-ops",
+  "version": "0.1.0-cp1",
+  "private": true,
+  "type": "module",
+  "description": "TECP-OPS-PILOT-001 CP1 offline TEST_ONLY identity, Owner approval, and capability contracts. NON_OPERATIONAL.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
