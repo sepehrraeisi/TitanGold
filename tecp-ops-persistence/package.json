@@ -1,0 +1,20 @@
+{
+  "name": "@titangold/tecp-ops-persistence",
+  "version": "0.0.0-cp2-i",
+  "private": true,
+  "type": "module",
+  "description": "TECP-OPS-PILOT-001 CP2-I offline TEST_ONLY composition of CP1 authority with frozen DLP-001..004 persistence interfaces. NON_OPERATIONAL. No PostgreSQL execution authorized in CP2-I.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/operationalTaskLeaseAuditRepository.test.js test/fencingConcurrency.test.js"
+  },
+  "exports": {
+    "./operationalTaskLeaseAuditRepository.js": "./src/operationalTaskLeaseAuditRepository.js",
+    "./nonProdDbHarness.js": "./src/nonProdDbHarness.js"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  }
+}
