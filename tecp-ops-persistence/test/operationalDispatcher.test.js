@@ -48,8 +48,12 @@ import {
 import {
   DISPATCHER_ACTIONS,
   DISPATCHER_DECISIONS,
+  TEST_ONLY_COMPOSITION_DECISIONS,
+  assertOperationalDispatcherHardDeny,
   createOperationalDispatcher,
+  createTestOnlyDlp004CompositionHandle,
   isPrivilegedOperationalDispatcher,
+  runTestOnlyDlp004Composition,
 } from '../src/operationalDispatcher.js';
 
 const BASELINE_SHA = '662b3a16d04de426d444cdce854d7a7d8b982ade';
@@ -423,5 +427,77 @@ describe('S2 operationalDispatcher fail-closed Gate B', () => {
       offlineInterfaceOnly: true,
     }, { id: 'txn' });
     assert.equal(projected.ok, true);
+  });
+
+  it('8) TEST_ONLY composition denies without Tier-3 DB client; not via dispatcher', async () => {
+    const h = buildHarness();
+    const chain = mintCp1(h);
+    const handle = createTestOnlyDlp004CompositionHandle({
+      proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+    });
+    const denied = await runTestOnlyDlp004Composition(handle, {
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      principal: chain.id.principal,
+      jti: 'jti-comp-1',
+      taskId: TASK_ID,
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey: 'resource-s2',
+      governanceRevision: S2_GOVERNANCE_REVISION,
+      issuerId: 'ops-rla-issuer',
+      audience: TRUST_ROOT_AUDIENCE,
+    });
+    assert.equal(
+      denied.decision,
+      TEST_ONLY_COMPOSITION_DECISIONS.DENY_DB_TIER3_NOT_AUTHORIZED,
+    );
+    assert.equal(denied.committed, false);
+    assert.equal(denied.mutationExecuted, false);
+
+    assert.throws(() => createTestOnlyDlp004CompositionHandle({
+      proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+      operationalDispatchClaim: true,
+    }));
+
+    const forged = await runTestOnlyDlp004Composition({ forged: true }, {
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      principal: chain.id.principal,
+      jti: 'jti-x',
+    });
+    assert.equal(forged.decision, TEST_ONLY_COMPOSITION_DECISIONS.DENY_NOT_TEST_ONLY);
+  });
+
+  it('9) TEST_ONLY composition refuses caller SQL/callbacks; dispatcher hard-deny helper', async () => {
+    const handle = createTestOnlyDlp004CompositionHandle({
+      proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+    });
+    const h = buildHarness();
+    const chain = mintCp1(h);
+    assert.equal(
+      (await runTestOnlyDlp004Composition(handle, {
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        principal: chain.id.principal,
+        jti: 'jti-sql',
+        sql: 'SELECT 1',
+        dbClient: { query: async () => ({ rows: [] }) },
+      })).decision,
+      TEST_ONLY_COMPOSITION_DECISIONS.DENY_CALLER_SQL,
+    );
+    assert.equal(
+      (await runTestOnlyDlp004Composition(handle, {
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        principal: chain.id.principal,
+        jti: 'jti-cb',
+        callback: () => {},
+        dbClient: { query: async () => ({ rows: [] }) },
+      })).decision,
+      TEST_ONLY_COMPOSITION_DECISIONS.DENY_CALLER_CALLBACK,
+    );
+
+    const d = createDispatcher(h, { current: null });
+    const hard = d.authorizeAndDispatch({
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      sql: 'x',
+    });
+    assert.equal(assertOperationalDispatcherHardDeny(hard).ok, true);
   });
 });
