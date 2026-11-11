@@ -15,10 +15,13 @@ import { describe, it } from 'node:test';
 
 import {
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+  OPS_PILOT_HARNESS_DECISIONS,
   OPS_PILOT_TIER3_AUTHORIZED,
   TIER3_ACTIVATION_AUTHORITY,
+  createInertOfflineOneShotTicketForTests,
   createPrivilegedTier3ActivationHandleForTests,
   evaluateOpsPilotHarnessSafety,
+  evaluateOwnerControlledLocalRunnerEvidence,
   isPrivilegedTier3ActivationHandle,
   startDisposableOpsPilotCluster,
 } from '../src/disposableOpsPilotDbHarness.js';
@@ -177,6 +180,39 @@ describe('S2 cp2DbFencingDurability (Tier-3 gated)', () => {
     );
     assert.equal(stillDenied.ok, false);
     assert.equal(stillDenied.decision, DB_TIER3_NOT_AUTHORIZED);
+  });
+
+  it('ordinary discovery cannot Owner-activate or live-start PostgreSQL', async () => {
+    const noMarker = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: 'b1036a5035a9c58e430e202086763b8acf963301',
+      approvedActions: [
+        'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+        'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+      ],
+      affirmSameUidLimitationsAccepted: true,
+    }, { argv: process.argv });
+    assert.equal(noMarker.ok, false);
+    assert.equal(
+      noMarker.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_INVOCATION_NOT_VERIFIABLE,
+    );
+
+    const inert = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    });
+    // Inert ticket without injected spawn still cannot live-exec under module const false.
+    const start = await startDisposableOpsPilotCluster({
+      explicitNonProd: true,
+      ownerOneShotTicket: inert,
+    }, { NODE_ENV: 'test' });
+    assert.equal(start.ok, false);
+    assert.equal(start.postgresActions, 0);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP,
+    ].includes(start.decision));
   });
 
   it('documents required live assertions for future Owner Tier-3 run', () => {
