@@ -1,22 +1,38 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import {
   ONE_SHOT_STATES,
   OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+  OPS_PILOT_HARNESS_CHECKPOINT,
   OPS_PILOT_HARNESS_DECISIONS,
+  OPS_PILOT_HARNESS_MARKER_MAGIC,
+  OPS_PILOT_HARNESS_MARKER_NAME,
+  OPS_PILOT_HARNESS_ROOT_PREFIX,
   OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
   OPS_PILOT_PINNED_MAIN_SHA,
   OPS_PILOT_REQUIRED_PG_VERSION,
   OPS_PILOT_TIER3_AUTHORIZED,
+  POSTMASTER_STATUS,
   TIER3_ACTIVATION_AUTHORITY,
   activateOwnerControlledLocalRunnerOneShot,
   assertHarnessSourceHasNoEagerPgImport,
+  assertNoSymlink,
   assertPathInsideRoot,
+  assertVerifiedHarnessPaths,
   buildInitdbArgs,
   buildPgCtlStartArgs,
   buildPgCtlStopArgs,
@@ -30,11 +46,16 @@ import {
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   getOwnerOneShotTicketView,
+  inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
+  isOwnedDisposableOpsPilotClusterController,
+  isOwnerOneShotTicket,
   planOwnedUnixSocketClientConfig,
   planPostgresVersionProbe,
   startDisposableOpsPilotCluster,
+  stopClusterAndProveTerminated,
   stopDisposableOpsPilotCluster,
+  writeHarnessMarker,
 } from '../src/disposableOpsPilotDbHarness.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -61,7 +82,18 @@ function inertSpawner() {
   };
 }
 
-describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => {
+function withIsolatedDisposableFixture(run) {
+  const root = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}p1cov-`));
+  const dataDir = join(root, 'data');
+  mkdirSync(dataDir);
+  try {
+    return run(root, dataDir);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+describe('S2 disposableOpsPilotDbHarness Tier-3 pre-live hardening offline safety', () => {
   it('1) source contract allow without Tier-3/DB execution', () => {
     const result = evaluateOpsPilotHarnessSafety(
       { explicitNonProd: true, dataDir: '/tmp/disposable-ops-pilot' },
@@ -74,6 +106,12 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     assert.equal(result.tier3ActivationAuthority, TIER3_ACTIVATION_AUTHORITY);
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_HARNESS_CHECKPOINT, 'S2_TIER3_PRE_LIVE_HARDENING');
+    assert.equal(OPS_PILOT_PINNED_MAIN_SHA, '1e7603a156e0dcb036dc5f43a06803e52695613f');
+    assert.deepEqual([...OPS_PILOT_APPROVED_TEST_ACTIONS], [
+      'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+      'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+    ]);
   });
 
   it('2) DATABASE_URL / PG* / TCP / remote / caller pg bin denied', () => {
@@ -326,7 +364,7 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     );
   });
 
-  it('10) verified Owner argv activates one-shot; live spawn request still denied by DB gate', () => {
+  it('10) ARGV marker / env / boolean cannot independently authorize Owner one-shot or DB', () => {
     const argv = [
       process.execPath,
       OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
@@ -355,6 +393,22 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED,
     );
 
+    const evidence = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1000,
+    }, deps);
+    assert.equal(evidence.ok, false);
+    assert.equal(
+      evidence.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION,
+    );
+    assert.equal(evidence.ownerAuthenticationProven, false);
+    assert.equal(evidence.ownerInvocationIndependentlyVerifiable, false);
+
     const activated = activateOwnerControlledLocalRunnerOneShot({
       repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
       approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
@@ -363,11 +417,25 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       affirmSameUidLimitationsAccepted: true,
       executionPrincipal: 1000,
     }, deps);
-    assert.equal(activated.ok, true);
-    assert.equal(activated.state, ONE_SHOT_STATES.ACTIVE_TEST_ONLY);
-    assert.equal(activated.liveSpawnPermitted, false);
-    assert.equal(activated.sameUidSealed, false);
-    assert.equal(isActiveOwnerOneShotTicket(activated.ticket, deps.clock), true);
+    assert.equal(activated.ok, false);
+    assert.equal(
+      activated.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN,
+    );
+    assert.equal(activated.ticket, undefined);
+
+    assert.equal(
+      evaluateOwnerControlledLocalRunnerEvidence({
+        ownerAuthorizedByBoolean: true,
+      }, deps).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_BOOLEAN_ACTIVATION,
+    );
+    assert.equal(
+      evaluateOwnerControlledLocalRunnerEvidence({
+        envAuthorized: true,
+      }, deps).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_BOOLEAN_ACTIVATION,
+    );
   });
 
   it('11) one-shot replay, TTL expiry, and cancellation fail closed', async () => {
@@ -435,35 +503,46 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     assert.equal(cancelled.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED);
   });
 
-  it('12) Owner one-shot without inert spawner cannot live-start; consumes capability', async () => {
-    const argv = [
-      process.execPath,
-      OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
-      '--test',
-      ...OPS_PILOT_APPROVED_TEST_ACTIONS,
-    ];
+  it('12) inert ticket without fake spawner cannot live-start; consumes; prepare is one-shot', async () => {
     const clock = makeClock();
-    const activated = activateOwnerControlledLocalRunnerOneShot({
-      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
-      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
-      executablePath: process.execPath,
-      harnessModulePath: HARNESS_SRC,
-      affirmSameUidLimitationsAccepted: true,
-      executionPrincipal: process.getuid?.(),
-    }, {
-      argv,
-      execPath: process.execPath,
-      getuid: () => process.getuid?.(),
-      clock,
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    assert.equal(Object.isFrozen(ticket), true);
+    assert.throws(() => {
+      ticket.liveSpawnPermitted = true;
     });
-    assert.equal(activated.ok, true);
+    assert.throws(() => {
+      ticket.consumed = false;
+    });
+
     const controller = createDisposableOpsPilotClusterController({
       explicitNonProd: true,
-      ownerOneShotTicket: activated.ticket,
+      ownerOneShotTicket: ticket,
       clock,
     }, { NODE_ENV: 'test' });
     const prepared = await controller.prepare();
     assert.equal(prepared.ok, true);
+    const preparedAgain = await controller.prepare();
+    assert.equal(preparedAgain.ok, false);
+    assert.equal(
+      preparedAgain.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PREPARE_ALREADY_USED,
+    );
+
+    const secondController = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+    }, { NODE_ENV: 'test' });
+    const secondPrepare = await secondController.prepare();
+    assert.equal(secondPrepare.ok, false);
+    assert.equal(
+      secondPrepare.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PREPARE_ALREADY_USED,
+    );
+
     const started = await controller.start();
     assert.equal(started.ok, false);
     assert.equal(
@@ -472,12 +551,19 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     );
     assert.equal(started.postgresActions, 0);
     assert.ok(started.plannedArgs?.initdbArgs);
-    assert.equal(isActiveOwnerOneShotTicket(activated.ticket, clock), false);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
     await controller.cleanup();
   });
 
-  it('13) path escape / symlink cleanup denial preserved by helpers', () => {
-    assert.throws(() => assertPathInsideRoot('/tmp/tecp-ops-pilot-s2-root', '/tmp/other'));
+  it('13) assertPathInsideRoot rejects canonical path escape', () => {
+    assert.throws(
+      () => assertPathInsideRoot('/tmp/tecp-ops-pilot-s2-root', '/tmp/other'),
+      /path escapes disposable root/,
+    );
+    assert.throws(
+      () => assertPathInsideRoot('/tmp/tecp-ops-pilot-s2-root', '/tmp/tecp-ops-pilot-s2-root/../escape'),
+      /path escapes disposable root/,
+    );
   });
 
   it('14) failed startup with inert spawner does not leave reusable activation', async () => {
@@ -514,5 +600,371 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED,
     ].includes(replayController.decision));
     await controller.cleanup();
+  });
+
+  it('15) default pg_ctl status/stop helpers deny without owned controller', () => {
+    const status = inspectPostmasterStatus('/tmp/tecp-ops-pilot-s2-not-owned/data');
+    assert.equal(status.blocked, true);
+    assert.equal(
+      status.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    assert.equal(status.status, 'UNCERTAIN');
+
+    const stopped = stopClusterAndProveTerminated('/tmp/tecp-ops-pilot-s2-not-owned/data');
+    assert.equal(stopped.blocked, true);
+    assert.equal(
+      stopped.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    assert.equal(stopped.terminated, false);
+  });
+
+  it('16) ticket privilege is module-private; public mutation cannot escalate', () => {
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    assert.equal(isOwnerOneShotTicket(ticket), true);
+    assert.equal(Object.isFrozen(ticket), true);
+    assert.equal(ticket.authorizesLivePostgres, false);
+    const view = getOwnerOneShotTicketView(ticket, clock);
+    assert.equal(view.liveSpawnPermitted, false);
+    assert.equal(view.ownerAuthenticationProven, false);
+    assert.equal(view.prepareUsed, false);
+    cancelOwnerOneShotTicket(ticket, clock);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
+    assert.equal(getOwnerOneShotTicketView(ticket, clock).cancelled, true);
+  });
+
+  it('17) EXECUTION_PRINCIPAL_MISMATCH and extra ARGV .test.js paths fail closed', () => {
+    const baseArgv = [
+      process.execPath,
+      OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
+      '--test',
+      OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      OPS_PILOT_APPROVED_TEST_ACTIONS[1],
+    ];
+    const deps = {
+      argv: baseArgv,
+      execPath: process.execPath,
+      getuid: () => 1000,
+    };
+
+    const mismatched = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1,
+    }, deps);
+    assert.equal(mismatched.ok, false);
+    assert.equal(
+      mismatched.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_WRONG_EXECUTABLE_IDENTITY,
+    );
+    assert.ok(mismatched.reasons.includes('EXECUTION_PRINCIPAL_MISMATCH'));
+    assert.equal(mismatched.ownerAuthenticationProven, undefined);
+
+    const matchingPrincipalStillArgvOnly = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1000,
+    }, deps);
+    assert.equal(matchingPrincipalStillArgvOnly.ok, false);
+    assert.equal(
+      matchingPrincipalStillArgvOnly.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION,
+    );
+    assert.equal(matchingPrincipalStillArgvOnly.ownerAuthenticationProven, false);
+
+    const extraArgv = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1000,
+    }, {
+      ...deps,
+      argv: [
+        ...baseArgv,
+        'tecp-ops-persistence/test/not-on-allowlist.test.js',
+      ],
+    });
+    assert.equal(extraArgv.ok, false);
+    assert.equal(
+      extraArgv.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION,
+    );
+    assert.ok(extraArgv.reasons.includes('UNAPPROVED_TEST_PATH_IN_ARGV'));
+
+    const activated = activateOwnerControlledLocalRunnerOneShot({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1000,
+    }, deps);
+    assert.equal(activated.ok, false);
+    assert.equal(
+      activated.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN,
+    );
+    assert.equal(activated.ticket, undefined);
+  });
+
+  it('18) assertNoSymlink / marker / assertVerifiedHarnessPaths adversarial denials', () => {
+    withIsolatedDisposableFixture((root, dataDir) => {
+      writeHarnessMarker(root, dataDir);
+      assert.deepEqual(
+        assertVerifiedHarnessPaths(root, dataDir),
+        { resolvedRoot: resolve(root), resolvedData: resolve(dataDir) },
+      );
+
+      assert.throws(
+        () => assertVerifiedHarnessPaths('', dataDir),
+        /harness root missing/,
+      );
+      assert.throws(
+        () => assertVerifiedHarnessPaths(root, ''),
+        /harness dataDir missing/,
+      );
+      assert.throws(
+        () => assertVerifiedHarnessPaths(root, '/tmp/not-inside-root'),
+        /path escapes disposable root/,
+      );
+
+      const missingMarkerRoot = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}nomarker-`));
+      const missingMarkerData = join(missingMarkerRoot, 'data');
+      mkdirSync(missingMarkerData);
+      try {
+        assert.throws(
+          () => assertVerifiedHarnessPaths(missingMarkerRoot, missingMarkerData),
+          /harness marker missing/,
+        );
+      } finally {
+        rmSync(missingMarkerRoot, { recursive: true, force: true });
+      }
+
+      writeFileSync(join(root, OPS_PILOT_HARNESS_MARKER_NAME), JSON.stringify({
+        magic: 'WRONG_MAGIC',
+        root: resolve(root),
+        dataDir: resolve(dataDir),
+      }), { mode: 0o600 });
+      assert.throws(
+        () => assertVerifiedHarnessPaths(root, dataDir),
+        /harness marker magic mismatch/,
+      );
+
+      writeFileSync(join(root, OPS_PILOT_HARNESS_MARKER_NAME), JSON.stringify({
+        magic: OPS_PILOT_HARNESS_MARKER_MAGIC,
+        root: resolve(root),
+        dataDir: resolve(join(root, 'other-data')),
+      }), { mode: 0o600 });
+      assert.throws(
+        () => assertVerifiedHarnessPaths(root, dataDir),
+        /harness marker path substitution detected/,
+      );
+
+      writeHarnessMarker(root, dataDir);
+
+      const badPrefixRoot = mkdtempSync(join(tmpdir(), 'not-disposable-prefix-'));
+      const badPrefixData = join(badPrefixRoot, 'data');
+      mkdirSync(badPrefixData);
+      writeHarnessMarker(badPrefixRoot, badPrefixData);
+      try {
+        assert.throws(
+          () => assertVerifiedHarnessPaths(badPrefixRoot, badPrefixData),
+          /disposable root prefix mismatch/,
+        );
+      } finally {
+        rmSync(badPrefixRoot, { recursive: true, force: true });
+      }
+    });
+
+    // Direct assertNoSymlink rejects existing symlink paths (lstat, not follow).
+    const linkParent = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}symlink-`));
+    const realTarget = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}target-`));
+    const realData = join(realTarget, 'data');
+    mkdirSync(realData);
+    const rootLink = join(linkParent, 'root-link');
+    const dataLink = join(linkParent, 'data-link');
+    try {
+      symlinkSync(realTarget, rootLink);
+      symlinkSync(realData, dataLink);
+      assert.throws(() => assertNoSymlink(rootLink), /symlink refused/);
+      assert.throws(() => assertNoSymlink(dataLink), /symlink refused/);
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true });
+      rmSync(realTarget, { recursive: true, force: true });
+    }
+
+    // Symlinked dataDir that resolves outside the disposable root is rejected.
+    withIsolatedDisposableFixture((root, dataDir) => {
+      writeHarnessMarker(root, dataDir);
+      const outside = mkdtempSync(join(tmpdir(), 'outside-not-disposable-'));
+      const escapeLink = join(root, 'escape-link');
+      try {
+        symlinkSync(outside, escapeLink);
+        assert.throws(() => assertNoSymlink(escapeLink), /symlink refused/);
+        assert.throws(
+          () => assertVerifiedHarnessPaths(root, escapeLink),
+          /path escapes disposable root|symlink refused/,
+        );
+      } finally {
+        rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it('19) owned-controller dataDir binding for default pg_ctl helpers without real postgres', async () => {
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn: inertSpawner().spawnSyncFn,
+      inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert' }),
+      stopFn: () => ({ status: 0 }),
+    }, { NODE_ENV: 'test' });
+    assert.equal(isOwnedDisposableOpsPilotClusterController(controller), true);
+    const prepared = await controller.prepare();
+    assert.equal(prepared.ok, true);
+    const { root, dataDir } = controller.getPaths();
+    assert.ok(root && dataDir);
+
+    // Remove FS so default inspect cannot reach real pg_ctl after ownership passes.
+    rmSync(root, { recursive: true, force: true });
+    assert.equal(existsSync(dataDir), false);
+
+    const positive = inspectPostmasterStatus(dataDir, { ownedController: controller });
+    assert.equal(positive.status, POSTMASTER_STATUS.STOPPED);
+    assert.equal(positive.reason, 'dataDir_absent');
+    assert.notEqual(positive.blocked, true);
+    assert.equal(positive.decision, undefined);
+
+    const mismatch = inspectPostmasterStatus('/tmp/tecp-ops-pilot-s2-foreign/data', {
+      ownedController: controller,
+    });
+    assert.equal(mismatch.blocked, true);
+    assert.equal(
+      mismatch.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+
+    const stopMismatch = stopClusterAndProveTerminated('/tmp/tecp-ops-pilot-s2-foreign/data', {
+      ownedController: controller,
+    });
+    assert.equal(stopMismatch.blocked, true);
+    assert.equal(stopMismatch.terminated, false);
+    assert.equal(
+      stopMismatch.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+
+    const fakeController = { kind: 'DISPOSABLE_OPS_PILOT_CLUSTER_CONTROLLER' };
+    const unowned = inspectPostmasterStatus(dataDir, { ownedController: fakeController });
+    assert.equal(unowned.blocked, true);
+    assert.equal(
+      unowned.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    const unownedStop = stopClusterAndProveTerminated(dataDir, { ownedController: fakeController });
+    assert.equal(unownedStop.blocked, true);
+    assert.equal(
+      unownedStop.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+
+    const alienRoot = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}alien-`));
+    const linkParent = mkdtempSync(join(tmpdir(), `${OPS_PILOT_HARNESS_ROOT_PREFIX}subst-`));
+    const substituted = join(linkParent, 'data');
+    try {
+      symlinkSync(alienRoot, substituted);
+      const substStatus = inspectPostmasterStatus(substituted, { ownedController: controller });
+      assert.equal(substStatus.blocked, true);
+      assert.equal(
+        substStatus.decision,
+        OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+      );
+      const substStop = stopClusterAndProveTerminated(substituted, { ownedController: controller });
+      assert.equal(substStop.blocked, true);
+      assert.equal(
+        substStop.decision,
+        OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+      );
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true });
+      rmSync(alienRoot, { recursive: true, force: true });
+    }
+
+    const clock2 = makeClock();
+    const ticket2 = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock: clock2 });
+    const other = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket2,
+      clock: clock2,
+      inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert' }),
+      stopFn: () => ({ status: 0 }),
+    }, { NODE_ENV: 'test' });
+    const otherPrepared = await other.prepare();
+    assert.equal(otherPrepared.ok, true);
+    const otherPaths = other.getPaths();
+    const cross = inspectPostmasterStatus(dataDir, { ownedController: other });
+    assert.equal(cross.blocked, true);
+    assert.equal(
+      cross.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    assert.notEqual(resolve(otherPaths.dataDir), resolve(dataDir));
+
+    // Legitimate cleanup after one-shot consumption must still succeed with owned controller.
+    const clock3 = makeClock();
+    const ticket3 = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock: clock3 });
+    const spawner = inertSpawner();
+    const liveCycle = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket3,
+      clock: clock3,
+      spawnSyncFn: spawner.spawnSyncFn.bind(spawner),
+      inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert' }),
+      stopFn: () => ({ status: 0 }),
+    }, { NODE_ENV: 'test' });
+    await liveCycle.prepare();
+    const started = await liveCycle.start();
+    assert.equal(started.ok, true);
+    assert.equal(isActiveOwnerOneShotTicket(ticket3, clock3), false);
+    const cleaned = await liveCycle.cleanup();
+    assert.equal(cleaned.ok, true);
+    assert.ok([
+      'CLEANUP_SAFE_DELETE',
+      'ALREADY_CLEANED',
+    ].includes(cleaned.reasons?.[0]) || cleaned.decision === OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE);
+
+    await other.cleanup();
+    // External deletion of controller root without marker must fail closed (no silent cleanup).
+    const cleanedPrimary = await controller.cleanup();
+    assert.equal(cleanedPrimary.ok, false);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PATH_ESCAPE,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP,
+    ].includes(cleanedPrimary.decision));
   });
 });
