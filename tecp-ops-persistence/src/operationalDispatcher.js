@@ -1,11 +1,11 @@
 /**
- * TECP-OPS-PILOT-001 S2 — allowlisted Operational Dispatcher (NON_OPERATIONAL).
+ * TECP-OPS-PILOT-001 S2 Gate C+D — Operational Dispatcher + TEST_ONLY composition.
  *
- * Gate B: fail-closed. Must not invoke real DLP mutation, PostgreSQL, Worker,
- * or MCP. OPERATIONAL_DISPATCH_AUTHORIZED remains NO.
+ * authorizeAndDispatch remains HARD_DENY / NON_OPERATIONAL.
+ * OPERATIONAL_DISPATCH_AUTHORIZED remains false forever in this module.
  *
- * Frozen DLP-004 interfaces are imported by name for future Gate D wiring only;
- * this module never calls them under Gate B defaults.
+ * TEST_ONLY DLP-004 composition is a separate privileged export, not reachable
+ * through operational dispatcher requests or arbitrary caller callbacks.
  */
 
 import { verifyCapability } from '../../tecp-ops/src/operationalCapabilityIssuer.js';
@@ -23,20 +23,38 @@ import {
   verifyOperationalResourceLeaseAuthority,
 } from '../../tecp-ops/src/operationalResourceLeaseAuthority.js';
 import {
+  invalidateContextsForTransaction,
   isBrandedDbIssuedLeaseContext,
+  isDbProvenLeaseContext,
   matchDbIssuedLeaseContext,
+  projectFromTrustedValidateWriteLease,
   rejectCallerLeaseObject,
 } from './dbIssuedLeaseContext.js';
+import {
+  createDurableAuthorityRegistries,
+} from './durableAuthorityRegistries.js';
 
-// Import-only reference to frozen DLP-004 public symbols for future composition.
-// Intentionally unused for execution in Gate B.
+import {
+  validateWriteLease,
+  withOwnedWriteLeaseTransaction,
+} from '../../tecp-persistence/src/writeLeaseRepository.js';
+import {
+  bindTaskClaimLeaseInTransaction,
+  releaseTaskClaimLeaseInTransaction,
+} from '../../tecp-persistence/src/taskClaimLeaseRepository.js';
+import {
+  appendAuditEventInTransaction,
+  appendEvidenceInTransaction,
+} from '../../tecp-persistence/src/auditEvidenceRepository.js';
 import {
   APPROVED_GOVERNANCE_REVISION as DLP004_GOVERNANCE_REVISION,
 } from '../../tecp-persistence/src/taskClaimLeaseAuditRepository.js';
 
-export const DISPATCHER_MODE = 'S2_GATE_B_NON_OPERATIONAL';
+export const DISPATCHER_MODE = 'S2_GATE_CD_HARD_DENY_PLUS_TEST_ONLY_COMPOSITION';
 export const DISPATCHER_PROOF_CLASS = 'OFFLINE_FAIL_CLOSED_DISPATCHER';
 export const OPERATIONAL_DISPATCH_AUTHORIZED = false;
+export const TEST_ONLY_COMPOSITION_PROOF_CLASS =
+  'TEST_ONLY_DLP004_COMPOSITION_AWAITING_TIER3_DB_VALIDATION';
 
 export const DISPATCHER_ACTIONS = Object.freeze({
   BIND_TASK_CLAIM_LEASE_WITH_AUDIT: 'BIND_TASK_CLAIM_LEASE_WITH_AUDIT',
@@ -64,7 +82,25 @@ export const DISPATCHER_DECISIONS = Object.freeze({
   DENY_MALFORMED: 'DENY_MALFORMED',
 });
 
+export const TEST_ONLY_COMPOSITION_DECISIONS = Object.freeze({
+  COMMITTED: 'COMMITTED',
+  DENY_MALFORMED: 'DENY_MALFORMED',
+  DENY_MISSING_CLIENT: 'DENY_MISSING_CLIENT',
+  DENY_MISSING_PRINCIPAL: 'DENY_MISSING_PRINCIPAL',
+  DENY_LEASE_VALIDATION: 'DENY_LEASE_VALIDATION',
+  DENY_LEASE_CONTEXT: 'DENY_LEASE_CONTEXT',
+  DENY_JTI: 'DENY_JTI',
+  DENY_UNKNOWN_ACTION: 'DENY_UNKNOWN_ACTION',
+  DENY_MUTATION: 'DENY_MUTATION',
+  DENY_EXCEPTION: 'DENY_EXCEPTION',
+  DENY_NOT_TEST_ONLY: 'DENY_NOT_TEST_ONLY',
+  DENY_CALLER_SQL: 'DENY_CALLER_SQL',
+  DENY_CALLER_CALLBACK: 'DENY_CALLER_CALLBACK',
+  DENY_DB_TIER3_NOT_AUTHORIZED: 'DENY_DB_TIER3_NOT_AUTHORIZED',
+});
+
 const privilegedDispatcherLatch = new WeakSet();
+const privilegedCompositionLatch = new WeakSet();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -100,6 +136,32 @@ function allowContract(reasons = [], extra = {}) {
     dlpInvoked: false,
     ...extra,
   });
+}
+
+function compositionDeny(decision, reasons = [], extra = {}) {
+  return Object.freeze({
+    ok: false,
+    allowed: false,
+    decision,
+    reasons: Object.freeze([...reasons]),
+    classification: TEST_ONLY_COMPOSITION_PROOF_CLASS,
+    operationalDispatchAuthorized: false,
+    mutationExecuted: false,
+    dlpInvoked: Boolean(extra.dlpInvoked),
+    jtiConsumedDurable: false,
+    committed: false,
+    rolledBack: extra.rolledBack !== false,
+    ...extra,
+  });
+}
+
+function requireOk(layerResult, label) {
+  if (!layerResult || layerResult.ok !== true) {
+    const err = new Error(label);
+    err.layerResult = layerResult;
+    throw err;
+  }
+  return layerResult;
 }
 
 function rejectUntrustedRequestSurface(request) {
@@ -158,9 +220,7 @@ function rejectUntrustedRequestSurface(request) {
 }
 
 /**
- * Create a privileged dispatcher. Request handlers must not rebuild trust deps.
- * Gate B: authorizeOperationalDispatch always ends in NON_OPERATIONAL deny for
- * mutation execution even after offline contract checks pass.
+ * Create a privileged dispatcher. authorizeAndDispatch ALWAYS hard-denies mutation.
  */
 export function createOperationalDispatcher(privilegedDeps = {}) {
   if (!isPlainObject(privilegedDeps)) {
@@ -174,14 +234,13 @@ export function createOperationalDispatcher(privilegedDeps = {}) {
     buildOwnerApprovalVerifyDeps,
     orlaVerifyDeps,
     durableRegistries,
-    // Persistence ports may be recorded but MUST NOT be invoked in Gate B.
     persistence = {},
     ownedTransaction = null,
     operationalDispatchAuthorized = false,
   } = privilegedDeps;
 
   if (operationalDispatchAuthorized === true || OPERATIONAL_DISPATCH_AUTHORIZED === true) {
-    throw new Error('GATE_B_FORBIDS_OPERATIONAL_DISPATCH_AUTHORIZATION_FLAG');
+    throw new Error('GATE_CD_FORBIDS_OPERATIONAL_DISPATCH_AUTHORIZATION_FLAG');
   }
   if (trustRoot == null) {
     throw new Error('TRUST_ROOT_REQUIRED');
@@ -249,7 +308,6 @@ export function createOperationalDispatcher(privilegedDeps = {}) {
         'CAPABILITY_DEPS_TRUST_ANCHOR_FORBIDDEN',
       ]);
     }
-    // Prefer branded principal from privileged deps; fall back to request principal.
     if (capabilityDeps.principal == null) {
       capabilityDeps = {
         ...capabilityDeps,
@@ -291,7 +349,6 @@ export function createOperationalDispatcher(privilegedDeps = {}) {
         'PRIVILEGED_ORLA_VERIFY_DEPS_REQUIRED',
       ]);
     }
-    // Force privileged trust root; ignore any request-supplied root.
     const orlaDeps = {
       ...orlaVerifyDeps,
       trustRoot,
@@ -337,27 +394,27 @@ export function createOperationalDispatcher(privilegedDeps = {}) {
     }
 
     if (constructorOwnedTxnInjection !== true && request.requireOwnedTxn !== false) {
-      // Gate B never has an authorized owned txn. Missing txn => deny before mutation.
       if (ownedTransaction == null && request.ownedTxnHandle == null) {
         return deny(DISPATCHER_DECISIONS.DENY_MISSING_OWNED_TXN, [
           'OWNED_TRANSACTION_REQUIRED_BEFORE_MUTATION',
-          'GATE_B_HAS_NO_AUTHORIZED_TXN',
+          'GATE_CD_HAS_NO_AUTHORIZED_OPERATIONAL_TXN',
         ]);
       }
     }
 
-    if (durableRegistries != null && typeof durableRegistries.consumeJti === 'function') {
-      // Do not consume jti on a path that will hard-deny mutation; Gate B stops here.
-    }
-
-    // Hard non-operational gate: never invoke DLP-004 or persistence ports.
+    void durableRegistries;
     void DLP004_GOVERNANCE_REVISION;
     void constructorPersistenceInjection;
+    void bindTaskClaimLeaseInTransaction;
+    void releaseTaskClaimLeaseInTransaction;
+    void withOwnedWriteLeaseTransaction;
+    void validateWriteLease;
     return deny(DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED, [
       'OPERATIONAL_DISPATCH_AUTHORIZED=NO',
-      'GATE_B_FORBIDS_DLP_MUTATION',
-      'GATE_B_FORBIDS_POSTGRES',
+      'GATE_CD_FORBIDS_DLP_MUTATION_ON_OPERATIONAL_PATH',
+      'GATE_CD_FORBIDS_POSTGRES_ON_OPERATIONAL_PATH',
       'OFFLINE_CONTRACT_CHECKS_MAY_PASS_BUT_MUTATION_DENIED',
+      'USE_runTestOnlyDlp004Composition_FOR_FIXTURE_COMPOSITION',
     ], {
       offlineContractObservations: Object.freeze({
         capabilityOk: true,
@@ -380,4 +437,298 @@ export function createOperationalDispatcher(privilegedDeps = {}) {
 
 export function isPrivilegedOperationalDispatcher(value) {
   return value !== null && typeof value === 'object' && privilegedDispatcherLatch.has(value);
+}
+
+export function createTestOnlyDlp004CompositionHandle(input = {}) {
+  if (!isPlainObject(input)) {
+    throw new TypeError('COMPOSITION_HANDLE_OPTIONS_REQUIRED');
+  }
+  if (input.proofClass !== 'TEST_ONLY_DLP004_COMPOSITION_HANDLE') {
+    throw new TypeError('TEST_ONLY_PROOF_CLASS_REQUIRED');
+  }
+  if (input.operationalDispatchClaim === true) {
+    throw new Error('OPERATIONAL_DISPATCH_CLAIM_FORBIDDEN');
+  }
+  const handle = Object.freeze({
+    kind: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+    proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+    operationalDispatchAuthorized: false,
+    classification: TEST_ONLY_COMPOSITION_PROOF_CLASS,
+  });
+  privilegedCompositionLatch.add(handle);
+  return handle;
+}
+
+export function isTestOnlyDlp004CompositionHandle(value) {
+  return value !== null && typeof value === 'object' && privilegedCompositionLatch.has(value);
+}
+
+/**
+ * TEST_ONLY DLP-004 composition:
+ * owned txn → (optional) validateWriteLease → DB_PROVEN context → durable jti
+ * → InTransaction bind/release + audit(+evidence) → commit; DENY/exception → rollback.
+ *
+ * Without a live DB client: DENY_DB_TIER3_NOT_AUTHORIZED (no fake durability).
+ * Not reachable via authorizeAndDispatch.
+ */
+export async function runTestOnlyDlp004Composition(compositionHandle, fixture = {}) {
+  if (!isTestOnlyDlp004CompositionHandle(compositionHandle)) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_NOT_TEST_ONLY, [
+      'PRIVILEGED_TEST_ONLY_COMPOSITION_HANDLE_REQUIRED',
+    ]);
+  }
+  if (!isPlainObject(fixture)) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_MALFORMED, [
+      'FIXTURE_OBJECT_REQUIRED',
+    ]);
+  }
+  if (
+    fixture.sql != null
+    || fixture.queryText != null
+    || fixture.rawSql != null
+  ) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_CALLER_SQL, [
+      'CALLER_SQL_FORBIDDEN',
+    ]);
+  }
+  if (
+    typeof fixture.callback === 'function'
+    || typeof fixture.execute === 'function'
+    || typeof fixture.work === 'function'
+    || fixture.clientFactory != null
+  ) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_CALLER_CALLBACK, [
+      'CALLER_CALLBACK_FORBIDDEN',
+    ]);
+  }
+
+  const client = fixture.dbClient;
+  if (!client || typeof client.query !== 'function') {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_DB_TIER3_NOT_AUTHORIZED, [
+      'DB_CLIENT_REQUIRED',
+      'TIER3_DISPOSABLE_POSTGRES_NOT_AUTHORIZED_IN_REMEDIATION',
+      'NO_FAKE_CLIENT_AS_DURABILITY_PROOF',
+    ]);
+  }
+
+  if (!isBrandedVerifiedOperationalPrincipal(fixture.principal)) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_MISSING_PRINCIPAL, [
+      'BRANDED_PRINCIPAL_REQUIRED',
+    ]);
+  }
+
+  const action = fixture.action;
+  if (
+    action !== DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT
+    && action !== DISPATCHER_ACTIONS.RELEASE_TASK_CLAIM_LEASE_WITH_AUDIT
+  ) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_UNKNOWN_ACTION, [
+      `UNSUPPORTED_ACTION:${String(action)}`,
+    ]);
+  }
+  if (!isNonEmptyString(fixture.jti)) {
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_MALFORMED, ['JTI_REQUIRED']);
+  }
+
+  const txnHandle = { id: `test-only-comp-${Date.now()}`, client };
+  const registries = createDurableAuthorityRegistries(client, {
+    issuerId: fixture.issuerId,
+    audience: fixture.audience,
+    requireOwnedTxn: fixture.requireOwnedTxn !== false,
+  });
+
+  let dlpInvoked = false;
+  try {
+    const committed = await withOwnedWriteLeaseTransaction(client, async () => {
+      let dbProvenContext = null;
+
+      const needsLeaseValidation = action === DISPATCHER_ACTIONS.RELEASE_TASK_CLAIM_LEASE_WITH_AUDIT
+        || fixture.requireLeaseValidation === true;
+      if (needsLeaseValidation) {
+        if (!isPlainObject(fixture.leaseValidationInput)) {
+          const err = new Error('LEASE_VALIDATION_INPUT');
+          err.compositionDeny = compositionDeny(
+            TEST_ONLY_COMPOSITION_DECISIONS.DENY_MALFORMED,
+            ['LEASE_VALIDATION_INPUT_REQUIRED'],
+            { rolledBack: true },
+          );
+          throw err;
+        }
+        const rawValidation = await validateWriteLease(client, fixture.leaseValidationInput);
+        if (!rawValidation.ok) {
+          const err = new Error('LEASE_VALIDATION');
+          err.compositionDeny = compositionDeny(
+            TEST_ONLY_COMPOSITION_DECISIONS.DENY_LEASE_VALIDATION,
+            [rawValidation.decision, ...(rawValidation.reasons || [])],
+            { rolledBack: true },
+          );
+          throw err;
+        }
+        const projected = projectFromTrustedValidateWriteLease(
+          { ...rawValidation, trustedValidateWriteLease: true, ok: true },
+          txnHandle,
+          fixture.leaseExpectation || {},
+        );
+        if (!projected.ok || !isDbProvenLeaseContext(projected.context)) {
+          const err = new Error('LEASE_CONTEXT');
+          err.compositionDeny = compositionDeny(
+            TEST_ONLY_COMPOSITION_DECISIONS.DENY_LEASE_CONTEXT,
+            [projected.decision, ...(projected.reasons || [])],
+            { rolledBack: true },
+          );
+          throw err;
+        }
+        dbProvenContext = projected.context;
+      }
+
+      const consume = await registries.consumeJti(fixture.jti, {
+        principalId: fixture.principal.principalId || fixture.principalId,
+        taskId: fixture.taskId,
+        action,
+        resourceType: fixture.resourceType,
+        resourceKey: fixture.resourceKey,
+        governanceRevision: fixture.governanceRevision,
+        issuerId: fixture.issuerId,
+        audience: fixture.audience,
+      });
+      if (!consume.ok) {
+        const err = new Error('JTI');
+        err.compositionDeny = compositionDeny(
+          TEST_ONLY_COMPOSITION_DECISIONS.DENY_JTI,
+          [consume.decision, ...(consume.reasons || [])],
+          { rolledBack: true },
+        );
+        throw err;
+      }
+
+      if (fixture.forceSoftDeny === true) {
+        const err = new Error('SOFT_DENY');
+        err.compositionDeny = compositionDeny(
+          TEST_ONLY_COMPOSITION_DECISIONS.DENY_MUTATION,
+          ['FIXTURE_SOFT_DENY'],
+          { rolledBack: true, dlpInvoked: false },
+        );
+        throw err;
+      }
+      if (typeof fixture.forceThrow === 'string') {
+        throw new Error(fixture.forceThrow);
+      }
+
+      dlpInvoked = true;
+      let bind = null;
+      let release = null;
+      let audit = null;
+      let evidence = null;
+
+      if (action === DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT) {
+        if (!isPlainObject(fixture.bind) || !isPlainObject(fixture.audit)) {
+          const err = new Error('BIND_AUDIT_REQUIRED');
+          err.compositionDeny = compositionDeny(
+            TEST_ONLY_COMPOSITION_DECISIONS.DENY_MALFORMED,
+            ['BIND_AND_AUDIT_INPUT_REQUIRED'],
+            { rolledBack: true, dlpInvoked: true },
+          );
+          throw err;
+        }
+        bind = requireOk(
+          await bindTaskClaimLeaseInTransaction(client, fixture.bind),
+          'BIND_DENY',
+        );
+        audit = requireOk(
+          await appendAuditEventInTransaction(client, fixture.audit),
+          'AUDIT_DENY',
+        );
+        if (fixture.evidence) {
+          evidence = requireOk(
+            await appendEvidenceInTransaction(client, fixture.evidence),
+            'EVIDENCE_DENY',
+          );
+        }
+      } else {
+        if (!isPlainObject(fixture.release) || !isPlainObject(fixture.audit)) {
+          const err = new Error('RELEASE_AUDIT_REQUIRED');
+          err.compositionDeny = compositionDeny(
+            TEST_ONLY_COMPOSITION_DECISIONS.DENY_MALFORMED,
+            ['RELEASE_AND_AUDIT_INPUT_REQUIRED'],
+            { rolledBack: true, dlpInvoked: true },
+          );
+          throw err;
+        }
+        release = requireOk(
+          await releaseTaskClaimLeaseInTransaction(client, fixture.release),
+          'RELEASE_DENY',
+        );
+        audit = requireOk(
+          await appendAuditEventInTransaction(client, fixture.audit),
+          'AUDIT_DENY',
+        );
+        if (fixture.evidence) {
+          evidence = requireOk(
+            await appendEvidenceInTransaction(client, fixture.evidence),
+            'EVIDENCE_DENY',
+          );
+        }
+      }
+
+      return Object.freeze({
+        ok: true,
+        allowed: true,
+        decision: TEST_ONLY_COMPOSITION_DECISIONS.COMMITTED,
+        reasons: Object.freeze([
+          'TEST_ONLY_DLP004_IN_TRANSACTION_COMPOSITION_COMMITTED',
+        ]),
+        classification: TEST_ONLY_COMPOSITION_PROOF_CLASS,
+        operationalDispatchAuthorized: false,
+        mutationExecuted: true,
+        dlpInvoked: true,
+        jtiConsumedDurable: true,
+        committed: true,
+        rolledBack: false,
+        bind,
+        release,
+        audit,
+        evidence,
+        dbProvenContext,
+        dlp004GovernanceRevision: DLP004_GOVERNANCE_REVISION,
+        note: 'DURABILITY_NOT_PROVEN_UNTIL_TIER3_DISPOSABLE_POSTGRES_RUNS',
+      });
+    });
+
+    invalidateContextsForTransaction(txnHandle);
+    return committed;
+  } catch (error) {
+    invalidateContextsForTransaction(txnHandle);
+    if (error && error.compositionDeny) {
+      return error.compositionDeny;
+    }
+    if (error && error.layerResult) {
+      return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_MUTATION, [
+        error.message || 'LAYER_DENY',
+        error.layerResult.decision,
+        ...(error.layerResult.reasons || []),
+      ], { rolledBack: true, dlpInvoked: true });
+    }
+    return compositionDeny(TEST_ONLY_COMPOSITION_DECISIONS.DENY_EXCEPTION, [
+      error?.message || 'COMPOSITION_EXCEPTION',
+    ], { rolledBack: true, dlpInvoked });
+  }
+}
+
+export function assertOperationalDispatcherHardDeny(result) {
+  if (!isPlainObject(result)) {
+    return deny(DISPATCHER_DECISIONS.DENY_MALFORMED, ['RESULT_REQUIRED']);
+  }
+  if (result.mutationExecuted === true || result.dlpInvoked === true) {
+    return deny(DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED, [
+      'UNEXPECTED_OPERATIONAL_MUTATION',
+    ]);
+  }
+  if (result.ok === true && result.decision === DISPATCHER_DECISIONS.ALLOW) {
+    return deny(DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED, [
+      'UNEXPECTED_OPERATIONAL_ALLOW',
+    ]);
+  }
+  return allowContract(['HARD_DENY_BOUNDARY_INTACT'], {
+    observedDecision: result.decision,
+  });
 }
