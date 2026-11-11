@@ -8,6 +8,7 @@ import {
   ONE_SHOT_STATES,
   OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+  OPS_PILOT_HARNESS_CHECKPOINT,
   OPS_PILOT_HARNESS_DECISIONS,
   OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
   OPS_PILOT_PINNED_MAIN_SHA,
@@ -30,10 +31,13 @@ import {
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   getOwnerOneShotTicketView,
+  inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
+  isOwnerOneShotTicket,
   planOwnedUnixSocketClientConfig,
   planPostgresVersionProbe,
   startDisposableOpsPilotCluster,
+  stopClusterAndProveTerminated,
   stopDisposableOpsPilotCluster,
 } from '../src/disposableOpsPilotDbHarness.js';
 
@@ -61,7 +65,7 @@ function inertSpawner() {
   };
 }
 
-describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => {
+describe('S2 disposableOpsPilotDbHarness Tier-3 pre-live hardening offline safety', () => {
   it('1) source contract allow without Tier-3/DB execution', () => {
     const result = evaluateOpsPilotHarnessSafety(
       { explicitNonProd: true, dataDir: '/tmp/disposable-ops-pilot' },
@@ -74,6 +78,12 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     assert.equal(result.tier3ActivationAuthority, TIER3_ACTIVATION_AUTHORITY);
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_HARNESS_CHECKPOINT, 'S2_TIER3_PRE_LIVE_HARDENING');
+    assert.equal(OPS_PILOT_PINNED_MAIN_SHA, '1e7603a156e0dcb036dc5f43a06803e52695613f');
+    assert.deepEqual([...OPS_PILOT_APPROVED_TEST_ACTIONS], [
+      'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+      'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+    ]);
   });
 
   it('2) DATABASE_URL / PG* / TCP / remote / caller pg bin denied', () => {
@@ -326,7 +336,7 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     );
   });
 
-  it('10) verified Owner argv activates one-shot; live spawn request still denied by DB gate', () => {
+  it('10) ARGV marker / env / boolean cannot independently authorize Owner one-shot or DB', () => {
     const argv = [
       process.execPath,
       OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
@@ -355,6 +365,22 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED,
     );
 
+    const evidence = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      executionPrincipal: 1000,
+    }, deps);
+    assert.equal(evidence.ok, false);
+    assert.equal(
+      evidence.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION,
+    );
+    assert.equal(evidence.ownerAuthenticationProven, false);
+    assert.equal(evidence.ownerInvocationIndependentlyVerifiable, false);
+
     const activated = activateOwnerControlledLocalRunnerOneShot({
       repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
       approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
@@ -363,11 +389,25 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       affirmSameUidLimitationsAccepted: true,
       executionPrincipal: 1000,
     }, deps);
-    assert.equal(activated.ok, true);
-    assert.equal(activated.state, ONE_SHOT_STATES.ACTIVE_TEST_ONLY);
-    assert.equal(activated.liveSpawnPermitted, false);
-    assert.equal(activated.sameUidSealed, false);
-    assert.equal(isActiveOwnerOneShotTicket(activated.ticket, deps.clock), true);
+    assert.equal(activated.ok, false);
+    assert.equal(
+      activated.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN,
+    );
+    assert.equal(activated.ticket, undefined);
+
+    assert.equal(
+      evaluateOwnerControlledLocalRunnerEvidence({
+        ownerAuthorizedByBoolean: true,
+      }, deps).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_BOOLEAN_ACTIVATION,
+    );
+    assert.equal(
+      evaluateOwnerControlledLocalRunnerEvidence({
+        envAuthorized: true,
+      }, deps).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_BOOLEAN_ACTIVATION,
+    );
   });
 
   it('11) one-shot replay, TTL expiry, and cancellation fail closed', async () => {
@@ -435,35 +475,46 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     assert.equal(cancelled.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED);
   });
 
-  it('12) Owner one-shot without inert spawner cannot live-start; consumes capability', async () => {
-    const argv = [
-      process.execPath,
-      OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
-      '--test',
-      ...OPS_PILOT_APPROVED_TEST_ACTIONS,
-    ];
+  it('12) inert ticket without fake spawner cannot live-start; consumes; prepare is one-shot', async () => {
     const clock = makeClock();
-    const activated = activateOwnerControlledLocalRunnerOneShot({
-      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
-      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
-      executablePath: process.execPath,
-      harnessModulePath: HARNESS_SRC,
-      affirmSameUidLimitationsAccepted: true,
-      executionPrincipal: process.getuid?.(),
-    }, {
-      argv,
-      execPath: process.execPath,
-      getuid: () => process.getuid?.(),
-      clock,
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    assert.equal(Object.isFrozen(ticket), true);
+    assert.throws(() => {
+      ticket.liveSpawnPermitted = true;
     });
-    assert.equal(activated.ok, true);
+    assert.throws(() => {
+      ticket.consumed = false;
+    });
+
     const controller = createDisposableOpsPilotClusterController({
       explicitNonProd: true,
-      ownerOneShotTicket: activated.ticket,
+      ownerOneShotTicket: ticket,
       clock,
     }, { NODE_ENV: 'test' });
     const prepared = await controller.prepare();
     assert.equal(prepared.ok, true);
+    const preparedAgain = await controller.prepare();
+    assert.equal(preparedAgain.ok, false);
+    assert.equal(
+      preparedAgain.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PREPARE_ALREADY_USED,
+    );
+
+    const secondController = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+    }, { NODE_ENV: 'test' });
+    const secondPrepare = await secondController.prepare();
+    assert.equal(secondPrepare.ok, false);
+    assert.equal(
+      secondPrepare.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PREPARE_ALREADY_USED,
+    );
+
     const started = await controller.start();
     assert.equal(started.ok, false);
     assert.equal(
@@ -472,7 +523,7 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
     );
     assert.equal(started.postgresActions, 0);
     assert.ok(started.plannedArgs?.initdbArgs);
-    assert.equal(isActiveOwnerOneShotTicket(activated.ticket, clock), false);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
     await controller.cleanup();
   });
 
@@ -514,5 +565,41 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 one-shot offline safety', () => 
       OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED,
     ].includes(replayController.decision));
     await controller.cleanup();
+  });
+
+  it('15) default pg_ctl status/stop helpers deny without owned controller', () => {
+    const status = inspectPostmasterStatus('/tmp/tecp-ops-pilot-s2-not-owned/data');
+    assert.equal(status.blocked, true);
+    assert.equal(
+      status.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    assert.equal(status.status, 'UNCERTAIN');
+
+    const stopped = stopClusterAndProveTerminated('/tmp/tecp-ops-pilot-s2-not-owned/data');
+    assert.equal(stopped.blocked, true);
+    assert.equal(
+      stopped.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+    );
+    assert.equal(stopped.terminated, false);
+  });
+
+  it('16) ticket privilege is module-private; public mutation cannot escalate', () => {
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    assert.equal(isOwnerOneShotTicket(ticket), true);
+    assert.equal(Object.isFrozen(ticket), true);
+    assert.equal(ticket.authorizesLivePostgres, false);
+    const view = getOwnerOneShotTicketView(ticket, clock);
+    assert.equal(view.liveSpawnPermitted, false);
+    assert.equal(view.ownerAuthenticationProven, false);
+    assert.equal(view.prepareUsed, false);
+    cancelOwnerOneShotTicket(ticket, clock);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
+    assert.equal(getOwnerOneShotTicketView(ticket, clock).cancelled, true);
   });
 });

@@ -4,9 +4,12 @@
  * Owner-controlled local runner model with same-UID limitations accepted for
  * disposable TEST_ONLY only. Default: HARD DENY.
  *
- * WeakSet brands, caller booleans, and environment flips are NOT Owner authority.
+ * WeakSet brands, caller booleans, ARGV markers, and environment flips are NOT
+ * Owner authentication and never independently authorize PostgreSQL execution.
  * Live PostgreSQL spawn remains closed while OPS_PILOT_DB_EXECUTION_AUTHORIZED=false.
+ * Privileged ticket state is module-private (WeakMap); exported tickets are frozen.
  * Offline tests may inject inert spawnSyncFn under an inert one-shot ticket only.
+ * Public pg_ctl helpers require an owned disposable controller identity.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -26,7 +29,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
-export const OPS_PILOT_HARNESS_CHECKPOINT = 'S2_TIER3_ONESHOT_ACTIVATION';
+export const OPS_PILOT_HARNESS_CHECKPOINT = 'S2_TIER3_PRE_LIVE_HARDENING';
 export const OPS_PILOT_REQUIRED_PG_VERSION = '14.24';
 export const OPS_PILOT_REQUIRED_PG_VERSION_PREFIX = 'postgres (PostgreSQL) 14.24';
 export const OPS_PILOT_PG_BIN_DIR = '/usr/lib/postgresql/14/bin';
@@ -36,7 +39,7 @@ export const OPS_PILOT_HARNESS_MARKER_MAGIC = 'TECP-OPS-PILOT-S2-DISPOSABLE-HARN
 export const OPS_PILOT_DB_EXECUTION_AUTHORIZED = false;
 export const OPS_PILOT_TIER3_AUTHORIZED = false;
 export const TIER3_ACTIVATION_AUTHORITY = 'TIER3_ACTIVATION_AUTHORITY_UNPROVEN';
-export const OPS_PILOT_PINNED_MAIN_SHA = 'b1036a5035a9c58e430e202086763b8acf963301';
+export const OPS_PILOT_PINNED_MAIN_SHA = '1e7603a156e0dcb036dc5f43a06803e52695613f';
 export const OPS_PILOT_OWNER_RUNNER_ARGV_MARKER = '--tecp-ops-s2-owner-controlled-local-runner';
 export const OPS_PILOT_DEFAULT_ONESHOT_TTL_MS = 120000;
 export const OPS_PILOT_MAX_ONESHOT_TTL_MS = 300000;
@@ -87,6 +90,11 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_UNAPPROVED_TEST_ACTION: 'DENY_UNAPPROVED_TEST_ACTION',
   DENY_UNSAFE_PG_TARGET: 'DENY_UNSAFE_PG_TARGET',
   DENY_PUBLIC_FACTORY_AS_OWNER: 'DENY_PUBLIC_FACTORY_AS_OWNER',
+  DENY_ARGV_ONLY_AUTHORIZATION: 'DENY_ARGV_ONLY_AUTHORIZATION',
+  DENY_TICKET_MUTATION_ESCALATION: 'DENY_TICKET_MUTATION_ESCALATION',
+  DENY_PREPARE_ALREADY_USED: 'DENY_PREPARE_ALREADY_USED',
+  DENY_HELPER_WITHOUT_OWNED_CONTROLLER: 'DENY_HELPER_WITHOUT_OWNED_CONTROLLER',
+  DENY_OWNER_AUTHENTICATION_UNPROVEN: 'DENY_OWNER_AUTHENTICATION_UNPROVEN',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -101,6 +109,9 @@ const privilegedTier3Latch = new WeakSet();
 const ownedClusterLatch = new WeakSet();
 const oneShotTicketLatch = new WeakSet();
 const inertOneShotLatch = new WeakSet();
+/** Module-private privileged state. Exported ticket objects are frozen and non-authoritative. */
+const ticketPrivilegeByRef = new WeakMap();
+const controllerCleanupAuthority = new WeakMap();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -443,18 +454,21 @@ export function evaluateOwnerControlledLocalRunnerEvidence(evidence = {}, deps =
     ]);
   }
 
+  // Structural context may be observed, but ARGV is NOT Owner authentication.
   return Object.freeze({
-    ok: true,
-    allowed: true,
-    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_ONESHOT_ACTIVE,
+    ok: false,
+    allowed: false,
+    decision: OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION,
     reasons: Object.freeze([
-      'OWNER_CONTROLLED_LOCAL_RUNNER_ARGV_MARKER_OBSERVED',
-      'PINNED_SHA_BOUND',
-      'APPROVED_ACTIONS_BOUND',
+      'ARGV_MARKER_IS_INVOCATION_CONTEXT_ONLY',
+      'OWNER_AUTHENTICATION_NOT_PROVEN',
+      'PINNED_SHA_AND_ALLOWLIST_CONTEXT_OBSERVED_BUT_NOT_AUTHORIZING',
       'SAME_UID_LIMITATIONS_ACCEPTED',
     ]),
-    ownerInvocationIndependentlyVerifiable: true,
-    ownerInvocationMechanism: 'ARGV_MARKER_PLUS_PINNED_SHA_PLUS_ALLOWLIST',
+    ownerInvocationIndependentlyVerifiable: false,
+    ownerAuthenticationProven: false,
+    ownerInvocationContextObserved: true,
+    ownerInvocationMechanism: 'ARGV_MARKER_CONTEXT_ONLY_NOT_OWNER_AUTHORITY',
     sameUidSealed: false,
     repositorySha,
     approvedActions,
@@ -466,25 +480,69 @@ export function evaluateOwnerControlledLocalRunnerEvidence(evidence = {}, deps =
   });
 }
 
-function createTicketRecord(fields) {
-  const ticket = {
+function createTicketRecord(publicFields, privilegeFields) {
+  const ticket = Object.freeze({
     kind: 'OWNER_ONESHOT_ACTIVATION_TICKET',
-    ...fields,
-  };
+    ...publicFields,
+  });
+  ticketPrivilegeByRef.set(ticket, {
+    state: privilegeFields.state,
+    consumed: privilegeFields.consumed === true,
+    cancelled: privilegeFields.cancelled === true,
+    inert: privilegeFields.inert === true,
+    liveSpawnPermitted: false,
+    prepareUsed: privilegeFields.prepareUsed === true,
+    expiresAtMonotonicMs: privilegeFields.expiresAtMonotonicMs,
+    createdAtMonotonicMs: privilegeFields.createdAtMonotonicMs,
+    ttlMs: privilegeFields.ttlMs,
+    repositorySha: privilegeFields.repositorySha,
+    approvedActions: privilegeFields.approvedActions,
+    nonce: privilegeFields.nonce,
+  });
   oneShotTicketLatch.add(ticket);
   return ticket;
 }
 
+function getTicketPrivilege(ticket) {
+  return ticketPrivilegeByRef.get(ticket) || null;
+}
+
 function readTicketState(ticket) {
-  return ticket?.__state;
+  const priv = getTicketPrivilege(ticket);
+  return priv ? priv.state : undefined;
 }
 
 function writeTicketState(ticket, state) {
-  ticket.__state = state;
+  const priv = getTicketPrivilege(ticket);
+  if (!priv) return;
+  priv.state = state;
 }
 
 function isTicketExpired(ticket, clock) {
-  return monotonicNowMs(clock) > ticket.expiresAtMonotonicMs;
+  const priv = getTicketPrivilege(ticket);
+  if (!priv) return true;
+  return monotonicNowMs(clock) > priv.expiresAtMonotonicMs;
+}
+
+function assertTicketNotEscalatedByMutation(ticket) {
+  const priv = getTicketPrivilege(ticket);
+  if (!priv) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, ['TICKET_PRIVILEGE_MISSING']);
+  }
+  // Exported frozen tickets have no authoritative mutable fields. If a caller
+  // somehow attaches own props, they must never grant live spawn.
+  if (ticket && ticket.liveSpawnPermitted === true && priv.liveSpawnPermitted !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TICKET_MUTATION_ESCALATION, [
+      'CALLER_MUTATED_LIVESPAWN_IGNORED',
+      'PRIVILEGE_STATE_IS_MODULE_PRIVATE',
+    ]);
+  }
+  if (ticket && ticket.consumed === false && priv.consumed === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TICKET_MUTATION_ESCALATION, [
+      'CALLER_CLEARED_CONSUMED_IGNORED',
+    ]);
+  }
+  return null;
 }
 
 export function isOwnerOneShotTicket(value) {
@@ -497,7 +555,9 @@ export function isInertOfflineOneShotTicket(value) {
 
 export function isActiveOwnerOneShotTicket(value, clock = {}) {
   if (!isOwnerOneShotTicket(value)) return false;
-  const state = readTicketState(value);
+  const priv = getTicketPrivilege(value);
+  if (!priv || priv.consumed === true || priv.cancelled === true) return false;
+  const state = priv.state;
   if (state !== ONE_SHOT_STATES.ACTIVE_TEST_ONLY && state !== ONE_SHOT_STATES.RESERVED) {
     return false;
   }
@@ -509,20 +569,23 @@ export function getOwnerOneShotTicketView(ticket, clock = {}) {
   if (!isOwnerOneShotTicket(ticket)) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, ['TICKET_REQUIRED']);
   }
+  const priv = getTicketPrivilege(ticket);
   const expired = isTicketExpired(ticket, clock);
   return Object.freeze({
     ok: true,
-    state: expired && readTicketState(ticket) === ONE_SHOT_STATES.ACTIVE_TEST_ONLY
+    state: expired && priv.state === ONE_SHOT_STATES.ACTIVE_TEST_ONLY
       ? ONE_SHOT_STATES.DENIED_OR_TERMINATED
-      : readTicketState(ticket),
+      : priv.state,
     inert: isInertOfflineOneShotTicket(ticket),
-    consumed: ticket.consumed === true,
-    cancelled: ticket.cancelled === true,
-    expiresAtMonotonicMs: ticket.expiresAtMonotonicMs,
+    consumed: priv.consumed === true,
+    cancelled: priv.cancelled === true,
+    prepareUsed: priv.prepareUsed === true,
+    expiresAtMonotonicMs: priv.expiresAtMonotonicMs,
     approvedActions: ticket.approvedActions,
     repositorySha: ticket.repositorySha,
-    liveSpawnPermitted: ticket.liveSpawnPermitted === true,
+    liveSpawnPermitted: false,
     operationalOwnerCustodyProven: false,
+    ownerAuthenticationProven: false,
     sameUidSealed: false,
   });
 }
@@ -533,56 +596,40 @@ export function getOwnerOneShotTicketView(ticket, clock = {}) {
  */
 export function activateOwnerControlledLocalRunnerOneShot(evidence = {}, deps = {}) {
   const verified = evaluateOwnerControlledLocalRunnerEvidence(evidence, deps);
-  if (!verified.ok) {
-    return verified;
-  }
-
-  // This instruction keeps live PostgreSQL execution closed.
-  const liveSpawnPermitted = false;
+  // Even when ARGV/context structurally matches, do NOT mint Owner authority.
+  // Same-UID ARGV spoofing is not independent Owner authentication.
   if (verified.liveSpawnRequested === true) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
       'LIVE_SPAWN_REQUESTED_BUT_TIER3_DB_EXECUTION_AUTHORIZED_NO',
-      'ONESHOT_MAY_BE_ACTIVATED_ONLY_AFTER_SEPARATE_OWNER_EXECUTION_GATE',
+      'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
     ], {
-      ownerInvocationIndependentlyVerifiable: verified.ownerInvocationIndependentlyVerifiable,
+      ownerAuthenticationProven: false,
+      ownerInvocationIndependentlyVerifiable: false,
     });
   }
-
-  const clock = deps.clock || {};
-  const now = monotonicNowMs(clock);
-  const ticket = createTicketRecord({
-    proofClass: 'OWNER_CONTROLLED_LOCAL_RUNNER_ONESHOT',
-    repositorySha: verified.repositorySha,
-    approvedActions: verified.approvedActions,
-    executablePath: verified.executablePath,
-    harnessModulePath: verified.harnessModulePath,
-    executionPrincipal: verified.executionPrincipal,
-    nonce: randomBytes(16).toString('hex'),
-    createdAtMonotonicMs: now,
-    expiresAtMonotonicMs: now + verified.ttlMs,
-    ttlMs: verified.ttlMs,
-    liveSpawnPermitted,
-    consumed: false,
-    cancelled: false,
-    inert: false,
-    __state: ONE_SHOT_STATES.VERIFIED_OWNER_INVOKED,
-  });
-  writeTicketState(ticket, ONE_SHOT_STATES.RESERVED);
-  writeTicketState(ticket, ONE_SHOT_STATES.ACTIVE_TEST_ONLY);
-  Object.freeze(ticket.approvedActions);
-
-  return Object.freeze({
-    ok: true,
-    allowed: true,
-    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_ONESHOT_ACTIVE,
-    reasons: Object.freeze(['ONESHOT_ACTIVE_TEST_ONLY']),
-    ticket,
-    state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
-    liveSpawnPermitted: false,
-    dbExecutionAuthorized: false,
-    ownerInvocationIndependentlyVerifiable: true,
-    sameUidSealed: false,
-    tier3ActivationAuthority: TIER3_ACTIVATION_AUTHORITY,
+  if (verified.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
+      'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
+      'ARGV_MARKER_ENV_BOOLEAN_WEAKSET_NOT_OWNER_AUTHORITY',
+      'LIVE_EXECUTION_GATE_REMAINS_CLOSED',
+      'USE_INERT_OFFLINE_TICKET_FOR_FAKE_SPAWNER_TESTS_ONLY',
+      ...(verified.reasons || []),
+    ], {
+      ownerAuthenticationProven: false,
+      ownerInvocationIndependentlyVerifiable: false,
+      ownerInvocationContextObserved: true,
+      exactScopeInsufficientForIndependentOwnerCustody: true,
+    });
+  }
+  if (!verified.ok) {
+    return verified;
+  }
+  return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
+    'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
+    'DEFAULT_DENY',
+  ], {
+    ownerAuthenticationProven: false,
+    ownerInvocationIndependentlyVerifiable: false,
   });
 }
 
@@ -615,6 +662,7 @@ export function createInertOfflineOneShotTicketForTests(input = {}, deps = {}) {
   if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > OPS_PILOT_MAX_ONESHOT_TTL_MS) {
     throw new TypeError('TTL_OUT_OF_BOUNDS');
   }
+  const nonce = randomBytes(16).toString('hex');
   const ticket = createTicketRecord({
     proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
     repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
@@ -622,15 +670,21 @@ export function createInertOfflineOneShotTicketForTests(input = {}, deps = {}) {
     executablePath: process.execPath,
     harnessModulePath: HARNESS_MODULE_PATH,
     executionPrincipal: process.getuid?.(),
-    nonce: randomBytes(16).toString('hex'),
-    createdAtMonotonicMs: now,
-    expiresAtMonotonicMs: now + ttlMs,
-    ttlMs,
-    liveSpawnPermitted: false,
+    nonce,
+    authorizesLivePostgres: false,
+    ownerAuthenticationProven: false,
+  }, {
+    state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
     consumed: false,
     cancelled: false,
     inert: true,
-    __state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
+    prepareUsed: false,
+    createdAtMonotonicMs: now,
+    expiresAtMonotonicMs: now + ttlMs,
+    ttlMs,
+    repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+    approvedActions,
+    nonce,
   });
   inertOneShotLatch.add(ticket);
   return ticket;
@@ -640,8 +694,9 @@ export function cancelOwnerOneShotTicket(ticket, clock = {}) {
   if (!isOwnerOneShotTicket(ticket)) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, ['TICKET_REQUIRED']);
   }
-  ticket.cancelled = true;
-  writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  const priv = getTicketPrivilege(ticket);
+  priv.cancelled = true;
+  priv.state = ONE_SHOT_STATES.DENIED_OR_TERMINATED;
   return Object.freeze({
     ok: true,
     decision: OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED,
@@ -666,45 +721,59 @@ function requireOneShotForLifecycle(config = {}, clock = {}) {
       'DEFAULT_DENY',
     ]);
   }
-  if (ticket.cancelled === true) {
-    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  const escalation = assertTicketNotEscalatedByMutation(ticket);
+  if (escalation) return escalation;
+  const priv = getTicketPrivilege(ticket);
+  if (priv.cancelled === true) {
+    priv.state = ONE_SHOT_STATES.DENIED_OR_TERMINATED;
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED, ['TICKET_CANCELLED']);
   }
-  if (ticket.consumed === true
-    || readTicketState(ticket) === ONE_SHOT_STATES.CONSUMED
-    || readTicketState(ticket) === ONE_SHOT_STATES.TERMINATED
-    || readTicketState(ticket) === ONE_SHOT_STATES.DENIED_OR_TERMINATED) {
+  if (priv.consumed === true
+    || priv.state === ONE_SHOT_STATES.CONSUMED
+    || priv.state === ONE_SHOT_STATES.TERMINATED
+    || priv.state === ONE_SHOT_STATES.DENIED_OR_TERMINATED) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY, [
       'ONESHOT_ALREADY_CONSUMED_OR_TERMINATED',
     ]);
   }
   if (isTicketExpired(ticket, clock)) {
-    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+    priv.state = ONE_SHOT_STATES.DENIED_OR_TERMINATED;
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_EXPIRED, ['ONESHOT_TTL_EXCEEDED']);
   }
-  const state = readTicketState(ticket);
-  if (state !== ONE_SHOT_STATES.ACTIVE_TEST_ONLY && state !== ONE_SHOT_STATES.RESERVED) {
+  if (priv.state !== ONE_SHOT_STATES.ACTIVE_TEST_ONLY && priv.state !== ONE_SHOT_STATES.RESERVED) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, [
-      `INVALID_STATE=${state}`,
+      `INVALID_STATE=${priv.state}`,
+    ]);
+  }
+  // Real Owner authentication is unproven in this two-file scope. Only inert
+  // TEST_ONLY tickets may exercise offline fake-spawner lifecycle paths.
+  if (!isInertOfflineOneShotTicket(ticket)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
+      'NON_INERT_TICKET_NOT_AUTHORIZED_FOR_LIFECYCLE',
+      'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
     ]);
   }
   return null;
 }
 
 function consumeOneShotOrDeny(ticket, clock = {}) {
-  if (ticket.cancelled === true) {
-    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  const priv = getTicketPrivilege(ticket);
+  if (!priv) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, ['TICKET_PRIVILEGE_MISSING']);
+  }
+  if (priv.cancelled === true) {
+    priv.state = ONE_SHOT_STATES.DENIED_OR_TERMINATED;
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED, ['TICKET_CANCELLED']);
   }
-  if (ticket.consumed === true) {
+  if (priv.consumed === true) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY, ['REPLAY_FORBIDDEN']);
   }
   if (isTicketExpired(ticket, clock)) {
-    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+    priv.state = ONE_SHOT_STATES.DENIED_OR_TERMINATED;
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_EXPIRED, ['ONESHOT_TTL_EXCEEDED']);
   }
-  ticket.consumed = true;
-  writeTicketState(ticket, ONE_SHOT_STATES.CONSUMED);
+  priv.consumed = true;
+  priv.state = ONE_SHOT_STATES.CONSUMED;
   return null;
 }
 
@@ -875,9 +944,36 @@ export function assertVerifiedHarnessPaths(root, dataDir) {
   return { resolvedRoot, resolvedData };
 }
 
-export function inspectPostmasterStatus(dataDir, { pgCtlStatusFn } = {}) {
+function assertOwnedControllerBindsDataDir(ownedController, dataDir) {
+  if (!isOwnedDisposableOpsPilotClusterController(ownedController)) {
+    return false;
+  }
+  const auth = controllerCleanupAuthority.get(ownedController);
+  if (!auth || !auth.dataDir || typeof dataDir !== 'string') {
+    return false;
+  }
+  return resolve(auth.dataDir) === resolve(dataDir);
+}
+
+/**
+ * Inspect postmaster status. Direct/default pg_ctl status is restricted to a
+ * verified controller-owned disposable dataDir. Injected status fns are offline-safe.
+ */
+export function inspectPostmasterStatus(dataDir, { pgCtlStatusFn, ownedController } = {}) {
   if (!dataDir || typeof dataDir !== 'string') {
     return { status: POSTMASTER_STATUS.UNCERTAIN, reason: 'missing_dataDir' };
+  }
+  if (!pgCtlStatusFn) {
+    if (!assertOwnedControllerBindsDataDir(ownedController, dataDir)) {
+      return {
+        status: POSTMASTER_STATUS.UNCERTAIN,
+        reason: 'DENY_HELPER_WITHOUT_OWNED_CONTROLLER',
+        decision: OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+        blocked: true,
+        ok: false,
+        allowed: false,
+      };
+    }
   }
   if (!existsSync(dataDir)) {
     return { status: POSTMASTER_STATUS.STOPPED, reason: 'dataDir_absent' };
@@ -914,13 +1010,27 @@ export function inspectPostmasterStatus(dataDir, { pgCtlStatusFn } = {}) {
   };
 }
 
-export function stopClusterAndProveTerminated(dataDir, { stopFn, inspectFn } = {}) {
+export function stopClusterAndProveTerminated(dataDir, { stopFn, inspectFn, ownedController } = {}) {
+  if (!stopFn) {
+    if (!assertOwnedControllerBindsDataDir(ownedController, dataDir)) {
+      return {
+        terminated: false,
+        blocked: true,
+        status: POSTMASTER_STATUS.UNCERTAIN,
+        reason: 'DENY_HELPER_WITHOUT_OWNED_CONTROLLER',
+        decision: OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER,
+        ok: false,
+        allowed: false,
+        stopError: 'OWNED_CONTROLLER_REQUIRED_FOR_DEFAULT_PG_CTL_STOP',
+      };
+    }
+  }
   const stopper = stopFn || ((dir) => spawnSync(
     join(OPS_PILOT_PG_BIN_DIR, 'pg_ctl'),
     [...buildPgCtlStopArgs(dir)],
     { encoding: 'utf8' },
   ));
-  const inspect = inspectFn || inspectPostmasterStatus;
+  const inspect = inspectFn || ((dir) => inspectPostmasterStatus(dir, { ownedController }));
   let stopError = null;
   try {
     const result = stopper(dataDir);
@@ -950,9 +1060,14 @@ export function stopClusterAndProveTerminated(dataDir, { stopFn, inspectFn } = {
   };
 }
 
-export function removeHarnessRootIfSafe(root, dataDir, { inspectFn } = {}) {
+export function removeHarnessRootIfSafe(root, dataDir, { inspectFn, ownedController } = {}) {
   const verified = assertVerifiedHarnessPaths(root, dataDir);
-  const inspection = (inspectFn || inspectPostmasterStatus)(verified.resolvedData);
+  if (!inspectFn && !assertOwnedControllerBindsDataDir(ownedController, verified.resolvedData)) {
+    throw new Error('BLOCKED: ownedController or inspectFn required; refusing default pg_ctl');
+  }
+  const inspection = inspectFn
+    ? inspectFn(verified.resolvedData)
+    : inspectPostmasterStatus(verified.resolvedData, { ownedController });
   if (inspection.status !== POSTMASTER_STATUS.STOPPED) {
     throw new Error(
       `BLOCKED: refusing delete; postmaster status=${inspection.status} (${inspection.reason})`,
@@ -1051,9 +1166,22 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         clock,
       }, env);
       if (again) return again;
-      if (root != null) {
-        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_SYMLINK_OR_PREEXISTING, [
-          'CLUSTER_ALREADY_PREPARED',
+      const priv = getTicketPrivilege(ticket);
+      if (!priv) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED, ['TICKET_PRIVILEGE_MISSING']);
+      }
+      if (priv.prepareUsed === true || root != null) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PREPARE_ALREADY_USED, [
+          'PREPARE_ONE_SHOT_PER_TICKET',
+          'REPEATED_ALLOCATION_FORBIDDEN',
+        ]);
+      }
+      // Filesystem allocation only for inert TEST_ONLY tickets under offline proof,
+      // or (future) live gate — never via ARGV/env/boolean/public factory alone.
+      if (!usingInertTicket) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
+          'PREPARE_REQUIRES_INERT_OFFLINE_TICKET_WHILE_LIVE_GATE_CLOSED',
+          'ARGV_ENV_BOOLEAN_PUBLIC_FACTORY_CANNOT_AUTHORIZE_FS_ALLOCATION',
         ]);
       }
       root = mkdtempSync(join(tmpdir(), OPS_PILOT_HARNESS_ROOT_PREFIX));
@@ -1064,6 +1192,13 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       mkdirSync(dataDir);
       mkdirSync(socketDir);
       writeHarnessMarker(root, dataDir);
+      priv.prepareUsed = true;
+      controllerCleanupAuthority.set(controller, {
+        root,
+        dataDir,
+        socketDir,
+        preparedAtMonotonicMs: monotonicNowMs(clock),
+      });
       return Object.freeze({
         ok: true,
         allowed: true,
@@ -1108,7 +1243,8 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       });
 
       const allowInertLifecycle = usingInertTicket && injectedSpawn;
-      const allowLiveLifecycle = ticket.liveSpawnPermitted === true
+      const ticketPriv = getTicketPrivilege(ticket);
+      const allowLiveLifecycle = ticketPriv?.liveSpawnPermitted === true
         && OPS_PILOT_DB_EXECUTION_AUTHORIZED === true
         && !usingInertTicket;
 
@@ -1234,12 +1370,14 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         });
       }
       const proof = stopClusterAndProveTerminated(dataDir, {
+        ownedController: this,
         stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
           join(binDir, 'pg_ctl'),
           [...buildPgCtlStopArgs(dir)],
           { encoding: 'utf8', shell: false },
         )),
         inspectFn: runners.inspectFn || ((dir) => inspectPostmasterStatus(dir, {
+          ownedController: this,
           pgCtlStatusFn: (d) => runners.spawnSyncFn(
             join(binDir, 'pg_ctl'),
             ['-D', d, 'status'],
@@ -1326,6 +1464,7 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       }
       try {
         const removed = removeHarnessRootIfSafe(root, dataDir, {
+          ownedController: this,
           inspectFn: runners.inspectFn || (() => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'cleanup_owned' })),
         });
         cleaned = true;
@@ -1358,6 +1497,7 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
     },
   };
   ownedClusterLatch.add(controller);
+  controllerCleanupAuthority.set(controller, { root: null, dataDir: null, socketDir: null });
   return controller;
 }
 
