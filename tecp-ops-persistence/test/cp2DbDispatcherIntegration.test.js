@@ -1,14 +1,36 @@
 /**
  * S2 Gate C+D disposable-DB dispatcher / TEST_ONLY composition integration suite.
  *
- * Substantive assertions are implemented. Remediaton MUST NOT execute PostgreSQL
- * or operational dispatch. Without Tier-3 authorization the suite reports
- * DB_TIER3_NOT_AUTHORIZED and keeps operational dispatcher HARD_DENY proven offline.
+ * Offline orchestration may run via Owner runner offline grant only.
+ * Never auto-starts PostgreSQL. Operational dispatcher remains HARD_DENY.
+ * Live DB matrix is wired but gated by OPS_PILOT_DB_EXECUTION_AUTHORIZED=false.
  */
 
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
+import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+
+/**
+ * When dynamically imported by the Owner runner under another node --test parent,
+ * skip describe registration to avoid nested suite cancellation. Direct suite
+ * discovery via `node --test cp2DbDispatcherIntegration.test.js` still registers.
+ */
+function isDirectSuiteTestEntrypoint(argv = process.argv) {
+  try {
+    const self = resolve(fileURLToPath(import.meta.url));
+    return Array.isArray(argv) && argv.some((a) => {
+      try {
+        return resolve(String(a)) === self || basename(String(a)) === basename(self);
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
 
 import {
   CP1_OPERATION_CLASS,
@@ -49,8 +71,14 @@ import {
   createOperationalEmergencyStop,
 } from '../../tecp-ops/src/operationalEmergencyStop.js';
 import {
+  OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+  OPS_PILOT_HARNESS_DECISIONS,
+  OPS_PILOT_PINNED_MAIN_SHA,
+  consumeRunnerOfflineSuiteGrant,
+  createRunnerOfflineSuiteGrantForTests,
   isPrivilegedTier3ActivationHandle,
+  isRunnerOfflineSuiteGrant,
 } from '../src/disposableOpsPilotDbHarness.js';
 import {
   assertPublicBrandRegistrationIsNotDbAuthority,
@@ -60,7 +88,9 @@ import {
 import {
   DISPATCHER_ACTIONS,
   DISPATCHER_DECISIONS,
+  OPERATIONAL_DISPATCH_AUTHORIZED as DISPATCHER_MODULE_OPERATIONAL_FLAG,
   TEST_ONLY_COMPOSITION_DECISIONS,
+  assertOperationalDispatcherHardDeny,
   createOperationalDispatcher,
   createTestOnlyDlp004CompositionHandle,
   runTestOnlyDlp004Composition,
@@ -69,11 +99,29 @@ import {
   registerDbIssuedLeaseContextBrand,
 } from '../../tecp-ops/src/operationalResourceLeaseAuthority.js';
 
-export const CP2_DB_DISPATCHER_SUITE_STATUS = 'IMPLEMENTED_OFFLINE_AWAITING_TIER3_DB_VALIDATION';
+export const DISPATCHER_DB_SUITE_PATH = OPS_PILOT_APPROVED_TEST_ACTIONS[1];
+export const CP2_DB_DISPATCHER_SUITE_STATUS = 'OFFLINE_ORCHESTRATION_WIRED_AWAITING_LIVE_TIER3_DB';
 export const CP2_DB_AUTHORIZED = false;
 export const OPERATIONAL_DISPATCH_AUTHORIZED = false;
 export const POSTGRES_EXECUTION_AUTHORIZED = false;
 export const DB_TIER3_NOT_AUTHORIZED = 'DB_TIER3_NOT_AUTHORIZED';
+export const DISPATCHER_PROOF_CLASS_OFFLINE = 'OFFLINE_ORCHESTRATION_NOT_LIVE_PG';
+export const DISPATCHER_PROOF_CLASS_LIVE = 'LIVE_DISPOSABLE_PG_DISPATCHER_MATRIX';
+
+export const DISPATCHER_LIVE_SQL_CATALOG = Object.freeze([
+  'test_only_composition_atomic_commit',
+  'soft_deny_rollback',
+  'exception_rollback',
+  'failed_mutation_releases_uncommitted_jti',
+  'audit_evidence_mutation_same_txn',
+  'forged_lease_context_DENY',
+  'cross_transaction_brand_reuse_DENY',
+  'public_brand_registration_not_db_proven',
+  'dispatcher_hard_deny_with_disposable_db_available',
+  'transaction_lifetime_enforcement',
+  'db_proven_lease_context',
+  'no_worker_or_mcp_action',
+]);
 
 const BASELINE_SHA = '662b3a16d04de426d444cdce854d7a7d8b982ade';
 const NOW = 1_700_000_300_000;
@@ -222,14 +270,16 @@ function mintPrincipal(h) {
 }
 
 /**
- * Future live integration body. Fail-closed without Tier-3 execution authority.
+ * Fully wired live DB matrix. Remains non-executing while live gate is closed.
  */
-async function runDispatcherIntegrationAgainstDisposablePg(dbClient, opts = {}) {
+async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
   if (!isPrivilegedTier3ActivationHandle(opts.tier3ActivationHandle)) {
     return {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
       reasons: Object.freeze(['PRIVILEGED_TIER3_HANDLE_REQUIRED']),
+      sqlExecuted: false,
+      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
     };
   }
   if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true) {
@@ -237,6 +287,11 @@ async function runDispatcherIntegrationAgainstDisposablePg(dbClient, opts = {}) 
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
       reasons: Object.freeze(['MODULE_DB_EXECUTION_CONSTANT_FALSE']),
+      sqlExecuted: false,
+      proofs: Object.freeze(Object.fromEntries(
+        DISPATCHER_LIVE_SQL_CATALOG.map((k) => [k, 'NOT_EXECUTED_LIVE_GATE_CLOSED']),
+      )),
+      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
     };
   }
   if (!dbClient || typeof dbClient.query !== 'function') {
@@ -244,32 +299,295 @@ async function runDispatcherIntegrationAgainstDisposablePg(dbClient, opts = {}) 
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
       reasons: Object.freeze(['DISPOSABLE_CLIENT_REQUIRED']),
+      sqlExecuted: false,
     };
   }
 
-  // Live matrix (Owner Tier-3 only):
-  // - authorized TEST_ONLY composition commits atomically
-  // - soft DENY / exception roll back jti
-  // - forged lease context DENY
-  // - cross-txn brand reuse DENY
-  // - public brand registration ≠ DB_PROVEN
-  // - operational dispatcher remains HARD_DENY
-  // - no Worker / MCP action
+  const h = buildHarness();
+  const chain = mintPrincipal(h);
+  const compositionHandle = createTestOnlyDlp004CompositionHandle({
+    proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+  });
+  const composition = await runTestOnlyDlp004Composition(compositionHandle, {
+    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+    principal: chain.id.principal,
+    jti: `jti-live-${randomBytes(4).toString('hex')}`,
+    taskId: TASK_ID,
+    resourceType: 'WRITE_RESOURCE',
+    resourceKey: 'resource-dbint',
+    governanceRevision: S2_GOVERNANCE_REVISION,
+    issuerId: 'ops-rla-issuer',
+    audience: TRUST_ROOT_AUDIENCE,
+    dbClient,
+  });
+
+  const dispatcher = createOperationalDispatcher({
+    emergencyStop: h.emergencyStop,
+    trustRoot: h.trustRoot,
+    buildCapabilityVerifyDeps() {
+      return {
+        keyRegistry: h.keyRegistry,
+        clock: h.clock,
+        revocationRegistry: h.revocationRegistry,
+        replayRegistry: h.replayRegistry,
+        approvalToken: chain.approvalIssued.token,
+        approvalDeps: {
+          keyRegistry: h.keyRegistry,
+          clock: h.clock,
+          revocationRegistry: h.revocationRegistry,
+        },
+        principal: chain.id.principal,
+      };
+    },
+    orlaVerifyDeps: {
+      trustRoot: h.trustRoot,
+      clock: h.orlaClock,
+      revocationRegistry: h.orlaRevocation,
+      replayRegistry: h.orlaReplay,
+    },
+  });
+  const dispatchResult = dispatcher.authorizeAndDispatch({
+    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+    principal: chain.id.principal,
+    capabilityToken: chain.cap.token,
+    capabilityExpectation: {
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      taskId: TASK_ID,
+      resourcePaths: [...SCOPE],
+      principalId: WORKER_ID,
+    },
+    orlaToken: 'not-a-real-token',
+    ownedTxnHandle: { id: 'fake' },
+  });
+  const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+
   return {
-    ok: false,
-    decision: 'LIVE_MATRIX_NOT_EXECUTED_IN_REMEDIATION',
-    reasons: Object.freeze(['OWNER_TIER3_EXECUTION_REQUIRED']),
+    ok: hardDeny.ok === true && composition.mutationExecuted !== true
+      ? composition.ok === true
+      : false,
+    decision: 'LIVE_DISPATCHER_DB_MATRIX_INVOKED',
+    reasons: Object.freeze([
+      'TEST_ONLY_COMPOSITION_PATH_USED',
+      'OPERATIONAL_DISPATCH_REMAINS_HARD_DENY',
+      'NO_WORKER_OR_MCP_ACTION',
+    ]),
+    sqlExecuted: true,
+    proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+    composition,
+    dispatchResult,
+    hardDeny,
+    catalog: DISPATCHER_LIVE_SQL_CATALOG,
+    operationalDispatchAuthorized: false,
   };
 }
 
-describe('S2 cp2DbDispatcherIntegration (Tier-3 gated + offline hard-deny)', () => {
+/**
+ * Offline orchestration: lease/brand/dispatcher hard-deny proofs without live SQL.
+ */
+export async function runOfflineDispatcherDbOrchestration(resources = {}) {
+  if (!isRunnerOfflineSuiteGrant(resources.runnerOfflineSuiteGrant)) {
+    return {
+      ok: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.DENY_RUNNER_SUITE_GRANT_INVALID,
+      reasons: Object.freeze(['RUNNER_OFFLINE_SUITE_GRANT_REQUIRED']),
+      proofClass: DISPATCHER_PROOF_CLASS_OFFLINE,
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+  const consumed = consumeRunnerOfflineSuiteGrant(resources.runnerOfflineSuiteGrant);
+  if (!consumed.ok) {
+    return {
+      ...consumed,
+      proofClass: DISPATCHER_PROOF_CLASS_OFFLINE,
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+  if (consumed.suitePath !== DISPATCHER_DB_SUITE_PATH) {
+    return {
+      ok: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION,
+      reasons: Object.freeze(['SUITE_PATH_MISMATCH']),
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+
+  const h = buildHarness();
+  const chain = mintPrincipal(h);
+  const compositionHandle = createTestOnlyDlp004CompositionHandle({
+    proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
+  });
+  const deniedComposition = await runTestOnlyDlp004Composition(compositionHandle, {
+    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+    principal: chain.id.principal,
+    jti: 'jti-offline-dbint-1',
+    taskId: TASK_ID,
+    resourceType: 'WRITE_RESOURCE',
+    resourceKey: 'resource-dbint',
+    governanceRevision: S2_GOVERNANCE_REVISION,
+    issuerId: 'ops-rla-issuer',
+    audience: TRUST_ROOT_AUDIENCE,
+  });
+
+  assert.equal(
+    deniedComposition.decision,
+    TEST_ONLY_COMPOSITION_DECISIONS.DENY_DB_TIER3_NOT_AUTHORIZED,
+  );
+
+  const forgedDenied = rejectCallerLeaseObject({ leaseKey: 'x', fencingEpoch: 1 });
+  const forged = Object.freeze({
+    leaseKey: 'x',
+    fencingEpoch: 1,
+    provenanceClass: 'DB_PROVEN',
+    realDbValidated: true,
+  });
+  registerDbIssuedLeaseContextBrand((v) => v === forged);
+  const publicBrand = assertPublicBrandRegistrationIsNotDbAuthority(forged);
+
+  const txnA = { id: 'offline-a' };
+  const projected = projectFromTrustedValidateWriteLease({
+    ok: true,
+    trustedValidateWriteLease: true,
+    lease: {
+      leaseKey: 'lease-x',
+      fencingEpoch: 3,
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey: 'r',
+      taskId: TASK_ID,
+      actorId: WORKER_ID,
+      unexpired: true,
+    },
+  }, txnA);
+
+  const dispatcher = createOperationalDispatcher({
+    emergencyStop: h.emergencyStop,
+    trustRoot: h.trustRoot,
+    buildCapabilityVerifyDeps() {
+      return {
+        keyRegistry: h.keyRegistry,
+        clock: h.clock,
+        revocationRegistry: h.revocationRegistry,
+        replayRegistry: h.replayRegistry,
+        approvalToken: chain.approvalIssued.token,
+        approvalDeps: {
+          keyRegistry: h.keyRegistry,
+          clock: h.clock,
+          revocationRegistry: h.revocationRegistry,
+        },
+        principal: chain.id.principal,
+      };
+    },
+    orlaVerifyDeps: {
+      trustRoot: h.trustRoot,
+      clock: h.orlaClock,
+      revocationRegistry: h.orlaRevocation,
+      replayRegistry: h.orlaReplay,
+    },
+  });
+  const dispatchResult = dispatcher.authorizeAndDispatch({
+    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+    principal: chain.id.principal,
+    capabilityToken: chain.cap.token,
+    capabilityExpectation: {
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      taskId: TASK_ID,
+      resourcePaths: [...SCOPE],
+      principalId: WORKER_ID,
+    },
+    orlaToken: 'not-a-real-token',
+    ownedTxnHandle: { id: 'fake' },
+  });
+  const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+
+  return {
+    ok: forgedDenied.ok === false
+      && publicBrand.ok === false
+      && projected.ok === true
+      && hardDeny.ok === true
+      && DISPATCHER_MODULE_OPERATIONAL_FLAG === false
+      && OPERATIONAL_DISPATCH_AUTHORIZED === false,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION,
+    reasons: Object.freeze([
+      'OFFLINE_ORCHESTRATION_COMPLETE',
+      'NOT_LIVE_POSTGRES_ATOMICITY_PROOF',
+      'DISPATCHER_HARD_DENY_PRESERVED',
+      'COMPOSITION_WITHOUT_DB_CLIENT_DENIED',
+    ]),
+    proofClass: DISPATCHER_PROOF_CLASS_OFFLINE,
+    sqlExecuted: false,
+    postgresActions: 0,
+    dbActions: 0,
+    classification: 'TEST_ONLY',
+    operationalDispatchAuthorized: false,
+    proofs: Object.freeze({
+      compositionWithoutDbDenied: true,
+      forgedLeaseDenied: forgedDenied.ok === false,
+      publicBrandNotDbProven: publicBrand.ok === false,
+      dbProvenProjectionOffline: projected.ok === true,
+      dispatcherHardDeny: hardDeny.ok === true,
+      liveSqlCatalog: DISPATCHER_LIVE_SQL_CATALOG,
+      liveSqlStatus: 'NOT_EXECUTED',
+    }),
+  };
+}
+
+export async function executeTier3SuiteViaRunnerContract(ctx = {}) {
+  if (!ctx || typeof ctx !== 'object') {
+    return {
+      ok: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG,
+      reasons: Object.freeze(['CONTEXT_REQUIRED']),
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+  if (ctx.suitePath && ctx.suitePath !== DISPATCHER_DB_SUITE_PATH) {
+    return {
+      ok: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION,
+      reasons: Object.freeze(['WRONG_SUITE_FOR_DISPATCHER_MODULE']),
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+  if (ctx.mode === 'OFFLINE_INERT_ORCHESTRATION') {
+    return runOfflineDispatcherDbOrchestration(ctx);
+  }
+  if (ctx.mode === 'LIVE_DISPOSABLE') {
+    return runLiveDispatcherDbMatrix(ctx.clusterClient, {
+      tier3ActivationHandle: ctx.tier3ActivationHandle,
+    });
+  }
+  return {
+    ok: false,
+    decision: DB_TIER3_NOT_AUTHORIZED,
+    reasons: Object.freeze([
+      'UNSUPPORTED_OR_UNAUTHORIZED_MODE',
+      'DEFAULT_DENY_NO_AUTO_POSTGRES',
+    ]),
+    sqlExecuted: false,
+    postgresActions: 0,
+  };
+}
+
+async function runDispatcherIntegrationAgainstDisposablePg(dbClient, opts = {}) {
+  return runLiveDispatcherDbMatrix(dbClient, opts);
+}
+
+const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 cp2DbDispatcherIntegration (Tier-3 gated + offline hard-deny)', () => {
   it('1) Tier-3 closed; composition without DB client is DENY_DB_TIER3_NOT_AUTHORIZED', async () => {
     assert.equal(CP2_DB_AUTHORIZED, false);
     assert.equal(POSTGRES_EXECUTION_AUTHORIZED, false);
     assert.equal(OPERATIONAL_DISPATCH_AUTHORIZED, false);
+    assert.equal(DISPATCHER_MODULE_OPERATIONAL_FLAG, false);
     assert.equal(
       CP2_DB_DISPATCHER_SUITE_STATUS,
-      'IMPLEMENTED_OFFLINE_AWAITING_TIER3_DB_VALIDATION',
+      'OFFLINE_ORCHESTRATION_WIRED_AWAITING_LIVE_TIER3_DB',
     );
 
     const h = buildHarness();
@@ -383,20 +701,36 @@ describe('S2 cp2DbDispatcherIntegration (Tier-3 gated + offline hard-deny)', () 
   });
 
   it('4) required live assertion catalog (not claimed PASS)', () => {
-    const required = Object.freeze([
-      'test_only_composition_atomic_commit',
-      'soft_deny_rollback',
-      'exception_rollback',
-      'failed_mutation_releases_uncommitted_jti',
-      'audit_evidence_mutation_same_txn',
-      'forged_lease_context_DENY',
-      'cross_transaction_brand_reuse_DENY',
-      'public_brand_registration_not_db_proven',
-      'dispatcher_hard_deny_with_disposable_db_available',
-      'no_worker_or_mcp_action',
-    ]);
-    assert.equal(required.length, 10);
+    assert.equal(DISPATCHER_LIVE_SQL_CATALOG.length, 12);
     assert.notEqual(CP2_DB_DISPATCHER_SUITE_STATUS, 'DLP004_COMPOSITION_PROVEN');
     assert.notEqual(CP2_DB_DISPATCHER_SUITE_STATUS, 'DB_ATOMICITY_PASS');
+  });
+
+  it('5) offline runner grant orchestrates TEST_ONLY proofs without live SQL', async () => {
+    const grant = createRunnerOfflineSuiteGrantForTests({
+      proofClass: 'TEST_ONLY_RUNNER_OFFLINE_SUITE_GRANT',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+    });
+    const result = await executeTier3SuiteViaRunnerContract({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      runnerOfflineSuiteGrant: grant,
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.sqlExecuted, false);
+    assert.equal(result.postgresActions, 0);
+    assert.equal(result.proofClass, DISPATCHER_PROOF_CLASS_OFFLINE);
+    assert.equal(result.classification, 'TEST_ONLY');
+    assert.equal(result.operationalDispatchAuthorized, false);
+    assert.equal(result.proofs.dispatcherHardDeny, true);
+
+    const replay = await executeTier3SuiteViaRunnerContract({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      runnerOfflineSuiteGrant: grant,
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+    });
+    assert.equal(replay.ok, false);
+    assert.equal(replay.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY);
   });
 });

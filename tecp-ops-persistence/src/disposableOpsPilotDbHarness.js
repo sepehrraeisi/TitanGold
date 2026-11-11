@@ -29,7 +29,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
-export const OPS_PILOT_HARNESS_CHECKPOINT = 'S2_TIER3_PRE_LIVE_HARDENING';
+export const OPS_PILOT_HARNESS_CHECKPOINT = 'S2_TIER3_FINAL_EXECUTION_READINESS';
 export const OPS_PILOT_REQUIRED_PG_VERSION = '14.24';
 export const OPS_PILOT_REQUIRED_PG_VERSION_PREFIX = 'postgres (PostgreSQL) 14.24';
 export const OPS_PILOT_PG_BIN_DIR = '/usr/lib/postgresql/14/bin';
@@ -39,13 +39,67 @@ export const OPS_PILOT_HARNESS_MARKER_MAGIC = 'TECP-OPS-PILOT-S2-DISPOSABLE-HARN
 export const OPS_PILOT_DB_EXECUTION_AUTHORIZED = false;
 export const OPS_PILOT_TIER3_AUTHORIZED = false;
 export const TIER3_ACTIVATION_AUTHORITY = 'TIER3_ACTIVATION_AUTHORITY_UNPROVEN';
-export const OPS_PILOT_PINNED_MAIN_SHA = '1e7603a156e0dcb036dc5f43a06803e52695613f';
+/** Canonical main tip after PR #295 merge. Future Owner Tier-3 execution must re-pin. */
+export const OPS_PILOT_PINNED_MAIN_SHA = 'ee26aa367475c0002b077bd0ae02838ce8c055e6';
 export const OPS_PILOT_OWNER_RUNNER_ARGV_MARKER = '--tecp-ops-s2-owner-controlled-local-runner';
 export const OPS_PILOT_DEFAULT_ONESHOT_TTL_MS = 120000;
 export const OPS_PILOT_MAX_ONESHOT_TTL_MS = 300000;
 export const OPS_PILOT_APPROVED_TEST_ACTIONS = Object.freeze([
   'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
   'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+]);
+
+/**
+ * Non-executable future Tier-3 contract (documentation + offline readiness only).
+ * Does not authorize PostgreSQL, Worker, MCP mutation, dispatch, or Production.
+ */
+export const TIER3_FINAL_EXECUTION_CONTRACT = Object.freeze({
+  repository: 'sepehrraeisi/TitanGold',
+  pinnedMainSha: OPS_PILOT_PINNED_MAIN_SHA,
+  ownerApproval: 'SEPARATELY_REQUIRED',
+  executionPrincipal: 'EXPLICITLY_UNVERIFIED_AS_OWNER',
+  executorIdentity: 'EXPLICITLY_UNVERIFIED_AS_OWNER_CUSTODY',
+  testSuites: Object.freeze([...OPS_PILOT_APPROVED_TEST_ACTIONS]),
+  postgresVersion: OPS_PILOT_REQUIRED_PG_VERSION,
+  postgresBinDir: OPS_PILOT_PG_BIN_DIR,
+  network: 'UNIX_SOCKET_ONLY',
+  externalDbTargets: 'DENY',
+  oneShot: true,
+  ttlDefaultSeconds: OPS_PILOT_DEFAULT_ONESHOT_TTL_MS / 1000,
+  ttlMaxSeconds: OPS_PILOT_MAX_ONESHOT_TTL_MS / 1000,
+  cleanup: 'MANDATORY',
+  auditEvidence: 'MANDATORY',
+  worker: 'DENY',
+  mcpMutation: 'DENY',
+  operationalDispatch: 'DENY',
+  production: 'DENY',
+  liveDbExecutionAuthorized: false,
+  executableLaunchCommand: null,
+});
+
+export const TIER3_READINESS_VERDICTS = Object.freeze({
+  READY_FOR_SEPARATE_OWNER_TIER3_EXECUTION_AUTHORIZATION:
+    'READY_FOR_SEPARATE_OWNER_TIER3_EXECUTION_AUTHORIZATION',
+  SOURCE_READY_TRUST_BOUNDARY_BLOCKED: 'SOURCE_READY_TRUST_BOUNDARY_BLOCKED',
+  EXACT_SCOPE_INSUFFICIENT: 'EXACT_SCOPE_INSUFFICIENT',
+  SECURITY_BLOCKED: 'SECURITY_BLOCKED',
+  OFFLINE_INTEGRATION_COMPLETE_EXTERNAL_TRUST_BLOCKED:
+    'OFFLINE_INTEGRATION_COMPLETE_EXTERNAL_TRUST_BLOCKED',
+});
+
+export const OPS_PILOT_OWNER_RUNNER_RELATIVE_PATH =
+  'tecp-ops-persistence/scripts/ownerControlledTier3LocalRunner.js';
+
+/**
+ * Five-file offline completion leaves no additional *source* paths required.
+ * Remaining blockers are external Owner custody / separate live authorization.
+ */
+export const TIER3_REQUIRED_ADDITIONAL_PATHS = Object.freeze([]);
+
+export const TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS = Object.freeze([
+  'INDEPENDENT_OWNER_INVOCATION_OR_CUSTODY_BOUNDARY_OUTSIDE_UNTRUSTED_NODE_PROCESS',
+  'SEPARATE_EXPLICIT_OWNER_TIER3_LIVE_EXECUTION_INSTRUCTION',
+  'FRESH_EXACT_SHA_SAFETY_PREFLIGHT_BEFORE_ANY_PG_SPAWN',
 ]);
 
 export const ONE_SHOT_STATES = Object.freeze({
@@ -95,6 +149,10 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_PREPARE_ALREADY_USED: 'DENY_PREPARE_ALREADY_USED',
   DENY_HELPER_WITHOUT_OWNED_CONTROLLER: 'DENY_HELPER_WITHOUT_OWNED_CONTROLLER',
   DENY_OWNER_AUTHENTICATION_UNPROVEN: 'DENY_OWNER_AUTHENTICATION_UNPROVEN',
+  DENY_FINAL_EXECUTION_NOT_READY: 'DENY_FINAL_EXECUTION_NOT_READY',
+  DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING: 'DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING',
+  DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
+  ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -109,9 +167,18 @@ const privilegedTier3Latch = new WeakSet();
 const ownedClusterLatch = new WeakSet();
 const oneShotTicketLatch = new WeakSet();
 const inertOneShotLatch = new WeakSet();
+/** Offline-only runner→suite grants. NEVER Owner authentication or live PG authority. */
+const runnerOfflineSuiteGrantLatch = new WeakSet();
+/**
+ * Independent Owner capability brands. Intentionally never minted by this module —
+ * ARGV/env/boolean/UID/WeakSet factories cannot create them. Live PG stays DENY
+ * until an out-of-process Owner custody boundary installs a verified capability.
+ */
+const independentOwnerCapabilityLatch = new WeakSet();
 /** Module-private privileged state. Exported ticket objects are frozen and non-authoritative. */
 const ticketPrivilegeByRef = new WeakMap();
 const controllerCleanupAuthority = new WeakMap();
+const runnerOfflineGrantPrivilege = new WeakMap();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -1642,6 +1709,250 @@ export function assertHarnessSourceHasNoEagerPgImport(sourceText) {
   return Object.freeze({
     ok: !eager,
     eagerPgImport: eager,
+  });
+}
+
+export function normalizeApprovedSuitePath(suitePath) {
+  const s = String(suitePath || '');
+  for (const approved of OPS_PILOT_APPROVED_TEST_ACTIONS) {
+    if (s === approved || s.endsWith(`/${approved}`) || s.endsWith(approved)) {
+      return approved;
+    }
+  }
+  return null;
+}
+
+export function assertApprovedSuiteAllowlist(suitePath) {
+  const normalized = normalizeApprovedSuitePath(suitePath);
+  if (!normalized) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, [
+      'UNAPPROVED_SUITE_PATH',
+      String(suitePath || 'MISSING'),
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    suitePath: normalized,
+  });
+}
+
+/**
+ * Independent Owner capability verification.
+ * This process never mints such capabilities. Shape/boolean/ARGV/UID cannot pass.
+ */
+export function evaluateIndependentOwnerCapability(capability = null) {
+  if (capability == null) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING, [
+      'INDEPENDENT_OWNER_CAPABILITY_REQUIRED',
+      'ARGV_ENV_BOOLEAN_UID_WEAKSET_NOT_OWNER_CUSTODY',
+    ], {
+      ownerInvocationIndependentlyVerifiable: false,
+      ownerAuthenticationProven: false,
+    });
+  }
+  if (!independentOwnerCapabilityLatch.has(capability)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_INVOCATION_NOT_VERIFIABLE, [
+      'DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE',
+      'CAPABILITY_NOT_INSTALLED_BY_OUT_OF_PROCESS_OWNER_CUSTODY',
+      'LOCAL_RUNNER_SCRIPT_IS_NOT_A_TRUSTED_CREDENTIAL_AUTHORITY',
+    ], {
+      ownerInvocationIndependentlyVerifiable: false,
+      ownerAuthenticationProven: false,
+    });
+  }
+  // Even a branded capability would still require the live module gate.
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
+      'INDEPENDENT_CAPABILITY_OBSERVED_BUT_LIVE_GATE_CLOSED',
+    ], {
+      ownerInvocationIndependentlyVerifiable: true,
+      ownerAuthenticationProven: true,
+      liveGateClosed: true,
+    });
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    ownerInvocationIndependentlyVerifiable: true,
+    ownerAuthenticationProven: true,
+  });
+}
+
+/**
+ * Offline-only suite grant issued by the Owner runner for TEST_ONLY orchestration.
+ * Does NOT authorize live PostgreSQL spawn or operational dispatch.
+ */
+export function createRunnerOfflineSuiteGrantForTests(input = {}) {
+  if (!isPlainObject(input)) {
+    throw new TypeError('RUNNER_OFFLINE_SUITE_GRANT_OPTIONS_REQUIRED');
+  }
+  if (input.proofClass !== 'TEST_ONLY_RUNNER_OFFLINE_SUITE_GRANT') {
+    throw new TypeError('TEST_ONLY_RUNNER_OFFLINE_SUITE_GRANT_PROOF_CLASS_REQUIRED');
+  }
+  if (input.authorizeLivePostgresSpawn === true || input.ownerAuthenticationProven === true) {
+    throw new Error('OFFLINE_SUITE_GRANT_CANNOT_CLAIM_LIVE_OR_OWNER_AUTH');
+  }
+  const suiteCheck = assertApprovedSuiteAllowlist(input.suitePath);
+  if (!suiteCheck.ok) {
+    throw new TypeError(`UNAPPROVED_SUITE:${input.suitePath}`);
+  }
+  const grant = Object.freeze({
+    kind: 'RUNNER_OFFLINE_SUITE_GRANT',
+    proofClass: 'TEST_ONLY_RUNNER_OFFLINE_SUITE_GRANT',
+    suitePath: suiteCheck.suitePath,
+    repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+    authorizesLivePostgres: false,
+    ownerAuthenticationProven: false,
+    classification: 'OFFLINE_ORCHESTRATION_NOT_LIVE_PG',
+  });
+  runnerOfflineSuiteGrantLatch.add(grant);
+  runnerOfflineGrantPrivilege.set(grant, {
+    suitePath: suiteCheck.suitePath,
+    consumed: false,
+    liveSpawnPermitted: false,
+  });
+  return grant;
+}
+
+export function isRunnerOfflineSuiteGrant(value) {
+  return value !== null && typeof value === 'object' && runnerOfflineSuiteGrantLatch.has(value);
+}
+
+export function consumeRunnerOfflineSuiteGrant(grant) {
+  if (!isRunnerOfflineSuiteGrant(grant)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RUNNER_SUITE_GRANT_INVALID, [
+      'RUNNER_OFFLINE_SUITE_GRANT_REQUIRED',
+    ]);
+  }
+  const priv = runnerOfflineGrantPrivilege.get(grant);
+  if (!priv || priv.consumed === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY, [
+      'RUNNER_OFFLINE_SUITE_GRANT_ALREADY_CONSUMED',
+    ]);
+  }
+  priv.consumed = true;
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION,
+    suitePath: priv.suitePath,
+    authorizesLivePostgres: false,
+  });
+}
+
+/**
+ * Offline final-execution readiness decision. Never authorizes live PostgreSQL.
+ * After five-file offline completion, reports external-trust blocked when gates closed.
+ */
+export function evaluateTier3FinalExecutionReadiness(input = {}, deps = {}) {
+  if (input && input.claimReadyDespiteTrustGaps === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_FINAL_EXECUTION_NOT_READY, [
+      'READY_CLAIM_FORBIDDEN_WHILE_TRUST_OR_SCOPE_BLOCKED',
+    ], {
+      verdict: TIER3_READINESS_VERDICTS.SECURITY_BLOCKED,
+    });
+  }
+
+  const evidence = evaluateOwnerControlledLocalRunnerEvidence({
+    repositorySha: input.repositorySha || OPS_PILOT_PINNED_MAIN_SHA,
+    approvedActions: input.approvedActions || [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+    executablePath: input.executablePath || (deps.execPath || process.execPath),
+    harnessModulePath: input.harnessModulePath || HARNESS_MODULE_PATH,
+    executionPrincipal: input.executionPrincipal,
+    affirmSameUidLimitationsAccepted: input.affirmSameUidLimitationsAccepted === true,
+    ownerControlledLocalRunnerInvocation: input.ownerControlledLocalRunnerInvocation === true,
+    authorizeLivePostgresSpawn: input.authorizeLivePostgresSpawn === true,
+    ownerAuthorizedByBoolean: input.ownerAuthorizedByBoolean,
+    envAuthorized: input.envAuthorized,
+    treatWeakSetAsOwnerAuthority: input.treatWeakSetAsOwnerAuthority,
+    tier3ActivationHandle: input.tier3ActivationHandle,
+    ttlMs: input.ttlMs,
+  }, deps);
+
+  const independent = evaluateIndependentOwnerCapability(input.independentOwnerCapability || null);
+  const liveGateClosed = OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
+    && OPS_PILOT_TIER3_AUTHORIZED === false;
+  const ownerInvocationIndependentlyVerifiable = independent.ownerInvocationIndependentlyVerifiable === true
+    && independent.ownerAuthenticationProven === true;
+  const ownerInvocationBoundary = ownerInvocationIndependentlyVerifiable
+    ? 'OWNER_INVOCATION_INDEPENDENTLY_VERIFIABLE'
+    : 'OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE';
+
+  const fiveFileOfflineComplete = input.fiveFileOfflineIntegrationComplete === true;
+  const requiredAdditionalPaths = TIER3_REQUIRED_ADDITIONAL_PATHS;
+
+  let verdict = TIER3_READINESS_VERDICTS.SOURCE_READY_TRUST_BOUNDARY_BLOCKED;
+  if (!liveGateClosed) {
+    verdict = TIER3_READINESS_VERDICTS.SECURITY_BLOCKED;
+  } else if (requiredAdditionalPaths.length > 0) {
+    verdict = TIER3_READINESS_VERDICTS.EXACT_SCOPE_INSUFFICIENT;
+  } else if (fiveFileOfflineComplete && !ownerInvocationIndependentlyVerifiable) {
+    verdict = TIER3_READINESS_VERDICTS.OFFLINE_INTEGRATION_COMPLETE_EXTERNAL_TRUST_BLOCKED;
+  } else if (!ownerInvocationIndependentlyVerifiable) {
+    verdict = TIER3_READINESS_VERDICTS.SOURCE_READY_TRUST_BOUNDARY_BLOCKED;
+  } else {
+    verdict = TIER3_READINESS_VERDICTS.READY_FOR_SEPARATE_OWNER_TIER3_EXECUTION_AUTHORIZATION;
+  }
+
+  return Object.freeze({
+    ok: false,
+    allowed: false,
+    decision: OPS_PILOT_HARNESS_DECISIONS.DENY_FINAL_EXECUTION_NOT_READY,
+    reasons: Object.freeze([
+      `VERDICT=${verdict}`,
+      ownerInvocationBoundary,
+      liveGateClosed
+        ? 'LIVE_DB_GATE_REMAINS_CLOSED'
+        : 'LIVE_DB_GATE_UNEXPECTEDLY_OPEN',
+      'EXECUTABLE_LAUNCH_COMMAND_NOT_PROPOSED',
+      'NO_LIVE_POSTGRES_AUTHORIZED_BY_THIS_EVALUATION',
+      ...(evidence.reasons || []),
+      ...(independent.reasons || []),
+    ]),
+    verdict,
+    ownerInvocationBoundary,
+    ownerInvocationIndependentlyVerifiable: false,
+    ownerAuthenticationProven: false,
+    executionPrincipal: 'EXPLICITLY_UNVERIFIED_AS_OWNER',
+    trustedExecutor: 'EXPLICITLY_UNVERIFIED_AS_OWNER_CUSTODY',
+    sameUidLimitations: Object.freeze({
+      acceptedForDisposableTestsOnly: input.affirmSameUidLimitationsAccepted === true,
+      sealed: false,
+      argvIsNotOwnerAuthentication: true,
+      processGetuidIsNotOwnerAuthentication: true,
+      weakSetWeakMapNotOwnerCustody: true,
+    }),
+    liveDbGate: Object.freeze({
+      OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+      OPS_PILOT_TIER3_AUTHORIZED,
+      closed: liveGateClosed,
+    }),
+    oneShotContract: Object.freeze({
+      defaultTtlSeconds: OPS_PILOT_DEFAULT_ONESHOT_TTL_MS / 1000,
+      maxTtlSeconds: OPS_PILOT_MAX_ONESHOT_TTL_MS / 1000,
+      oneShotRequired: true,
+      replay: 'DENY',
+      cancelled: 'DENY',
+      expired: 'DENY',
+    }),
+    exactTwoSuiteAllowlist: OPS_PILOT_APPROVED_TEST_ACTIONS,
+    exactTwoSuiteIntegration: Object.freeze({
+      fencingSuiteWiredForOfflineOrchestration: fiveFileOfflineComplete === true,
+      dispatcherSuiteWiredForOfflineOrchestration: fiveFileOfflineComplete === true,
+      liveSqlPassClaimed: false,
+      blocker: ownerInvocationIndependentlyVerifiable
+        ? null
+        : 'EXTERNAL_OWNER_TRUST_BOUNDARY_REQUIRED_FOR_LIVE_PG',
+    }),
+    requiredAdditionalPaths,
+    requiredExternalTrustComponents: TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS,
+    executionContract: TIER3_FINAL_EXECUTION_CONTRACT,
+    ownerEvidenceDecision: evidence.decision,
+    independentOwnerCapabilityDecision: independent.decision,
+    ownerRunnerRelativePath: OPS_PILOT_OWNER_RUNNER_RELATIVE_PATH,
+    postgresActions: 0,
+    dbActions: 0,
   });
 }
 

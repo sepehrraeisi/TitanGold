@@ -28,7 +28,12 @@ import {
   OPS_PILOT_TIER3_AUTHORIZED,
   POSTMASTER_STATUS,
   TIER3_ACTIVATION_AUTHORITY,
+  TIER3_FINAL_EXECUTION_CONTRACT,
+  TIER3_READINESS_VERDICTS,
+  TIER3_REQUIRED_ADDITIONAL_PATHS,
+  TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS,
   activateOwnerControlledLocalRunnerOneShot,
+  assertApprovedSuiteAllowlist,
   assertHarnessSourceHasNoEagerPgImport,
   assertNoSymlink,
   assertPathInsideRoot,
@@ -42,14 +47,18 @@ import {
   createDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
   createPrivilegedTier3ActivationHandleForTests,
+  createRunnerOfflineSuiteGrantForTests,
   detectPostgresVersion,
+  evaluateIndependentOwnerCapability,
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
+  evaluateTier3FinalExecutionReadiness,
   getOwnerOneShotTicketView,
   inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
   isOwnedDisposableOpsPilotClusterController,
   isOwnerOneShotTicket,
+  isRunnerOfflineSuiteGrant,
   planOwnedUnixSocketClientConfig,
   planPostgresVersionProbe,
   startDisposableOpsPilotCluster,
@@ -57,6 +66,12 @@ import {
   stopDisposableOpsPilotCluster,
   writeHarnessMarker,
 } from '../src/disposableOpsPilotDbHarness.js';
+import {
+  OWNER_RUNNER_DECISIONS,
+  getRunnerImportSideEffectsReport,
+  invokeOwnerControlledTier3LocalRunner,
+  isDirectCliEntrypoint,
+} from '../scripts/ownerControlledTier3LocalRunner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HARNESS_SRC = join(__dirname, '../src/disposableOpsPilotDbHarness.js');
@@ -70,10 +85,12 @@ function makeClock(start = 1_000_000) {
 }
 
 function inertSpawner() {
+  const calls = [];
   return {
-    calls: [],
+    calls,
     spawnSyncFn(bin, args) {
-      this.calls.push({ bin, args: [...args] });
+      // Closure-bound: safe when extracted as request.spawnSyncFn without .bind(this).
+      calls.push({ bin, args: [...args] });
       if (String(bin).endsWith('postgres') && args[0] === '--version') {
         return { status: 0, stdout: 'postgres (PostgreSQL) 14.24 (Ubuntu)\n', stderr: '' };
       }
@@ -93,7 +110,7 @@ function withIsolatedDisposableFixture(run) {
   }
 }
 
-describe('S2 disposableOpsPilotDbHarness Tier-3 pre-live hardening offline safety', () => {
+describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offline safety', () => {
   it('1) source contract allow without Tier-3/DB execution', () => {
     const result = evaluateOpsPilotHarnessSafety(
       { explicitNonProd: true, dataDir: '/tmp/disposable-ops-pilot' },
@@ -106,12 +123,15 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 pre-live hardening offline safet
     assert.equal(result.tier3ActivationAuthority, TIER3_ACTIVATION_AUTHORITY);
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
-    assert.equal(OPS_PILOT_HARNESS_CHECKPOINT, 'S2_TIER3_PRE_LIVE_HARDENING');
-    assert.equal(OPS_PILOT_PINNED_MAIN_SHA, '1e7603a156e0dcb036dc5f43a06803e52695613f');
+    assert.equal(OPS_PILOT_HARNESS_CHECKPOINT, 'S2_TIER3_FINAL_EXECUTION_READINESS');
+    assert.equal(OPS_PILOT_PINNED_MAIN_SHA, 'ee26aa367475c0002b077bd0ae02838ce8c055e6');
     assert.deepEqual([...OPS_PILOT_APPROVED_TEST_ACTIONS], [
       'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
       'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
     ]);
+    assert.equal(TIER3_FINAL_EXECUTION_CONTRACT.pinnedMainSha, OPS_PILOT_PINNED_MAIN_SHA);
+    assert.equal(TIER3_FINAL_EXECUTION_CONTRACT.liveDbExecutionAuthorized, false);
+    assert.equal(TIER3_FINAL_EXECUTION_CONTRACT.executableLaunchCommand, null);
   });
 
   it('2) DATABASE_URL / PG* / TCP / remote / caller pg bin denied', () => {
@@ -966,5 +986,245 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 pre-live hardening offline safet
       OPS_PILOT_HARNESS_DECISIONS.DENY_PATH_ESCAPE,
       OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP,
     ].includes(cleanedPrimary.decision));
+  });
+
+  it('20) final execution readiness remains DENY with external Owner-trust blockers', () => {
+    const denied = evaluateTier3FinalExecutionReadiness({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      ownerControlledLocalRunnerInvocation: true,
+      fiveFileOfflineIntegrationComplete: true,
+    }, {
+      argv: [
+        process.execPath,
+        OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
+        ...OPS_PILOT_APPROVED_TEST_ACTIONS,
+      ],
+      execPath: process.execPath,
+      getuid: () => process.getuid(),
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.allowed, false);
+    assert.equal(
+      denied.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_FINAL_EXECUTION_NOT_READY,
+    );
+    assert.equal(
+      denied.verdict,
+      TIER3_READINESS_VERDICTS.OFFLINE_INTEGRATION_COMPLETE_EXTERNAL_TRUST_BLOCKED,
+    );
+    assert.equal(
+      denied.ownerInvocationBoundary,
+      'OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE',
+    );
+    assert.equal(denied.liveDbGate.closed, true);
+    assert.equal(denied.executionContract.executableLaunchCommand, null);
+    assert.equal(denied.postgresActions, 0);
+    assert.equal(TIER3_REQUIRED_ADDITIONAL_PATHS.length, 0);
+    assert.ok(TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS.length >= 3);
+    assert.equal(
+      evaluateIndependentOwnerCapability(null).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING,
+    );
+    assert.equal(
+      evaluateIndependentOwnerCapability({ fake: true }).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_INVOCATION_NOT_VERIFIABLE,
+    );
+
+    const spoof = evaluateTier3FinalExecutionReadiness({
+      claimReadyDespiteTrustGaps: true,
+      ownerAuthorizedByBoolean: true,
+    });
+    assert.equal(spoof.ok, false);
+    assert.equal(spoof.verdict, TIER3_READINESS_VERDICTS.SECURITY_BLOCKED);
+
+    const argvOnly = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+    }, {
+      argv: [
+        process.execPath,
+        OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
+        ...OPS_PILOT_APPROVED_TEST_ACTIONS,
+      ],
+      execPath: process.execPath,
+    });
+    assert.equal(
+      argvOnly.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ARGV_ONLY_AUTHORIZATION,
+    );
+  });
+
+  it('21) Owner runner defaults DENY; offline inert suite routing works without PG', async () => {
+    assert.deepEqual(getRunnerImportSideEffectsReport(), {
+      filesystemActions: 0,
+      processSpawnActions: 0,
+      databaseActions: 0,
+      networkActions: 0,
+      postgresActions: 0,
+    });
+    assert.equal(isDirectCliEntrypoint(['node', '/tmp/not-the-runner.js']), false);
+
+    const defaultDeny = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(defaultDeny.ok, false);
+    assert.equal(
+      defaultDeny.decision,
+      OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE,
+    );
+    assert.equal(defaultDeny.postgresActions, 0);
+
+    const argvOnly = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      treatArgvAsOwnerAuth: true,
+    }, {
+      argv: [process.execPath, OPS_PILOT_OWNER_RUNNER_ARGV_MARKER, OPS_PILOT_APPROVED_TEST_ACTIONS[0]],
+      execPath: process.execPath,
+      env: { NODE_ENV: 'test' },
+    });
+    assert.equal(argvOnly.decision, OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV);
+
+    const envOnly = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      envAuthorized: true,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(envOnly.decision, OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV);
+
+    const wrongSha = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: '0'.repeat(40),
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      spawnSyncFn: inertSpawner().spawnSyncFn,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(wrongSha.decision, OWNER_RUNNER_DECISIONS.DENY_WRONG_REPOSITORY_SHA);
+
+    const wrongExec = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: '/tmp/not-node',
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      spawnSyncFn: inertSpawner().spawnSyncFn,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(wrongExec.decision, OWNER_RUNNER_DECISIONS.DENY_WRONG_EXECUTABLE_IDENTITY);
+
+    const wrongPrincipal = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      executionPrincipal: 999999,
+      affirmSameUidLimitationsAccepted: true,
+      spawnSyncFn: inertSpawner().spawnSyncFn,
+    }, {
+      execPath: process.execPath,
+      getuid: () => 1,
+      env: { NODE_ENV: 'test' },
+    });
+    assert.equal(wrongPrincipal.decision, OWNER_RUNNER_DECISIONS.DENY_WRONG_EXECUTION_PRINCIPAL);
+
+    const unapproved = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: 'tecp-ops-persistence/test/notApproved.test.js',
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(unapproved.decision, OWNER_RUNNER_DECISIONS.DENY_UNAPPROVED_SUITE);
+
+    const externalDb = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      databaseUrl: 'postgres://example',
+    }, { env: { NODE_ENV: 'test' } });
+    assert.equal(externalDb.decision, OWNER_RUNNER_DECISIONS.DENY_EXTERNAL_DB_TARGET);
+
+    const liveDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      authorizeLivePostgresSpawn: true,
+    }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+    assert.equal(
+      liveDenied.decision,
+      OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE,
+    );
+    assert.equal(liveDenied.postgresActions, 0);
+
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+      approvedActions: [OPS_PILOT_APPROVED_TEST_ACTIONS[0]],
+    }, { clock });
+    cancelOwnerOneShotTicket(ticket, clock);
+    const cancelled = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      ownerOneShotTicket: ticket,
+      spawnSyncFn: inertSpawner().spawnSyncFn,
+    }, { execPath: process.execPath, clock, env: { NODE_ENV: 'test' } });
+    assert.equal(cancelled.ok, false);
+    assert.ok([
+      OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST,
+      OWNER_RUNNER_DECISIONS.DENY_ONESHOT_REPLAY,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_CANCELLED,
+    ].includes(cancelled.decision) || (cancelled.evidence?.failure != null));
+
+    for (const suitePath of OPS_PILOT_APPROVED_TEST_ACTIONS) {
+      const routed = await invokeOwnerControlledTier3LocalRunner({
+        mode: 'OFFLINE_INERT_ORCHESTRATION',
+        suitePath,
+        repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+        executablePath: process.execPath,
+        harnessModulePath: HARNESS_SRC,
+        affirmSameUidLimitationsAccepted: true,
+        spawnSyncFn: inertSpawner().spawnSyncFn,
+        inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert' }),
+        stopFn: () => ({ status: 0 }),
+      }, { execPath: process.execPath, env: { NODE_ENV: 'test' } });
+      assert.equal(routed.ok, true, `${suitePath}:${routed.decision}`);
+      assert.equal(routed.decision, OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION);
+      assert.equal(routed.postgresActions, 0);
+      assert.equal(routed.suiteResult.sqlExecuted, false);
+    }
+
+    assert.equal(assertApprovedSuiteAllowlist(OPS_PILOT_APPROVED_TEST_ACTIONS[0]).ok, true);
+    const grant = createRunnerOfflineSuiteGrantForTests({
+      proofClass: 'TEST_ONLY_RUNNER_OFFLINE_SUITE_GRANT',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[1],
+    });
+    assert.equal(isRunnerOfflineSuiteGrant(grant), true);
   });
 });
