@@ -32,6 +32,7 @@ function fixtureReader({
           baseRefName: 'main',
           headRefName: 'feature',
           changedFiles: files,
+          changedFilesCount: files.length,
           filesComplete: true,
           url: `https://example.test/${repository}/pull/${prNumber}`,
           title: `task`,
@@ -441,6 +442,7 @@ test('complete large PR file list detects forbidden path beyond first page', asy
           baseSha: BASE,
           headSha: HEAD,
           changedFiles: allFiles,
+          changedFilesCount: allFiles.length,
           filesComplete: true,
         },
       };
@@ -493,4 +495,158 @@ test('reader reporting incomplete pagination blocks verify', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, 'PARTIAL_OR_INCOMPLETE_FILE_LIST');
   assert.equal(result.decision, 'BLOCKED');
+});
+
+test('fetched file count must match authoritative changedFiles count', async () => {
+  const {
+    verifyTaskEvidence,
+    assertCompleteChangedFileList,
+  } = await import('../src/evidenceVerifier.js');
+
+  const mismatch = assertCompleteChangedFileList({
+    files: ['docs/a.md', 'docs/b.md'],
+    changedFilesCount: 5,
+  });
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.code, 'FILE_COUNT_MISMATCH');
+
+  const reader = {
+    async fetchPullRequest({ repository, prNumber }) {
+      return {
+        ok: true,
+        code: 'OK',
+        data: {
+          repository,
+          prNumber,
+          state: 'OPEN',
+          baseSha: BASE,
+          headSha: HEAD,
+          changedFiles: ['docs/a.md'],
+          changedFilesCount: 3,
+          filesComplete: true,
+        },
+      };
+    },
+  };
+  const result = await verifyTaskEvidence(
+    {
+      taskId: 'count-1',
+      attempt: 1,
+      repository: 'sepehrraeisi/TitanGold',
+      baseSha: BASE,
+      fileAllowlist: ['docs/a.md'],
+    },
+    { prNumber: 7, actorId: 'a', attempt: 1 },
+    { githubReader: reader, nowMs: 1 },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'FILE_COUNT_MISMATCH');
+  assert.equal(result.decision, 'BLOCKED');
+});
+
+test('missing authoritative changedFiles count blocks verify', async () => {
+  const { verifyTaskEvidence } = await import('../src/evidenceVerifier.js');
+  const reader = {
+    async fetchPullRequest({ repository, prNumber }) {
+      return {
+        ok: true,
+        code: 'OK',
+        data: {
+          repository,
+          prNumber,
+          state: 'OPEN',
+          baseSha: BASE,
+          headSha: HEAD,
+          changedFiles: ['docs/a.md'],
+          filesComplete: true,
+          // changedFilesCount omitted
+        },
+      };
+    },
+  };
+  const result = await verifyTaskEvidence(
+    {
+      taskId: 'count-2',
+      attempt: 1,
+      repository: 'sepehrraeisi/TitanGold',
+      baseSha: BASE,
+      fileAllowlist: ['docs/a.md'],
+    },
+    { prNumber: 8, actorId: 'a', attempt: 1 },
+    { githubReader: reader, nowMs: 1 },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'CHANGED_FILES_COUNT_UNPROVEN');
+  assert.equal(result.decision, 'BLOCKED');
+});
+
+test('GitHub 3000-file listing hard limit blocks when completeness unprovable', async () => {
+  const {
+    assertCompleteChangedFileList,
+    GITHUB_PR_FILES_LISTING_HARD_LIMIT,
+    verifyTaskEvidence,
+  } = await import('../src/evidenceVerifier.js');
+
+  assert.equal(GITHUB_PR_FILES_LISTING_HARD_LIMIT, 3000);
+
+  const overLimit = assertCompleteChangedFileList({
+    files: Array.from({ length: 10 }, (_, i) => `docs/f-${i}.md`),
+    changedFilesCount: GITHUB_PR_FILES_LISTING_HARD_LIMIT + 1,
+  });
+  assert.equal(overLimit.ok, false);
+  assert.equal(overLimit.code, 'GITHUB_FILE_LIST_HARD_LIMIT');
+
+  const reader = {
+    async fetchPullRequest() {
+      return {
+        ok: false,
+        code: 'GITHUB_FILE_LIST_HARD_LIMIT',
+        data: null,
+        detail: 'authoritative changedFiles exceeds listing hard limit',
+        changedFilesCount: GITHUB_PR_FILES_LISTING_HARD_LIMIT + 50,
+      };
+    },
+  };
+  const result = await verifyTaskEvidence(
+    {
+      taskId: 'limit-1',
+      attempt: 1,
+      repository: 'sepehrraeisi/TitanGold',
+      baseSha: BASE,
+      fileAllowlist: ['docs/a.md'],
+    },
+    { prNumber: 9, actorId: 'a', attempt: 1 },
+    { githubReader: reader, nowMs: 1 },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'GITHUB_FILE_LIST_HARD_LIMIT');
+  assert.equal(result.decision, 'BLOCKED');
+});
+
+test('inconsistent PR metadata is rejected', async () => {
+  const { verifyTaskEvidence } = await import('../src/evidenceVerifier.js');
+  const reader = {
+    async fetchPullRequest() {
+      return {
+        ok: false,
+        code: 'INCONSISTENT_PR_METADATA',
+        data: null,
+        detail: 'returned PR number missing or does not match requested prNumber',
+      };
+    },
+  };
+  const result = await verifyTaskEvidence(
+    {
+      taskId: 'meta-1',
+      attempt: 1,
+      repository: 'sepehrraeisi/TitanGold',
+      baseSha: BASE,
+      fileAllowlist: ['docs/a.md'],
+    },
+    { prNumber: 10, actorId: 'a', attempt: 1 },
+    { githubReader: reader, nowMs: 1 },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'INCONSISTENT_PR_METADATA');
+  assert.equal(result.decision, 'FAIL');
 });

@@ -8,6 +8,12 @@
  * Changed-file lists must be COMPLETE. Partial/truncated/paginated-incomplete
  * lists NEVER PASS — fail closed with PARTIAL_OR_INCOMPLETE_FILE_LIST.
  *
+ * Completeness also requires the fetched file count to match the PR's
+ * authoritative `changedFiles` count from GitHub metadata. GitHub's REST
+ * pulls/{n}/files listing hard-caps at 3000 entries; when completeness cannot
+ * be established (count > 3000, truncated listing, or count mismatch),
+ * verification is BLOCKED — never PASS.
+ *
  * Verification does NOT imply OWNER_ACCEPTED, MERGED, or PRODUCTION_DEPLOYED.
  * No GitHub writes or auto-merge.
  */
@@ -22,6 +28,19 @@ export const VERIFY_DECISIONS = Object.freeze({
   BLOCKED: 'BLOCKED',
   UNVERIFIED: 'UNVERIFIED',
 });
+
+/** GitHub REST PR files endpoint returns at most this many entries. */
+export const GITHUB_PR_FILES_LISTING_HARD_LIMIT = 3000;
+
+const BLOCKED_READER_CODES = new Set([
+  'GITHUB_UNAVAILABLE',
+  'GITHUB_QUERY_FAILED',
+  'PARTIAL_OR_INCOMPLETE_FILE_LIST',
+  'GITHUB_FILE_LIST_PAGINATION_LIMIT',
+  'GITHUB_FILE_LIST_HARD_LIMIT',
+  'FILE_COUNT_MISMATCH',
+  'CHANGED_FILES_COUNT_UNPROVEN',
+]);
 
 function isSha(value) {
   return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
@@ -49,8 +68,76 @@ function runGh(ghPath, args, env) {
 }
 
 /**
+ * Validate that a fetched file list is complete relative to GitHub's
+ * authoritative changed-files count. Never treats a truncated 3000-cap
+ * listing as complete.
+ */
+export function assertCompleteChangedFileList({ files, changedFilesCount } = {}) {
+  if (!Array.isArray(files)) {
+    return {
+      ok: false,
+      code: 'INVALID_REMOTE_FILE_LIST',
+      filesComplete: false,
+    };
+  }
+  if (!Number.isInteger(changedFilesCount) || changedFilesCount < 0) {
+    return {
+      ok: false,
+      code: 'CHANGED_FILES_COUNT_UNPROVEN',
+      filesComplete: false,
+      detail: 'authoritative changedFiles count missing or not a non-negative integer',
+      fetchedCount: files.length,
+      changedFilesCount,
+    };
+  }
+  if (changedFilesCount > GITHUB_PR_FILES_LISTING_HARD_LIMIT) {
+    return {
+      ok: false,
+      code: 'GITHUB_FILE_LIST_HARD_LIMIT',
+      filesComplete: false,
+      detail:
+        `authoritative changedFiles=${changedFilesCount} exceeds GitHub listing hard limit `
+        + `${GITHUB_PR_FILES_LISTING_HARD_LIMIT}; complete file list cannot be established`,
+      fetchedCount: files.length,
+      changedFilesCount,
+    };
+  }
+  if (files.length > GITHUB_PR_FILES_LISTING_HARD_LIMIT) {
+    return {
+      ok: false,
+      code: 'GITHUB_FILE_LIST_HARD_LIMIT',
+      filesComplete: false,
+      detail: 'fetched file list exceeded GitHub listing hard limit',
+      fetchedCount: files.length,
+      changedFilesCount,
+    };
+  }
+  if (files.length !== changedFilesCount) {
+    return {
+      ok: false,
+      code: 'FILE_COUNT_MISMATCH',
+      filesComplete: false,
+      detail:
+        `fetched file count ${files.length} does not match authoritative changedFiles `
+        + `${changedFilesCount}`,
+      fetchedCount: files.length,
+      changedFilesCount,
+    };
+  }
+  return {
+    ok: true,
+    code: 'OK',
+    filesComplete: true,
+    fetchedCount: files.length,
+    changedFilesCount,
+  };
+}
+
+/**
  * Fetch ALL PR files via GitHub REST with explicit pagination.
  * Never trusts `gh pr view --json files` alone (historically truncated).
+ * When `changedFilesCount` is supplied, require exact count match and BLOCK
+ * when the authoritative count exceeds GitHub's 3000-file listing hard limit.
  */
 export function fetchCompletePrFilesViaGhApi({
   ghPath = 'gh',
@@ -58,6 +145,7 @@ export function fetchCompletePrFilesViaGhApi({
   repository,
   prNumber,
   perPage = 100,
+  changedFilesCount = undefined,
 } = {}) {
   if (!Number.isInteger(prNumber) || prNumber <= 0) {
     return { ok: false, code: 'INVALID_PR_NUMBER', files: null, filesComplete: false };
@@ -67,6 +155,30 @@ export function fetchCompletePrFilesViaGhApi({
   }
   if (!Number.isInteger(perPage) || perPage < 1 || perPage > 100) {
     return { ok: false, code: 'INVALID_PAGE_SIZE', files: null, filesComplete: false };
+  }
+
+  if (changedFilesCount !== undefined) {
+    if (!Number.isInteger(changedFilesCount) || changedFilesCount < 0) {
+      return {
+        ok: false,
+        code: 'INCONSISTENT_PR_METADATA',
+        files: null,
+        filesComplete: false,
+        detail: 'changedFilesCount must be a non-negative integer when provided',
+      };
+    }
+    if (changedFilesCount > GITHUB_PR_FILES_LISTING_HARD_LIMIT) {
+      return {
+        ok: false,
+        code: 'GITHUB_FILE_LIST_HARD_LIMIT',
+        files: null,
+        filesComplete: false,
+        detail:
+          `authoritative changedFiles=${changedFilesCount} exceeds GitHub listing hard limit `
+          + `${GITHUB_PR_FILES_LISTING_HARD_LIMIT}`,
+        changedFilesCount,
+      };
+    }
   }
 
   const files = [];
@@ -138,6 +250,29 @@ export function fetchCompletePrFilesViaGhApi({
       files.push(p);
     }
 
+    // Hard-cap guard: once we have hit the documented listing ceiling, further
+    // pages cannot prove a complete list without an exact matching count below
+    // or equal to the limit (checked after pagination).
+    if (files.length >= GITHUB_PR_FILES_LISTING_HARD_LIMIT && batch.length === perPage) {
+      // Continue one more page only if expected count could still match exactly
+      // at the hard limit; otherwise stop — completeness unprovable.
+      if (
+        changedFilesCount === undefined
+        || changedFilesCount > GITHUB_PR_FILES_LISTING_HARD_LIMIT
+        || files.length > changedFilesCount
+      ) {
+        return {
+          ok: false,
+          code: 'GITHUB_FILE_LIST_HARD_LIMIT',
+          files: null,
+          filesComplete: false,
+          detail: 'listing reached GitHub 3000-file hard limit before completeness proven',
+          fetchedCount: files.length,
+          changedFilesCount,
+        };
+      }
+    }
+
     if (batch.length < perPage) {
       sawPartialPage = true;
       break;
@@ -165,12 +300,42 @@ export function fetchCompletePrFilesViaGhApi({
     };
   }
 
+  if (changedFilesCount === undefined) {
+    // A terminating short page alone cannot prove completeness against GitHub's
+    // silent 3000-file listing cap. Authoritative count is mandatory.
+    return {
+      ok: false,
+      code: 'CHANGED_FILES_COUNT_UNPROVEN',
+      files: null,
+      filesComplete: false,
+      detail: 'authoritative changedFiles count was not supplied',
+      fetchedCount: files.length,
+    };
+  }
+
+  const completeness = assertCompleteChangedFileList({
+    files,
+    changedFilesCount,
+  });
+  if (!completeness.ok) {
+    return {
+      ok: false,
+      code: completeness.code,
+      files: null,
+      filesComplete: false,
+      detail: completeness.detail,
+      fetchedCount: completeness.fetchedCount,
+      changedFilesCount: completeness.changedFilesCount,
+    };
+  }
+
   return {
     ok: true,
     code: 'OK',
     files,
     filesComplete: true,
     pageCount: page,
+    changedFilesCount: completeness.changedFilesCount,
   };
 }
 
@@ -190,6 +355,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
       }
 
       // Deliberately omit `files` from view JSON — use paginated API instead.
+      // `changedFiles` here is the authoritative INTEGER count from GitHub.
       const view = runGh(
         ghPath,
         [
@@ -199,7 +365,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           '--repo',
           repository,
           '--json',
-          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,url,title,headRepositoryOwner,headRepository',
+          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,url,title,headRepositoryOwner,headRepository,changedFiles',
         ],
         env,
       );
@@ -223,6 +389,25 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
         return { ok: false, code: 'GITHUB_PARSE_FAILED', data: null };
       }
 
+      if (!Number.isInteger(parsed.number) || parsed.number !== prNumber) {
+        return {
+          ok: false,
+          code: 'INCONSISTENT_PR_METADATA',
+          data: null,
+          detail: 'returned PR number missing or does not match requested prNumber',
+        };
+      }
+
+      const authoritativeCount = parsed.changedFiles;
+      if (!Number.isInteger(authoritativeCount) || authoritativeCount < 0) {
+        return {
+          ok: false,
+          code: 'CHANGED_FILES_COUNT_UNPROVEN',
+          data: null,
+          detail: 'gh pr view did not return an integer changedFiles count',
+        };
+      }
+
       // Verify repository identity against returned metadata when present
       const headOwner = parsed.headRepositoryOwner && parsed.headRepositoryOwner.login;
       const headName = parsed.headRepository && parsed.headRepository.name;
@@ -240,6 +425,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
         env,
         repository,
         prNumber,
+        changedFilesCount: authoritativeCount,
       });
       if (!filesResult.ok || filesResult.filesComplete !== true) {
         return {
@@ -247,6 +433,8 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           code: filesResult.code || 'PARTIAL_OR_INCOMPLETE_FILE_LIST',
           data: null,
           detail: filesResult.detail,
+          fetchedCount: filesResult.fetchedCount,
+          changedFilesCount: authoritativeCount,
         };
       }
 
@@ -262,6 +450,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           baseRefName: parsed.baseRefName,
           headRefName: parsed.headRefName,
           changedFiles: filesResult.files,
+          changedFilesCount: authoritativeCount,
           filesComplete: true,
           url: parsed.url,
           title: parsed.title,
@@ -317,13 +506,12 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
 
   if (!remote || !remote.ok) {
     const code = remote && remote.code ? remote.code : 'GITHUB_UNAVAILABLE';
-    if (
-      code === 'GITHUB_UNAVAILABLE'
-      || code === 'GITHUB_QUERY_FAILED'
-      || code === 'PARTIAL_OR_INCOMPLETE_FILE_LIST'
-      || code === 'GITHUB_FILE_LIST_PAGINATION_LIMIT'
-    ) {
-      return blocked(code, nowMs, { detail: remote && remote.detail });
+    if (BLOCKED_READER_CODES.has(code)) {
+      return blocked(code, nowMs, {
+        detail: remote && remote.detail,
+        fetchedCount: remote && remote.fetchedCount,
+        changedFilesCount: remote && remote.changedFilesCount,
+      });
     }
     return fail(code, nowMs, { detail: remote && remote.detail });
   }
@@ -368,6 +556,40 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
   if (!changed) {
     return fail('INVALID_REMOTE_FILE_LIST', nowMs, { remote: data });
   }
+
+  const completeness = assertCompleteChangedFileList({
+    files: data.changedFiles,
+    changedFilesCount: data.changedFilesCount,
+  });
+  if (!completeness.ok) {
+    if (
+      completeness.code === 'GITHUB_FILE_LIST_HARD_LIMIT'
+      || completeness.code === 'FILE_COUNT_MISMATCH'
+      || completeness.code === 'CHANGED_FILES_COUNT_UNPROVEN'
+    ) {
+      return blocked(completeness.code, nowMs, {
+        detail: completeness.detail,
+        fetchedCount: completeness.fetchedCount,
+        changedFilesCount: completeness.changedFilesCount,
+      });
+    }
+    return fail(completeness.code, nowMs, {
+      detail: completeness.detail,
+      fetchedCount: completeness.fetchedCount,
+      changedFilesCount: completeness.changedFilesCount,
+    });
+  }
+  // Normalized unique sorted list must still reconcile to the authoritative count.
+  // Duplicates in the raw listing would shrink the normalized set — reject that.
+  if (changed.length !== data.changedFilesCount) {
+    return blocked('FILE_COUNT_MISMATCH', nowMs, {
+      detail: 'normalized unique file list length does not match authoritative changedFiles count',
+      fetchedCount: data.changedFiles.length,
+      normalizedCount: changed.length,
+      changedFilesCount: data.changedFilesCount,
+    });
+  }
+
   const allow = new Set(task.fileAllowlist);
   const forbidden = changed.filter((f) => !allow.has(f));
   if (forbidden.length > 0) {
@@ -384,6 +606,8 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
     atMs: nowMs,
     limitations: Object.freeze([
       'PASS means remote PR metadata matched task constraints with a complete file list',
+      'PASS requires fetched file count to equal authoritative GitHub changedFiles count',
+      'PASS is impossible when GitHub listing hard limit (3000) prevents completeness',
       'PASS does not mean OWNER_ACCEPTED',
       'PASS does not mean MERGED',
       'PASS does not mean PRODUCTION_DEPLOYED',
@@ -398,6 +622,7 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
       baseSha: data.baseSha.toLowerCase(),
       headSha: data.headSha.toLowerCase(),
       changedFiles: Object.freeze(changed),
+      changedFilesCount: data.changedFilesCount,
       filesComplete: true,
       url: data.url || null,
     }),
