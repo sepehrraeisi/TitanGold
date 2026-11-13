@@ -2,12 +2,19 @@
  * Local durable file store for Task Manager V1.
  *
  * - Node.js builtins only
- * - Atomic write via temp + rename
+ * - Atomic write via temp + fsync + rename + directory fsync
  * - Exclusive single-manager lock (one active process)
- * - Corruption DENY (never silently re-init a corrupt store)
- * - Data directory must be outside tracked repository files (caller-owned)
+ * - Corruption / orphan DENY when correctness is not provable
+ * - On restart: reconcile orphan task files into the index only when the
+ *   on-disk JSON is valid and taskId matches the filename (provable recovery
+ *   of "task written, index not yet updated"). Never silently overwrite orphans.
  *
- * NOT a multi-process correctness proof. Concurrent writers fail closed.
+ * Honest durability limits:
+ * - fsync reduces loss windows but does not guarantee power-loss safety on
+ *   every filesystem, mount option, or virtual disk.
+ * - events.jsonl is supplemental; task.auditTrail inside each task file is
+ *   the authoritative audit record after a successful writeTask.
+ * - NOT a multi-process correctness proof. Concurrent writers fail closed.
  */
 
 import fs from 'node:fs';
@@ -25,15 +32,31 @@ const TASKS_DIR = 'tasks';
 const EVENTS_NAME = 'events.jsonl';
 const INDEX_NAME = 'index.json';
 
+/** Test hooks: throw after named durability step. */
+const faultHooks = {
+  afterTaskFileWrite: null,
+  afterIndexWrite: null,
+  afterMetaWrite: null,
+  afterEventAppend: null,
+  beforeRename: null,
+};
+
+export function __setFaultHook(name, fn) {
+  if (!(name in faultHooks)) {
+    throw new Error(`unknown fault hook: ${name}`);
+  }
+  faultHooks[name] = typeof fn === 'function' ? fn : null;
+}
+
+export function __clearFaultHooks() {
+  for (const key of Object.keys(faultHooks)) faultHooks[key] = null;
+}
+
 function fail(code, message, extra = {}) {
   const err = new Error(message);
   err.code = code;
   Object.assign(err, extra);
   return err;
-}
-
-function isAbsoluteOutsideCwd(dataDir) {
-  return path.isAbsolute(dataDir);
 }
 
 async function realpathOrNull(p) {
@@ -44,35 +67,55 @@ async function realpathOrNull(p) {
   }
 }
 
+async function fsyncPath(targetPath) {
+  const fh = await fsp.open(targetPath, 'r');
+  try {
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+}
+
+async function fsyncDir(dirPath) {
+  // O_RDONLY directory fsync — best effort; may be unsupported on some FS.
+  try {
+    const fh = await fsp.open(dirPath, 'r');
+    try {
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  } catch (err) {
+    if (err && (err.code === 'EINVAL' || err.code === 'EISDIR')) {
+      // Some platforms reject directory fsync; durability note remains in README.
+      return;
+    }
+    throw err;
+  }
+}
+
 async function ensureSafeDir(dataDir) {
   if (typeof dataDir !== 'string' || dataDir.trim().length === 0) {
     throw fail('INVALID_DATA_DIR', 'dataDir must be a non-empty string');
   }
   const resolved = path.resolve(dataDir);
-  if (!isAbsoluteOutsideCwd(resolved) && !path.isAbsolute(dataDir)) {
-    // still allow relative for tests, but resolve absolutely
-  }
-  // Reject null bytes and path tricks in components after resolve
   if (resolved.includes('\0')) {
     throw fail('INVALID_DATA_DIR', 'dataDir contains NUL');
   }
   await fsp.mkdir(resolved, { recursive: true, mode: 0o700 });
   const real = await fsp.realpath(resolved);
-  // Restrictive permissions when possible
   try {
     await fsp.chmod(real, 0o700);
   } catch {
-    // best-effort on platforms without chmod semantics
+    // best-effort
   }
   return real;
 }
 
 async function assertPathInsideRoot(rootReal, candidate) {
   const resolved = path.resolve(rootReal, candidate);
-  // Disallow escape via symlink: require final realpath under root
   const parent = path.dirname(resolved);
   await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
-  // If file exists, realpath it; else realpath parent and join basename
   let finalPath;
   const existing = await realpathOrNull(resolved);
   if (existing) {
@@ -85,7 +128,6 @@ async function assertPathInsideRoot(rootReal, candidate) {
   if (finalPath !== rootReal && !finalPath.startsWith(prefix)) {
     throw fail('PATH_ESCAPE', 'resolved path escapes data directory', { finalPath, rootReal });
   }
-  // Reject symlink escape for existing nodes
   try {
     const st = await fsp.lstat(resolved);
     if (st.isSymbolicLink()) {
@@ -98,19 +140,44 @@ async function assertPathInsideRoot(rootReal, candidate) {
   return resolved;
 }
 
-async function atomicWriteFile(filePath, contents, mode = 0o600) {
+/**
+ * Atomic replace with file + directory fsync.
+ * Capsule: write tmp → fsync tmp → rename → fsync dir.
+ */
+export async function atomicWriteFile(filePath, contents, mode = 0o600) {
   const dir = path.dirname(filePath);
+  await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
   const tmp = path.join(
     dir,
     `.${path.basename(filePath)}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`,
   );
-  await fsp.writeFile(tmp, contents, { encoding: 'utf8', mode });
+  const fh = await fsp.open(tmp, 'w', mode);
+  try {
+    await fh.writeFile(contents, 'utf8');
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+  if (faultHooks.beforeRename) await faultHooks.beforeRename({ filePath, tmp });
   await fsp.rename(tmp, filePath);
   try {
     await fsp.chmod(filePath, mode);
   } catch {
     // ignore
   }
+  await fsyncDir(dir);
+}
+
+async function appendFileDurable(filePath, contents, mode = 0o600) {
+  const dir = path.dirname(filePath);
+  const fh = await fsp.open(filePath, 'a', mode);
+  try {
+    await fh.writeFile(contents, 'utf8');
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+  await fsyncDir(dir);
 }
 
 function hashPayload(text) {
@@ -147,6 +214,116 @@ function pidAlive(pid) {
   }
 }
 
+function isValidTaskId(taskId) {
+  return typeof taskId === 'string' && /^[A-Za-z0-9._:-]+$/.test(taskId);
+}
+
+async function listTaskFilesOnDisk(tasksDir) {
+  let entries;
+  try {
+    entries = await fsp.readdir(tasksDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const ids = [];
+  for (const ent of entries) {
+    if (!ent.isFile()) {
+      if (ent.isSymbolicLink && ent.isSymbolicLink()) {
+        throw fail('SYMLINK_FORBIDDEN', 'symlink in tasks directory');
+      }
+      // skip non-files except reject symlinks via lstat below
+      continue;
+    }
+    if (ent.name.startsWith('.')) continue; // temp files
+    if (!ent.name.endsWith('.json')) {
+      throw fail('CORRUPT_STORE', `unexpected file in tasks/: ${ent.name}`);
+    }
+    const id = ent.name.slice(0, -'.json'.length);
+    if (!isValidTaskId(id)) {
+      throw fail('CORRUPT_STORE', `invalid task filename: ${ent.name}`);
+    }
+    const full = path.join(tasksDir, ent.name);
+    const st = await fsp.lstat(full);
+    if (st.isSymbolicLink()) {
+      throw fail('SYMLINK_FORBIDDEN', 'symlink task file');
+    }
+    ids.push(id);
+  }
+  return ids.sort();
+}
+
+/**
+ * Reconcile index ↔ on-disk task files.
+ * - Orphan file (disk, not index): recover into index only if JSON valid and
+ *   task.taskId === filename stem. Never overwrite the orphan file.
+ * - Missing file for index id: fail closed.
+ * - Mismatched taskId inside file: fail closed.
+ */
+async function reconcileIndexAndTasks({ root, tasksDir, indexPath, metaPath }) {
+  const indexRead = await readJsonFile(indexPath);
+  if (!indexRead.ok || !indexRead.value || !Array.isArray(indexRead.value.taskIds)) {
+    throw fail('CORRUPT_STORE', 'index.json is corrupt');
+  }
+  const indexed = [...new Set(indexRead.value.taskIds)].sort();
+  for (const id of indexed) {
+    if (!isValidTaskId(id)) {
+      throw fail('CORRUPT_STORE', `invalid taskId in index: ${id}`);
+    }
+  }
+
+  const onDisk = await listTaskFilesOnDisk(tasksDir);
+  const indexedSet = new Set(indexed);
+  const diskSet = new Set(onDisk);
+
+  const missingFiles = indexed.filter((id) => !diskSet.has(id));
+  if (missingFiles.length > 0) {
+    throw fail(
+      'CORRUPT_STORE',
+      'index references tasks with missing files; refusing silent repair',
+      { missingFiles },
+    );
+  }
+
+  const orphans = onDisk.filter((id) => !indexedSet.has(id));
+  const recovered = [];
+  for (const id of orphans) {
+    const filePath = path.join(tasksDir, `${id}.json`);
+    const parsed = await readJsonFile(filePath);
+    if (!parsed.ok || !parsed.value || typeof parsed.value !== 'object') {
+      throw fail('ORPHAN_TASK_UNPROVABLE', `orphan task file unreadable: ${id}`);
+    }
+    if (parsed.value.taskId !== id) {
+      throw fail(
+        'ORPHAN_TASK_UNPROVABLE',
+        'orphan filename does not match embedded taskId; refusing overwrite/repair',
+        { fileId: id, embeddedTaskId: parsed.value.taskId },
+      );
+    }
+    // Provable: durable task file survived; index update was interrupted.
+    recovered.push(id);
+  }
+
+  if (recovered.length > 0) {
+    const nextIds = [...indexed, ...recovered].sort();
+    await atomicWriteFile(indexPath, `${JSON.stringify({ taskIds: nextIds }, null, 2)}\n`);
+    const metaRead = await readJsonFile(metaPath);
+    if (metaRead.ok && metaRead.value) {
+      const meta = metaRead.value;
+      meta.updatedAtMs = Date.now();
+      meta.taskCount = nextIds.length;
+      meta.lastReconcile = {
+        recoveredOrphans: recovered,
+        atMs: meta.updatedAtMs,
+      };
+      await atomicWriteFile(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+    }
+    return { taskIds: nextIds, recoveredOrphans: recovered };
+  }
+
+  return { taskIds: indexed, recoveredOrphans: [] };
+}
+
 /**
  * Open or create a store. Corrupt existing stores DENY without wipe.
  *
@@ -166,25 +343,29 @@ export async function openFileQueueStore(dataDir, options = {}) {
   const metaExists = fs.existsSync(metaPath);
   const indexExists = fs.existsSync(indexPath);
   const tasksExist = fs.existsSync(tasksDir);
+  const eventsExist = fs.existsSync(eventsPath);
 
-  if (!metaExists && !indexExists && !tasksExist) {
+  // Partial initialization: any subset without full trio → fail closed (no silent empty init)
+  const any = metaExists || indexExists || tasksExist || eventsExist;
+  const allCore = metaExists && indexExists && tasksExist;
+
+  if (!any) {
     if (!allowCreate) {
       throw fail('STORE_NOT_FOUND', 'store does not exist');
     }
     await fsp.mkdir(tasksDir, { recursive: true, mode: 0o700 });
+    await fsyncDir(root);
     const meta = defaultMeta(nowMs);
     await atomicWriteFile(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
     await atomicWriteFile(indexPath, `${JSON.stringify({ taskIds: [] }, null, 2)}\n`);
     await atomicWriteFile(eventsPath, '', 0o600);
+  } else if (!allCore) {
+    throw fail(
+      'CORRUPT_STORE',
+      'existing store is incompletely initialized; refusing silent re-init',
+      { metaExists, indexExists, tasksExist, eventsExist },
+    );
   } else {
-    // Partial / corrupt detection
-    if (!metaExists || !indexExists) {
-      throw fail(
-        'CORRUPT_STORE',
-        'existing store is incomplete or corrupt; refusing silent re-init',
-        { metaExists, indexExists },
-      );
-    }
     const metaRead = await readJsonFile(metaPath);
     if (!metaRead.ok || !metaRead.value || metaRead.value.kind !== STORE_KIND) {
       throw fail('CORRUPT_STORE', 'meta.json is corrupt or wrong kind');
@@ -195,14 +376,26 @@ export async function openFileQueueStore(dataDir, options = {}) {
     if (metaRead.value.integrity === 'CORRUPT') {
       throw fail('CORRUPT_STORE', 'store integrity marked CORRUPT');
     }
-    const indexRead = await readJsonFile(indexPath);
-    if (!indexRead.ok || !indexRead.value || !Array.isArray(indexRead.value.taskIds)) {
-      throw fail('CORRUPT_STORE', 'index.json is corrupt');
+    if (!eventsExist) {
+      // events missing but core present: create empty events only if no tasks claim audits
+      // Fail closed if indexed tasks have audit trails (would contradict empty events)
+      const indexRead = await readJsonFile(indexPath);
+      if (!indexRead.ok) throw fail('CORRUPT_STORE', 'index corrupt while events missing');
+      for (const id of indexRead.value.taskIds || []) {
+        const tp = path.join(tasksDir, `${id}.json`);
+        const tr = await readJsonFile(tp);
+        if (tr.ok && tr.value && Array.isArray(tr.value.auditTrail) && tr.value.auditTrail.length > 0) {
+          throw fail(
+            'CORRUPT_STORE',
+            'events.jsonl missing but task auditTrail present; refusing silent contradiction',
+          );
+        }
+      }
+      await atomicWriteFile(eventsPath, '', 0o600);
     }
-    await fsp.mkdir(tasksDir, { recursive: true, mode: 0o700 });
   }
 
-  // Acquire exclusive manager lock
+  // Acquire exclusive manager lock before reconcile
   let lockFd;
   try {
     lockFd = await fsp.open(lockPath, 'wx', 0o600);
@@ -214,7 +407,6 @@ export async function openFileQueueStore(dataDir, options = {}) {
           holderPid: existing.value.pid,
         });
       }
-      // Stale lock: remove and retry once
       await fsp.unlink(lockPath).catch(() => {});
       try {
         lockFd = await fsp.open(lockPath, 'wx', 0o600);
@@ -235,6 +427,25 @@ export async function openFileQueueStore(dataDir, options = {}) {
     kind: STORE_KIND,
   };
   await lockFd.writeFile(`${JSON.stringify(lockPayload, null, 2)}\n`, 'utf8');
+  await lockFd.sync();
+
+  // Reconcile orphans under lock
+  let reconcileInfo = { recoveredOrphans: [] };
+  try {
+    reconcileInfo = await reconcileIndexAndTasks({ root, tasksDir, indexPath, metaPath });
+  } catch (err) {
+    try {
+      await lockFd.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await fsp.unlink(lockPath);
+    } catch {
+      // ignore
+    }
+    throw err;
+  }
 
   const store = {
     root,
@@ -245,6 +456,7 @@ export async function openFileQueueStore(dataDir, options = {}) {
     indexPath,
     lockFd,
     closed: false,
+    lastReconcile: reconcileInfo,
   };
 
   return createStoreApi(store);
@@ -269,6 +481,7 @@ function createStoreApi(store) {
     await ensureOpen();
     const payload = `${JSON.stringify({ taskIds: [...taskIds].sort() }, null, 2)}\n`;
     await atomicWriteFile(store.indexPath, payload);
+    if (faultHooks.afterIndexWrite) await faultHooks.afterIndexWrite({ taskIds });
   }
 
   async function markCorrupt(reason) {
@@ -285,7 +498,7 @@ function createStoreApi(store) {
   }
 
   async function taskPath(taskId) {
-    if (typeof taskId !== 'string' || !/^[A-Za-z0-9._:-]+$/.test(taskId)) {
+    if (!isValidTaskId(taskId)) {
       throw fail('INVALID_TASK_ID', 'taskId has forbidden characters');
     }
     return assertPathInsideRoot(store.root, path.join(TASKS_DIR, `${taskId}.json`));
@@ -293,6 +506,7 @@ function createStoreApi(store) {
 
   return {
     root: store.root,
+    lastReconcile: store.lastReconcile,
 
     async listTaskIds() {
       return readIndex();
@@ -307,6 +521,10 @@ function createStoreApi(store) {
           await markCorrupt(`task ${taskId} corrupt`);
           throw fail('CORRUPT_STORE', `task record corrupt: ${taskId}`);
         }
+        if (parsed.value.taskId !== taskId) {
+          await markCorrupt(`task ${taskId} id mismatch`);
+          throw fail('CORRUPT_STORE', `taskId mismatch in ${taskId}.json`);
+        }
         return parsed.value;
       } catch (err) {
         if (err.code === 'ENOENT') return null;
@@ -314,26 +532,59 @@ function createStoreApi(store) {
       }
     },
 
+    /**
+     * Persist task then index (for new ids). Crash between these steps leaves
+     * a recoverable orphan that openFileQueueStore reconciles on restart.
+     * Never silently overwrites an on-disk orphan for a different embedded id.
+     */
     async writeTask(task) {
       await ensureOpen();
       if (!task || typeof task.taskId !== 'string') {
         throw fail('INVALID_TASK', 'task.taskId required');
       }
       const filePath = await taskPath(task.taskId);
+
+      // Refuse to overwrite a mismatched on-disk record (orphan / corruption).
+      try {
+        await fsp.access(filePath, fs.constants.F_OK);
+        const existing = await readJsonFile(filePath);
+        if (!existing.ok) {
+          throw fail('CORRUPT_STORE', `existing task file unreadable: ${task.taskId}`);
+        }
+        if (existing.value.taskId !== task.taskId) {
+          throw fail(
+            'ORPHAN_TASK_CONFLICT',
+            'refusing to overwrite on-disk task with mismatched taskId',
+          );
+        }
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          // new task file — ok
+        } else {
+          throw err;
+        }
+      }
+
       const body = `${JSON.stringify(task, null, 2)}\n`;
       await atomicWriteFile(filePath, body);
+      if (faultHooks.afterTaskFileWrite) {
+        await faultHooks.afterTaskFileWrite({ taskId: task.taskId, filePath });
+      }
+
       const ids = await readIndex();
       if (!ids.includes(task.taskId)) {
         ids.push(task.taskId);
         await writeIndex(ids);
       }
+
       const metaRead = await readJsonFile(store.metaPath);
       if (metaRead.ok && metaRead.value) {
         const meta = metaRead.value;
         meta.updatedAtMs = Date.now();
-        meta.taskCount = ids.length;
+        meta.taskCount = (await readIndex()).length;
         meta.lastTaskSha256 = hashPayload(body);
         await atomicWriteFile(store.metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+        if (faultHooks.afterMetaWrite) await faultHooks.afterMetaWrite({ taskId: task.taskId });
       }
       return task;
     },
@@ -341,7 +592,8 @@ function createStoreApi(store) {
     async appendEvent(event) {
       await ensureOpen();
       const line = `${JSON.stringify(event)}\n`;
-      await fsp.appendFile(store.eventsPath, line, { encoding: 'utf8', mode: 0o600 });
+      await appendFileDurable(store.eventsPath, line, 0o600);
+      if (faultHooks.afterEventAppend) await faultHooks.afterEventAppend({ event });
     },
 
     async readMeta() {

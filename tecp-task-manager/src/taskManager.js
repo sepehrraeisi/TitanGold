@@ -128,6 +128,7 @@ export async function createTaskManager(options) {
 
   async function save(task, auditEvent) {
     let next = task;
+    let canonicalAudit = null;
     if (auditEvent) {
       const validated = validateAuditEvent({
         eventId: auditEvent.eventId,
@@ -139,21 +140,35 @@ export async function createTaskManager(options) {
       if (!validated.valid) {
         return result(false, `AUDIT_${validated.decision}`);
       }
-      next = appendAudit(task, {
+      canonicalAudit = {
         eventId: auditEvent.eventId,
         eventType: auditEvent.eventType,
         actorId: auditEvent.actorId,
         atMs: auditEvent.atMs,
         note: auditEvent.note,
-      });
+      };
+      // Authoritative audit lives inside the task record (atomic with writeTask).
+      next = appendAudit(task, canonicalAudit);
     }
     await store.writeTask(next);
-    await store.appendEvent({
-      atMs: auditEvent ? auditEvent.atMs : Date.now(),
-      taskId: next.taskId,
-      status: next.status,
-      type: auditEvent ? auditEvent.eventType : 'PERSIST',
-    });
+    // Supplemental events.jsonl must not silently diverge: if append fails after
+    // a successful task write, surface failure (task.auditTrail remains SoT).
+    try {
+      await store.appendEvent({
+        atMs: canonicalAudit ? canonicalAudit.atMs : Date.now(),
+        taskId: next.taskId,
+        status: next.status,
+        type: canonicalAudit ? canonicalAudit.eventType : 'PERSIST',
+        eventId: canonicalAudit ? canonicalAudit.eventId : null,
+        authorityClass: 'SUPPLEMENTAL_EVENT_LOG_TASK_AUDIT_TRAIL_IS_CANONICAL',
+      });
+    } catch (err) {
+      return result(false, 'AUDIT_EVENT_APPEND_FAILED', {
+        task: next,
+        detail: err && err.message,
+        note: 'task.auditTrail was persisted; supplemental events.jsonl append failed',
+      });
+    }
     return result(true, 'OK', { task: next });
   }
 

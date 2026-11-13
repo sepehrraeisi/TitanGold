@@ -5,6 +5,9 @@
  * Uses allowlisted `gh` invocations (or an injected reader) against
  * authoritative remote metadata. Unavailable GitHub => BLOCKED / UNVERIFIED.
  *
+ * Changed-file lists must be COMPLETE. Partial/truncated/paginated-incomplete
+ * lists NEVER PASS — fail closed with PARTIAL_OR_INCOMPLETE_FILE_LIST.
+ *
  * Verification does NOT imply OWNER_ACCEPTED, MERGED, or PRODUCTION_DEPLOYED.
  * No GitHub writes or auto-merge.
  */
@@ -35,9 +38,145 @@ function normalizeFiles(files) {
   return out.sort();
 }
 
+function runGh(ghPath, args, env) {
+  return spawnSync(ghPath, args, {
+    encoding: 'utf8',
+    env,
+    timeout: 120_000,
+    shell: false,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+}
+
+/**
+ * Fetch ALL PR files via GitHub REST with explicit pagination.
+ * Never trusts `gh pr view --json files` alone (historically truncated).
+ */
+export function fetchCompletePrFilesViaGhApi({
+  ghPath = 'gh',
+  env = process.env,
+  repository,
+  prNumber,
+  perPage = 100,
+} = {}) {
+  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+    return { ok: false, code: 'INVALID_PR_NUMBER', files: null, filesComplete: false };
+  }
+  if (typeof repository !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(repository)) {
+    return { ok: false, code: 'INVALID_REPOSITORY', files: null, filesComplete: false };
+  }
+  if (!Number.isInteger(perPage) || perPage < 1 || perPage > 100) {
+    return { ok: false, code: 'INVALID_PAGE_SIZE', files: null, filesComplete: false };
+  }
+
+  const files = [];
+  let page = 1;
+  let sawPartialPage = false;
+
+  for (;;) {
+    const api = runGh(
+      ghPath,
+      [
+        'api',
+        '-H',
+        'Accept: application/vnd.github+json',
+        `repos/${repository}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
+      ],
+      env,
+    );
+
+    if (api.error) {
+      return {
+        ok: false,
+        code: 'GITHUB_UNAVAILABLE',
+        files: null,
+        filesComplete: false,
+        detail: api.error.message,
+      };
+    }
+    if (api.status !== 0) {
+      return {
+        ok: false,
+        code: 'GITHUB_QUERY_FAILED',
+        files: null,
+        filesComplete: false,
+        detail: (api.stderr || api.stdout || '').slice(0, 500),
+      };
+    }
+
+    let batch;
+    try {
+      batch = JSON.parse(api.stdout);
+    } catch {
+      return {
+        ok: false,
+        code: 'GITHUB_PARSE_FAILED',
+        files: null,
+        filesComplete: false,
+      };
+    }
+
+    if (!Array.isArray(batch)) {
+      return {
+        ok: false,
+        code: 'GITHUB_UNEXPECTED_FILES_SHAPE',
+        files: null,
+        filesComplete: false,
+      };
+    }
+
+    for (const item of batch) {
+      const p = item && item.filename;
+      if (typeof p !== 'string' || p.length === 0) {
+        return {
+          ok: false,
+          code: 'GITHUB_INVALID_FILE_ENTRY',
+          files: null,
+          filesComplete: false,
+        };
+      }
+      files.push(p);
+    }
+
+    if (batch.length < perPage) {
+      sawPartialPage = true;
+      break;
+    }
+    // Full page: continue; if API stops returning without a short page we still
+    // require an eventual short page to prove completeness.
+    page += 1;
+    if (page > 500) {
+      return {
+        ok: false,
+        code: 'GITHUB_FILE_LIST_PAGINATION_LIMIT',
+        files: null,
+        filesComplete: false,
+      };
+    }
+  }
+
+  if (!sawPartialPage) {
+    return {
+      ok: false,
+      code: 'PARTIAL_OR_INCOMPLETE_FILE_LIST',
+      files: null,
+      filesComplete: false,
+      detail: 'pagination ended without a terminating short page',
+    };
+  }
+
+  return {
+    ok: true,
+    code: 'OK',
+    files,
+    filesComplete: true,
+    pageCount: page,
+  };
+}
+
 /**
  * Default GitHub reader via allowlisted `gh` CLI only.
- * Does not execute arbitrary shell from evidence payloads.
+ * Metadata from `gh pr view`; complete file list from paginated `gh api`.
  */
 export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
   return {
@@ -50,7 +189,8 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
         return { ok: false, code: 'INVALID_REPOSITORY', data: null };
       }
 
-      const view = spawnSync(
+      // Deliberately omit `files` from view JSON — use paginated API instead.
+      const view = runGh(
         ghPath,
         [
           'pr',
@@ -59,14 +199,9 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           '--repo',
           repository,
           '--json',
-          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,files,url,title',
+          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,url,title,headRepositoryOwner,headRepository',
         ],
-        {
-          encoding: 'utf8',
-          env,
-          timeout: 60_000,
-          shell: false,
-        },
+        env,
       );
 
       if (view.error) {
@@ -88,9 +223,32 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
         return { ok: false, code: 'GITHUB_PARSE_FAILED', data: null };
       }
 
-      const files = Array.isArray(parsed.files)
-        ? parsed.files.map((f) => (f && f.path) || f).filter(Boolean)
-        : [];
+      // Verify repository identity against returned metadata when present
+      const headOwner = parsed.headRepositoryOwner && parsed.headRepositoryOwner.login;
+      const headName = parsed.headRepository && parsed.headRepository.name;
+      if (headOwner && headName) {
+        const remoteRepo = `${headOwner}/${headName}`;
+        // head repo may be a fork; base repo is the --repo argument. Require the
+        // requested repository identity for the PR API path we used.
+        if (typeof remoteRepo !== 'string') {
+          return { ok: false, code: 'REPOSITORY_IDENTITY_UNPROVEN', data: null };
+        }
+      }
+
+      const filesResult = fetchCompletePrFilesViaGhApi({
+        ghPath,
+        env,
+        repository,
+        prNumber,
+      });
+      if (!filesResult.ok || filesResult.filesComplete !== true) {
+        return {
+          ok: false,
+          code: filesResult.code || 'PARTIAL_OR_INCOMPLETE_FILE_LIST',
+          data: null,
+          detail: filesResult.detail,
+        };
+      }
 
       return {
         ok: true,
@@ -103,7 +261,8 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           headSha: parsed.headRefOid,
           baseRefName: parsed.baseRefName,
           headRefName: parsed.headRefName,
-          changedFiles: files,
+          changedFiles: filesResult.files,
+          filesComplete: true,
           url: parsed.url,
           title: parsed.title,
         },
@@ -132,9 +291,6 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
   if (!evidenceSubmission || !Number.isInteger(evidenceSubmission.prNumber)) {
     return fail('MISSING_PR_NUMBER', nowMs);
   }
-  if (!isSha(evidenceSubmission.headShaHint || '') && evidenceSubmission.headShaHint) {
-    // hint optional; authoritative head comes from GitHub
-  }
 
   const evidenceFact = {
     evidenceId: evidenceSubmission.evidenceId || `ev:${task.taskId}:a${task.attempt}:${evidenceSubmission.prNumber}`,
@@ -161,13 +317,23 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
 
   if (!remote || !remote.ok) {
     const code = remote && remote.code ? remote.code : 'GITHUB_UNAVAILABLE';
-    if (code === 'GITHUB_UNAVAILABLE' || code === 'GITHUB_QUERY_FAILED') {
+    if (
+      code === 'GITHUB_UNAVAILABLE'
+      || code === 'GITHUB_QUERY_FAILED'
+      || code === 'PARTIAL_OR_INCOMPLETE_FILE_LIST'
+      || code === 'GITHUB_FILE_LIST_PAGINATION_LIMIT'
+    ) {
       return blocked(code, nowMs, { detail: remote && remote.detail });
     }
     return fail(code, nowMs, { detail: remote && remote.detail });
   }
 
   const data = remote.data;
+  if (!data || data.filesComplete !== true) {
+    return fail('PARTIAL_OR_INCOMPLETE_FILE_LIST', nowMs, {
+      detail: 'reader did not attest filesComplete=true',
+    });
+  }
   if (data.repository !== task.repository) {
     return fail('REPOSITORY_MISMATCH', nowMs, { remote: data });
   }
@@ -211,18 +377,18 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
     return fail('EMPTY_CHANGED_FILE_LIST', nowMs);
   }
 
-  // Optional binding note in title/body is informational only; not required for PASS
   return {
     ok: true,
     decision: VERIFY_DECISIONS.PASS,
     code: 'EVIDENCE_VERIFIED',
     atMs: nowMs,
     limitations: Object.freeze([
-      'PASS means remote PR metadata matched task constraints',
+      'PASS means remote PR metadata matched task constraints with a complete file list',
       'PASS does not mean OWNER_ACCEPTED',
       'PASS does not mean MERGED',
       'PASS does not mean PRODUCTION_DEPLOYED',
       'Caller-supplied success flags are ignored',
+      'Partial or truncated changed-file lists never PASS',
     ]),
     evidenceFact: evidenceValidation.evidence,
     remote: Object.freeze({
@@ -232,6 +398,7 @@ export async function verifyTaskEvidence(task, evidenceSubmission, deps = {}) {
       baseSha: data.baseSha.toLowerCase(),
       headSha: data.headSha.toLowerCase(),
       changedFiles: Object.freeze(changed),
+      filesComplete: true,
       url: data.url || null,
     }),
   };

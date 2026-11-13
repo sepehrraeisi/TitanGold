@@ -61,23 +61,30 @@ Add `--json` for machine-readable output.
 
 ## Evidence verification
 
-`verify` queries authoritative GitHub metadata via allowlisted `gh pr view` (or an injected reader in tests):
+`verify` queries authoritative GitHub metadata via allowlisted `gh` (or an injected reader in tests):
 
 - repository identity
 - PR number/state
-- exact HEAD SHA
-- base SHA must match the task baseline
+- exact HEAD SHA and base SHA (base must match the task baseline)
+- **complete** changed-file list via paginated `gh api .../pulls/{n}/files` (not truncated `pr view --json files`)
 - changed files must be a non-empty subset of the task allowlist
 
-Caller-supplied `success: true` is ignored. If GitHub is unavailable, result is `BLOCKED` / unverified — never PASS.
+Caller-supplied `success: true` is ignored. If GitHub is unavailable, or the file list is partial/incomplete, result is `BLOCKED` / fail — **never PASS**.
 
 Verification ≠ Owner accept ≠ merged ≠ production deployed.
+
+## Storage durability (honest limits)
+
+- Writes use temp file → `fsync` → atomic `rename` → directory `fsync` (best effort).
+- A crash between task-file write and index update leaves an **orphan** task file. On restart, the store reconciles the orphan into the index **only** when the JSON is valid and `task.taskId` matches the filename. Mismatched orphans and index entries without files **fail closed**. Orphans are never silently overwritten.
+- `task.auditTrail` inside the task file is the authoritative audit record. `events.jsonl` is supplemental; an append failure after a successful task write is surfaced as an error.
+- `fsync` reduces loss windows but does **not** guarantee power-loss durability on every filesystem, mount option, cloud disk, or VM host. This is not a PostgreSQL WAL claim.
 
 ## Recovery rules
 
 - Expired **CLAIMED/PREPARED** → `RECOVERY_REQUIRED` (safe Owner review before re-claim)
 - Expired **RUNNING** → `UNCERTAIN_RUNNING` (never silently reassigned; work may still be running)
-- Corrupt store → DENY (no silent empty re-init)
+- Corrupt store / unprovable orphan → DENY (no silent empty re-init)
 
 ## Tests
 

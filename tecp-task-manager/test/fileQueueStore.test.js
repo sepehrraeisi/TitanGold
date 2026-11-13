@@ -116,3 +116,109 @@ test('symlink in data tree forbidden on write path parent file', async () => {
   await store.close();
   await fsp.rm(dir, { recursive: true, force: true });
 });
+
+test('orphan task file after crash is reconciled on restart (provable)', async () => {
+  const {
+    __setFaultHook,
+    __clearFaultHooks,
+  } = await import('../src/fileQueueStore.js');
+  const dir = await createDisposableDataDir();
+  const store = await openFileQueueStore(dir);
+  __setFaultHook('afterTaskFileWrite', async () => {
+    throw Object.assign(new Error('injected crash after task file'), { code: 'INJECTED_CRASH' });
+  });
+  await assert.rejects(
+    () => store.writeTask({ taskId: 'orphan-1', status: 'PENDING', goal: 'x', auditTrail: [] }),
+    (err) => err.code === 'INJECTED_CRASH',
+  );
+  __clearFaultHooks();
+  // Close without completing index update (lock release)
+  await store.close();
+
+  // Index should not yet list orphan-1 (crash before index write)
+  const indexRaw = JSON.parse(await fsp.readFile(path.join(dir, 'index.json'), 'utf8'));
+  assert.equal(indexRaw.taskIds.includes('orphan-1'), false);
+  assert.equal(fs.existsSync(path.join(dir, 'tasks', 'orphan-1.json')), true);
+
+  const store2 = await openFileQueueStore(dir);
+  assert.ok(store2.lastReconcile.recoveredOrphans.includes('orphan-1'));
+  const ids = await store2.listTaskIds();
+  assert.equal(ids.includes('orphan-1'), true);
+  const task = await store2.readTask('orphan-1');
+  assert.equal(task.taskId, 'orphan-1');
+  await store2.close();
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+test('mismatched orphan taskId fails closed and is never overwritten', async () => {
+  const dir = await createDisposableDataDir();
+  const store = await openFileQueueStore(dir);
+  await store.close();
+
+  await fsp.writeFile(
+    path.join(dir, 'tasks', 'file-id.json'),
+    `${JSON.stringify({ taskId: 'other-id', status: 'PENDING' }, null, 2)}\n`,
+    'utf8',
+  );
+  await assert.rejects(
+    () => openFileQueueStore(dir),
+    (err) => err.code === 'ORPHAN_TASK_UNPROVABLE',
+  );
+  // File unchanged
+  const raw = JSON.parse(await fsp.readFile(path.join(dir, 'tasks', 'file-id.json'), 'utf8'));
+  assert.equal(raw.taskId, 'other-id');
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+test('index entry without task file fails closed', async () => {
+  const dir = await createDisposableDataDir();
+  const store = await openFileQueueStore(dir);
+  await store.writeTask({ taskId: 'keep', status: 'PENDING' });
+  await store.close();
+  await fsp.writeFile(
+    path.join(dir, 'index.json'),
+    `${JSON.stringify({ taskIds: ['keep', 'ghost'] }, null, 2)}\n`,
+    'utf8',
+  );
+  await assert.rejects(
+    () => openFileQueueStore(dir),
+    (err) => err.code === 'CORRUPT_STORE' && /missing files/.test(err.message),
+  );
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+test('fsync durability fault hooks around rename boundary', async () => {
+  const {
+    __setFaultHook,
+    __clearFaultHooks,
+    atomicWriteFile,
+  } = await import('../src/fileQueueStore.js');
+  const dir = await createDisposableDataDir();
+  const target = path.join(dir, 'durability.json');
+  let hit = false;
+  __setFaultHook('beforeRename', async () => {
+    hit = true;
+    throw Object.assign(new Error('crash before rename'), { code: 'INJECTED_CRASH' });
+  });
+  await assert.rejects(
+    () => atomicWriteFile(target, '{"ok":true}\n'),
+    (err) => err.code === 'INJECTED_CRASH',
+  );
+  assert.equal(hit, true);
+  assert.equal(fs.existsSync(target), false);
+  // leftover tmp may exist; final file must not
+  __clearFaultHooks();
+  await atomicWriteFile(target, '{"ok":true}\n');
+  assert.equal(JSON.parse(await fsp.readFile(target, 'utf8')).ok, true);
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+test('partial initialization refuses silent empty re-init', async () => {
+  const dir = await createDisposableDataDir();
+  await fsp.writeFile(path.join(dir, 'events.jsonl'), '', 'utf8');
+  await assert.rejects(
+    () => openFileQueueStore(dir),
+    (err) => err.code === 'CORRUPT_STORE',
+  );
+  await fsp.rm(dir, { recursive: true, force: true });
+});

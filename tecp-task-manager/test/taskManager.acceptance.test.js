@@ -32,6 +32,7 @@ function fixtureReader({
           baseRefName: 'main',
           headRefName: 'feature',
           changedFiles: files,
+          filesComplete: true,
           url: `https://example.test/${repository}/pull/${prNumber}`,
           title: `task`,
         },
@@ -377,4 +378,119 @@ test('zero DB/Worker/MCP/dispatcher side effects in package surface', async () =
   assert.equal(tm.includes('operationalDispatcher'), false);
   assert.equal(tm.includes('postgres'), false);
   assert.equal(tm.includes('createTitanMcpServer'), false);
+});
+
+test('partial file list without filesComplete never PASSes', async () => {
+  const dir = await createDisposableDataDir();
+  const manager = await createTaskManager({
+    dataDir: dir,
+    githubReader: {
+      kind: 'PARTIAL_FIXTURE',
+      async fetchPullRequest({ repository, prNumber }) {
+        return {
+          ok: true,
+          code: 'OK',
+          data: {
+            repository,
+            prNumber,
+            state: 'OPEN',
+            baseSha: BASE,
+            headSha: HEAD,
+            changedFiles: ['docs/a.md'],
+            // filesComplete intentionally omitted
+          },
+        };
+      },
+    },
+  });
+  try {
+    await manager.create(createInput());
+    await manager.claim({ taskId: 'task-1', actorId: 'cursor-1' });
+    await manager.prepare({ taskId: 'task-1', actorId: 'cursor-1' });
+    await manager.ackRunning({ taskId: 'task-1', actorId: 'cursor-1' });
+    await manager.submitEvidence({ taskId: 'task-1', actorId: 'cursor-1', prNumber: 11 });
+    const verified = await manager.verify({ taskId: 'task-1', actorId: 'owner-1' });
+    assert.equal(verified.ok, false);
+    assert.equal(verified.code, 'PARTIAL_OR_INCOMPLETE_FILE_LIST');
+  } finally {
+    await manager.close();
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('complete large PR file list detects forbidden path beyond first page', async () => {
+  const { verifyTaskEvidence } = await import('../src/evidenceVerifier.js');
+  const pageSize = 100;
+  const allowed = [];
+  for (let i = 0; i < pageSize; i += 1) {
+    allowed.push(`docs/page1-${i}.md`);
+  }
+  // Second page includes a forbidden path
+  const allFiles = [...allowed, 'backend/secret.js', 'docs/tail.md'];
+
+  const reader = {
+    kind: 'PAGED_COMPLETE_FIXTURE',
+    async fetchPullRequest({ repository, prNumber }) {
+      return {
+        ok: true,
+        code: 'OK',
+        data: {
+          repository,
+          prNumber,
+          state: 'OPEN',
+          baseSha: BASE,
+          headSha: HEAD,
+          changedFiles: allFiles,
+          filesComplete: true,
+        },
+      };
+    },
+  };
+
+  const task = {
+    taskId: 'big-1',
+    attempt: 1,
+    actorId: 'cursor-1',
+    repository: 'sepehrraeisi/TitanGold',
+    baseSha: BASE,
+    fileAllowlist: [...allowed, 'docs/tail.md'],
+  };
+
+  const result = await verifyTaskEvidence(
+    task,
+    { prNumber: 99, actorId: 'cursor-1', attempt: 1 },
+    { githubReader: reader, nowMs: 1 },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'FORBIDDEN_PATHS_IN_PR');
+  assert.ok(result.forbidden.includes('backend/secret.js'));
+  assert.ok(result.changedFiles.length > pageSize);
+});
+
+test('reader reporting incomplete pagination blocks verify', async () => {
+  const { verifyTaskEvidence } = await import('../src/evidenceVerifier.js');
+  const reader = {
+    async fetchPullRequest() {
+      return {
+        ok: false,
+        code: 'PARTIAL_OR_INCOMPLETE_FILE_LIST',
+        data: null,
+        detail: 'simulated truncated gh pr view files page',
+      };
+    },
+  };
+  const result = await verifyTaskEvidence(
+    {
+      taskId: 't',
+      attempt: 1,
+      repository: 'sepehrraeisi/TitanGold',
+      baseSha: BASE,
+      fileAllowlist: ['docs/a.md'],
+    },
+    { prNumber: 1, actorId: 'a', attempt: 1 },
+    { githubReader: reader },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'PARTIAL_OR_INCOMPLETE_FILE_LIST');
+  assert.equal(result.decision, 'BLOCKED');
 });
