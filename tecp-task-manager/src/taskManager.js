@@ -102,11 +102,35 @@ function isDurableReconciliation(task) {
     || r.originalBaseSha.toLowerCase() !== String(task.baseSha).toLowerCase()) {
     return false;
   }
-  if (!task.verification || task.verification.decision !== VERIFY_DECISIONS.FAIL) {
+  if (!task.verification
+    || task.verification.decision !== VERIFY_DECISIONS.FAIL
+    || task.verification.code !== 'BASE_SHA_MISMATCH') {
     return false;
   }
+  if (!task.evidence || !Number.isInteger(task.evidence.prNumber)) return false;
   if (!r.github || !r.ownerAcknowledgement) return false;
+  if (!r.historicalEvidence
+    || r.historicalEvidence.prNumber !== task.evidence.prNumber) {
+    return false;
+  }
+  if (r.github.implementationPrNumber !== task.evidence.prNumber) return false;
+  if (isShaLike(task.evidence.headShaHint)) {
+    if (!isShaLike(r.historicalEvidence.headShaHint)
+      || r.historicalEvidence.headShaHint.toLowerCase()
+        !== task.evidence.headShaHint.toLowerCase()) {
+      return false;
+    }
+    if (!isShaLike(r.github.implementationHeadSha)
+      || r.github.implementationHeadSha.toLowerCase()
+        !== task.evidence.headShaHint.toLowerCase()) {
+      return false;
+    }
+  }
   return true;
+}
+
+function isShaLike(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
 }
 
 function result(ok, code, extra = {}) {
@@ -752,6 +776,35 @@ export async function createTaskManager(options) {
       if (!task.verification || task.verification.decision !== VERIFY_DECISIONS.FAIL) {
         return result(false, 'HISTORICAL_FAIL_MISSING');
       }
+      if (task.verification.code !== 'BASE_SHA_MISMATCH') {
+        return result(false, 'WRONG_HISTORICAL_FAILURE_TYPE', {
+          expectedCode: 'BASE_SHA_MISMATCH',
+          actualCode: task.verification.code,
+        });
+      }
+      if (!task.evidence || !Number.isInteger(task.evidence.prNumber)) {
+        return result(false, 'HISTORICAL_EVIDENCE_MISSING');
+      }
+      if (
+        Number.isInteger(implementationPrNumber)
+        && implementationPrNumber !== task.evidence.prNumber
+      ) {
+        return result(false, 'IMPLEMENTATION_PR_NOT_BOUND_TO_HISTORICAL_EVIDENCE', {
+          requestedImplementationPr: implementationPrNumber,
+          historicalEvidencePr: task.evidence.prNumber,
+        });
+      }
+      if (
+        isShaLike(task.evidence.headShaHint)
+        && typeof expectedImplementationHeadSha === 'string'
+        && expectedImplementationHeadSha.toLowerCase()
+          !== task.evidence.headShaHint.toLowerCase()
+      ) {
+        return result(false, 'IMPLEMENTATION_HEAD_NOT_BOUND_TO_HISTORICAL_EVIDENCE', {
+          requestedImplementationHeadSha: expectedImplementationHeadSha,
+          historicalEvidenceHeadShaHint: task.evidence.headShaHint,
+        });
+      }
 
       const request = {
         expectedAttempt,
@@ -811,9 +864,13 @@ export async function createTaskManager(options) {
       }
 
       const next = cloneMutable(task);
-      // Preserve historical FAIL verification byte-for-byte (object copy already).
-      if (!next.verification || next.verification.decision !== VERIFY_DECISIONS.FAIL) {
+      // Preserve historical FAIL verification, evidence, baseSha byte-for-byte.
+      if (!next.verification || next.verification.decision !== VERIFY_DECISIONS.FAIL
+        || next.verification.code !== 'BASE_SHA_MISMATCH') {
         return result(false, 'HISTORICAL_FAIL_MISSING');
+      }
+      if (!next.evidence || next.evidence.prNumber !== task.evidence.prNumber) {
+        return result(false, 'HISTORICAL_EVIDENCE_MISSING');
       }
       next.status = TASK_STATUSES.FAILED;
       next.reconciliation = Object.freeze({
@@ -824,6 +881,7 @@ export async function createTaskManager(options) {
         attempt: task.attempt,
         originalBaseSha: task.baseSha.toLowerCase(),
         originalFailure: verified.originalFailure,
+        historicalEvidence: verified.historicalEvidence,
         ownerAcknowledgement: request.ownerAcknowledgement,
         ownerActorId: actorId,
         github: verified.github,

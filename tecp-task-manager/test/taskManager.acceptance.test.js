@@ -1111,8 +1111,15 @@ test('reconciliation preserves historical BASE_SHA_MISMATCH FAIL', async () => {
     assert.equal(recon.task.verification.decision, 'FAIL');
     assert.equal(recon.task.verification.code, 'BASE_SHA_MISMATCH');
     assert.equal(recon.task.verification.atMs, failAt);
+    assert.equal(recon.task.evidence.prNumber, 304);
+    assert.equal(recon.task.evidence.headShaHint, IMPL_HEAD);
     assert.equal(recon.task.reconciliation.decision, 'RECONCILED');
     assert.equal(recon.task.reconciliation.ownerAcceptStillRequired, true);
+    assert.equal(recon.task.reconciliation.historicalEvidence.prNumber, 304);
+    assert.equal(
+      recon.task.reconciliation.historicalEvidence.headShaHint,
+      IMPL_HEAD,
+    );
     assert.notEqual(recon.task.status, TASK_STATUSES.EVIDENCE_VERIFIED);
     await m2.close();
   } finally {
@@ -1212,7 +1219,10 @@ test('reconciliation rejects wrong governance / implementation PR or SHAs', asyn
       expectedImplementationHeadSha: '4444444444444444444444444444444444444444',
     }));
     assert.equal(wrongImplHead.ok, false);
-    assert.equal(wrongImplHead.code, 'IMPLEMENTATION_HEAD_SHA_MISMATCH');
+    assert.equal(
+      wrongImplHead.code,
+      'IMPLEMENTATION_HEAD_NOT_BOUND_TO_HISTORICAL_EVIDENCE',
+    );
     const wrongBase = await m2.reconcile(reconcileArgs({
       expectedBaseSha: '5555555555555555555555555555555555555555',
     }));
@@ -1476,6 +1486,155 @@ test('CLI reconcile command wires required Owner flags', async () => {
     });
     const recon = await m2.reconcile(reconcileArgs({ taskId: 'task-cli-recon' }));
     assert.equal(recon.ok, true);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation denies substituted implementation PR not bound to evidence', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader({ implPr: 999 }),
+    });
+    const denied = await m2.reconcile(reconcileArgs({ implementationPrNumber: 999 }));
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'IMPLEMENTATION_PR_NOT_BOUND_TO_HISTORICAL_EVIDENCE');
+    const status = await m2.status({ taskId: 'task-recon-1' });
+    assert.equal(status.task.status, TASK_STATUSES.FAILED);
+    assert.equal(status.task.verification.code, 'BASE_SHA_MISMATCH');
+    assert.equal(status.task.evidence.prNumber, 304);
+    assert.equal(status.task.reconciliation, undefined);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation denies substituted HEAD not bound to evidence hint', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const otherHead = '7777777777777777777777777777777777777777';
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader({ implHead: otherHead }),
+    });
+    const denied = await m2.reconcile(reconcileArgs({
+      expectedImplementationHeadSha: otherHead,
+    }));
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'IMPLEMENTATION_HEAD_NOT_BOUND_TO_HISTORICAL_EVIDENCE');
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation denies wrong historical failure type', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: ORIG_BASE,
+      headSha: IMPL_HEAD,
+      files: [...ALLOW_PATHS, 'backend/secret.js'],
+    }),
+  });
+  try {
+    await managerCreateFailedForbidden(m1, 'task-wrong-fail');
+    const verified = await m1.verify({ taskId: 'task-wrong-fail', actorId: 'owner-1' });
+    assert.equal(verified.ok, false);
+    assert.equal(verified.code, 'FORBIDDEN_PATHS_IN_PR');
+    assert.equal(verified.task.status, TASK_STATUSES.FAILED);
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const denied = await m2.reconcile(reconcileArgs({
+      taskId: 'task-wrong-fail',
+      implementationPrNumber: 304,
+      expectedImplementationHeadSha: IMPL_HEAD,
+    }));
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'WRONG_HISTORICAL_FAILURE_TYPE');
+    const status = await m2.status({ taskId: 'task-wrong-fail' });
+    assert.equal(status.task.verification.code, 'FORBIDDEN_PATHS_IN_PR');
+    assert.equal(status.task.reconciliation, undefined);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+async function managerCreateFailedForbidden(manager, taskId) {
+  await manager.create(createInput({
+    taskId,
+    baseSha: ORIG_BASE,
+    fileAllowlist: ALLOW_PATHS,
+    goal: 'should fail forbidden path',
+  }));
+  await manager.claim({ taskId, actorId: 'cursor-1' });
+  await manager.prepare({ taskId, actorId: 'cursor-1' });
+  await manager.ackRunning({ taskId, actorId: 'cursor-1' });
+  await manager.submitEvidence({
+    taskId,
+    actorId: 'cursor-1',
+    prNumber: 304,
+    headShaHint: IMPL_HEAD,
+  });
+}
+
+test('reconciliation denies missing historical evidence', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const store = await openFileQueueStore(dir);
+    const task = await store.readTask('task-recon-1');
+    const mutated = { ...task, evidence: null };
+    await store.writeTask(mutated);
+    await store.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const denied = await m2.reconcile(reconcileArgs());
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'HISTORICAL_EVIDENCE_MISSING');
     await m2.close();
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });

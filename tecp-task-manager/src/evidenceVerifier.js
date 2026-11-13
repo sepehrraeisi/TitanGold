@@ -821,6 +821,19 @@ export async function verifyAppendOnlyReconciliation(task, request, deps = {}) {
   if (!task.verification || task.verification.decision !== VERIFY_DECISIONS.FAIL) {
     return reconcileDeny('HISTORICAL_FAIL_MISSING', nowMs);
   }
+  // This approved reconciliation scenario is only for historical BASE_SHA_MISMATCH.
+  if (task.verification.code !== 'BASE_SHA_MISMATCH') {
+    return reconcileDeny('WRONG_HISTORICAL_FAILURE_TYPE', nowMs, {
+      expectedCode: 'BASE_SHA_MISMATCH',
+      actualCode: task.verification.code,
+    });
+  }
+  if (!task.evidence || typeof task.evidence !== 'object') {
+    return reconcileDeny('HISTORICAL_EVIDENCE_MISSING', nowMs);
+  }
+  if (!Number.isInteger(task.evidence.prNumber) || task.evidence.prNumber <= 0) {
+    return reconcileDeny('HISTORICAL_EVIDENCE_PR_MISSING', nowMs);
+  }
   if (
     typeof request.ownerAcknowledgement !== 'string'
     || request.ownerAcknowledgement.trim().length < 8
@@ -833,6 +846,13 @@ export async function verifyAppendOnlyReconciliation(task, request, deps = {}) {
   if (!Number.isInteger(request.implementationPrNumber) || request.implementationPrNumber <= 0) {
     return reconcileDeny('INVALID_IMPLEMENTATION_PR', nowMs);
   }
+  // Bind implementation PR to the originally submitted evidence — reject substitution.
+  if (request.implementationPrNumber !== task.evidence.prNumber) {
+    return reconcileDeny('IMPLEMENTATION_PR_NOT_BOUND_TO_HISTORICAL_EVIDENCE', nowMs, {
+      requestedImplementationPr: request.implementationPrNumber,
+      historicalEvidencePr: task.evidence.prNumber,
+    });
+  }
   if (!isSha(request.expectedGovernanceMergeSha)) {
     return reconcileDeny('INVALID_GOVERNANCE_MERGE_SHA', nowMs);
   }
@@ -841,6 +861,19 @@ export async function verifyAppendOnlyReconciliation(task, request, deps = {}) {
   }
   if (!isSha(request.expectedImplementationMergeSha)) {
     return reconcileDeny('INVALID_IMPLEMENTATION_MERGE_SHA', nowMs);
+  }
+  // When the original submission recorded a HEAD hint, bind reconciliation to it.
+  const historicalHeadHint = task.evidence.headShaHint;
+  if (historicalHeadHint != null && historicalHeadHint !== '') {
+    if (!isSha(historicalHeadHint)) {
+      return reconcileDeny('HISTORICAL_EVIDENCE_HEAD_HINT_INVALID', nowMs);
+    }
+    if (!shaEq(request.expectedImplementationHeadSha, historicalHeadHint)) {
+      return reconcileDeny('IMPLEMENTATION_HEAD_NOT_BOUND_TO_HISTORICAL_EVIDENCE', nowMs, {
+        requestedImplementationHeadSha: request.expectedImplementationHeadSha,
+        historicalEvidenceHeadShaHint: historicalHeadHint,
+      });
+    }
   }
   if (typeof reader.fetchPullRequest !== 'function' || typeof reader.compareCommits !== 'function') {
     return reconcileBlocked('GITHUB_READER_INSUFFICIENT', nowMs, {
@@ -1063,6 +1096,13 @@ export async function verifyAppendOnlyReconciliation(task, request, deps = {}) {
       decision: task.verification.decision,
       code: task.verification.code,
       atMs: task.verification.atMs || null,
+    }),
+    historicalEvidence: Object.freeze({
+      prNumber: task.evidence.prNumber,
+      headShaHint: isSha(task.evidence.headShaHint)
+        ? task.evidence.headShaHint.toLowerCase()
+        : (task.evidence.headShaHint || null),
+      evidenceId: task.evidence.evidenceId || null,
     }),
     github: Object.freeze({
       repository: task.repository,
