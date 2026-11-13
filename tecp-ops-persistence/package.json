@@ -3,12 +3,12 @@
   "version": "0.0.0-cp2-i",
   "private": true,
   "type": "module",
-  "description": "TECP-OPS-PILOT-001 CP2-I offline TEST_ONLY composition of CP1 authority with frozen DLP-001..004 persistence interfaces. NON_OPERATIONAL. No PostgreSQL execution authorized in CP2-I.",
+  "description": "TECP-OPS-PILOT-001 offline TEST_ONLY persistence contracts: CP2-I non-dispatch composition plus S2 harness/dispatcher/registry sources. NON_OPERATIONAL. Live PostgreSQL / CP2-DB remains unauthorized while OPS_PILOT_DB_EXECUTION_AUTHORIZED=false.",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/operationalTaskLeaseAuditRepository.test.js test/fencingConcurrency.test.js"
+    "test": "node --test test/operationalTaskLeaseAuditRepository.test.js test/fencingConcurrency.test.js test/dbIssuedLeaseContext.test.js test/durableAuthorityRegistries.test.js test/operationalDispatcher.test.js test/disposableOpsPilotDbHarness.test.js test/cp2DbFencingDurability.test.js test/cp2DbDispatcherIntegration.test.js"
   },
   "exports": {
     "./operationalTaskLeaseAuditRepository.js": "./src/operationalTaskLeaseAuditRepository.js",
