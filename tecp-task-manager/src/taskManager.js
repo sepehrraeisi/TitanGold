@@ -59,7 +59,79 @@ import {
   DEFAULT_RUNNING_TTL_MS,
 } from './claimLease.js';
 import { buildInstructionPacket } from './instructionPacket.js';
-import { verifyTaskEvidence, VERIFY_DECISIONS } from './evidenceVerifier.js';
+import {
+  verifyTaskEvidence,
+  verifyAppendOnlyReconciliation,
+  VERIFY_DECISIONS,
+  RECONCILIATION_DECISIONS,
+  GOVERNANCE_ONLY_RULE02_PATH,
+} from './evidenceVerifier.js';
+
+const OWNER_ACK_MIN_LEN = 8;
+
+function reconciliationBinding(request) {
+  return {
+    attempt: request.expectedAttempt,
+    baseSha: String(request.expectedBaseSha || '').toLowerCase(),
+    governancePrNumber: request.governancePrNumber,
+    governanceMergeSha: String(request.expectedGovernanceMergeSha || '').toLowerCase(),
+    implementationPrNumber: request.implementationPrNumber,
+    implementationHeadSha: String(request.expectedImplementationHeadSha || '').toLowerCase(),
+    implementationMergeSha: String(request.expectedImplementationMergeSha || '').toLowerCase(),
+  };
+}
+
+function bindingsEqual(a, b) {
+  if (!a || !b) return false;
+  return a.attempt === b.attempt
+    && a.baseSha === b.baseSha
+    && a.governancePrNumber === b.governancePrNumber
+    && a.governanceMergeSha === b.governanceMergeSha
+    && a.implementationPrNumber === b.implementationPrNumber
+    && a.implementationHeadSha === b.implementationHeadSha
+    && a.implementationMergeSha === b.implementationMergeSha;
+}
+
+function isDurableReconciliation(task) {
+  const r = task && task.reconciliation;
+  if (!r || typeof r !== 'object') return false;
+  if (r.decision !== RECONCILIATION_DECISIONS.RECONCILED) return false;
+  if (r.ok !== true) return false;
+  if (r.attempt !== task.attempt) return false;
+  if (typeof r.originalBaseSha !== 'string'
+    || r.originalBaseSha.toLowerCase() !== String(task.baseSha).toLowerCase()) {
+    return false;
+  }
+  if (!task.verification
+    || task.verification.decision !== VERIFY_DECISIONS.FAIL
+    || task.verification.code !== 'BASE_SHA_MISMATCH') {
+    return false;
+  }
+  if (!task.evidence || !Number.isInteger(task.evidence.prNumber)) return false;
+  if (!r.github || !r.ownerAcknowledgement) return false;
+  if (!r.historicalEvidence
+    || r.historicalEvidence.prNumber !== task.evidence.prNumber) {
+    return false;
+  }
+  if (r.github.implementationPrNumber !== task.evidence.prNumber) return false;
+  if (isShaLike(task.evidence.headShaHint)) {
+    if (!isShaLike(r.historicalEvidence.headShaHint)
+      || r.historicalEvidence.headShaHint.toLowerCase()
+        !== task.evidence.headShaHint.toLowerCase()) {
+      return false;
+    }
+    if (!isShaLike(r.github.implementationHeadSha)
+      || r.github.implementationHeadSha.toLowerCase()
+        !== task.evidence.headShaHint.toLowerCase()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isShaLike(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
+}
 
 function result(ok, code, extra = {}) {
   return { ok, code, ...extra };
@@ -662,6 +734,183 @@ export async function createTaskManager(options) {
       });
     },
 
+    /**
+     * Owner-gated append-only reconciliation of a FAILED task.
+     * Preserves historical verification FAIL; never fabricates VERIFY PASS.
+     * Does NOT perform OWNER_ACCEPT.
+     */
+    async reconcile({
+      taskId,
+      actorId,
+      nowMs,
+      expectedAttempt,
+      expectedBaseSha,
+      governancePrNumber,
+      expectedGovernanceMergeSha,
+      implementationPrNumber,
+      expectedImplementationHeadSha,
+      expectedImplementationMergeSha,
+      ownerAcknowledgement,
+      success,
+    }) {
+      const ts = Number.isFinite(nowMs) ? nowMs : Date.now();
+      if (!actorId || typeof actorId !== 'string') {
+        return result(false, 'OWNER_ACTOR_REQUIRED');
+      }
+      if (
+        typeof ownerAcknowledgement !== 'string'
+        || ownerAcknowledgement.trim().length < OWNER_ACK_MIN_LEN
+      ) {
+        return result(false, 'OWNER_ACKNOWLEDGEMENT_REQUIRED', {
+          note: 'Explicit Owner acknowledgement text is required; actor name alone is insufficient',
+          identityLimitation:
+            'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
+        });
+      }
+
+      const task = await store.readTask(taskId);
+      if (!task) return result(false, 'TASK_NOT_FOUND');
+      if (task.status !== TASK_STATUSES.FAILED) {
+        return result(false, 'INVALID_TRANSITION', { status: task.status });
+      }
+      if (!task.verification || task.verification.decision !== VERIFY_DECISIONS.FAIL) {
+        return result(false, 'HISTORICAL_FAIL_MISSING');
+      }
+      if (task.verification.code !== 'BASE_SHA_MISMATCH') {
+        return result(false, 'WRONG_HISTORICAL_FAILURE_TYPE', {
+          expectedCode: 'BASE_SHA_MISMATCH',
+          actualCode: task.verification.code,
+        });
+      }
+      if (!task.evidence || !Number.isInteger(task.evidence.prNumber)) {
+        return result(false, 'HISTORICAL_EVIDENCE_MISSING');
+      }
+      if (
+        Number.isInteger(implementationPrNumber)
+        && implementationPrNumber !== task.evidence.prNumber
+      ) {
+        return result(false, 'IMPLEMENTATION_PR_NOT_BOUND_TO_HISTORICAL_EVIDENCE', {
+          requestedImplementationPr: implementationPrNumber,
+          historicalEvidencePr: task.evidence.prNumber,
+        });
+      }
+      if (
+        isShaLike(task.evidence.headShaHint)
+        && typeof expectedImplementationHeadSha === 'string'
+        && expectedImplementationHeadSha.toLowerCase()
+          !== task.evidence.headShaHint.toLowerCase()
+      ) {
+        return result(false, 'IMPLEMENTATION_HEAD_NOT_BOUND_TO_HISTORICAL_EVIDENCE', {
+          requestedImplementationHeadSha: expectedImplementationHeadSha,
+          historicalEvidenceHeadShaHint: task.evidence.headShaHint,
+        });
+      }
+
+      const request = {
+        expectedAttempt,
+        expectedBaseSha,
+        governancePrNumber,
+        expectedGovernanceMergeSha,
+        implementationPrNumber,
+        expectedImplementationHeadSha,
+        expectedImplementationMergeSha,
+        ownerAcknowledgement: ownerAcknowledgement.trim(),
+        success,
+      };
+      const binding = reconciliationBinding(request);
+
+      // Idempotent replay of the exact same binding — no duplicate audit.
+      if (task.reconciliation && isDurableReconciliation(task)) {
+        const existingBinding = reconciliationBinding({
+          expectedAttempt: task.reconciliation.attempt,
+          expectedBaseSha: task.reconciliation.originalBaseSha,
+          governancePrNumber: task.reconciliation.github.governancePrNumber,
+          expectedGovernanceMergeSha: task.reconciliation.github.governanceMergeSha,
+          implementationPrNumber: task.reconciliation.github.implementationPrNumber,
+          expectedImplementationHeadSha: task.reconciliation.github.implementationHeadSha,
+          expectedImplementationMergeSha: task.reconciliation.github.implementationMergeSha,
+        });
+        if (bindingsEqual(existingBinding, binding)) {
+          return result(true, 'RECONCILIATION_REPLAY', {
+            task: freezeTask(task),
+            reconciliation: task.reconciliation,
+            note: 'identical append-only reconciliation already recorded; audit not duplicated',
+            identityLimitation:
+              'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
+          });
+        }
+        return result(false, 'RECONCILIATION_CONFLICT', {
+          existing: existingBinding,
+          requested: binding,
+        });
+      }
+      if (task.reconciliation && !isDurableReconciliation(task)) {
+        return result(false, 'CORRUPT_RECONCILIATION_RECORD', {
+          note: 'existing reconciliation metadata failed validation; refusing silent grant',
+        });
+      }
+
+      const verified = await verifyAppendOnlyReconciliation(task, request, {
+        githubReader,
+        nowMs: ts,
+      });
+      if (!verified.ok) {
+        return result(false, verified.code, {
+          decision: verified.decision,
+          reconciliation: verified,
+          identityLimitation:
+            'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
+        });
+      }
+
+      const next = cloneMutable(task);
+      // Preserve historical FAIL verification, evidence, baseSha byte-for-byte.
+      if (!next.verification || next.verification.decision !== VERIFY_DECISIONS.FAIL
+        || next.verification.code !== 'BASE_SHA_MISMATCH') {
+        return result(false, 'HISTORICAL_FAIL_MISSING');
+      }
+      if (!next.evidence || next.evidence.prNumber !== task.evidence.prNumber) {
+        return result(false, 'HISTORICAL_EVIDENCE_MISSING');
+      }
+      next.status = TASK_STATUSES.FAILED;
+      next.reconciliation = Object.freeze({
+        ok: true,
+        decision: RECONCILIATION_DECISIONS.RECONCILED,
+        code: verified.code,
+        atMs: ts,
+        attempt: task.attempt,
+        originalBaseSha: task.baseSha.toLowerCase(),
+        originalFailure: verified.originalFailure,
+        historicalEvidence: verified.historicalEvidence,
+        ownerAcknowledgement: request.ownerAcknowledgement,
+        ownerActorId: actorId,
+        github: verified.github,
+        limitations: verified.limitations,
+        identityLimitation:
+          'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
+        authorityClass: 'APPEND_ONLY_RECONCILIATION_NOT_RETROSPECTIVE_VERIFY_PASS',
+        historicalStatusPreserved: TASK_STATUSES.FAILED,
+        ownerAcceptStillRequired: true,
+      });
+      next.updatedAtMs = ts;
+
+      const saved = await save(freezeTask(next), {
+        eventId: randomUUID(),
+        eventType: 'APPEND_ONLY_RECONCILIATION_RECORDED',
+        actorId,
+        atMs: ts,
+        note: verified.code,
+      });
+      if (!saved.ok) return saved;
+      return result(true, verified.code, {
+        task: saved.task,
+        reconciliation: saved.task.reconciliation,
+        identityLimitation:
+          'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
+        note: 'Historical verification remains FAIL; Owner ACCEPT remains a separate action',
+      });
+    },
+
     async accept({ taskId, actorId, nowMs, acknowledgement }) {
       const ts = Number.isFinite(nowMs) ? nowMs : Date.now();
       const cap = requireCapability(actorId, 'OWNER', 'APPROVE_MERGE');
@@ -674,8 +923,22 @@ export async function createTaskManager(options) {
 
       const task = await store.readTask(taskId);
       if (!task) return result(false, 'TASK_NOT_FOUND');
-      if (task.status !== TASK_STATUSES.EVIDENCE_VERIFIED) {
-        return result(false, 'INVALID_TRANSITION', { status: task.status });
+
+      if (task.status === TASK_STATUSES.FAILED && task.reconciliation
+        && !isDurableReconciliation(task)) {
+        return result(false, 'CORRUPT_RECONCILIATION_RECORD');
+      }
+
+      const viaOrdinaryVerify = task.status === TASK_STATUSES.EVIDENCE_VERIFIED;
+      const viaReconciliation = task.status === TASK_STATUSES.FAILED
+        && isDurableReconciliation(task);
+      if (!viaOrdinaryVerify && !viaReconciliation) {
+        return result(false, 'INVALID_TRANSITION', {
+          status: task.status,
+          note: task.status === TASK_STATUSES.FAILED
+            ? 'FAILED tasks require durable append-only reconciliation before OWNER_ACCEPT'
+            : 'only EVIDENCE_VERIFIED or FAILED+RECONCILED tasks may be accepted',
+        });
       }
 
       const next = cloneMutable(task);
@@ -688,6 +951,15 @@ export async function createTaskManager(options) {
         identityLimitation:
           'LOCAL_CLI_ACK_SAME_UID_NOT_INDEPENDENT_OWNER_AUTHENTICATION',
         authorityClass: 'LOCAL_OWNER_REVIEW_NOT_PRODUCTION_AUTHZ',
+        acceptancePath: viaReconciliation
+          ? 'AFTER_APPEND_ONLY_RECONCILIATION'
+          : 'AFTER_ORDINARY_EVIDENCE_VERIFIED',
+        historicalVerificationPreserved: viaReconciliation
+          ? {
+            decision: task.verification.decision,
+            code: task.verification.code,
+          }
+          : null,
       };
       if (next.lease) {
         const released = releaseWorkflowLease(next.lease);
@@ -891,4 +1163,6 @@ export {
   GOVERNANCE_REVISION,
   normalizeAllowlistPath,
   openFileQueueStore,
+  RECONCILIATION_DECISIONS,
+  GOVERNANCE_ONLY_RULE02_PATH,
 };
