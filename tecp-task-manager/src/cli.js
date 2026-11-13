@@ -31,11 +31,21 @@ Commands:
   start    --task-id ID --actor ACTOR          # ACK_RUNNING
   submit   --task-id ID --actor ACTOR --pr N [--head-sha SHA]
   verify   --task-id ID [--actor ACTOR]
+  reconcile --task-id ID --actor ACTOR --attempt N --base-sha SHA \\
+           --governance-pr N --governance-merge-sha SHA \\
+           --implementation-pr N --implementation-head-sha SHA \\
+           --implementation-merge-sha SHA --owner-ack TEXT
   accept   --task-id ID --actor ACTOR [--note TEXT]
   reject   --task-id ID --actor ACTOR [--reason TEXT]
   status   [--task-id ID]
   recover  --task-id ID [--actor ACTOR] [--reason TEXT]
   next
+
+Reconciliation notes:
+  - Preserves historical FAILED verification; never rewrites FAIL to PASS.
+  - Requires explicit --owner-ack text (actor name alone is insufficient).
+  - Local same-UID CLI identity is NOT independently authenticated Owner authority.
+  - Successful reconcile does NOT auto-accept; run accept separately afterward.
 
 Flags:
   --json          machine-readable JSON on stdout
@@ -247,6 +257,41 @@ async function main(argv = process.argv.slice(2)) {
         );
         break;
       }
+      case 'reconcile': {
+        out = await manager.reconcile({
+          taskId: parsed.flags['task-id'],
+          actorId: parsed.flags.actor,
+          expectedAttempt: Number(parsed.flags.attempt),
+          expectedBaseSha: parsed.flags['base-sha'],
+          governancePrNumber: Number(parsed.flags['governance-pr']),
+          expectedGovernanceMergeSha: parsed.flags['governance-merge-sha'],
+          implementationPrNumber: Number(parsed.flags['implementation-pr']),
+          expectedImplementationHeadSha: parsed.flags['implementation-head-sha'],
+          expectedImplementationMergeSha: parsed.flags['implementation-merge-sha'],
+          ownerAcknowledgement: parsed.flags['owner-ack'],
+        });
+        if (out.ok && !parsed.flags.json) {
+          console.log(
+            `RECONCILED ${out.task.taskId} code=${out.code} `
+            + `(historical FAIL preserved; Owner ACCEPT still required)`,
+          );
+          console.log(
+            'LIMITATION: local same-UID CLI acknowledgement is NOT independently authenticated Owner authority.',
+          );
+          if (out.task.reconciliation && out.task.reconciliation.limitations) {
+            for (const line of out.task.reconciliation.limitations) {
+              console.log(`  - ${line}`);
+            }
+          }
+        } else {
+          emit(
+            out.ok ? `RECONCILED ${out.task.taskId}` : `RECONCILE ${out.code}`,
+            out,
+            parsed.flags.json,
+          );
+        }
+        break;
+      }
       case 'accept': {
         out = await manager.accept({
           taskId: parsed.flags['task-id'],
@@ -286,6 +331,17 @@ async function main(argv = process.argv.slice(2)) {
           console.log(`${t.taskId}  ${t.status}  attempt=${t.attempt}  actor=${t.actorId || '-'}`);
           console.log(`  repo=${t.repository} base=${t.baseSha}`);
           console.log(`  allow=${t.fileAllowlist.join(', ')}`);
+          if (t.verification) {
+            console.log(
+              `  verification=${t.verification.decision}/${t.verification.code}`,
+            );
+          }
+          if (t.reconciliation) {
+            console.log(
+              `  reconciliation=${t.reconciliation.decision}/${t.reconciliation.code} `
+              + `(historical FAIL preserved; accept separate)`,
+            );
+          }
         } else {
           for (const t of out.tasks) {
             console.log(`${t.taskId}\t${t.status}\tattempt=${t.attempt}\tactor=${t.actorId || '-'}`);

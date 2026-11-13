@@ -29,8 +29,21 @@ export const VERIFY_DECISIONS = Object.freeze({
   UNVERIFIED: 'UNVERIFIED',
 });
 
+export const RECONCILIATION_DECISIONS = Object.freeze({
+  RECONCILED: 'RECONCILED',
+  DENY: 'DENY',
+  BLOCKED: 'BLOCKED',
+});
+
+/** Sole path permitted for governance-only base advancement. */
+export const GOVERNANCE_ONLY_RULE02_PATH =
+  '.cursor/rules/titangold-current-active-work.mdc';
+
 /** GitHub REST PR files endpoint returns at most this many entries. */
 export const GITHUB_PR_FILES_LISTING_HARD_LIMIT = 3000;
+
+/** GitHub compare API truncates the files array around this size. */
+export const GITHUB_COMPARE_FILES_SOFT_LIMIT = 300;
 
 const BLOCKED_READER_CODES = new Set([
   'GITHUB_UNAVAILABLE',
@@ -356,6 +369,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
 
       // Deliberately omit `files` from view JSON — use paginated API instead.
       // `changedFiles` here is the authoritative INTEGER count from GitHub.
+      // `mergeCommit` is required for append-only reconciliation of MERGED PRs.
       const view = runGh(
         ghPath,
         [
@@ -365,7 +379,7 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           '--repo',
           repository,
           '--json',
-          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,url,title,headRepositoryOwner,headRepository,changedFiles',
+          'number,state,baseRefOid,headRefOid,baseRefName,headRefName,url,title,headRepositoryOwner,headRepository,changedFiles,mergeCommit',
         ],
         env,
       );
@@ -438,6 +452,11 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
         };
       }
 
+      let mergeCommitOid = null;
+      if (parsed.mergeCommit && typeof parsed.mergeCommit.oid === 'string') {
+        mergeCommitOid = parsed.mergeCommit.oid;
+      }
+
       return {
         ok: true,
         code: 'OK',
@@ -452,8 +471,76 @@ export function createGhPrReader({ ghPath = 'gh', env = process.env } = {}) {
           changedFiles: filesResult.files,
           changedFilesCount: authoritativeCount,
           filesComplete: true,
+          mergeCommitOid,
           url: parsed.url,
           title: parsed.title,
+        },
+      };
+    },
+
+    /**
+     * Trusted remote ancestry / intervening-file probe via GitHub compare API.
+     * Never trusts caller-supplied ancestry booleans.
+     */
+    async compareCommits({ repository, base, head }) {
+      if (typeof repository !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(repository)) {
+        return { ok: false, code: 'INVALID_REPOSITORY', data: null };
+      }
+      if (!isSha(base) || !isSha(head)) {
+        return { ok: false, code: 'INVALID_COMPARE_SHA', data: null };
+      }
+      const api = runGh(
+        ghPath,
+        [
+          'api',
+          '-H',
+          'Accept: application/vnd.github+json',
+          `repos/${repository}/compare/${base.toLowerCase()}...${head.toLowerCase()}`,
+        ],
+        env,
+      );
+      if (api.error) {
+        return { ok: false, code: 'GITHUB_UNAVAILABLE', data: null, detail: api.error.message };
+      }
+      if (api.status !== 0) {
+        return {
+          ok: false,
+          code: 'GITHUB_QUERY_FAILED',
+          data: null,
+          detail: (api.stderr || api.stdout || '').slice(0, 500),
+        };
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(api.stdout);
+      } catch {
+        return { ok: false, code: 'GITHUB_PARSE_FAILED', data: null };
+      }
+      if (!parsed || typeof parsed.status !== 'string') {
+        return { ok: false, code: 'GITHUB_UNEXPECTED_COMPARE_SHAPE', data: null };
+      }
+      const files = Array.isArray(parsed.files)
+        ? parsed.files.map((f) => f && f.filename).filter((p) => typeof p === 'string')
+        : null;
+      if (!files) {
+        return { ok: false, code: 'GITHUB_UNEXPECTED_COMPARE_SHAPE', data: null };
+      }
+      // Compare API truncates file lists; if we hit the soft limit, completeness
+      // of intervening paths cannot be proven — BLOCK rather than PASS.
+      const filesComplete = files.length < GITHUB_COMPARE_FILES_SOFT_LIMIT;
+      return {
+        ok: true,
+        code: 'OK',
+        data: {
+          repository,
+          base: base.toLowerCase(),
+          head: head.toLowerCase(),
+          status: parsed.status,
+          aheadBy: Number.isInteger(parsed.ahead_by) ? parsed.ahead_by : null,
+          behindBy: Number.isInteger(parsed.behind_by) ? parsed.behind_by : null,
+          totalCommits: Number.isInteger(parsed.total_commits) ? parsed.total_commits : null,
+          files,
+          filesComplete,
         },
       };
     },
@@ -647,5 +734,349 @@ function blocked(code, nowMs, extra = {}) {
     code,
     atMs: nowMs,
     ...extra,
+  };
+}
+
+function reconcileDeny(code, nowMs, extra = {}) {
+  return {
+    ok: false,
+    decision: RECONCILIATION_DECISIONS.DENY,
+    code,
+    atMs: nowMs,
+    ...extra,
+  };
+}
+
+function reconcileBlocked(code, nowMs, extra = {}) {
+  return {
+    ok: false,
+    decision: RECONCILIATION_DECISIONS.BLOCKED,
+    unverified: true,
+    code,
+    atMs: nowMs,
+    ...extra,
+  };
+}
+
+function shaEq(a, b) {
+  return typeof a === 'string' && typeof b === 'string'
+    && a.toLowerCase() === b.toLowerCase();
+}
+
+function isDescendantCompare(data) {
+  if (!data) return false;
+  if (data.behindBy !== 0) return false;
+  return data.status === 'ahead' || data.status === 'identical';
+}
+
+function filesOnlyRule02(files) {
+  if (!Array.isArray(files) || files.length === 0) return false;
+  const normalized = normalizeFiles(files);
+  if (!normalized || normalized.length !== 1) return false;
+  return normalized[0] === GOVERNANCE_ONLY_RULE02_PATH;
+}
+
+/**
+ * Independently verify Owner-gated append-only reconciliation of a FAILED
+ * task whose historical verification was BASE_SHA_MISMATCH (or similar)
+ * because a governance-only Rule02 PR advanced main between task base and
+ * implementation PR base.
+ *
+ * Never fabricates retrospective VERIFY PASS. Never trusts caller success
+ * flags, ancestry booleans, or changed-file lists.
+ *
+ * @param {object} task durable task record (must retain original verification FAIL)
+ * @param {object} request Owner-supplied binding claims (verified against GitHub)
+ * @param {{ githubReader?: object, nowMs?: number }} [deps]
+ */
+export async function verifyAppendOnlyReconciliation(task, request, deps = {}) {
+  const nowMs = Number.isFinite(deps.nowMs) ? deps.nowMs : Date.now();
+  const reader = deps.githubReader || createGhPrReader();
+
+  if (request && request.success === true) {
+    // ignored intentionally — never trust caller success flags
+  }
+
+  if (!task || !Array.isArray(task.fileAllowlist) || !isSha(task.baseSha)) {
+    return reconcileDeny('INVALID_TASK', nowMs);
+  }
+  if (!request || typeof request !== 'object') {
+    return reconcileDeny('INVALID_RECONCILIATION_REQUEST', nowMs);
+  }
+  if (!Number.isInteger(request.expectedAttempt) || request.expectedAttempt !== task.attempt) {
+    return reconcileDeny('WRONG_ATTEMPT', nowMs, {
+      expectedAttempt: request.expectedAttempt,
+      taskAttempt: task.attempt,
+    });
+  }
+  if (!isSha(request.expectedBaseSha) || !shaEq(request.expectedBaseSha, task.baseSha)) {
+    return reconcileDeny('WRONG_BASE_SHA', nowMs, {
+      expectedBaseSha: request.expectedBaseSha,
+      taskBaseSha: task.baseSha,
+    });
+  }
+  if (task.status !== 'FAILED') {
+    return reconcileDeny('TASK_NOT_FAILED', nowMs, { status: task.status });
+  }
+  if (!task.verification || task.verification.decision !== VERIFY_DECISIONS.FAIL) {
+    return reconcileDeny('HISTORICAL_FAIL_MISSING', nowMs);
+  }
+  if (
+    typeof request.ownerAcknowledgement !== 'string'
+    || request.ownerAcknowledgement.trim().length < 8
+  ) {
+    return reconcileDeny('OWNER_ACKNOWLEDGEMENT_REQUIRED', nowMs);
+  }
+  if (!Number.isInteger(request.governancePrNumber) || request.governancePrNumber <= 0) {
+    return reconcileDeny('INVALID_GOVERNANCE_PR', nowMs);
+  }
+  if (!Number.isInteger(request.implementationPrNumber) || request.implementationPrNumber <= 0) {
+    return reconcileDeny('INVALID_IMPLEMENTATION_PR', nowMs);
+  }
+  if (!isSha(request.expectedGovernanceMergeSha)) {
+    return reconcileDeny('INVALID_GOVERNANCE_MERGE_SHA', nowMs);
+  }
+  if (!isSha(request.expectedImplementationHeadSha)) {
+    return reconcileDeny('INVALID_IMPLEMENTATION_HEAD_SHA', nowMs);
+  }
+  if (!isSha(request.expectedImplementationMergeSha)) {
+    return reconcileDeny('INVALID_IMPLEMENTATION_MERGE_SHA', nowMs);
+  }
+  if (typeof reader.fetchPullRequest !== 'function' || typeof reader.compareCommits !== 'function') {
+    return reconcileBlocked('GITHUB_READER_INSUFFICIENT', nowMs, {
+      detail: 'reader must expose fetchPullRequest and compareCommits',
+    });
+  }
+
+  let govRemote;
+  let implRemote;
+  let govCompare;
+  let implAncestry;
+  try {
+    govRemote = await reader.fetchPullRequest({
+      repository: task.repository,
+      prNumber: request.governancePrNumber,
+    });
+    implRemote = await reader.fetchPullRequest({
+      repository: task.repository,
+      prNumber: request.implementationPrNumber,
+    });
+    govCompare = await reader.compareCommits({
+      repository: task.repository,
+      base: task.baseSha,
+      head: request.expectedGovernanceMergeSha,
+    });
+    implAncestry = await reader.compareCommits({
+      repository: task.repository,
+      base: request.expectedGovernanceMergeSha,
+      head: request.expectedImplementationMergeSha,
+    });
+  } catch (err) {
+    return reconcileBlocked('GITHUB_UNAVAILABLE', nowMs, { detail: err && err.message });
+  }
+
+  if (!govRemote || !govRemote.ok) {
+    const code = govRemote && govRemote.code ? govRemote.code : 'GITHUB_UNAVAILABLE';
+    if (BLOCKED_READER_CODES.has(code) || code === 'GITHUB_UNAVAILABLE') {
+      return reconcileBlocked(code, nowMs, { detail: govRemote && govRemote.detail });
+    }
+    return reconcileDeny(code, nowMs, { detail: govRemote && govRemote.detail });
+  }
+  if (!implRemote || !implRemote.ok) {
+    const code = implRemote && implRemote.code ? implRemote.code : 'GITHUB_UNAVAILABLE';
+    if (BLOCKED_READER_CODES.has(code) || code === 'GITHUB_UNAVAILABLE') {
+      return reconcileBlocked(code, nowMs, { detail: implRemote && implRemote.detail });
+    }
+    return reconcileDeny(code, nowMs, { detail: implRemote && implRemote.detail });
+  }
+  if (!govCompare || !govCompare.ok) {
+    const code = govCompare && govCompare.code ? govCompare.code : 'GITHUB_UNAVAILABLE';
+    if (BLOCKED_READER_CODES.has(code) || code === 'GITHUB_UNAVAILABLE' || code === 'GITHUB_QUERY_FAILED') {
+      return reconcileBlocked(code, nowMs, { detail: govCompare && govCompare.detail });
+    }
+    return reconcileDeny(code, nowMs, { detail: govCompare && govCompare.detail });
+  }
+  if (!implAncestry || !implAncestry.ok) {
+    const code = implAncestry && implAncestry.code ? implAncestry.code : 'GITHUB_UNAVAILABLE';
+    if (BLOCKED_READER_CODES.has(code) || code === 'GITHUB_UNAVAILABLE' || code === 'GITHUB_QUERY_FAILED') {
+      return reconcileBlocked(code, nowMs, { detail: implAncestry && implAncestry.detail });
+    }
+    return reconcileDeny(code, nowMs, { detail: implAncestry && implAncestry.detail });
+  }
+
+  const gov = govRemote.data;
+  const impl = implRemote.data;
+  if (!gov || !impl) {
+    return reconcileBlocked('GITHUB_INSUFFICIENT_EVIDENCE', nowMs);
+  }
+  if (gov.repository !== task.repository || impl.repository !== task.repository) {
+    return reconcileDeny('REPOSITORY_MISMATCH', nowMs);
+  }
+  if (gov.prNumber !== request.governancePrNumber || impl.prNumber !== request.implementationPrNumber) {
+    return reconcileDeny('PR_NUMBER_MISMATCH', nowMs);
+  }
+  if (String(gov.state).toUpperCase() !== 'MERGED') {
+    return reconcileDeny('GOVERNANCE_PR_NOT_MERGED', nowMs, { state: gov.state });
+  }
+  if (String(impl.state).toUpperCase() !== 'MERGED') {
+    return reconcileDeny('IMPLEMENTATION_PR_NOT_MERGED', nowMs, { state: impl.state });
+  }
+  if (!isSha(gov.mergeCommitOid) || !shaEq(gov.mergeCommitOid, request.expectedGovernanceMergeSha)) {
+    return reconcileDeny('GOVERNANCE_MERGE_SHA_MISMATCH', nowMs, {
+      remote: gov.mergeCommitOid,
+      expected: request.expectedGovernanceMergeSha,
+    });
+  }
+  if (!isSha(impl.mergeCommitOid) || !shaEq(impl.mergeCommitOid, request.expectedImplementationMergeSha)) {
+    return reconcileDeny('IMPLEMENTATION_MERGE_SHA_MISMATCH', nowMs, {
+      remote: impl.mergeCommitOid,
+      expected: request.expectedImplementationMergeSha,
+    });
+  }
+  if (!isSha(impl.headSha) || !shaEq(impl.headSha, request.expectedImplementationHeadSha)) {
+    return reconcileDeny('IMPLEMENTATION_HEAD_SHA_MISMATCH', nowMs, {
+      remote: impl.headSha,
+      expected: request.expectedImplementationHeadSha,
+    });
+  }
+  // Governance PR must start from the original task base.
+  if (!isSha(gov.baseSha) || !shaEq(gov.baseSha, task.baseSha)) {
+    return reconcileDeny('GOVERNANCE_BASE_MISMATCH', nowMs, {
+      remote: gov.baseSha,
+      expected: task.baseSha,
+    });
+  }
+  // Implementation PR must be based on the governance merge tip (not original base).
+  if (!isSha(impl.baseSha) || !shaEq(impl.baseSha, request.expectedGovernanceMergeSha)) {
+    return reconcileDeny('IMPLEMENTATION_BASE_MISMATCH', nowMs, {
+      remote: impl.baseSha,
+      expected: request.expectedGovernanceMergeSha,
+    });
+  }
+
+  if (!gov.filesComplete || !impl.filesComplete) {
+    return reconcileBlocked('PARTIAL_OR_INCOMPLETE_FILE_LIST', nowMs);
+  }
+  if (!govCompare.data || !govCompare.data.filesComplete) {
+    return reconcileBlocked('COMPARE_FILE_LIST_INCOMPLETE', nowMs, {
+      detail: 'GitHub compare file list truncated; cannot prove Rule02-only advancement',
+    });
+  }
+  if (!implAncestry.data || implAncestry.data.filesComplete !== true) {
+    // Ancestry for merge commit only needs behindBy/status; file list completeness
+    // is still required to reject silent unrelated paths between gov and impl merge.
+    return reconcileBlocked('COMPARE_FILE_LIST_INCOMPLETE', nowMs, {
+      detail: 'GitHub compare file list truncated between governance and implementation merges',
+    });
+  }
+
+  if (!isDescendantCompare(govCompare.data)) {
+    return reconcileDeny('GOVERNANCE_NOT_DESCENDANT_OF_ORIGINAL_BASE', nowMs, {
+      compare: govCompare.data,
+    });
+  }
+  if (!filesOnlyRule02(govCompare.data.files)) {
+    return reconcileDeny('UNRELATED_BASE_ADVANCEMENT', nowMs, {
+      interveningFiles: govCompare.data.files,
+      detail: 'original-base..governance-merge must change only Rule02',
+    });
+  }
+  // Governance PR complete changed-file list must also be Rule02-only.
+  const govFiles = normalizeFiles(gov.changedFiles);
+  if (!govFiles || !filesOnlyRule02(govFiles)) {
+    return reconcileDeny('GOVERNANCE_PR_NOT_RULE02_ONLY', nowMs, {
+      changedFiles: govFiles,
+    });
+  }
+  if (gov.changedFilesCount !== 1) {
+    return reconcileDeny('GOVERNANCE_PR_NOT_RULE02_ONLY', nowMs, {
+      changedFilesCount: gov.changedFilesCount,
+    });
+  }
+
+  if (!isDescendantCompare(implAncestry.data)) {
+    return reconcileDeny('IMPLEMENTATION_MERGE_NOT_DESCENDANT_OF_GOVERNANCE', nowMs, {
+      compare: implAncestry.data,
+    });
+  }
+
+  const implFiles = normalizeFiles(impl.changedFiles);
+  if (!implFiles) {
+    return reconcileDeny('INVALID_REMOTE_FILE_LIST', nowMs);
+  }
+  const implCompleteness = assertCompleteChangedFileList({
+    files: impl.changedFiles,
+    changedFilesCount: impl.changedFilesCount,
+  });
+  if (!implCompleteness.ok) {
+    return reconcileBlocked(implCompleteness.code, nowMs, {
+      detail: implCompleteness.detail,
+    });
+  }
+  if (implFiles.length !== impl.changedFilesCount) {
+    return reconcileBlocked('FILE_COUNT_MISMATCH', nowMs);
+  }
+  const allow = new Set(task.fileAllowlist);
+  const forbidden = implFiles.filter((f) => !allow.has(f));
+  if (forbidden.length > 0) {
+    return reconcileDeny('IMPLEMENTATION_ALLOWLIST_MISMATCH', nowMs, {
+      forbidden,
+      changedFiles: implFiles,
+      allowlist: [...allow],
+    });
+  }
+  if (implFiles.length === 0) {
+    return reconcileDeny('EMPTY_CHANGED_FILE_LIST', nowMs);
+  }
+  // Reject scope expansion relative to allowlist: every allowlisted path need
+  // not appear, but no extras; already enforced. Also reject if compare between
+  // gov merge and impl merge introduces paths outside the allowlist (merge
+  // commit may include only PR files — still check).
+  const between = normalizeFiles(implAncestry.data.files);
+  if (!between) {
+    return reconcileDeny('INVALID_COMPARE_FILE_LIST', nowMs);
+  }
+  const betweenForbidden = between.filter((f) => !allow.has(f));
+  if (betweenForbidden.length > 0) {
+    return reconcileDeny('UNRELATED_PATHS_BETWEEN_GOV_AND_IMPL', nowMs, {
+      forbidden: betweenForbidden,
+    });
+  }
+
+  const limitations = Object.freeze([
+    'RECONCILED means independently verified governance-only base advancement plus matching implementation PR metadata',
+    'Historical verification decision remains FAIL and is never rewritten to PASS',
+    'RECONCILED does not mean OWNER_ACCEPTED',
+    'RECONCILED does not mean PRODUCTION_DEPLOYED',
+    'Local CLI / same-UID acknowledgement is NOT independently authenticated Owner authority',
+    'Caller-supplied success flags, ancestry booleans, and file lists are ignored',
+    'GitHub unavailable or incomplete evidence yields BLOCKED, never PASS',
+  ]);
+
+  return {
+    ok: true,
+    decision: RECONCILIATION_DECISIONS.RECONCILED,
+    code: 'APPEND_ONLY_RECONCILIATION_VERIFIED',
+    atMs: nowMs,
+    limitations,
+    originalFailure: Object.freeze({
+      decision: task.verification.decision,
+      code: task.verification.code,
+      atMs: task.verification.atMs || null,
+    }),
+    github: Object.freeze({
+      repository: task.repository,
+      originalBaseSha: task.baseSha.toLowerCase(),
+      governancePrNumber: gov.prNumber,
+      governanceMergeSha: gov.mergeCommitOid.toLowerCase(),
+      governanceBaseSha: gov.baseSha.toLowerCase(),
+      governanceChangedFiles: Object.freeze(govFiles),
+      implementationPrNumber: impl.prNumber,
+      implementationHeadSha: impl.headSha.toLowerCase(),
+      implementationMergeSha: impl.mergeCommitOid.toLowerCase(),
+      implementationBaseSha: impl.baseSha.toLowerCase(),
+      implementationChangedFiles: Object.freeze(implFiles),
+      implementationChangedFilesCount: impl.changedFilesCount,
+    }),
   };
 }

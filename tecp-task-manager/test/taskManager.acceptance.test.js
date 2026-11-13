@@ -912,3 +912,572 @@ test('independent CLI processes preserve task state; API restart replay stays co
     await fsp.rm(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Append-only Owner-gated reconciliation (authorized four-path slice)
+// ---------------------------------------------------------------------------
+
+const ORIG_BASE = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+const GOV_HEAD = 'ffffffffffffffffffffffffffffffffffffffff';
+const GOV_MERGE = '1111111111111111111111111111111111111111';
+const IMPL_HEAD = '2222222222222222222222222222222222222222';
+const IMPL_MERGE = '3333333333333333333333333333333333333333';
+const RULE02 = '.cursor/rules/titangold-current-active-work.mdc';
+const ALLOW_PATHS = [
+  'tecp-task-manager/src/taskManager.js',
+  'tecp-task-manager/test/taskManager.acceptance.test.js',
+];
+const OWNER_ACK = 'I_ACKNOWLEDGE_APPEND_ONLY_RECONCILIATION_OF_FAILED_EVIDENCE';
+
+function reconciliationReader(overrides = {}) {
+  const govFiles = overrides.govFiles || [RULE02];
+  const implFiles = overrides.implFiles || ALLOW_PATHS;
+  const govCompareFiles = overrides.govCompareFiles || [RULE02];
+  const implCompareFiles = overrides.implCompareFiles || ALLOW_PATHS;
+  const failCompare = overrides.failCompare || null;
+  const failPr = overrides.failPr || null;
+  return {
+    kind: 'INERT_RECONCILIATION_FIXTURE_READER',
+    async fetchPullRequest({ repository, prNumber }) {
+      if (failPr) return { ok: false, code: failPr, data: null };
+      if (prNumber === (overrides.govPr || 303)) {
+        return {
+          ok: true,
+          code: 'OK',
+          data: {
+            repository,
+            prNumber,
+            state: overrides.govState || 'MERGED',
+            baseSha: overrides.govBase || ORIG_BASE,
+            headSha: overrides.govHead || GOV_HEAD,
+            baseRefName: 'main',
+            headRefName: 'governance',
+            changedFiles: govFiles,
+            changedFilesCount: govFiles.length,
+            filesComplete: true,
+            mergeCommitOid: overrides.govMerge || GOV_MERGE,
+            url: `https://example.test/${repository}/pull/${prNumber}`,
+            title: 'governance',
+          },
+        };
+      }
+      if (prNumber === (overrides.implPr || 304)) {
+        return {
+          ok: true,
+          code: 'OK',
+          data: {
+            repository,
+            prNumber,
+            state: overrides.implState || 'MERGED',
+            baseSha: overrides.implBase || GOV_MERGE,
+            headSha: overrides.implHead || IMPL_HEAD,
+            baseRefName: 'main',
+            headRefName: 'impl',
+            changedFiles: implFiles,
+            changedFilesCount: implFiles.length,
+            filesComplete: true,
+            mergeCommitOid: overrides.implMerge || IMPL_MERGE,
+            url: `https://example.test/${repository}/pull/${prNumber}`,
+            title: 'impl',
+          },
+        };
+      }
+      return { ok: false, code: 'PR_NOT_FOUND', data: null };
+    },
+    async compareCommits({ repository, base, head }) {
+      if (failCompare) return { ok: false, code: failCompare, data: null };
+      const b = base.toLowerCase();
+      const h = head.toLowerCase();
+      if (b === ORIG_BASE && h === (overrides.govMerge || GOV_MERGE).toLowerCase()) {
+        return {
+          ok: true,
+          code: 'OK',
+          data: {
+            repository,
+            base: b,
+            head: h,
+            status: overrides.govCompareStatus || 'ahead',
+            aheadBy: 2,
+            behindBy: overrides.govBehindBy ?? 0,
+            totalCommits: 2,
+            files: govCompareFiles,
+            filesComplete: overrides.govCompareComplete !== false,
+          },
+        };
+      }
+      if (
+        b === (overrides.govMerge || GOV_MERGE).toLowerCase()
+        && h === (overrides.implMerge || IMPL_MERGE).toLowerCase()
+      ) {
+        return {
+          ok: true,
+          code: 'OK',
+          data: {
+            repository,
+            base: b,
+            head: h,
+            status: overrides.implCompareStatus || 'ahead',
+            aheadBy: 1,
+            behindBy: overrides.implBehindBy ?? 0,
+            totalCommits: 1,
+            files: implCompareFiles,
+            filesComplete: overrides.implCompareComplete !== false,
+          },
+        };
+      }
+      return {
+        ok: true,
+        code: 'OK',
+        data: {
+          repository,
+          base: b,
+          head: h,
+          status: 'diverged',
+          aheadBy: 1,
+          behindBy: 1,
+          totalCommits: 1,
+          files: ['unrelated/path.js'],
+          filesComplete: true,
+        },
+      };
+    },
+  };
+}
+
+async function seedFailedBaseMismatch(manager, taskId = 'task-recon-1') {
+  await manager.create(createInput({
+    taskId,
+    baseSha: ORIG_BASE,
+    fileAllowlist: ALLOW_PATHS,
+    goal: 'Idempotency durability two-path fix',
+  }));
+  await manager.claim({ taskId, actorId: 'cursor-1' });
+  await manager.prepare({ taskId, actorId: 'cursor-1' });
+  await manager.ackRunning({ taskId, actorId: 'cursor-1' });
+  // Evidence points at impl PR; verify uses ordinary reader with mismatched base.
+  await manager.submitEvidence({
+    taskId,
+    actorId: 'cursor-1',
+    prNumber: 304,
+    headShaHint: IMPL_HEAD,
+  });
+}
+
+function reconcileArgs(overrides = {}) {
+  return {
+    taskId: 'task-recon-1',
+    actorId: 'owner-1',
+    expectedAttempt: 1,
+    expectedBaseSha: ORIG_BASE,
+    governancePrNumber: 303,
+    expectedGovernanceMergeSha: GOV_MERGE,
+    implementationPrNumber: 304,
+    expectedImplementationHeadSha: IMPL_HEAD,
+    expectedImplementationMergeSha: IMPL_MERGE,
+    ownerAcknowledgement: OWNER_ACK,
+    ...overrides,
+  };
+}
+
+test('reconciliation preserves historical BASE_SHA_MISMATCH FAIL', async () => {
+  const dir = await createDisposableDataDir();
+  // First manager: ordinary verify with mismatched base -> FAILED
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+      state: 'MERGED',
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    const verified = await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    assert.equal(verified.ok, false);
+    assert.equal(verified.code, 'BASE_SHA_MISMATCH');
+    assert.equal(verified.task.status, TASK_STATUSES.FAILED);
+    assert.equal(verified.task.verification.decision, 'FAIL');
+    const failAt = verified.task.verification.atMs;
+    await m1.close();
+
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const recon = await m2.reconcile(reconcileArgs());
+    assert.equal(recon.ok, true);
+    assert.equal(recon.task.status, TASK_STATUSES.FAILED);
+    assert.equal(recon.task.verification.decision, 'FAIL');
+    assert.equal(recon.task.verification.code, 'BASE_SHA_MISMATCH');
+    assert.equal(recon.task.verification.atMs, failAt);
+    assert.equal(recon.task.reconciliation.decision, 'RECONCILED');
+    assert.equal(recon.task.reconciliation.ownerAcceptStillRequired, true);
+    assert.notEqual(recon.task.status, TASK_STATUSES.EVIDENCE_VERIFIED);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation accepts valid governance-only advancement', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const recon = await m2.reconcile(reconcileArgs());
+    assert.equal(recon.ok, true);
+    assert.equal(recon.code, 'APPEND_ONLY_RECONCILIATION_VERIFIED');
+    assert.equal(
+      recon.task.reconciliation.github.governanceChangedFiles[0],
+      RULE02,
+    );
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation rejects unrelated base advancement', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader({
+        govCompareFiles: [RULE02, 'backend/unrelated.js'],
+        govFiles: [RULE02, 'backend/unrelated.js'],
+      }),
+    });
+    const recon = await m2.reconcile(reconcileArgs());
+    assert.equal(recon.ok, false);
+    assert.ok(
+      recon.code === 'UNRELATED_BASE_ADVANCEMENT'
+      || recon.code === 'GOVERNANCE_PR_NOT_RULE02_ONLY',
+    );
+    const status = await m2.status({ taskId: 'task-recon-1' });
+    assert.equal(status.task.status, TASK_STATUSES.FAILED);
+    assert.equal(status.task.verification.decision, 'FAIL');
+    assert.equal(status.task.reconciliation, undefined);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation rejects wrong governance / implementation PR or SHAs', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const wrongGov = await m2.reconcile(reconcileArgs({ governancePrNumber: 999 }));
+    assert.equal(wrongGov.ok, false);
+    const wrongImplHead = await m2.reconcile(reconcileArgs({
+      expectedImplementationHeadSha: '4444444444444444444444444444444444444444',
+    }));
+    assert.equal(wrongImplHead.ok, false);
+    assert.equal(wrongImplHead.code, 'IMPLEMENTATION_HEAD_SHA_MISMATCH');
+    const wrongBase = await m2.reconcile(reconcileArgs({
+      expectedBaseSha: '5555555555555555555555555555555555555555',
+    }));
+    assert.equal(wrongBase.ok, false);
+    assert.equal(wrongBase.code, 'WRONG_BASE_SHA');
+    const wrongAttempt = await m2.reconcile(reconcileArgs({ expectedAttempt: 9 }));
+    assert.equal(wrongAttempt.ok, false);
+    assert.equal(wrongAttempt.code, 'WRONG_ATTEMPT');
+    await m2.close();
+    const m3 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader({
+        implFiles: [...ALLOW_PATHS, 'tecp-task-manager/package.json'],
+      }),
+    });
+    const badAllow = await m3.reconcile(reconcileArgs());
+    assert.equal(badAllow.ok, false);
+    assert.equal(badAllow.code, 'IMPLEMENTATION_ALLOWLIST_MISMATCH');
+    await m3.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation GitHub unavailable yields BLOCKED never PASS', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader({ failPr: 'GITHUB_UNAVAILABLE' }),
+    });
+    const recon = await m2.reconcile(reconcileArgs());
+    assert.equal(recon.ok, false);
+    assert.equal(recon.code, 'GITHUB_UNAVAILABLE');
+    assert.equal(recon.decision, 'BLOCKED');
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('ordinary FAILED task cannot bypass accept without reconciliation', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    const denied = await m1.accept({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'INVALID_TRANSITION');
+    assert.equal((await m1.status({ taskId: 'task-recon-1' })).task.status, TASK_STATUSES.FAILED);
+    await m1.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('successful reconciliation still requires separate OWNER_ACCEPT', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const recon = await m2.reconcile(reconcileArgs());
+    assert.equal(recon.ok, true);
+    assert.equal(recon.task.status, TASK_STATUSES.FAILED);
+    const accepted = await m2.accept({
+      taskId: 'task-recon-1',
+      actorId: 'owner-1',
+      acknowledgement: 'Owner accepts after reconciliation',
+    });
+    assert.equal(accepted.ok, true);
+    assert.equal(accepted.task.status, TASK_STATUSES.OWNER_ACCEPTED);
+    assert.equal(
+      accepted.task.ownerReview.acceptancePath,
+      'AFTER_APPEND_ONLY_RECONCILIATION',
+    );
+    assert.equal(accepted.task.verification.decision, 'FAIL');
+    assert.match(
+      accepted.task.ownerReview.identityLimitation,
+      /SAME_UID/,
+    );
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation replay is idempotent; conflicting binding DENY', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const first = await m2.reconcile(reconcileArgs());
+    assert.equal(first.ok, true);
+    const auditCount = first.task.auditTrail.filter(
+      (e) => e.eventType === 'APPEND_ONLY_RECONCILIATION_RECORDED',
+    ).length;
+    assert.equal(auditCount, 1);
+    await m2.close();
+
+    const m3 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const replay = await m3.reconcile(reconcileArgs());
+    assert.equal(replay.ok, true);
+    assert.equal(replay.code, 'RECONCILIATION_REPLAY');
+    const auditCount2 = replay.task.auditTrail.filter(
+      (e) => e.eventType === 'APPEND_ONLY_RECONCILIATION_RECORDED',
+    ).length;
+    assert.equal(auditCount2, 1);
+    const conflict = await m3.reconcile(reconcileArgs({
+      expectedImplementationMergeSha: '6666666666666666666666666666666666666666',
+    }));
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.code, 'RECONCILIATION_CONFLICT');
+    await m3.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('reconciliation requires owner acknowledgement; corrupt record DENY', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1);
+    await m1.verify({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    await m1.close();
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const missingAck = await m2.reconcile(reconcileArgs({ ownerAcknowledgement: 'short' }));
+    assert.equal(missingAck.ok, false);
+    assert.equal(missingAck.code, 'OWNER_ACKNOWLEDGEMENT_REQUIRED');
+    await m2.close();
+    // Persist a corrupt reconciliation record directly then deny accept/reconcile.
+    const store = await openFileQueueStore(dir);
+    const task = await store.readTask('task-recon-1');
+    const mutated = {
+      ...task,
+      reconciliation: { decision: 'RECONCILED', ok: true },
+    };
+    await store.writeTask(mutated);
+    await store.close();
+    const m3 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const corrupt = await m3.reconcile(reconcileArgs());
+    assert.equal(corrupt.ok, false);
+    assert.equal(corrupt.code, 'CORRUPT_RECONCILIATION_RECORD');
+    const acceptCorrupt = await m3.accept({ taskId: 'task-recon-1', actorId: 'owner-1' });
+    assert.equal(acceptCorrupt.ok, false);
+    assert.equal(acceptCorrupt.code, 'CORRUPT_RECONCILIATION_RECORD');
+    await m3.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI reconcile command wires required Owner flags', async () => {
+  const dir = await createDisposableDataDir();
+  const m1 = await createTaskManager({
+    dataDir: dir,
+    githubReader: fixtureReader({
+      baseSha: GOV_MERGE,
+      headSha: IMPL_HEAD,
+      files: ALLOW_PATHS,
+    }),
+  });
+  try {
+    await seedFailedBaseMismatch(m1, 'task-cli-recon');
+    await m1.verify({ taskId: 'task-cli-recon', actorId: 'owner-1' });
+    await m1.close();
+
+    // CLI uses default gh reader; inject via manager API path already covered.
+    // Here verify parse/help surface and that missing flags fail closed through manager
+    // when invoked with incomplete args via programmatic main.
+    process.env.TECP_TASK_MANAGER_DATA_DIR = dir;
+    const prev = process.env.TECP_TASK_MANAGER_DATA_DIR;
+    const { main } = await import('../src/cli.js');
+    const codeBefore = process.exitCode;
+    process.exitCode = 0;
+    // Missing owner-ack should fail
+    await main([
+      'reconcile',
+      '--data-dir', dir,
+      '--json',
+      '--task-id', 'task-cli-recon',
+      '--actor', 'owner-1',
+      '--attempt', '1',
+      '--base-sha', ORIG_BASE,
+      '--governance-pr', '303',
+      '--governance-merge-sha', GOV_MERGE,
+      '--implementation-pr', '304',
+      '--implementation-head-sha', IMPL_HEAD,
+      '--implementation-merge-sha', IMPL_MERGE,
+      // no --owner-ack
+    ]);
+    assert.equal(process.exitCode, 1);
+    process.exitCode = codeBefore;
+    process.env.TECP_TASK_MANAGER_DATA_DIR = prev;
+
+    // Manager-level success with injected reader remains the durable proof path.
+    const m2 = await createTaskManager({
+      dataDir: dir,
+      githubReader: reconciliationReader(),
+    });
+    const recon = await m2.reconcile(reconcileArgs({ taskId: 'task-cli-recon' }));
+    assert.equal(recon.ok, true);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
