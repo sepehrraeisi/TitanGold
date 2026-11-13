@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fsp from 'node:fs/promises';
-import { createDisposableDataDir } from '../src/fileQueueStore.js';
+import { createDisposableDataDir, openFileQueueStore } from '../src/fileQueueStore.js';
 import { createTaskManager, TASK_STATUSES } from '../src/taskManager.js';
 import { main as cliMain } from '../src/cli.js';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CLI_PATH = path.join(PKG_ROOT, 'src', 'cli.js');
 
 const BASE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const HEAD = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -649,4 +655,260 @@ test('inconsistent PR metadata is rejected', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.code, 'INCONSISTENT_PR_METADATA');
   assert.equal(result.decision, 'FAIL');
+});
+
+async function runCliJson(dataDir, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [CLI_PATH, '--json', '--data-dir', dataDir, ...args], {
+      cwd: PKG_ROOT,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      let payload = null;
+      try {
+        payload = JSON.parse(stdout);
+      } catch {
+        payload = { parseError: true, stdout, stderr };
+      }
+      resolve({ code, payload, stdout, stderr });
+    });
+  });
+}
+
+test('idempotent claim same-key replay after manager restart', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-claim-restart-1';
+  try {
+    const m1 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await m1.create(createInput());
+    const first = await m1.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    assert.equal(first.ok, true);
+    assert.equal(first.task.attempt, 1);
+    assert.equal(first.task.status, TASK_STATUSES.CLAIMED);
+    assert.ok(first.task.idempotencyRecords?.[key]);
+    await m1.close();
+
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const replay = await m2.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    assert.equal(replay.ok, true);
+    assert.equal(replay.code, 'IDEMPOTENT_REPLAY');
+    assert.equal(replay.task.attempt, 1);
+    assert.equal(replay.task.status, TASK_STATUSES.CLAIMED);
+    assert.equal(replay.task.actorId, 'cursor-1');
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('idempotent claim conflicting-key reuse denied after restart', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-claim-conflict-1';
+  try {
+    const m1 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await m1.create(createInput());
+    const first = await m1.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    assert.equal(first.ok, true);
+    await m1.close();
+
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const conflict = await m2.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-2',
+      idempotencyKey: key,
+    });
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.code, 'IDEMPOTENCY_CONFLICT');
+    const status = await m2.status({ taskId: 'task-1' });
+    assert.equal(status.task.attempt, 1);
+    assert.equal(status.task.actorId, 'cursor-1');
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('idempotent claim stale-attempt denial', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-claim-stale-1';
+  try {
+    const m1 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await m1.create(createInput());
+    const first = await m1.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+      attempt: 1,
+    });
+    assert.equal(first.ok, true);
+    await m1.close();
+
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const stale = await m2.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+      attempt: 99,
+    });
+    assert.equal(stale.ok, false);
+    assert.equal(stale.code, 'STALE_ATTEMPT');
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('failed claim does not durable-consume idempotency key', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-claim-no-consume-on-fail';
+  try {
+    const manager = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await manager.create(createInput({ taskId: 'a' }));
+    await manager.create(createInput({ taskId: 'b', goal: 'also a.md' }));
+    await manager.claim({ taskId: 'a', actorId: 'cursor-1' });
+    const denied = await manager.claim({
+      taskId: 'b',
+      actorId: 'cursor-2',
+      idempotencyKey: key,
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.code, 'RESOURCE_CONFLICT');
+    await manager.close();
+
+    // After restart, key must still be usable for a fresh PENDING task.
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await m2.create(createInput({
+      taskId: 'c',
+      goal: 'Edit docs/c.md only',
+      fileAllowlist: ['docs/c.md'],
+    }));
+    const okClaim = await m2.claim({
+      taskId: 'c',
+      actorId: 'cursor-3',
+      idempotencyKey: key,
+    });
+    assert.equal(okClaim.ok, true);
+    assert.equal(okClaim.task.attempt, 1);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('crash before durable idempotency record allows safe retry; corrupt ledger denies', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-crash-safe-1';
+  try {
+    const m1 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    await m1.create(createInput());
+    await m1.close();
+
+    // Simulate crash after claim state write but before idempotency binding:
+    // task is CLAIMED without idempotencyRecords → restart must not invent a grant.
+    const store = await openFileQueueStore(dir);
+    const task = await store.readTask('task-1');
+    task.status = TASK_STATUSES.CLAIMED;
+    task.actorId = 'cursor-1';
+    task.attempt = 1;
+    task.lease = {
+      leaseId: 'lease-sim',
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      attempt: 1,
+      status: 'ACTIVE',
+      issuedAtMs: 1,
+      expiresAtMs: Date.now() + 60_000,
+      branchName: null,
+    };
+    delete task.idempotencyRecords;
+    await store.writeTask(task);
+    await store.close();
+
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const again = await m2.claim({
+      taskId: 'task-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    // Already claimed — no second active claim; key remains unconsumed.
+    assert.equal(again.ok, false);
+    assert.equal(again.code, 'INVALID_TRANSITION');
+    await m2.close();
+
+    // Corrupt durable ledger must fail closed on open / claim path.
+    const store2 = await openFileQueueStore(dir);
+    const t2 = await store2.readTask('task-1');
+    t2.idempotencyRecords = { [key]: { operation: 'not-an-object', attempt: 1 } };
+    await store2.writeTask(t2);
+    await store2.close();
+
+    await assert.rejects(
+      () => createTaskManager({ dataDir: dir, githubReader: fixtureReader() }),
+      (err) => err && err.code === 'CORRUPT_IDEMPOTENCY_LEDGER',
+    );
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('independent CLI processes preserve task state; API restart replay stays consistent', async () => {
+  const dir = await createDisposableDataDir();
+  const key = 'idem-cli-process-1';
+  try {
+    const created = await runCliJson(dir, [
+      'create',
+      '--task-id', 'task-cli-1',
+      '--owner', 'owner-1',
+      '--repo', 'sepehrraeisi/TitanGold',
+      '--base-sha', BASE,
+      '--goal', 'Edit docs/a.md only',
+      '--allow', 'docs/a.md',
+    ]);
+    assert.equal(created.payload.ok, true);
+
+    const m1 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const claim = await m1.claim({
+      taskId: 'task-cli-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    assert.equal(claim.ok, true);
+    await m1.close();
+
+    const statusProc = await runCliJson(dir, ['status', '--task-id', 'task-cli-1']);
+    assert.equal(statusProc.payload.ok, true);
+    assert.equal(statusProc.payload.task.status, TASK_STATUSES.CLAIMED);
+    assert.equal(statusProc.payload.task.attempt, 1);
+    assert.ok(statusProc.payload.task.idempotencyRecords?.[key]);
+
+    const m2 = await createTaskManager({ dataDir: dir, githubReader: fixtureReader() });
+    const replay = await m2.claim({
+      taskId: 'task-cli-1',
+      actorId: 'cursor-1',
+      idempotencyKey: key,
+    });
+    assert.equal(replay.code, 'IDEMPOTENT_REPLAY');
+    assert.equal(replay.task.attempt, 1);
+    await m2.close();
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
 });

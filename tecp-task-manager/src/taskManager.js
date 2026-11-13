@@ -114,6 +114,8 @@ export async function createTaskManager(options) {
     ? options.runningTtlMs
     : DEFAULT_RUNNING_TTL_MS;
   const githubReader = options.githubReader || null;
+  // Process-local cache of durable idempotency ledger entries.
+  // Populated from task records on open; updated only AFTER a successful writeTask.
   const seenIdempotency = new Map();
 
   async function loadAllTasks() {
@@ -124,6 +126,68 @@ export async function createTaskManager(options) {
       if (t) tasks.push(freezeTask(t));
     }
     return tasks;
+  }
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function copyIdempotencyRecords(records) {
+    if (records == null) return {};
+    if (!isPlainObject(records)) return null;
+    const out = {};
+    for (const [key, entry] of Object.entries(records)) {
+      if (!isPlainObject(entry) || !isPlainObject(entry.operation)) return null;
+      if (!Number.isInteger(entry.attempt) || entry.attempt < 0) return null;
+      const validated = validateOperation(entry.operation);
+      if (!validated.valid) return null;
+      if (validated.operation.idempotencyKey !== key) return null;
+      out[key] = {
+        operation: { ...validated.operation },
+        attempt: entry.attempt,
+        recordedAtMs: Number.isFinite(entry.recordedAtMs) ? entry.recordedAtMs : null,
+      };
+    }
+    return out;
+  }
+
+  /**
+   * Rebuild in-memory idempotency index from durable task records.
+   * Fail closed on corrupt ledger data (never silent grant).
+   */
+  async function hydrateIdempotencyFromStore() {
+    seenIdempotency.clear();
+    const tasks = await loadAllTasks();
+    for (const task of tasks) {
+      if (task.idempotencyRecords == null) continue;
+      const copied = copyIdempotencyRecords(task.idempotencyRecords);
+      if (copied == null) {
+        return result(false, 'CORRUPT_IDEMPOTENCY_LEDGER', {
+          taskId: task.taskId,
+          note: 'durable idempotencyRecords failed validation; refusing silent grant',
+        });
+      }
+      for (const [key, entry] of Object.entries(copied)) {
+        if (seenIdempotency.has(key)) {
+          return result(false, 'CORRUPT_IDEMPOTENCY_LEDGER', {
+            taskId: task.taskId,
+            note: 'duplicate durable idempotency key across tasks',
+          });
+        }
+        seenIdempotency.set(key, {
+          operation: entry.operation,
+          attempt: entry.attempt,
+          sourceTaskId: task.taskId,
+        });
+      }
+    }
+    return result(true, 'OK');
+  }
+
+  const hydrated = await hydrateIdempotencyFromStore();
+  if (!hydrated.ok) {
+    await store.close();
+    throw Object.assign(new Error(hydrated.code), hydrated);
   }
 
   async function save(task, auditEvent) {
@@ -196,21 +260,58 @@ export async function createTaskManager(options) {
     return claims;
   }
 
-  async function checkIdempotency(op) {
+  /**
+   * Lookup durable idempotency binding. Does NOT reserve a key on miss —
+   * successful CLAIM must persist the binding atomically with the state change,
+   * then update the in-memory cache.
+   */
+  async function checkIdempotency(op, { expectedAttempt } = {}) {
     const validated = validateOperation(op);
     if (!validated.valid) {
       return result(false, validated.decision);
     }
+
+    // Re-hydrate from durable store so CLI/process restarts and concurrent
+    // manager reopenings observe committed bindings (not process-local only).
+    const hydrate = await hydrateIdempotencyFromStore();
+    if (!hydrate.ok) return hydrate;
+
     const prev = seenIdempotency.get(op.idempotencyKey);
     if (!prev) {
-      seenIdempotency.set(op.idempotencyKey, validated.operation);
-      return result(true, 'OK', { replay: false });
+      return result(true, 'OK', {
+        replay: false,
+        operation: validated.operation,
+      });
     }
-    const cmp = compareIdempotency(prev, validated.operation);
+
+    const cmp = compareIdempotency(prev.operation, validated.operation);
     if (cmp.decision === IDEMPOTENCY_COMPARISON_DECISIONS.SAME_OPERATION) {
-      return result(true, 'IDEMPOTENT_REPLAY', { replay: true });
+      if (Number.isInteger(expectedAttempt) && expectedAttempt !== prev.attempt) {
+        return result(false, 'STALE_ATTEMPT', {
+          expectedAttempt,
+          boundAttempt: prev.attempt,
+          sourceTaskId: prev.sourceTaskId,
+        });
+      }
+      return result(true, 'IDEMPOTENT_REPLAY', {
+        replay: true,
+        operation: validated.operation,
+        boundAttempt: prev.attempt,
+        sourceTaskId: prev.sourceTaskId,
+      });
     }
-    return result(false, 'IDEMPOTENCY_CONFLICT', { comparison: cmp.decision });
+    return result(false, 'IDEMPOTENCY_CONFLICT', {
+      comparison: cmp.decision,
+      sourceTaskId: prev.sourceTaskId,
+    });
+  }
+
+  function rememberIdempotency(key, entry) {
+    seenIdempotency.set(key, {
+      operation: { ...entry.operation },
+      attempt: entry.attempt,
+      sourceTaskId: entry.sourceTaskId,
+    });
   }
 
   const api = {
@@ -251,11 +352,19 @@ export async function createTaskManager(options) {
       });
     },
 
-    async claim({ taskId, actorId, actorType = 'CURSOR_WORKER', nowMs, idempotencyKey }) {
+    async claim({
+      taskId,
+      actorId,
+      actorType = 'CURSOR_WORKER',
+      nowMs,
+      idempotencyKey,
+      attempt: expectedAttempt,
+    }) {
       const ts = Number.isFinite(nowMs) ? nowMs : Date.now();
       const cap = requireCapability(actorId, actorType, 'CLAIM_TASK');
       if (cap.decision !== 'ALLOW') return result(false, cap.decision);
 
+      let pendingIdempotencyOperation = null;
       if (idempotencyKey) {
         const idem = await checkIdempotency({
           idempotencyKey,
@@ -263,18 +372,33 @@ export async function createTaskManager(options) {
           actorId,
           operationType: 'CLAIM',
           governanceRevision: GOVERNANCE_REVISION,
-        });
+        }, { expectedAttempt: Number.isInteger(expectedAttempt) ? expectedAttempt : undefined });
         if (!idem.ok) return idem;
         if (idem.replay) {
           const task = await store.readTask(taskId);
-          return result(true, 'IDEMPOTENT_REPLAY', { task: task ? freezeTask(task) : null });
+          if (!task) return result(false, 'TASK_NOT_FOUND');
+          // Replay must never mint a second active claim / bump attempt.
+          if (Number.isInteger(idem.boundAttempt) && task.attempt !== idem.boundAttempt) {
+            return result(false, 'STALE_ATTEMPT', {
+              expectedAttempt: idem.boundAttempt,
+              actualAttempt: task.attempt,
+            });
+          }
+          return result(true, 'IDEMPOTENT_REPLAY', { task: freezeTask(task) });
         }
+        pendingIdempotencyOperation = idem.operation;
       }
 
       const task = await store.readTask(taskId);
       if (!task) return result(false, 'TASK_NOT_FOUND');
       if (task.status !== TASK_STATUSES.PENDING) {
         return result(false, 'INVALID_TRANSITION', { status: task.status });
+      }
+      if (Number.isInteger(expectedAttempt) && expectedAttempt !== task.attempt + 1) {
+        return result(false, 'STALE_ATTEMPT', {
+          expectedAttempt,
+          nextAttempt: task.attempt + 1,
+        });
       }
 
       const tasks = await loadAllTasks();
@@ -314,12 +438,36 @@ export async function createTaskManager(options) {
       next.attempt = attempt;
       next.lease = lease.lease;
       next.updatedAtMs = ts;
-      return save(freezeTask(next), {
+
+      // Persist idempotency binding atomically with the claim state change.
+      // Do not update the process-local cache until writeTask succeeds.
+      if (pendingIdempotencyOperation) {
+        const existingRecords = copyIdempotencyRecords(task.idempotencyRecords || {});
+        if (existingRecords == null) {
+          return result(false, 'CORRUPT_IDEMPOTENCY_LEDGER', { taskId });
+        }
+        existingRecords[pendingIdempotencyOperation.idempotencyKey] = {
+          operation: { ...pendingIdempotencyOperation },
+          attempt,
+          recordedAtMs: ts,
+        };
+        next.idempotencyRecords = existingRecords;
+      }
+
+      const saved = await save(freezeTask(next), {
         eventId: randomUUID(),
         eventType: 'TASK_CLAIMED',
         actorId,
         atMs: ts,
       });
+      if (saved.ok && pendingIdempotencyOperation) {
+        rememberIdempotency(pendingIdempotencyOperation.idempotencyKey, {
+          operation: pendingIdempotencyOperation,
+          attempt,
+          sourceTaskId: taskId,
+        });
+      }
+      return saved;
     },
 
     async prepare({ taskId, actorId, nowMs }) {
