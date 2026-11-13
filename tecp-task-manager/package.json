@@ -1,0 +1,22 @@
+{
+  "name": "@titangold/tecp-task-manager",
+  "version": "0.1.0-v1",
+  "private": true,
+  "type": "module",
+  "description": "TECP single-Cursor Task Manager V1. Local atomic JSONL queue with supervised manual Cursor handoff. NOT production TECP authorization, fencing, Worker, MCP, or dispatcher authority.",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "tecp-task-manager": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "cli": "node src/cli.js"
+  },
+  "exports": {
+    ".": "./src/taskManager.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
