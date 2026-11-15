@@ -41,6 +41,11 @@ export const OPS_PILOT_TIER3_AUTHORIZED = false;
 export const TIER3_ACTIVATION_AUTHORITY = 'TIER3_ACTIVATION_AUTHORITY_UNPROVEN';
 /** Canonical main tip after PR #295 merge. Future Owner Tier-3 execution must re-pin. */
 export const OPS_PILOT_PINNED_MAIN_SHA = 'ee26aa367475c0002b077bd0ae02838ce8c055e6';
+/** Governance merge base for offline five-path implementation (PR #307). */
+export const OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA =
+  '361eaab9d449f3070b87b5ad0c88e5f5a38da49d';
+export const OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY =
+  'REQUIRES_SEPARATE_OWNER_AUTHORIZED_ACTIVATION_ERA_PIN_NOT_THIS_OFFLINE_IMPL';
 export const OPS_PILOT_OWNER_RUNNER_ARGV_MARKER = '--tecp-ops-s2-owner-controlled-local-runner';
 export const OPS_PILOT_DEFAULT_ONESHOT_TTL_MS = 120000;
 export const OPS_PILOT_MAX_ONESHOT_TTL_MS = 300000;
@@ -56,6 +61,10 @@ export const OPS_PILOT_APPROVED_TEST_ACTIONS = Object.freeze([
 export const TIER3_FINAL_EXECUTION_CONTRACT = Object.freeze({
   repository: 'sepehrraeisi/TitanGold',
   pinnedMainSha: OPS_PILOT_PINNED_MAIN_SHA,
+  governanceMergeBaseSha: OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA,
+  liveActivationShaPolicy: OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
+  ownerCapabilityVerifierPath:
+    'tecp-ops-persistence/scripts/s2Tier3OwnerCapabilityVerifier.js',
   ownerApproval: 'SEPARATELY_REQUIRED',
   executionPrincipal: 'EXPLICITLY_UNVERIFIED_AS_OWNER',
   executorIdentity: 'EXPLICITLY_UNVERIFIED_AS_OWNER_CUSTODY',
@@ -89,10 +98,12 @@ export const TIER3_READINESS_VERDICTS = Object.freeze({
 
 export const OPS_PILOT_OWNER_RUNNER_RELATIVE_PATH =
   'tecp-ops-persistence/scripts/ownerControlledTier3LocalRunner.js';
+export const OPS_PILOT_OWNER_CAPABILITY_VERIFIER_RELATIVE_PATH =
+  'tecp-ops-persistence/scripts/s2Tier3OwnerCapabilityVerifier.js';
 
 /**
- * Five-file offline completion leaves no additional *source* paths required.
- * Remaining blockers are external Owner custody / separate live authorization.
+ * Five-path offline completion: verifier path is in-repo; latch install remains external.
+ * Remaining blockers are Owner custody / recovery-admin / separate live authorization.
  */
 export const TIER3_REQUIRED_ADDITIONAL_PATHS = Object.freeze([]);
 
@@ -100,6 +111,9 @@ export const TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS = Object.freeze([
   'INDEPENDENT_OWNER_INVOCATION_OR_CUSTODY_BOUNDARY_OUTSIDE_UNTRUSTED_NODE_PROCESS',
   'SEPARATE_EXPLICIT_OWNER_TIER3_LIVE_EXECUTION_INSTRUCTION',
   'FRESH_EXACT_SHA_SAFETY_PREFLIGHT_BEFORE_ANY_PG_SPAWN',
+  'VERIFIED_S2_TIER3_OWNER_CAPABILITY_VIA_PUBLIC_KEY_ONLY_VERIFIER',
+  'OPS_PILOT_OWNER_CAPABILITY_VERIFIER_RELATIVE_PATH',
+  'OWNER_CUSTODY_AND_RECOVERY_ADMIN_INDEPENDENTLY_PROVEN_OUTSIDE_UNTRUSTED_NODE',
 ]);
 
 export const ONE_SHOT_STATES = Object.freeze({
@@ -151,6 +165,9 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_OWNER_AUTHENTICATION_UNPROVEN: 'DENY_OWNER_AUTHENTICATION_UNPROVEN',
   DENY_FINAL_EXECUTION_NOT_READY: 'DENY_FINAL_EXECUTION_NOT_READY',
   DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING: 'DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING',
+  DENY_OWNER_CAPABILITY_INVALID: 'DENY_OWNER_CAPABILITY_INVALID',
+  DENY_OWNER_CUSTODY_NOT_PROVEN: 'DENY_OWNER_CUSTODY_NOT_PROVEN',
+  DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
   DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
 });
@@ -1777,6 +1794,54 @@ export function evaluateIndependentOwnerCapability(capability = null) {
     ownerInvocationIndependentlyVerifiable: true,
     ownerAuthenticationProven: true,
   });
+}
+
+/**
+ * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
+ * Never mints independentOwnerCapabilityLatch or live tickets in this offline slice.
+ */
+export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
+  const verified = input.verifiedCapability || input.capabilityVerification || null;
+  if (!verified || verified.ok !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CAPABILITY_INVALID, [
+      'VERIFIED_OWNER_CAPABILITY_REQUIRED',
+      ...(verified?.reasons || []),
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
+  }
+  if (input.ownerCustodyProven !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
+      'OWNER_CUSTODY_NOT_PROVEN',
+      'VERIFY_ONLY_NOT_CUSTODY_PROOF',
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+    });
+  }
+  if (input.recoveryAdminProven !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RECOVERY_ADMIN_NOT_PROVEN, [
+      'RECOVERY_ADMIN_NOT_PROVEN',
+    ], {
+      liveSpawnEligible: false,
+      recoveryAdminProven: false,
+    });
+  }
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true || OPS_PILOT_TIER3_AUTHORIZED === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
+      'LIVE_DB_GATE_CLOSED',
+      OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
+      'INDEPENDENT_OWNER_CAPABILITY_LATCH_NOT_MINTED_IN_REPO',
+    ], {
+      liveSpawnEligible: false,
+      liveGateClosed: true,
+    });
+  }
+  return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
+    'DEFAULT_FAIL_CLOSED_OFFLINE_IMPLEMENTATION',
+  ], { liveSpawnEligible: false });
 }
 
 /**
