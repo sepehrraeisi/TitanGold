@@ -7,7 +7,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -75,11 +75,32 @@ import {
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
   OPS_PILOT_HARNESS_DECISIONS,
   OPS_PILOT_PINNED_MAIN_SHA,
+  OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA,
+  OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
   consumeRunnerOfflineSuiteGrant,
   createRunnerOfflineSuiteGrantForTests,
+  evaluateLiveSpawnAuthorizationFromOwnerCapability,
+  evaluateOwnerControlledLocalRunnerEvidence,
+  evaluateTier3FinalExecutionReadiness,
   isPrivilegedTier3ActivationHandle,
   isRunnerOfflineSuiteGrant,
 } from '../src/disposableOpsPilotDbHarness.js';
+import {
+  evaluateVerifiedCapabilityLiveSpawnEligibility,
+  S2_OWNER_CAPABILITY_ISSUER,
+  S2_OWNER_CAPABILITY_KIND,
+  S2_OWNER_CAPABILITY_PURPOSE,
+  S2_OWNER_CAPABILITY_REPOSITORY_ID,
+  S2_TIER3_OWNER_CAPABILITY_DECISIONS,
+  verifyS2Tier3OwnerCapabilityArtifact,
+  getVerifierImportSideEffectsReport,
+  __testOnlyRegisterOwnerPublicKeyForVerification,
+  __testOnlyRegisterReplayJti,
+  __testOnlyRegisterRevokedJti,
+  __testOnlyResetS2Tier3OwnerCapabilityRegistries,
+  __testOnlySetRevocationRegistryUnavailable,
+} from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
+import { invokeOwnerControlledTier3LocalRunner } from '../scripts/ownerControlledTier3LocalRunner.js';
 import {
   assertPublicBrandRegistrationIsNotDbAuthority,
   projectFromTrustedValidateWriteLease,
@@ -107,6 +128,65 @@ export const POSTGRES_EXECUTION_AUTHORIZED = false;
 export const DB_TIER3_NOT_AUTHORIZED = 'DB_TIER3_NOT_AUTHORIZED';
 export const DISPATCHER_PROOF_CLASS_OFFLINE = 'OFFLINE_ORCHESTRATION_NOT_LIVE_PG';
 export const DISPATCHER_PROOF_CLASS_LIVE = 'LIVE_DISPOSABLE_PG_DISPATCHER_MATRIX';
+
+const S2_CLAIM_KEY_ORDER = Object.freeze([
+  'alg',
+  'capabilityId',
+  'exp',
+  'iss',
+  'jti',
+  'kid',
+  'kind',
+  'nbf',
+  'pinnedMainSha',
+  'purpose',
+  'repositoryId',
+  'suitePath',
+]);
+
+function canonicalS2OwnerCapabilityClaimsJson(value) {
+  const parts = [];
+  for (const key of S2_CLAIM_KEY_ORDER) {
+    const v = value[key];
+    if (typeof v === 'string') {
+      parts.push(`"${key}":"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+    } else {
+      parts.push(`"${key}":${v}`);
+    }
+  }
+  return `{${parts.join(',')}}`;
+}
+
+function signS2OwnerCapabilityTokenForTests(claims, privateKeyPem) {
+  const payload = canonicalS2OwnerCapabilityClaimsJson(claims);
+  const signature = sign(null, Buffer.from(payload, 'utf8'), createPrivateKey(privateKeyPem));
+  return `${Buffer.from(payload, 'utf8').toString('base64url')}.${Buffer.from(signature).toString('base64url')}`;
+}
+
+let __dispatcherJtiCounter = 0;
+function nextDispatcherJti(prefix) {
+  __dispatcherJtiCounter += 1;
+  return `${prefix}-${__dispatcherJtiCounter}`;
+}
+
+function buildBaseS2OwnerCapabilityClaims(overrides = {}) {
+  const nowMs = 1_700_000_100_000;
+  return {
+    alg: 'Ed25519',
+    capabilityId: 's2-wsl-lab-dispatcher-cap-v1',
+    exp: nowMs + 120_000,
+    iss: S2_OWNER_CAPABILITY_ISSUER,
+    jti: nextDispatcherJti('jti-dispatcher'),
+    kid: 's2-dispatcher-test-owner-kid',
+    kind: S2_OWNER_CAPABILITY_KIND,
+    nbf: nowMs,
+    pinnedMainSha: OPS_PILOT_PINNED_MAIN_SHA,
+    purpose: S2_OWNER_CAPABILITY_PURPOSE,
+    repositoryId: S2_OWNER_CAPABILITY_REPOSITORY_ID,
+    suitePath: DISPATCHER_DB_SUITE_PATH,
+    ...overrides,
+  };
+}
 
 export const DISPATCHER_LIVE_SQL_CATALOG = Object.freeze([
   'test_only_composition_atomic_commit',
@@ -732,5 +812,150 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     });
     assert.equal(replay.ok, false);
     assert.equal(replay.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY);
+  });
+
+  it('6) offline S2 Owner capability negative security matrix (DB-free)', async () => {
+    assert.equal(getVerifierImportSideEffectsReport().postgresActions, 0);
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-dispatcher-test-owner-kid', publicPem);
+
+    const deps = { __testMode: true, nowMs: 1_700_000_100_500 };
+    const valid = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(buildBaseS2OwnerCapabilityClaims(), privatePem),
+      {},
+      deps,
+    );
+    assert.equal(valid.ok, true);
+
+    const wrongKeys = generateKeyPairSync('ed25519');
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+    __testOnlyRegisterOwnerPublicKeyForVerification(
+      's2-dispatcher-test-owner-kid',
+      wrongKeys.publicKey.export({ type: 'spki', format: 'pem' }),
+    );
+    const invalidSig = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(buildBaseS2OwnerCapabilityClaims(), privatePem),
+      {},
+      deps,
+    );
+    assert.equal(invalidSig.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_INVALID_SIGNATURE);
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-dispatcher-test-owner-kid', publicPem);
+
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact('not-a-token', {}, deps).ok,
+      false,
+    );
+
+    const liveCap = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: valid,
+      ownerCustodyProven: true,
+      recoveryAdminProven: true,
+    });
+    assert.equal(liveCap.ok, false);
+    assert.equal(liveCap.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED);
+
+    assert.equal(
+      evaluateVerifiedCapabilityLiveSpawnEligibility(valid, {
+        ownerCustodyProven: true,
+        recoveryAdminProven: true,
+      }).ok,
+      false,
+    );
+
+    assert.equal(OPERATIONAL_DISPATCH_AUTHORIZED, false);
+    assert.equal(DISPATCHER_MODULE_OPERATIONAL_FLAG, false);
+
+    const liveRunner = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      ownerCapabilityToken: signS2OwnerCapabilityTokenForTests(
+        buildBaseS2OwnerCapabilityClaims(),
+        privatePem,
+      ),
+      ownerCustodyProven: true,
+      recoveryAdminProven: true,
+      authorizeLivePostgresSpawn: true,
+      spawnSyncFn: () => ({ status: 0, stdout: '', stderr: '' }),
+    });
+    assert.equal(liveRunner.ok, false);
+
+    __testOnlyRegisterReplayJti('replay-dispatcher-jti');
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(
+        signS2OwnerCapabilityTokenForTests(
+          buildBaseS2OwnerCapabilityClaims({ jti: 'replay-dispatcher-jti' }),
+          privatePem,
+        ),
+        {},
+        deps,
+      ).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY,
+    );
+
+    __testOnlyRegisterRevokedJti('revoked-dispatcher-jti');
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(
+        signS2OwnerCapabilityTokenForTests(
+          buildBaseS2OwnerCapabilityClaims({ jti: 'revoked-dispatcher-jti' }),
+          privatePem,
+        ),
+        {},
+        deps,
+      ).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REVOKED,
+    );
+
+    __testOnlySetRevocationRegistryUnavailable(true);
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(
+        signS2OwnerCapabilityTokenForTests(buildBaseS2OwnerCapabilityClaims(), privatePem),
+        {},
+        deps,
+      ).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REVOCATION_UNAVAILABLE,
+    );
+    __testOnlySetRevocationRegistryUnavailable(false);
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-dispatcher-test-owner-kid', publicPem);
+
+    const trustAnchorCaller = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(buildBaseS2OwnerCapabilityClaims(), privatePem),
+      { publicKey: publicPem },
+      deps,
+    );
+    assert.equal(
+      trustAnchorCaller.decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WORKER_SUPPLIED_TRUST_ANCHOR,
+    );
+
+    const argvDeny = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      affirmSameUidLimitationsAccepted: true,
+      ownerControlledLocalRunnerInvocation: true,
+    }, { argv: ['node', '--fake-marker', DISPATCHER_DB_SUITE_PATH] });
+    assert.equal(argvDeny.ok, false);
+
+    assert.equal((await invokeOwnerControlledTier3LocalRunner({ envAuthorized: true, suitePath: DISPATCHER_DB_SUITE_PATH })).ok, false);
+    assert.equal((await invokeOwnerControlledTier3LocalRunner({ authorizeByUid: true, suitePath: DISPATCHER_DB_SUITE_PATH })).ok, false);
+
+    const cleanupFail = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      spawnSyncFn: () => ({ status: 0, stdout: '', stderr: '' }),
+      inspectFn: () => ({ status: 'RUNNING', reason: 'stuck' }),
+      stopFn: () => ({ status: 1 }),
+    });
+    assert.equal(cleanupFail.ok, false);
+
+    const readiness = evaluateTier3FinalExecutionReadiness({
+      fiveFileOfflineIntegrationComplete: true,
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+    });
+    assert.equal(readiness.executionContract.governanceMergeBaseSha, OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA);
+    assert.equal(readiness.executionContract.liveActivationShaPolicy, OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY);
   });
 });

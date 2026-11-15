@@ -8,6 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -43,12 +44,35 @@ import {
   createInertOfflineOneShotTicketForTests,
   createPrivilegedTier3ActivationHandleForTests,
   createRunnerOfflineSuiteGrantForTests,
+  evaluateLiveSpawnAuthorizationFromOwnerCapability,
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
+  evaluateTier3FinalExecutionReadiness,
   isPrivilegedTier3ActivationHandle,
   isRunnerOfflineSuiteGrant,
   startDisposableOpsPilotCluster,
+  OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA,
+  OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
 } from '../src/disposableOpsPilotDbHarness.js';
+import {
+  evaluateVerifiedCapabilityLiveSpawnEligibility,
+  S2_OWNER_CAPABILITY_ISSUER,
+  S2_OWNER_CAPABILITY_KIND,
+  S2_OWNER_CAPABILITY_PURPOSE,
+  S2_OWNER_CAPABILITY_REPOSITORY_ID,
+  S2_TIER3_OWNER_CAPABILITY_DECISIONS,
+  verifyS2Tier3OwnerCapabilityArtifact,
+  getVerifierImportSideEffectsReport,
+  __testOnlyRegisterOwnerPublicKeyForVerification,
+  __testOnlyRegisterReplayJti,
+  __testOnlyRegisterRevokedJti,
+  __testOnlyResetS2Tier3OwnerCapabilityRegistries,
+  __testOnlySetRevocationRegistryUnavailable,
+} from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
+import { invokeOwnerControlledTier3LocalRunner } from '../scripts/ownerControlledTier3LocalRunner.js';
+import {
+  OPERATIONAL_DISPATCH_AUTHORIZED as DISPATCHER_MODULE_OPERATIONAL_FLAG,
+} from '../src/operationalDispatcher.js';
 import {
   DURABLE_REGISTRY_DECISIONS,
   createDurableAuthorityRegistries,
@@ -86,6 +110,67 @@ function assertTier3GateClosed() {
   assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
   assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
   assert.equal(TIER3_ACTIVATION_AUTHORITY, 'TIER3_ACTIVATION_AUTHORITY_UNPROVEN');
+}
+
+const S2_CLAIM_KEY_ORDER = Object.freeze([
+  'alg',
+  'capabilityId',
+  'exp',
+  'iss',
+  'jti',
+  'kid',
+  'kind',
+  'nbf',
+  'pinnedMainSha',
+  'purpose',
+  'repositoryId',
+  'suitePath',
+]);
+
+function canonicalS2OwnerCapabilityClaimsJson(value) {
+  const parts = [];
+  for (const key of S2_CLAIM_KEY_ORDER) {
+    const v = value[key];
+    if (typeof v === 'string') {
+      parts.push(`"${key}":"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+    } else {
+      parts.push(`"${key}":${v}`);
+    }
+  }
+  return `{${parts.join(',')}}`;
+}
+
+function signS2OwnerCapabilityTokenForTests(claims, privateKeyPem) {
+  const payload = canonicalS2OwnerCapabilityClaimsJson(claims);
+  const signature = sign(null, Buffer.from(payload, 'utf8'), createPrivateKey(privateKeyPem));
+  const payloadB64 = Buffer.from(payload, 'utf8').toString('base64url');
+  const sigB64 = Buffer.from(signature).toString('base64url');
+  return `${payloadB64}.${sigB64}`;
+}
+
+function buildBaseS2OwnerCapabilityClaims(overrides = {}) {
+  const nowMs = 1_700_000_000_000;
+  return {
+    alg: 'Ed25519',
+    capabilityId: 's2-wsl-lab-offline-cap-v1',
+    exp: nowMs + 120_000,
+    iss: S2_OWNER_CAPABILITY_ISSUER,
+    jti: `jti-s2-fencing-${randomJtiSuffix()}`,
+    kid: 's2-fencing-test-owner-kid',
+    kind: S2_OWNER_CAPABILITY_KIND,
+    nbf: nowMs,
+    pinnedMainSha: OPS_PILOT_PINNED_MAIN_SHA,
+    purpose: S2_OWNER_CAPABILITY_PURPOSE,
+    repositoryId: S2_OWNER_CAPABILITY_REPOSITORY_ID,
+    suitePath: FENCING_SUITE_PATH,
+    ...overrides,
+  };
+}
+
+let __jtiCounter = 0;
+function randomJtiSuffix() {
+  __jtiCounter += 1;
+  return String(__jtiCounter);
 }
 
 function offlineContractProofs() {
@@ -468,5 +553,224 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(FENCING_LIVE_SQL_CATALOG.length, 10);
     assert.notEqual(CP2_DB_FENCING_SUITE_STATUS, 'FENCING_DURABLE_PASS');
     assert.notEqual(CP2_DB_FENCING_SUITE_STATUS, 'DB_ATOMICITY_PASS');
+  });
+
+  it('6) offline S2 Owner capability negative security matrix (DB-free)', async () => {
+    assert.equal(getVerifierImportSideEffectsReport().postgresActions, 0);
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const wrongKeys = generateKeyPairSync('ed25519');
+  const wrongPublicPem = wrongKeys.publicKey.export({ type: 'spki', format: 'pem' });
+
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-fencing-test-owner-kid', publicPem);
+
+    const deps = { __testMode: true, nowMs: 1_700_000_000_500 };
+    const goodClaims = buildBaseS2OwnerCapabilityClaims();
+    const goodToken = signS2OwnerCapabilityTokenForTests(goodClaims, privatePem);
+    const valid = verifyS2Tier3OwnerCapabilityArtifact(goodToken, {}, deps);
+    assert.equal(valid.ok, true);
+    assert.equal(valid.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.ALLOW_VERIFY_ONLY);
+
+    const wrongKeyRegistered = { ...deps };
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-fencing-test-owner-kid', wrongPublicPem);
+    const wrongKeyDeny = verifyS2Tier3OwnerCapabilityArtifact(goodToken, {}, wrongKeyRegistered);
+    assert.equal(wrongKeyDeny.ok, false);
+    assert.equal(wrongKeyDeny.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_INVALID_SIGNATURE);
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-fencing-test-owner-kid', publicPem);
+
+    const forgedToken = `${goodToken.split('.')[0]}.${Buffer.from('forged').toString('base64url')}`;
+    const forged = verifyS2Tier3OwnerCapabilityArtifact(forgedToken, {}, deps);
+    assert.equal(forged.ok, false);
+
+    const expiredClaims = buildBaseS2OwnerCapabilityClaims({
+      nbf: 1_600_000_000_000,
+      exp: 1_600_000_060_000,
+      jti: `jti-expired-${randomJtiSuffix()}`,
+    });
+    const expiredToken = signS2OwnerCapabilityTokenForTests(expiredClaims, privatePem);
+    const expired = verifyS2Tier3OwnerCapabilityArtifact(expiredToken, {}, {
+      __testMode: true,
+      nowMs: 1_700_000_000_500,
+    });
+    assert.equal(expired.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_EXPIRED);
+
+    const futureClaims = buildBaseS2OwnerCapabilityClaims({
+      nbf: 1_900_000_000_000,
+      exp: 1_900_000_120_000,
+      jti: `jti-future-${randomJtiSuffix()}`,
+    });
+    const futureToken = signS2OwnerCapabilityTokenForTests(futureClaims, privatePem);
+    const future = verifyS2Tier3OwnerCapabilityArtifact(futureToken, {}, deps);
+    assert.equal(future.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_NBF_VIOLATION);
+
+    const wrongRepo = signS2OwnerCapabilityTokenForTests(
+      buildBaseS2OwnerCapabilityClaims({ repositoryId: 'wrong/repo', jti: `jti-repo-${randomJtiSuffix()}` }),
+      privatePem,
+    );
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(wrongRepo, {}, deps).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_REPOSITORY,
+    );
+
+    const wrongSha = signS2OwnerCapabilityTokenForTests(
+      buildBaseS2OwnerCapabilityClaims({ pinnedMainSha: '0'.repeat(40), jti: `jti-sha-${randomJtiSuffix()}` }),
+      privatePem,
+    );
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(wrongSha, {}, deps).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_SHA,
+    );
+
+    const wrongSuite = signS2OwnerCapabilityTokenForTests(
+      buildBaseS2OwnerCapabilityClaims({
+        suitePath: 'tecp-ops-persistence/test/other.test.js',
+        jti: `jti-suite-${randomJtiSuffix()}`,
+      }),
+      privatePem,
+    );
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(wrongSuite, {}, deps).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_SUITE,
+    );
+
+    const wrongPurpose = signS2OwnerCapabilityTokenForTests(
+      buildBaseS2OwnerCapabilityClaims({ purpose: 'WRONG', jti: `jti-purpose-${randomJtiSuffix()}` }),
+      privatePem,
+    );
+    assert.equal(
+      verifyS2Tier3OwnerCapabilityArtifact(wrongPurpose, {}, deps).decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_PURPOSE,
+    );
+
+    __testOnlyRegisterReplayJti('jti-replay-blocked');
+    const replayBlocked = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(
+        buildBaseS2OwnerCapabilityClaims({ jti: 'jti-replay-blocked' }),
+        privatePem,
+      ),
+      {},
+      deps,
+    );
+    assert.equal(replayBlocked.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY);
+
+    __testOnlyRegisterRevokedJti('jti-revoked-blocked');
+    const revoked = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(
+        buildBaseS2OwnerCapabilityClaims({ jti: 'jti-revoked-blocked' }),
+        privatePem,
+      ),
+      {},
+      deps,
+    );
+    assert.equal(revoked.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REVOKED);
+
+    __testOnlySetRevocationRegistryUnavailable(true);
+    const revocationUnavailable = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(
+        buildBaseS2OwnerCapabilityClaims({ jti: `jti-rev-unavail-${randomJtiSuffix()}` }),
+        privatePem,
+      ),
+      {},
+      deps,
+    );
+    assert.equal(
+      revocationUnavailable.decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REVOCATION_UNAVAILABLE,
+    );
+    __testOnlySetRevocationRegistryUnavailable(false);
+
+    const thirdSuite = await invokeOwnerControlledTier3LocalRunner({
+      suitePath: 'tecp-ops-persistence/test/not-allowed.test.js',
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      spawnSyncFn: () => ({ status: 0, stdout: '', stderr: '' }),
+    });
+    assert.equal(thirdSuite.ok, false);
+
+    const callerKey = verifyS2Tier3OwnerCapabilityArtifact(
+      signS2OwnerCapabilityTokenForTests(
+        buildBaseS2OwnerCapabilityClaims({ jti: `jti-caller-${randomJtiSuffix()}` }),
+        privatePem,
+      ),
+      { trustAnchor: publicPem },
+      deps,
+    );
+    assert.equal(
+      callerKey.decision,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WORKER_SUPPLIED_TRUST_ANCHOR,
+    );
+
+    const argvOnly = evaluateOwnerControlledLocalRunnerEvidence({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      affirmSameUidLimitationsAccepted: true,
+      ownerControlledLocalRunnerInvocation: true,
+    }, { argv: ['node', '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH] });
+    assert.equal(argvOnly.ok, false);
+
+    const envOnly = await invokeOwnerControlledTier3LocalRunner({
+      envAuthorized: true,
+      suitePath: FENCING_SUITE_PATH,
+    });
+    assert.equal(envOnly.ok, false);
+
+    const uidOnly = await invokeOwnerControlledTier3LocalRunner({
+      authorizeByUid: true,
+      suitePath: FENCING_SUITE_PATH,
+    });
+    assert.equal(uidOnly.ok, false);
+
+    const sameUidSelf = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: FENCING_SUITE_PATH,
+      independentOwnerCapability: { ownerAuthenticationProven: true },
+      authorizeLivePostgresSpawn: true,
+    });
+    assert.equal(sameUidSelf.ok, false);
+
+    const liveDenied = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: valid,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
+    assert.equal(liveDenied.ok, false);
+    assert.equal(liveDenied.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN);
+
+    const recoveryDenied = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: valid,
+      ownerCustodyProven: true,
+      recoveryAdminProven: false,
+    });
+    assert.equal(recoveryDenied.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_RECOVERY_ADMIN_NOT_PROVEN);
+
+    const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(valid, {
+      ownerCustodyProven: true,
+      recoveryAdminProven: true,
+    });
+    assert.equal(spawnEligibility.ok, false);
+    assert.equal(spawnEligibility.liveSpawnEligible, false);
+
+    assert.equal(DISPATCHER_MODULE_OPERATIONAL_FLAG, false);
+
+    const cleanupFail = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'OFFLINE_INERT_ORCHESTRATION',
+      suitePath: FENCING_SUITE_PATH,
+      spawnSyncFn: () => ({ status: 0, stdout: '', stderr: '' }),
+      inspectFn: () => ({ status: 'RUNNING', reason: 'inert_stuck' }),
+      stopFn: () => ({ status: 1 }),
+    });
+    assert.equal(cleanupFail.ok, false);
+    assert.ok(cleanupFail.reasons.includes('CLEANUP_FAILURE_CANNOT_PASS'));
+
+    const readiness = evaluateTier3FinalExecutionReadiness({
+      fiveFileOfflineIntegrationComplete: true,
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+    });
+    assert.equal(readiness.ok, false);
+    assert.equal(readiness.executionContract.governanceMergeBaseSha, OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA);
+    assert.equal(readiness.executionContract.liveActivationShaPolicy, OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY);
   });
 });

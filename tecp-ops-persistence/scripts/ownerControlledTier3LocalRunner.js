@@ -30,11 +30,16 @@ import {
   createInertOfflineOneShotTicketForTests,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
+  evaluateLiveSpawnAuthorizationFromOwnerCapability,
   evaluateOwnerControlledLocalRunnerEvidence,
   isInertOfflineOneShotTicket,
   isOwnedDisposableOpsPilotClusterController,
   isOwnerOneShotTicket,
 } from '../src/disposableOpsPilotDbHarness.js';
+import {
+  evaluateVerifiedCapabilityLiveSpawnEligibility,
+  verifyS2Tier3OwnerCapabilityArtifact,
+} from './s2Tier3OwnerCapabilityVerifier.js';
 
 export const OWNER_RUNNER_MODE = 'OWNER_CONTROLLED_TIER3_LOCAL_RUNNER_DEFAULT_DENY';
 export const OWNER_RUNNER_RELATIVE_PATH = OPS_PILOT_OWNER_RUNNER_RELATIVE_PATH;
@@ -156,6 +161,36 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
   }
 
   if (
+    request.ownerCapabilityArtifact != null
+    && typeof request.ownerCapabilityArtifact === 'object'
+    && (
+      request.ownerCapabilityArtifact.trustAnchor
+      || request.ownerCapabilityArtifact.publicKey
+      || request.ownerCapabilityArtifact.verifier
+      || request.ownerCapabilityArtifact.verifyKey
+    )
+  ) {
+    return {
+      ...deny(OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV, [
+        'REQUEST_CARRIED_TRUST_ANCHOR_FORBIDDEN',
+      ]),
+      evidence: evidenceEnvelope({
+        failure: { decision: 'DENY_WORKER_SUPPLIED_TRUST_ANCHOR' },
+      }),
+    };
+  }
+  if (request.ownerCapabilityTrustAnchor || request.ownerPublicKey || request.verifierPublicKey) {
+    return {
+      ...deny(OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV, [
+        'REQUEST_CARRIED_TRUST_ANCHOR_FORBIDDEN',
+      ]),
+      evidence: evidenceEnvelope({
+        failure: { decision: 'DENY_WORKER_SUPPLIED_TRUST_ANCHOR' },
+      }),
+    };
+  }
+
+  if (
     request.ownerAuthorizedByBoolean === true
     || request.envAuthorized === true
     || request.authorizeByUid === true
@@ -237,6 +272,17 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     };
   }
 
+  const capabilityToken = typeof request.ownerCapabilityArtifact === 'string'
+    ? request.ownerCapabilityArtifact
+    : (typeof request.ownerCapabilityToken === 'string'
+      ? request.ownerCapabilityToken
+      : null);
+  const capabilityVerified = capabilityToken
+    ? verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
+      suitePath: suiteCheck.suitePath,
+    }, request.verifierDeps || deps.verifierDeps || { __testMode: true })
+    : null;
+
   const independent = evaluateIndependentOwnerCapability(
     request.independentOwnerCapability || null,
   );
@@ -244,6 +290,32 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     || request.authorizeLivePostgresSpawn === true;
 
   if (wantsLive) {
+    if (capabilityVerified) {
+      const liveFromCapability = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+        verifiedCapability: capabilityVerified,
+        ownerCustodyProven: request.ownerCustodyProven === true,
+        recoveryAdminProven: request.recoveryAdminProven === true,
+      });
+      const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(capabilityVerified, {
+        ownerCustodyProven: request.ownerCustodyProven === true,
+        recoveryAdminProven: request.recoveryAdminProven === true,
+      });
+      if (!liveFromCapability.ok || !spawnEligibility.ok) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, [
+            'VERIFIED_CAPABILITY_DOES_NOT_MINT_LIVE_TICKET',
+            liveFromCapability.decision || spawnEligibility.decision,
+            ...(liveFromCapability.reasons || []),
+            ...(spawnEligibility.reasons || []),
+          ]),
+          capabilityVerified,
+          evidence: evidenceEnvelope({
+            authorization: Object.freeze({ structural, independent, capabilityVerified }),
+            failure: liveFromCapability,
+          }),
+        };
+      }
+    }
     if (!independent.ok || independent.ownerAuthenticationProven !== true) {
       return {
         ...deny(
@@ -433,15 +505,22 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
   const stopped = await controller.stop();
   const cleaned = await controller.cleanup();
 
+  const cleanupSucceeded = cleaned?.ok !== false;
+  const suiteSucceeded = suiteResult?.ok === true;
+  const overallOk = suiteSucceeded && cleanupSucceeded;
+
   return Object.freeze({
-    ok: suiteResult?.ok === true,
-    allowed: suiteResult?.ok === true,
-    decision: suiteResult?.ok === true
+    ok: overallOk,
+    allowed: overallOk,
+    decision: overallOk
       ? OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION
-      : (suiteResult?.decision || OWNER_RUNNER_DECISIONS.DENY_DEFAULT),
+      : (cleaned?.ok === false
+        ? OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST
+        : (suiteResult?.decision || OWNER_RUNNER_DECISIONS.DENY_DEFAULT)),
     reasons: Object.freeze([
       'OFFLINE_INERT_ORCHESTRATION_ONLY',
       'NOT_LIVE_POSTGRES_DURABILITY_PROOF',
+      ...(cleaned?.ok === false ? ['CLEANUP_FAILURE_CANNOT_PASS'] : []),
       ...(suiteResult?.reasons || []),
     ]),
     suitePath: suiteCheck.suitePath,
