@@ -48,6 +48,8 @@ export const S2_TIER3_OWNER_CAPABILITY_DECISIONS = Object.freeze({
   DENY_OPERATIONAL_ISSUANCE_DISABLED: 'DENY_OPERATIONAL_ISSUANCE_DISABLED',
   DENY_DEFAULT_FAIL_CLOSED: 'DENY_DEFAULT_FAIL_CLOSED',
   DENY_LIVE_SPAWN_INELIGIBLE: 'DENY_LIVE_SPAWN_INELIGIBLE',
+  DENY_MISSING_TRUSTED_VERIFIER_DEPS: 'DENY_MISSING_TRUSTED_VERIFIER_DEPS',
+  DENY_CALLER_SUPPLIED_TRUST_ANCHOR: 'DENY_CALLER_SUPPLIED_TRUST_ANCHOR',
 });
 
 const CLAIM_KEY_ORDER = Object.freeze([
@@ -69,6 +71,11 @@ const __testKeyRegistry = new Map();
 const __testReplayRegistry = new Set();
 const __testRevokedRegistry = new Set();
 let __testRevocationAvailable = true;
+/** Brands TEST_ONLY verifier deps objects. Never operational trust. */
+const testOnlyVerifierDepsLatch = new WeakSet();
+
+export const S2_OWNER_CAPABILITY_TEST_ONLY_DEPS_PROOF_CLASS =
+  'TEST_ONLY_S2_OWNER_CAPABILITY_VERIFIER_DEPS';
 
 const VERIFIER_MODULE_PATH = fileURLToPath(import.meta.url);
 
@@ -148,62 +155,84 @@ function parseJsonObject(text) {
   }
 }
 
-function resolveKeyRegistry(deps = {}) {
-  if (deps.keyRegistry && typeof deps.keyRegistry.get === 'function') {
-    return deps.keyRegistry;
-  }
-  if (deps.__testMode === true) {
-    return {
-      get(kid) {
-        return __testKeyRegistry.get(kid) || null;
-      },
-    };
+function isExplicitTestOnlyVerifierDeps(deps = {}) {
+  return deps != null
+    && typeof deps === 'object'
+    && deps.proofClass === S2_OWNER_CAPABILITY_TEST_ONLY_DEPS_PROOF_CLASS
+    && deps.__testMode === true
+    && testOnlyVerifierDepsLatch.has(deps);
+}
+
+function rejectCallerTrustAnchorsInDeps(deps = {}) {
+  if (!isPlainObject(deps)) return null;
+  if (deps.trustAnchor || deps.publicKey || deps.verifier || deps.verifyKey
+    || deps.ownerPublicKeyPem || deps.callerPublicKey) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR, [
+      'CALLER_TRUST_ANCHOR_IN_DEPS_FORBIDDEN',
+    ]);
   }
   return null;
 }
 
+function resolveKeyRegistry(deps = {}) {
+  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+    return null;
+  }
+  if (deps.keyRegistry && typeof deps.keyRegistry.get === 'function') {
+    return deps.keyRegistry;
+  }
+  return {
+    get(kid) {
+      return __testKeyRegistry.get(kid) || null;
+    },
+  };
+}
+
 function resolveClock(deps = {}) {
+  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+    return null;
+  }
   if (deps.clock && typeof deps.clock.nowMs === 'function') {
     return deps.clock;
   }
-  if (deps.__testMode === true && isSafeInteger(deps.nowMs)) {
+  if (isSafeInteger(deps.nowMs)) {
     return { nowMs: () => deps.nowMs };
   }
   return { nowMs: () => Date.now() };
 }
 
 function resolveRevocation(deps = {}) {
+  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+    return null;
+  }
   if (deps.revocationRegistry) {
     return deps.revocationRegistry;
   }
-  if (deps.__testMode === true) {
-    return {
-      isRevoked(jti) {
-        if (!__testRevocationAvailable) {
-          return { ok: false, unavailable: true };
-        }
-        return { ok: true, revoked: __testRevokedRegistry.has(jti) };
-      },
-    };
-  }
-  return null;
+  return {
+    isRevoked(jti) {
+      if (!__testRevocationAvailable) {
+        return { ok: false, unavailable: true };
+      }
+      return { ok: true, revoked: __testRevokedRegistry.has(jti) };
+    },
+  };
 }
 
 function resolveReplay(deps = {}) {
+  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+    return null;
+  }
   if (deps.replayRegistry) {
     return deps.replayRegistry;
   }
-  if (deps.__testMode === true) {
-    return {
-      has(jti) {
-        return __testReplayRegistry.has(jti);
-      },
-      record(jti) {
-        __testReplayRegistry.add(jti);
-      },
-    };
-  }
-  return null;
+  return {
+    has(jti) {
+      return __testReplayRegistry.has(jti);
+    },
+    record(jti) {
+      __testReplayRegistry.add(jti);
+    },
+  };
 }
 
 function validateClaimShape(claims, expectation = {}) {
@@ -246,6 +275,18 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
     && (expectation.trustAnchor || expectation.publicKey || expectation.verifier)) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WORKER_SUPPLIED_TRUST_ANCHOR, [
       'TRUST_ANCHOR_IN_EXPECTATION_FORBIDDEN',
+    ]);
+  }
+
+  const depsTrustDeny = rejectCallerTrustAnchorsInDeps(deps);
+  if (depsTrustDeny) return depsTrustDeny;
+
+  // Only explicitly branded TEST_ONLY verifier deps may proceed in this offline slice.
+  // Missing trusted configuration fails closed (no implicit __testMode).
+  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MISSING_TRUSTED_VERIFIER_DEPS, [
+      'TRUSTED_OR_TEST_ONLY_VERIFIER_DEPS_REQUIRED',
+      'NO_IMPLICIT_TEST_MODE',
     ]);
   }
 
@@ -304,6 +345,11 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
   }
 
   const clock = resolveClock(deps);
+  if (!clock || typeof clock.nowMs !== 'function') {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MISSING_TRUSTED_VERIFIER_DEPS, [
+      'CLOCK_REQUIRED',
+    ]);
+  }
   const nowMs = clock.nowMs();
   if (nowMs < claims.nbf) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_NBF_VIOLATION, ['NOT_YET_VALID']);
@@ -331,7 +377,12 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
   }
 
   const replay = resolveReplay(deps);
-  if (replay?.has(claims.jti)) {
+  if (!replay || typeof replay.has !== 'function') {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_DEFAULT_FAIL_CLOSED, [
+      'REPLAY_REGISTRY_REQUIRED',
+    ]);
+  }
+  if (replay.has(claims.jti)) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY, [`JTI:${claims.jti}`]);
   }
 
@@ -396,7 +447,9 @@ export function evaluateVerifiedCapabilityLiveSpawnEligibility(verified = {}, co
 }
 
 export function getVerifierImportSideEffectsReport() {
+  // Static import-time attestation only — NOT measured runtime telemetry.
   return Object.freeze({
+    kind: 'IMPORT_TIME_STATIC_ATTESTATION_NOT_MEASURED_RUNTIME_EVIDENCE',
     filesystemActions: 0,
     processSpawnActions: 0,
     databaseActions: 0,
@@ -405,7 +458,7 @@ export function getVerifierImportSideEffectsReport() {
   });
 }
 
-/** TEST_ONLY registry helpers — no signing exports. */
+/** TEST_ONLY registry helpers — no signing exports. Not operational trust. */
 export function __testOnlyResetS2Tier3OwnerCapabilityRegistries() {
   __testKeyRegistry.clear();
   __testReplayRegistry.clear();
@@ -429,6 +482,28 @@ export function __testOnlySetRevocationRegistryUnavailable(unavailable = true) {
   __testRevocationAvailable = unavailable !== true;
 }
 
+/**
+ * Create branded TEST_ONLY verifier deps for isolated test invocation.
+ * Plain {__testMode:true} objects are NOT accepted.
+ */
+export function __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps(options = {}) {
+  const deps = {
+    proofClass: S2_OWNER_CAPABILITY_TEST_ONLY_DEPS_PROOF_CLASS,
+    __testMode: true,
+    nowMs: options.nowMs,
+    clock: options.clock,
+    keyRegistry: options.keyRegistry,
+    revocationRegistry: options.revocationRegistry,
+    replayRegistry: options.replayRegistry,
+  };
+  testOnlyVerifierDepsLatch.add(deps);
+  return deps;
+}
+
+export function isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(deps) {
+  return isExplicitTestOnlyVerifierDeps(deps);
+}
+
 export function isDirectVerifierCliEntrypoint(argv = process.argv, metaUrl = import.meta.url) {
   if (!Array.isArray(argv) || argv.length < 2) return false;
   try {
@@ -440,20 +515,19 @@ export function isDirectVerifierCliEntrypoint(argv = process.argv, metaUrl = imp
 
 export function runS2Tier3OwnerCapabilityVerifierCli(argv = process.argv, deps = {}) {
   const token = argv[2] || '';
-  return verifyS2Tier3OwnerCapabilityArtifact(token, {}, {
-    __testMode: true,
-    ...deps,
-  });
+  // CLI never enables test mode implicitly. Absent trusted deps => fail closed.
+  return verifyS2Tier3OwnerCapabilityArtifact(token, {}, deps || {});
 }
 
 if (isDirectVerifierCliEntrypoint()) {
-  const result = runS2Tier3OwnerCapabilityVerifierCli(process.argv);
+  const result = runS2Tier3OwnerCapabilityVerifierCli(process.argv, {});
   process.stdout.write(`${JSON.stringify({
     ok: result.ok,
     decision: result.decision,
     reasons: result.reasons,
     operationalIssuanceEnabled: OPERATIONAL_ISSUANCE_ENABLED,
     approvedSuites: OPS_PILOT_APPROVED_TEST_ACTIONS,
+    testModeEnabled: false,
   })}\n`);
   process.exitCode = result.ok ? 0 : 1;
 }

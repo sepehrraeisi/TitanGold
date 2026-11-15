@@ -57,6 +57,9 @@ export const OWNER_RUNNER_DECISIONS = Object.freeze({
   DENY_EXTERNAL_DB_TARGET: 'DENY_EXTERNAL_DB_TARGET',
   DENY_ONESHOT_REPLAY: 'DENY_ONESHOT_REPLAY',
   DENY_INVALID_REQUEST: 'DENY_INVALID_REQUEST',
+  DENY_STOP_OR_CLEANUP_FAILED: 'DENY_STOP_OR_CLEANUP_FAILED',
+  DENY_VERIFIER_TRUST_MISSING: 'DENY_VERIFIER_TRUST_MISSING',
+  DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF: 'DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
 });
 
@@ -85,6 +88,36 @@ function deny(decision, reasons = [], extra = {}) {
   });
 }
 
+
+/**
+ * Explicit validated successful lifecycle result.
+ * Missing/null/undefined/malformed => not successful (fail closed).
+ */
+function isValidatedSuccessfulLifecycleResult(result) {
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) {
+    return false;
+  }
+  if (result.ok !== true) {
+    return false;
+  }
+  if (result.decision == null || typeof result.decision !== 'string') {
+    return false;
+  }
+  if (!Array.isArray(result.reasons)) {
+    return false;
+  }
+  return true;
+}
+
+function lifecycleStageEvidence(stage, result, error = null) {
+  return Object.freeze({
+    stage,
+    validatedSuccessful: isValidatedSuccessfulLifecycleResult(result),
+    result: result == null ? null : result,
+    error: error == null ? null : String(error && error.message ? error.message : error),
+  });
+}
+
 function evidenceEnvelope(parts = {}) {
   return Object.freeze({
     authorization: parts.authorization || null,
@@ -101,12 +134,22 @@ function evidenceEnvelope(parts = {}) {
  * Must remain all-zero unless this module is executed as a CLI entrypoint.
  */
 export function getRunnerImportSideEffectsReport() {
+  // Static import-time attestation only — NOT a measured runtime telemetry report.
+  // Shape preserved for compatibility; do not treat zeros as measured runtime evidence.
   return Object.freeze({
     filesystemActions: 0,
     processSpawnActions: 0,
     databaseActions: 0,
     networkActions: 0,
     postgresActions: 0,
+  });
+}
+
+/** Explicit meta: clarifies report() is attestation, not measured telemetry. */
+export function getRunnerImportSideEffectsAttestationMeta() {
+  return Object.freeze({
+    kind: 'IMPORT_TIME_STATIC_ATTESTATION_NOT_MEASURED_RUNTIME_EVIDENCE',
+    reportIsMeasuredRuntimeEvidence: false,
   });
 }
 
@@ -272,16 +315,58 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     };
   }
 
+  // Request-carried verifierDeps / trust anchors are never operational authority.
+  if (request.verifierDeps != null
+    || request.trustAnchor != null
+    || request.publicKey != null
+    || request.keyRegistry != null) {
+    return {
+      ...deny(OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV, [
+        'CALLER_SUPPLIED_VERIFIER_DEPS_FORBIDDEN',
+        'REQUEST_TRUST_ANCHOR_FORBIDDEN',
+      ]),
+      evidence: evidenceEnvelope({
+        failure: { decision: OWNER_RUNNER_DECISIONS.DENY_CALLER_BOOLEAN_OR_ENV },
+      }),
+    };
+  }
+  if (request.ownerCustodyProven === true || request.recoveryAdminProven === true) {
+    return {
+      ...deny(OWNER_RUNNER_DECISIONS.DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF, [
+        'REQUEST_OWNER_CUSTODY_BOOLEAN_NOT_PROOF',
+        'REQUEST_RECOVERY_ADMIN_BOOLEAN_NOT_PROOF',
+      ]),
+      evidence: evidenceEnvelope({
+        failure: { decision: OWNER_RUNNER_DECISIONS.DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF },
+      }),
+    };
+  }
+
   const capabilityToken = typeof request.ownerCapabilityArtifact === 'string'
     ? request.ownerCapabilityArtifact
     : (typeof request.ownerCapabilityToken === 'string'
       ? request.ownerCapabilityToken
       : null);
-  const capabilityVerified = capabilityToken
-    ? verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
+  let capabilityVerified = null;
+  if (capabilityToken) {
+    // Trusted verifier configuration must be explicitly supplied via deps (not request).
+    // Test-only deps require branded TEST_ONLY proofClass; no implicit __testMode fallback.
+    const trustedVerifierDeps = deps.trustedVerifierDeps;
+    if (trustedVerifierDeps == null) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+          'TRUSTED_VERIFIER_DEPS_REQUIRED',
+          'NO_IMPLICIT_TEST_MODE_FALLBACK',
+        ]),
+        evidence: evidenceEnvelope({
+          failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING },
+        }),
+      };
+    }
+    capabilityVerified = verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
       suitePath: suiteCheck.suitePath,
-    }, request.verifierDeps || deps.verifierDeps || { __testMode: true })
-    : null;
+    }, trustedVerifierDeps);
+  }
 
   const independent = evaluateIndependentOwnerCapability(
     request.independentOwnerCapability || null,
@@ -291,14 +376,15 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
 
   if (wantsLive) {
     if (capabilityVerified) {
+      // Request custody booleans are NEVER accepted as independent proof.
       const liveFromCapability = evaluateLiveSpawnAuthorizationFromOwnerCapability({
         verifiedCapability: capabilityVerified,
-        ownerCustodyProven: request.ownerCustodyProven === true,
-        recoveryAdminProven: request.recoveryAdminProven === true,
+        ownerCustodyProven: false,
+        recoveryAdminProven: false,
       });
       const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(capabilityVerified, {
-        ownerCustodyProven: request.ownerCustodyProven === true,
-        recoveryAdminProven: request.recoveryAdminProven === true,
+        ownerCustodyProven: false,
+        recoveryAdminProven: false,
       });
       if (!liveFromCapability.ok || !spawnEligibility.ok) {
         return {
@@ -502,25 +588,83 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     ]);
   }
 
-  const stopped = await controller.stop();
-  const cleaned = await controller.cleanup();
+  let stopped;
+  let cleaned;
+  let stopError = null;
+  let cleanupError = null;
+  try {
+    stopped = await controller.stop();
+  } catch (error) {
+    stopError = error;
+    stopped = null;
+  }
+  // Never delete while stop is unproven / failed / malformed.
+  const stopValidated = isValidatedSuccessfulLifecycleResult(stopped);
+  if (!stopValidated) {
+    // Best-effort cleanup attempt still recorded, but overall DENY.
+    try {
+      cleaned = await controller.cleanup();
+    } catch (error) {
+      cleanupError = error;
+      cleaned = null;
+    }
+    return Object.freeze({
+      ok: false,
+      allowed: false,
+      decision: OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED,
+      reasons: Object.freeze([
+        'STOP_FAILURE_OR_MALFORMED_CANNOT_PASS',
+        'SUITE_SUCCESS_REQUIRES_VALIDATED_STOP_AND_CLEANUP',
+        ...(stopError ? ['STOP_THREW'] : []),
+        ...(stopped == null ? ['STOP_RESULT_MISSING'] : ['STOP_RESULT_NOT_VALIDATED']),
+        ...(suiteResult?.reasons || []),
+      ]),
+      suitePath: suiteCheck.suitePath,
+      suiteResult,
+      postgresActions: 0,
+      dbActions: 0,
+      workerActions: 0,
+      mcpMutations: 0,
+      operationalDispatchActions: 0,
+      productionActions: 0,
+      ownerAuthenticationProven: false,
+      ownerInvocationIndependentlyVerifiable: false,
+      liveDbExecutionAuthorized: false,
+      evidence: evidenceEnvelope({
+        authorization: Object.freeze({ structural, independent, capabilityVerified }),
+        start: started,
+        stop: lifecycleStageEvidence('stop', stopped, stopError),
+        cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),
+        suite: suiteResult,
+        failure: Object.freeze({ decision: OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED }),
+      }),
+    });
+  }
 
-  const cleanupSucceeded = cleaned?.ok !== false;
+  try {
+    cleaned = await controller.cleanup();
+  } catch (error) {
+    cleanupError = error;
+    cleaned = null;
+  }
+
+  const cleanupValidated = isValidatedSuccessfulLifecycleResult(cleaned);
   const suiteSucceeded = suiteResult?.ok === true;
-  const overallOk = suiteSucceeded && cleanupSucceeded;
+  const overallOk = suiteSucceeded && stopValidated && cleanupValidated;
 
   return Object.freeze({
     ok: overallOk,
     allowed: overallOk,
     decision: overallOk
       ? OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION
-      : (cleaned?.ok === false
-        ? OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST
+      : (!cleanupValidated
+        ? OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED
         : (suiteResult?.decision || OWNER_RUNNER_DECISIONS.DENY_DEFAULT)),
     reasons: Object.freeze([
       'OFFLINE_INERT_ORCHESTRATION_ONLY',
       'NOT_LIVE_POSTGRES_DURABILITY_PROOF',
-      ...(cleaned?.ok === false ? ['CLEANUP_FAILURE_CANNOT_PASS'] : []),
+      ...(!cleanupValidated ? ['CLEANUP_FAILURE_OR_MALFORMED_CANNOT_PASS'] : []),
+      ...(cleanupError ? ['CLEANUP_THREW'] : []),
       ...(suiteResult?.reasons || []),
     ]),
     suitePath: suiteCheck.suitePath,
@@ -535,10 +679,10 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     ownerInvocationIndependentlyVerifiable: false,
     liveDbExecutionAuthorized: false,
     evidence: evidenceEnvelope({
-      authorization: Object.freeze({ structural, independent }),
+      authorization: Object.freeze({ structural, independent, capabilityVerified }),
       start: started,
-      stop: stopped,
-      cleanup: cleaned,
+      stop: lifecycleStageEvidence('stop', stopped, stopError),
+      cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),
       suite: suiteResult,
     }),
   });
