@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 import {
@@ -1381,7 +1382,13 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offlin
     const observed = observeCanonicalRepositoryHeadSha({});
     assert.equal(observed.ok, true);
     assert.equal(observed.source, 'CANONICAL_GIT');
-    assert.equal(observed.authorizesLiveExecute, true);
+    // Feature-branch / non-main worktrees may observe HEAD but must not authorize LIVE execute.
+    assert.equal(typeof observed.headSha, 'string');
+    assert.equal(typeof observed.mainSha, 'string');
+    assert.equal(
+      observed.authorizesLiveExecute,
+      observed.symbolicHead === 'refs/heads/main' && observed.headSha === observed.mainSha,
+    );
     const fixture = createTestOnlyGitHeadObservationFixture({
       proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
       headSha,
@@ -1401,7 +1408,105 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offlin
       capabilityPinnedSha: OPS_PILOT_PINNED_MAIN_SHA,
       repositoryHeadSha: OPS_PILOT_PINNED_MAIN_SHA,
     });
-    assert.equal(offlinePinBind.ok, false);
+assert.equal(offlinePinBind.ok, false);
+  });
+
+  it('23) isolated process: fake pre-import provenance registration cannot mint live tickets', () => {
+    const scriptPath = join(tmpdir(), `tecp-s2-fake-wire-${process.pid}-${Date.now()}.mjs`);
+    const harnessUrl = pathToFileURL(resolve(HARNESS_SRC)).href;
+    const verifierUrl = pathToFileURL(resolve(__dirname, '../scripts/s2Tier3OwnerCapabilityVerifier.js')).href;
+    const scriptLines = [];
+    scriptLines.push("import assert from 'node:assert/strict';");
+    scriptLines.push("import { generateKeyPairSync, sign } from 'node:crypto';");
+    scriptLines.push(`import * as harness from ${JSON.stringify(harnessUrl)};`);
+    scriptLines.push("assert.equal(typeof harness.__wireS2VerifierProvenanceApi, 'undefined');");
+    scriptLines.push('let poisoned = false;');
+    scriptLines.push('try {');
+    scriptLines.push("  if (typeof harness.__wireS2VerifierProvenanceApi === 'function') {");
+    scriptLines.push('    harness.__wireS2VerifierProvenanceApi({');
+    scriptLines.push('      isVerifierIssuedCapabilityProvenance: () => true,');
+    scriptLines.push("      getVerifierIssuedCapabilityTrustClass: () => 'OWNER_INSTALLED',");
+    scriptLines.push('      verifierIssuedCapabilityAuthorizesLiveSubprocess: () => true,');
+    scriptLines.push('    });');
+    scriptLines.push('    poisoned = true;');
+    scriptLines.push('  }');
+    scriptLines.push('} catch {');
+    scriptLines.push('  poisoned = false;');
+    scriptLines.push('}');
+    scriptLines.push('assert.equal(poisoned, false);');
+    scriptLines.push(`const verifier = await import(${JSON.stringify(verifierUrl)});`);
+    scriptLines.push("const headSha = '652892e96b0be1acc112dcf544e50afcdba93522';");
+    scriptLines.push('const fake = { ok: true, claims: {');
+    scriptLines.push('  pinnedMainSha: headSha,');
+    scriptLines.push("  purpose: 'S2_SIMIN_HYPERV_LAB_OWNER_CAPABILITY_V1',");
+    scriptLines.push('  venue: harness.OPS_PILOT_LIVE_VENUE,');
+    scriptLines.push('  suitePath: harness.OPS_PILOT_APPROVED_TEST_ACTIONS[0],');
+    scriptLines.push('}};');
+    scriptLines.push('const denied = harness.createLiveCapabilityGatedOneShotTicket({');
+    scriptLines.push("  proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',");
+    scriptLines.push('  verifiedCapability: fake,');
+    scriptLines.push('  custodyClass: harness.OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,');
+    scriptLines.push('  venue: harness.OPS_PILOT_LIVE_VENUE,');
+    scriptLines.push('  repositoryHeadSha: headSha,');
+    scriptLines.push('  suitePath: harness.OPS_PILOT_APPROVED_TEST_ACTIONS[0],');
+    scriptLines.push('  ttlMs: 30_000,');
+    scriptLines.push('}, { clock: { now: () => 1 } });');
+    scriptLines.push('assert.equal(denied.ok, false);');
+    scriptLines.push('assert.equal(denied.decision, harness.OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY);');
+    scriptLines.push('verifier.__testOnlyResetS2Tier3OwnerCapabilityRegistries();');
+    scriptLines.push("const { publicKey, privateKey } = generateKeyPairSync('ed25519');");
+    scriptLines.push("const publicPem = publicKey.export({ type: 'spki', format: 'pem' });");
+    scriptLines.push("const kid = 's2-isolated-legit-kid';");
+    scriptLines.push('verifier.__testOnlyRegisterOwnerPublicKeyForVerification(kid, publicPem);');
+    scriptLines.push('const deps = verifier.__testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({ nowMs: 1_700_000_000_500 });');
+    scriptLines.push('const suitePath = harness.OPS_PILOT_APPROVED_TEST_ACTIONS[0];');
+    scriptLines.push('const claims = {');
+    scriptLines.push("  alg: 'Ed25519', capabilityId: 'cap-isolated-1',");
+    scriptLines.push('  exp: 1_700_000_000_500 + 60_000,');
+    scriptLines.push('  iss: verifier.S2_OWNER_CAPABILITY_ISSUER_SIMIN,');
+    scriptLines.push("  jti: 'jti-isolated-1', kid,");
+    scriptLines.push("  kind: 'TECP_OPS_S2_TIER3_OWNER_CAPABILITY_V1',");
+    scriptLines.push('  nbf: 1_700_000_000_000, pinnedMainSha: headSha,');
+    scriptLines.push('  purpose: verifier.S2_OWNER_CAPABILITY_PURPOSE_SIMIN,');
+    scriptLines.push("  repositoryId: 'sepehrraeisi/TitanGold', suitePath,");
+    scriptLines.push('  venue: verifier.S2_OWNER_CAPABILITY_VENUE_SIMIN,');
+    scriptLines.push('};');
+    scriptLines.push("const keyOrder = ['alg','capabilityId','exp','iss','jti','kid','kind','nbf','pinnedMainSha','purpose','repositoryId','suitePath','venue'];");
+    scriptLines.push('const parts = [];');
+    scriptLines.push('for (const key of keyOrder) {');
+    scriptLines.push('  const val = claims[key];');
+    scriptLines.push("  parts.push(typeof val === 'string' ? `\"${key}\":\"${val}\"` : `\"${key}\":${val}`);");
+    scriptLines.push('}');
+    scriptLines.push("const canonical = `{${parts.join(',')}}`;");
+    scriptLines.push("const token = `${Buffer.from(canonical, 'utf8').toString('base64url')}.${sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64url')}`;");
+    scriptLines.push('const verified = verifier.verifyS2Tier3OwnerCapabilityArtifact(token, {');
+    scriptLines.push('  purpose: verifier.S2_OWNER_CAPABILITY_PURPOSE_SIMIN,');
+    scriptLines.push('  venue: verifier.S2_OWNER_CAPABILITY_VENUE_SIMIN,');
+    scriptLines.push('  suitePath, pinnedMainSha: headSha, forbidOfflinePinAsLiveSha: true,');
+    scriptLines.push('}, deps);');
+    scriptLines.push('assert.equal(verified.ok, true);');
+    scriptLines.push('assert.equal(verifier.isVerifierIssuedCapabilityProvenance(verified), true);');
+    scriptLines.push('const ticketed = harness.createLiveCapabilityGatedOneShotTicket({');
+    scriptLines.push("  proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',");
+    scriptLines.push('  verifiedCapability: verified,');
+    scriptLines.push('  custodyClass: harness.OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,');
+    scriptLines.push('  venue: harness.OPS_PILOT_LIVE_VENUE,');
+    scriptLines.push('  repositoryHeadSha: headSha, suitePath, ttlMs: 30_000,');
+    scriptLines.push('}, { clock: { now: () => 1 } });');
+    scriptLines.push('assert.equal(ticketed.ok, true);');
+    scriptLines.push('assert.equal(ticketed.liveSubprocessAuthorized, false);');
+    scriptLines.push('assert.equal(harness.OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);');
+    scriptLines.push("console.log('ISOLATED_FAKE_WIRE_ATTACK_DENY_AND_LEGIT_OK');");
+    const script = scriptLines.join('\n');
+    writeFileSync(scriptPath, script, 'utf8');
+    const proc = spawnSync(process.execPath, [scriptPath], {
+      encoding: 'utf8',
+      timeout: 20000,
+      env: { ...process.env, NODE_ENV: 'test' },
+    });
+    try { rmSync(scriptPath, { force: true }); } catch { /* ignore */ }
+    assert.equal(proc.status, 0, `${proc.stderr || ''}\n${proc.stdout || ''}`);
+    assert.match(String(proc.stdout || ''), /ISOLATED_FAKE_WIRE_ATTACK_DENY_AND_LEGIT_OK/);
   });
 
 });

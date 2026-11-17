@@ -603,8 +603,13 @@ export function evaluateVerifiedCapabilityLiveSpawnEligibility(verified = {}, co
   });
 }
 
-export function resolveOwnerInstalledFixedTrustRegistryPath(home = homedir()) {
-  const dir = pathJoin(home, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
+export function resolveOwnerInstalledFixedTrustRegistryPath(home = undefined) {
+  // Caller-supplied home is ignored for trust resolution authority. Always use OS homedir().
+  if (home != null && home !== homedir()) {
+    // Non-authoritative path preview only — createOwnerInstalled rejects overrides before latch.
+  }
+  const trustedHome = homedir();
+  const dir = pathJoin(trustedHome, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
   return Object.freeze({
     dir,
     pubkeyPath: pathJoin(dir, OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME),
@@ -613,7 +618,33 @@ export function resolveOwnerInstalledFixedTrustRegistryPath(home = homedir()) {
 }
 
 export function createOwnerInstalledFixedTrustVerifierDeps(options = {}) {
-  const paths = resolveOwnerInstalledFixedTrustRegistryPath(options.home);
+  if (options == null || typeof options !== 'object' || Array.isArray(options)) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR, [
+      'OWNER_INSTALLED_DEPS_OPTIONS_OBJECT_REQUIRED',
+    ]);
+  }
+  const forbiddenOverrides = [
+    'home',
+    'trustHome',
+    'publicKey',
+    'pubkeyPem',
+    'kid',
+    'keyRegistry',
+    'pubkeyPath',
+    'kidPath',
+    'dir',
+    'trustRegistryPaths',
+  ];
+  for (const key of forbiddenOverrides) {
+    if (options[key] != null) {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR, [
+        'CALLER_TRUST_HOME_OR_KEY_OVERRIDE_FORBIDDEN',
+        `FORBIDDEN_OPTION=${key}`,
+      ]);
+    }
+  }
+  // Runtime trust directory is always the Owner-local homedir registry — never request-driven.
+  const paths = resolveOwnerInstalledFixedTrustRegistryPath();
   if (!existsSync(paths.pubkeyPath) || !existsSync(paths.kidPath)) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
       'OWNER_INSTALLED_PUBKEY_OR_KID_MISSING',
@@ -736,13 +767,6 @@ export function isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(deps) {
   return isExplicitTestOnlyVerifierDeps(deps);
 }
 
-
-import { __wireS2VerifierProvenanceApi } from '../src/disposableOpsPilotDbHarness.js';
-__wireS2VerifierProvenanceApi(Object.freeze({
-  isVerifierIssuedCapabilityProvenance,
-  getVerifierIssuedCapabilityTrustClass,
-  verifierIssuedCapabilityAuthorizesLiveSubprocess,
-}));
 
 export function isDirectVerifierCliEntrypoint(argv = process.argv, metaUrl = import.meta.url) {
   if (!Array.isArray(argv) || argv.length < 2) return false;

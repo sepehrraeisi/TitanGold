@@ -253,35 +253,17 @@ const runnerOfflineSuiteGrantLatch = new WeakSet();
  * until an out-of-process Owner custody boundary installs a verified capability.
  */
 const independentOwnerCapabilityLatch = new WeakSet();
-/** Filled once by s2Tier3OwnerCapabilityVerifier.js module init (no circular import). */
-let __verifierProvenanceApi = null;
-export function __wireS2VerifierProvenanceApi(api) {
-  if (__verifierProvenanceApi != null) {
-    throw new Error('S2_VERIFIER_PROVENANCE_API_ALREADY_WIRED');
-  }
-  if (!api
-    || typeof api.isVerifierIssuedCapabilityProvenance !== 'function'
-    || typeof api.getVerifierIssuedCapabilityTrustClass !== 'function'
-    || typeof api.verifierIssuedCapabilityAuthorizesLiveSubprocess !== 'function') {
-    throw new TypeError('S2_VERIFIER_PROVENANCE_API_INVALID');
-  }
-  __verifierProvenanceApi = Object.freeze({ ...api });
-}
-function requireVerifierProvenanceApi() {
-  if (__verifierProvenanceApi == null) {
-    throw new Error('S2_VERIFIER_PROVENANCE_API_NOT_WIRED_IMPORT_VERIFIER_MODULE');
-  }
-  return __verifierProvenanceApi;
-}
-function isVerifierIssuedCapabilityProvenance(value) {
-  return requireVerifierProvenanceApi().isVerifierIssuedCapabilityProvenance(value) === true;
-}
-function getVerifierIssuedCapabilityTrustClass(value) {
-  return requireVerifierProvenanceApi().getVerifierIssuedCapabilityTrustClass(value);
-}
-function verifierIssuedCapabilityAuthorizesLiveSubprocess(value) {
-  return requireVerifierProvenanceApi().verifierIssuedCapabilityAuthorizesLiveSubprocess(value) === true;
-}
+/**
+ * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
+ * There is no public registration/wire entrypoint — callers cannot substitute fake callbacks.
+ * Circular init is safe: verifier only reads harness consts inside functions; harness only
+ * calls these inside functions after both modules finish evaluating.
+ */
+import {
+  getVerifierIssuedCapabilityTrustClass,
+  isVerifierIssuedCapabilityProvenance,
+  verifierIssuedCapabilityAuthorizesLiveSubprocess,
+} from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
 /** Module-private privileged state. Exported ticket objects are frozen and non-authoritative. */
 const ticketPrivilegeByRef = new WeakMap();
 const controllerCleanupAuthority = new WeakMap();
@@ -2011,14 +1993,79 @@ export function observeCanonicalRepositoryHeadSha(options = {}) {
       `GOT=${headSha || 'EMPTY'}`,
     ]);
   }
+
+  let mainResult;
+  let symResult;
+  try {
+    mainResult = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'rev-parse', 'refs/heads/main'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+    symResult = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'symbolic-ref', '-q', 'HEAD'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+  } catch (err) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_OR_SYMBOLIC_REF_SPAWN_FAILED',
+      String(err && err.message ? err.message : err),
+    ], {
+      headSha,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    });
+  }
+  if (!mainResult || mainResult.error || mainResult.status !== 0) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_REF_UNREADABLE',
+      String(mainResult?.stderr || mainResult?.error || 'NO_STATUS'),
+    ], {
+      headSha,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+      authorizesLiveExecute: false,
+    });
+  }
+  const mainSha = String(mainResult.stdout || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(mainSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_SHA_NOT_40_HEX',
+    ], { headSha, authorizesLiveExecute: false });
+  }
+  const symbolicHead = String(symResult?.stdout || '').trim();
+  const onMainBranch = symbolicHead === 'refs/heads/main'
+    && (symResult?.status === 0);
+  const headMatchesMain = headSha === mainSha;
+  // Live execute authority requires attached HEAD on refs/heads/main equal to main tip.
+  // Self-consistent feature-branch / detached worktrees observe HEAD but cannot authorize LIVE execute.
+  const authorizesLiveExecute = onMainBranch && headMatchesMain;
   return Object.freeze({
     ok: true,
     allowed: true,
     decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
-    reasons: Object.freeze(['CANONICAL_GIT_HEAD_OBSERVED']),
+    reasons: Object.freeze(authorizesLiveExecute
+      ? ['CANONICAL_MAIN_HEAD_OBSERVED']
+      : [
+        'CANONICAL_GIT_HEAD_OBSERVED_NON_MAIN_WORKTREE',
+        onMainBranch ? 'HEAD_ATTACHED_MAIN' : 'HEAD_NOT_ATTACHED_MAIN',
+        headMatchesMain ? 'HEAD_EQUALS_MAIN_TIP' : 'HEAD_DIFFERS_FROM_MAIN_TIP',
+        `HEAD=${headSha}`,
+        `MAIN=${mainSha}`,
+        `SYMBOLIC=${symbolicHead || 'DETACHED_OR_UNAVAILABLE'}`,
+      ]),
     headSha,
+    mainSha,
+    symbolicHead: symbolicHead || null,
     source: 'CANONICAL_GIT',
-    authorizesLiveExecute: true,
+    authorizesLiveExecute,
     repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
     gitBin: OPS_PILOT_CANONICAL_GIT_BIN,
   });

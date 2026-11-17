@@ -405,44 +405,45 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
-    // Trusted verifier deps: Owner-installed fixed registry OR explicit branded TEST_ONLY deps.
-    // Never accept request-carried trust anchors.
-    let trustedVerifierDeps = deps.trustedVerifierDeps;
-    if (trustedVerifierDeps == null) {
-      const installed = createOwnerInstalledFixedTrustVerifierDeps({
-        home: deps.trustHome,
-        clock: deps.clock,
-        nowMs: deps.nowMs,
-      });
-      if (installed && installed.ok === false) {
-        return {
-          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
-            'OWNER_TRUST_REGISTRY_MISSING',
-          ]),
-          evidence: evidenceEnvelope({ failure: installed }),
-        };
-      }
-      trustedVerifierDeps = installed;
-    } else if (
-      !isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(trustedVerifierDeps)
-      && !isOwnerInstalledFixedTrustVerifierDeps(trustedVerifierDeps)
-    ) {
+    const isExecuteMode = request.mode === 'LIVE_CAPABILITY_GATED_EXECUTE';
+
+    // Never allow request/deps trustHome to redirect the Owner trust registry.
+    if (deps.trustHome != null || request.trustHome != null) {
       return {
         ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
-          'TRUSTED_VERIFIER_DEPS_MUST_BE_BRANDED_TEST_ONLY_OR_OWNER_INSTALLED',
+          'CALLER_TRUST_HOME_OVERRIDE_FORBIDDEN',
         ]),
         evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
       };
     }
 
-    const isExecuteMode = request.mode === 'LIVE_CAPABILITY_GATED_EXECUTE';
-    // Production-capable LIVE path: Owner-installed trust only. TEST_ONLY deps never execute PG.
+    let trustedVerifierDeps = null;
     if (isExecuteMode) {
-      if (!isOwnerInstalledFixedTrustVerifierDeps(trustedVerifierDeps)) {
+      // Production-capable LIVE execute: self-load fixed Owner registry only.
+      // Reject injected deps, clocks, keys, and TEST_ONLY fixtures — branding alone is not authority.
+      if (deps.trustedVerifierDeps != null) {
         return {
           ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
-            'LIVE_EXECUTE_REQUIRES_OWNER_INSTALLED_TRUST_REGISTRY',
-            'TEST_ONLY_OR_CALLER_DEPS_CANNOT_AUTHORIZE_SUBPROCESS',
+            'LIVE_EXECUTE_REJECTS_CALLER_INJECTED_TRUSTED_VERIFIER_DEPS',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
+        };
+      }
+      if (deps.clock != null || deps.nowMs != null || request.clock != null || request.nowMs != null) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+            'LIVE_EXECUTE_REJECTS_CALLER_CLOCK_OR_NOWMS',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
+        };
+      }
+      if (
+        deps.publicKey != null || deps.kid != null || deps.keyRegistry != null
+        || request.publicKey != null || request.kid != null
+      ) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+            'LIVE_EXECUTE_REJECTS_CALLER_KEY_MATERIAL',
           ]),
           evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
         };
@@ -453,6 +454,49 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
             'TEST_ONLY_GIT_FIXTURE_FORBIDDEN_IN_LIVE_EXECUTE',
           ]),
           evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING } }),
+        };
+      }
+      const installed = createOwnerInstalledFixedTrustVerifierDeps({});
+      if (installed && installed.ok === false) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
+            'OWNER_TRUST_REGISTRY_MISSING',
+          ]),
+          evidence: evidenceEnvelope({ failure: installed }),
+        };
+      }
+      if (!isOwnerInstalledFixedTrustVerifierDeps(installed)) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+            'LIVE_EXECUTE_REQUIRES_OWNER_INSTALLED_TRUST_REGISTRY',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
+        };
+      }
+      trustedVerifierDeps = installed;
+    } else {
+      // Offline / authorization-only: Owner-installed fixed registry OR explicit branded TEST_ONLY deps.
+      trustedVerifierDeps = deps.trustedVerifierDeps;
+      if (trustedVerifierDeps == null) {
+        const installed = createOwnerInstalledFixedTrustVerifierDeps({});
+        if (installed && installed.ok === false) {
+          return {
+            ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
+              'OWNER_TRUST_REGISTRY_MISSING',
+            ]),
+            evidence: evidenceEnvelope({ failure: installed }),
+          };
+        }
+        trustedVerifierDeps = installed;
+      } else if (
+        !isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(trustedVerifierDeps)
+        && !isOwnerInstalledFixedTrustVerifierDeps(trustedVerifierDeps)
+      ) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+            'TRUSTED_VERIFIER_DEPS_MUST_BE_BRANDED_TEST_ONLY_OR_OWNER_INSTALLED',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
         };
       }
     }

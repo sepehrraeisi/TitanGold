@@ -1096,10 +1096,20 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(ticketed.trustClass, 'TEST_ONLY');
     assert.equal(ticketed.postgresActions, 0);
 
-    const missingRegistry = createOwnerInstalledFixedTrustVerifierDeps({
+    const homeOverrideDenied = createOwnerInstalledFixedTrustVerifierDeps({
       home: '/tmp/tecp-missing-owner-trust-home-should-not-exist',
     });
-    assert.equal(missingRegistry.ok, false);
+    assert.equal(homeOverrideDenied.ok, false);
+    assert.equal(homeOverrideDenied.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR);
+    assert.ok((homeOverrideDenied.reasons || []).includes('CALLER_TRUST_HOME_OR_KEY_OVERRIDE_FORBIDDEN'));
+    // Default Owner registry path (no override) may be missing on this host — still fail closed.
+    const missingRegistry = createOwnerInstalledFixedTrustVerifierDeps({});
+    if (missingRegistry && missingRegistry.ok === false) {
+      assert.ok(
+        missingRegistry.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING
+        || missingRegistry.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR,
+      );
+    }
 
     // Fresh JTI required: verifier records replay on successful verify.
     const claims2 = { ...claims, jti: 'jti-simin-fencing-2', capabilityId: 'cap-simin-fencing-2' };
@@ -1181,6 +1191,46 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       executeDenied.decision === 'DENY_VERIFIER_TRUST_MISSING'
       || executeDenied.decision === 'DENY_LIVE_SHA_BINDING',
     );
+
+    // LIVE_EXECUTE must reject caller trustHome override even without injected deps.
+    const trustHomeDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustHome: '/tmp/tecp-attacker-trust-home',
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(trustHomeDenied.ok, false);
+    assert.equal(trustHomeDenied.decision, 'DENY_VERIFIER_TRUST_MISSING');
+    assert.ok((trustHomeDenied.reasons || []).includes('CALLER_TRUST_HOME_OVERRIDE_FORBIDDEN'));
+
+    // Fake branded trusted deps object (proofClass only) must DENY.
+    const fakeTrustedDeps = Object.freeze({
+      proofClass: 'OWNER_INSTALLED_FIXED_TRUST_VERIFIER_DEPS_V1',
+      __ownerInstalledTrust: true,
+    });
+    const fakeDepsDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      repositorySha: headSha,
+      repositoryHeadSha: headSha,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: fakeTrustedDeps,
+      testOnlyGitObservationFixture: gitFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(fakeDepsDenied.ok, false);
+    assert.equal(fakeDepsDenied.decision, 'DENY_VERIFIER_TRUST_MISSING');
   });
 });
 
