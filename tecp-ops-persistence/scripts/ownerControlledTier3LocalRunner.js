@@ -17,6 +17,8 @@ import {
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
   OPS_PILOT_DEFAULT_ONESHOT_TTL_MS,
   OPS_PILOT_HARNESS_DECISIONS,
+  OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  OPS_PILOT_LIVE_VENUE,
   OPS_PILOT_MAX_ONESHOT_TTL_MS,
   OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
   OPS_PILOT_OWNER_RUNNER_RELATIVE_PATH,
@@ -25,11 +27,14 @@ import {
   TIER3_FINAL_EXECUTION_CONTRACT,
   TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS,
   assertApprovedSuiteAllowlist,
+  brandVerifiedIndependentOwnerCapability,
   cancelOwnerOneShotTicket,
   createDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
+  createLiveCapabilityGatedOneShotTicket,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
+  evaluateLiveRepositoryHeadBinding,
   evaluateLiveSpawnAuthorizationFromOwnerCapability,
   evaluateOwnerControlledLocalRunnerEvidence,
   isInertOfflineOneShotTicket,
@@ -37,7 +42,12 @@ import {
   isOwnerOneShotTicket,
 } from '../src/disposableOpsPilotDbHarness.js';
 import {
+  S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+  S2_OWNER_CAPABILITY_VENUE_SIMIN,
+  createOwnerInstalledFixedTrustVerifierDeps,
   evaluateVerifiedCapabilityLiveSpawnEligibility,
+  isOwnerInstalledFixedTrustVerifierDeps,
+  isTestOnlyS2Tier3OwnerCapabilityVerifierDeps,
   verifyS2Tier3OwnerCapabilityArtifact,
 } from './s2Tier3OwnerCapabilityVerifier.js';
 
@@ -60,7 +70,10 @@ export const OWNER_RUNNER_DECISIONS = Object.freeze({
   DENY_STOP_OR_CLEANUP_FAILED: 'DENY_STOP_OR_CLEANUP_FAILED',
   DENY_VERIFIER_TRUST_MISSING: 'DENY_VERIFIER_TRUST_MISSING',
   DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF: 'DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF',
+  DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
+  DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
+  ALLOW_LIVE_CAPABILITY_AUTHORIZATION: 'ALLOW_LIVE_CAPABILITY_AUTHORIZATION',
 });
 
 const RUNNER_MODULE_PATH = fileURLToPath(import.meta.url);
@@ -264,8 +277,17 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     ? deps.argv
     : [execPath, OPS_PILOT_OWNER_RUNNER_ARGV_MARKER, suiteCheck.suitePath];
 
+  const liveRequestHint = (
+    request.mode === 'LIVE_CAPABILITY_GATED_AUTHORIZATION'
+    || request.mode === 'LIVE_CAPABILITY_GATED_EXECUTE'
+    || (typeof request.ownerCapabilityArtifact === 'string' && request.ownerCapabilityArtifact.length > 0)
+  );
   const structural = evaluateOwnerControlledLocalRunnerEvidence({
-    repositorySha: request.repositorySha || OPS_PILOT_PINNED_MAIN_SHA,
+    repositorySha: request.repositorySha || (
+      liveRequestHint
+        ? (request.repositoryHeadSha || deps.repositoryHeadSha || '')
+        : OPS_PILOT_PINNED_MAIN_SHA
+    ),
     approvedActions: [suiteCheck.suitePath],
     executablePath: request.executablePath || execPath,
     harnessModulePath: request.harnessModulePath || resolve(
@@ -277,6 +299,8 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     ownerControlledLocalRunnerInvocation: true,
     authorizeLivePostgresSpawn: request.authorizeLivePostgresSpawn === true,
     ttlMs: request.ttlMs,
+    skipOfflinePinShaCheck: liveRequestHint === true,
+    liveCapabilityShaBinding: liveRequestHint === true,
   }, {
     argv,
     execPath,
@@ -285,9 +309,15 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
 
   if (
     structural.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_WRONG_REPOSITORY_SHA
+    || structural.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING
   ) {
     return {
-      ...deny(OWNER_RUNNER_DECISIONS.DENY_WRONG_REPOSITORY_SHA, structural.reasons || []),
+      ...deny(
+        structural.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING
+          ? OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING
+          : OWNER_RUNNER_DECISIONS.DENY_WRONG_REPOSITORY_SHA,
+        structural.reasons || [],
+      ),
       evidence: evidenceEnvelope({ authorization: structural, failure: structural }),
     };
   }
@@ -344,96 +374,326 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
 
   const capabilityToken = typeof request.ownerCapabilityArtifact === 'string'
     ? request.ownerCapabilityArtifact
-    : (typeof request.ownerCapabilityToken === 'string'
-      ? request.ownerCapabilityToken
-      : null);
+    : null;
+
+  const liveModes = new Set([
+    'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+    'LIVE_CAPABILITY_GATED_EXECUTE',
+  ]);
+  const isLiveMode = liveModes.has(request.mode) || capabilityToken != null;
+
   let capabilityVerified = null;
-  if (capabilityToken) {
-    // Trusted verifier configuration must be explicitly supplied via deps (not request).
-    // Test-only deps require branded TEST_ONLY proofClass; no implicit __testMode fallback.
-    const trustedVerifierDeps = deps.trustedVerifierDeps;
-    if (trustedVerifierDeps == null) {
-      return {
-        ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
-          'TRUSTED_VERIFIER_DEPS_REQUIRED',
-          'NO_IMPLICIT_TEST_MODE_FALLBACK',
-        ]),
-        evidence: evidenceEnvelope({
-          failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING },
-        }),
-      };
-    }
-    capabilityVerified = verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
-      suitePath: suiteCheck.suitePath,
-    }, trustedVerifierDeps);
-  }
+  let liveAuthorization = null;
+  let liveTicketResult = null;
 
-  const independent = evaluateIndependentOwnerCapability(
-    request.independentOwnerCapability || null,
-  );
-  const wantsLive = request.mode === 'LIVE_DISPOSABLE'
-    || request.authorizeLivePostgresSpawn === true;
-
-  if (wantsLive) {
-    if (capabilityVerified) {
-      // Request custody booleans are NEVER accepted as independent proof.
-      const liveFromCapability = evaluateLiveSpawnAuthorizationFromOwnerCapability({
-        verifiedCapability: capabilityVerified,
-        ownerCustodyProven: false,
-        recoveryAdminProven: false,
-      });
-      const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(capabilityVerified, {
-        ownerCustodyProven: false,
-        recoveryAdminProven: false,
-      });
-      if (!liveFromCapability.ok || !spawnEligibility.ok) {
-        return {
-          ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, [
-            'VERIFIED_CAPABILITY_DOES_NOT_MINT_LIVE_TICKET',
-            liveFromCapability.decision || spawnEligibility.decision,
-            ...(liveFromCapability.reasons || []),
-            ...(spawnEligibility.reasons || []),
-          ]),
-          capabilityVerified,
-          evidence: evidenceEnvelope({
-            authorization: Object.freeze({ structural, independent, capabilityVerified }),
-            failure: liveFromCapability,
-          }),
-        };
-      }
-    }
-    if (!independent.ok || independent.ownerAuthenticationProven !== true) {
+  if (isLiveMode) {
+    if (!capabilityToken) {
       return {
         ...deny(
           OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE,
           [
             'DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE',
-            'LOCAL_RUNNER_IS_NOT_TRUSTED_CREDENTIAL_AUTHORITY',
-            ...(independent.reasons || []),
+            'LIVE_MODE_REQUIRES_OWNER_CAPABILITY_ARTIFACT',
           ],
         ),
-        requiredExternalTrustComponents: TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS,
+        evidence: evidenceEnvelope({ failure: { missingCapability: true } }),
+      };
+    }
+
+    // Trusted verifier deps: Owner-installed fixed registry OR explicit branded TEST_ONLY deps.
+    // Never accept request-carried trust anchors.
+    let trustedVerifierDeps = deps.trustedVerifierDeps;
+    if (trustedVerifierDeps == null) {
+      const installed = createOwnerInstalledFixedTrustVerifierDeps({
+        home: deps.trustHome,
+        clock: deps.clock,
+        nowMs: deps.nowMs,
+      });
+      if (installed && installed.ok === false) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
+            'OWNER_TRUST_REGISTRY_MISSING',
+          ]),
+          evidence: evidenceEnvelope({ failure: installed }),
+        };
+      }
+      trustedVerifierDeps = installed;
+    } else if (
+      !isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(trustedVerifierDeps)
+      && !isOwnerInstalledFixedTrustVerifierDeps(trustedVerifierDeps)
+    ) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+          'TRUSTED_VERIFIER_DEPS_MUST_BE_BRANDED_TEST_ONLY_OR_OWNER_INSTALLED',
+        ]),
+        evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
+      };
+    }
+
+    const headSha = String(
+      deps.repositoryHeadSha
+      || request.repositoryHeadSha
+      || request.repositorySha
+      || '',
+    );
+    const shaBind = evaluateLiveRepositoryHeadBinding({
+      capabilityPinnedSha: headSha,
+      repositoryHeadSha: headSha,
+    });
+    // Preliminary format check only; exact capability claim match happens after verify.
+    if (!/^[0-9a-f]{40}$/.test(headSha) || headSha === OPS_PILOT_PINNED_MAIN_SHA) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, [
+          'LIVE_HEAD_SHA_REQUIRED_AND_MUST_NOT_BE_OFFLINE_PIN',
+          ...(shaBind.reasons || []),
+        ]),
+        evidence: evidenceEnvelope({ failure: shaBind }),
+      };
+    }
+
+    capabilityVerified = verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
+      suitePath: suiteCheck.suitePath,
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+      pinnedMainSha: headSha,
+      forbidOfflinePinAsLiveSha: true,
+    }, trustedVerifierDeps);
+
+    if (!capabilityVerified || capabilityVerified.ok !== true) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE, [
+          'OWNER_CAPABILITY_VERIFY_FAILED',
+          ...(capabilityVerified?.reasons || []),
+          capabilityVerified?.decision,
+        ]),
+        capabilityVerified,
         evidence: evidenceEnvelope({
-          authorization: Object.freeze({ structural, independent }),
-          failure: independent,
+          authorization: Object.freeze({ structural, capabilityVerified }),
+          failure: capabilityVerified,
         }),
       };
     }
-    if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true || OPS_PILOT_TIER3_AUTHORIZED === true) {
-      // Tier3 module const must remain false; DB execution must be explicitly true for live.
+
+    const claimShaBind = evaluateLiveRepositoryHeadBinding({
+      capabilityPinnedSha: capabilityVerified.claims?.pinnedMainSha,
+      repositoryHeadSha: headSha,
+    });
+    if (!claimShaBind.ok) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, claimShaBind.reasons || []),
+        capabilityVerified,
+        evidence: evidenceEnvelope({ failure: claimShaBind, authorization: { structural, capabilityVerified } }),
+      };
+    }
+
+    const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(capabilityVerified, {
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+      ohsaCustodyClaimed: false,
+    });
+    liveAuthorization = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: capabilityVerified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+      ohsaCustodyClaimed: false,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath: suiteCheck.suitePath,
+    });
+    if (!liveAuthorization.ok || !spawnEligibility.ok || liveAuthorization.liveSpawnEligible !== true) {
       return {
         ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, [
-          'OPS_PILOT_DB_EXECUTION_AUTHORIZED=false',
-          'LIVE_SPAWN_FORBIDDEN_IN_THIS_PHASE',
+          'LIVE_CAPABILITY_NOT_ELIGIBLE',
+          liveAuthorization.decision || spawnEligibility.decision,
+          ...(liveAuthorization.reasons || []),
+          ...(spawnEligibility.reasons || []),
         ]),
+        capabilityVerified,
         evidence: evidenceEnvelope({
-          authorization: Object.freeze({ structural, independent }),
+          authorization: Object.freeze({ structural, capabilityVerified, liveAuthorization, spawnEligibility }),
+          failure: liveAuthorization,
         }),
       };
     }
+
+    // Brand verified capability (does not mint/sign). Create live one-shot ticket.
+    brandVerifiedIndependentOwnerCapability(capabilityVerified);
+    liveTicketResult = createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: capabilityVerified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath: suiteCheck.suitePath,
+      ttlMs: request.ttlMs ?? OPS_PILOT_DEFAULT_ONESHOT_TTL_MS,
+    }, { clock: deps.clock || {} });
+    if (!liveTicketResult.ok) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, liveTicketResult.reasons || [
+          'LIVE_ONESHOT_CREATE_FAILED',
+        ]),
+        capabilityVerified,
+        evidence: evidenceEnvelope({ failure: liveTicketResult }),
+      };
+    }
+
+    // AUTHORIZATION mode: validate + ticket only. No PostgreSQL side effects.
+    if (request.mode !== 'LIVE_CAPABILITY_GATED_EXECUTE') {
+      return Object.freeze({
+        ok: true,
+        allowed: true,
+        decision: OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION,
+        reasons: Object.freeze([
+          'LIVE_CAPABILITY_AUTHORIZATION_ONLY',
+          'NO_POSTGRES_SIDE_EFFECTS',
+          'MODULE_CONSTS_REMAIN_FALSE',
+          'OHSA_NOT_PROVEN',
+          'RECOVERY_ADMIN_NOT_PROVEN',
+          'SEPARATE_EXECUTE_MODE_REQUIRED_FOR_PG_SPAWN',
+          ...liveAuthorization.reasons,
+        ]),
+        suitePath: suiteCheck.suitePath,
+        ticket: liveTicketResult.ticket,
+        capabilityVerified,
+        liveAuthorization,
+        custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+        venue: OPS_PILOT_LIVE_VENUE,
+        postgresActions: 0,
+        dbActions: 0,
+        workerActions: 0,
+        mcpMutations: 0,
+        operationalDispatchActions: 0,
+        productionActions: 0,
+        ownerAuthenticationProven: true,
+        ownerInvocationIndependentlyVerifiable: true,
+        ownerCustodyProven: false,
+        recoveryAdminProven: false,
+        liveDbExecutionAuthorized: false,
+        moduleConsts: Object.freeze({
+          OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+          OPS_PILOT_TIER3_AUTHORIZED,
+        }),
+        evidence: evidenceEnvelope({
+          authorization: Object.freeze({
+            structural,
+            capabilityVerified,
+            liveAuthorization,
+            spawnEligibility,
+          }),
+        }),
+      });
+    }
+
+    // EXECUTE mode: capability-gated disposable lifecycle (post-merge Owner step only).
+    // Still refuses env/boolean overrides and keeps module consts false.
+    if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, [
+          'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
+        ]),
+        evidence: evidenceEnvelope({ failure: { moduleConstsUnexpected: true } }),
+      };
+    }
+
+    const clock = deps.clock || {};
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: liveTicketResult.ticket,
+      clock,
+      spawnSyncFn: deps.spawnSyncFn, // optional inject for offline inert proofs only
+    }, { NODE_ENV: 'test', ...(env || {}) });
+    if (!isOwnedDisposableOpsPilotClusterController(controller)) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+          'LIVE_OWNED_CONTROLLER_CREATE_FAILED',
+          controller?.decision || 'UNKNOWN',
+        ]),
+        evidence: evidenceEnvelope({ failure: controller }),
+      };
+    }
+    const prepared = await controller.prepare();
+    if (!prepared.ok) {
+      await controller.cleanup();
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, prepared.reasons || ['PREPARE_FAILED']),
+        evidence: evidenceEnvelope({ start: prepared, failure: prepared }),
+        postgresActions: prepared.postgresActions || 0,
+      };
+    }
+    const started = await controller.start();
+    if (!started.ok) {
+      const cleaned = await controller.cleanup();
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, started.reasons || ['START_DENIED']),
+        evidence: evidenceEnvelope({ start: started, cleanup: cleaned, failure: started }),
+        postgresActions: started.postgresActions || 0,
+      };
+    }
+
+    const suiteModule = await loadSuiteExecutor(suiteCheck.suitePath);
+    let suiteResult;
+    try {
+      suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
+        mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+        ownedController: controller,
+        repositorySha: headSha,
+        suitePath: suiteCheck.suitePath,
+        liveCapabilityAuthorized: true,
+        custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      });
+    } catch (error) {
+      suiteResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+        'SUITE_ORCHESTRATION_THREW',
+        error.message || String(error),
+      ]);
+    }
+    let stopped;
+    let cleaned;
+    let stopError = null;
+    let cleanupError = null;
+    try { stopped = await controller.stop(); } catch (error) { stopError = error; stopped = null; }
+    const stopValidated = isValidatedSuccessfulLifecycleResult(stopped);
+    try { cleaned = await controller.cleanup(); } catch (error) { cleanupError = error; cleaned = null; }
+    const cleanupValidated = isValidatedSuccessfulLifecycleResult(cleaned);
+    const overallOk = suiteResult?.ok === true && stopValidated && cleanupValidated;
+    return Object.freeze({
+      ok: overallOk,
+      allowed: overallOk,
+      decision: overallOk
+        ? OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION
+        : OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED,
+      reasons: Object.freeze([
+        'LIVE_CAPABILITY_GATED_EXECUTE',
+        'MODULE_CONSTS_REMAIN_FALSE',
+        'OHSA_NOT_PROVEN',
+        ...(suiteResult?.reasons || []),
+      ]),
+      suitePath: suiteCheck.suitePath,
+      suiteResult,
+      postgresActions: started.postgresActions || 0,
+      dbActions: suiteResult?.sqlExecuted === true ? 1 : 0,
+      workerActions: 0,
+      mcpMutations: 0,
+      operationalDispatchActions: 0,
+      productionActions: 0,
+      ownerAuthenticationProven: true,
+      ownerInvocationIndependentlyVerifiable: true,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+      liveDbExecutionAuthorized: false,
+      evidence: evidenceEnvelope({
+        authorization: Object.freeze({ structural, capabilityVerified, liveAuthorization }),
+        start: started,
+        stop: lifecycleStageEvidence('stop', stopped, stopError),
+        cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),
+        suite: suiteResult,
+      }),
+    });
   }
 
-  // Default and LIVE without proven capability: fail closed.
+  // Default without capability: fail closed (non-offline modes).
   if (request.mode !== 'OFFLINE_INERT_ORCHESTRATION') {
     return {
       ...deny(
@@ -441,14 +701,12 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
         [
           'DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE',
           'DEFAULT_DENY',
-          'OFFLINE_INERT_ORCHESTRATION_MODE_REQUIRED_FOR_TEST_ROUTING',
-          ...(independent.reasons || []),
+          'CAPABILITY_REQUIRED_FOR_LIVE_BRIDGE',
         ],
       ),
       requiredExternalTrustComponents: TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS,
-      executionContract: TIER3_FINAL_EXECUTION_CONTRACT,
       evidence: evidenceEnvelope({
-        authorization: Object.freeze({ structural, independent }),
+        authorization: Object.freeze({ structural }),
         failure: { decision: OWNER_RUNNER_DECISIONS.DENY_DEFAULT },
       }),
     };
@@ -631,7 +889,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       ownerInvocationIndependentlyVerifiable: false,
       liveDbExecutionAuthorized: false,
       evidence: evidenceEnvelope({
-        authorization: Object.freeze({ structural, independent, capabilityVerified }),
+        authorization: Object.freeze({ structural, capabilityVerified }),
         start: started,
         stop: lifecycleStageEvidence('stop', stopped, stopError),
         cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),
@@ -679,7 +937,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     ownerInvocationIndependentlyVerifiable: false,
     liveDbExecutionAuthorized: false,
     evidence: evidenceEnvelope({
-      authorization: Object.freeze({ structural, independent, capabilityVerified }),
+      authorization: Object.freeze({ structural, capabilityVerified }),
       start: started,
       stop: lifecycleStageEvidence('stop', stopped, stopError),
       cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),

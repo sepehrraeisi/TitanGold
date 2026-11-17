@@ -58,6 +58,19 @@ export const OPS_PILOT_ACTIVATION_PREP_VENUE =
 /** Prep status: binaries/Rule02 prep may advance; live gates remain closed. */
 export const OPS_PILOT_ACTIVATION_PREP_STATUS =
   'PG14_BINARIES_AND_RULE02_PREP_ONLY_LIVE_DB_AND_TIER3_GATES_REMAIN_CLOSED';
+/** Historical offline regression pin alias (immutable offline invariant). */
+export const OPS_PILOT_OFFLINE_CONTRACT_PIN_SHA = OPS_PILOT_PINNED_MAIN_SHA;
+/** Live venue binding for SIMIN Hyper-V lab capabilities. */
+export const OPS_PILOT_LIVE_VENUE = 'SIMIN_HYPERV_UBUNTU_VM_TITANGOLD_S2_LAB_ONLY';
+/** Functional-lab custody class — NOT OHSA / NOT independent recovery-admin proof. */
+export const OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB =
+  'FUNCTIONAL_LAB_OWNER_SIGNED_CAPABILITY_SAME_UID_ACCEPTED_FOR_DISPOSABLE_ONLY';
+export const OPS_PILOT_LIVE_BRIDGE_MODE =
+  'CAPABILITY_GATED_ONESHOT_LIVE_LIFECYCLE_MODULE_CONSTS_REMAIN_FALSE';
+export const OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR =
+  '.tecp-ops-pilot/s2-simin-owner-trust';
+export const OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME = 'ed25519-spki.pem';
+export const OPS_PILOT_OWNER_TRUST_KID_FILENAME = 'kid.txt';
 /** Governance merge base for offline five-path implementation (PR #307). */
 export const OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA =
   '361eaab9d449f3070b87b5ad0c88e5f5a38da49d';
@@ -104,6 +117,12 @@ export const TIER3_FINAL_EXECUTION_CONTRACT = Object.freeze({
   activationEraTargetMainSha: OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA,
   activationPrepVenue: OPS_PILOT_ACTIVATION_PREP_VENUE,
   activationPrepStatus: OPS_PILOT_ACTIVATION_PREP_STATUS,
+  activationEraTargetIsHistoricalPrepOnly: true,
+  liveBridgeMode: OPS_PILOT_LIVE_BRIDGE_MODE,
+  liveVenue: OPS_PILOT_LIVE_VENUE,
+  liveCustodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  offlineContractPinSha: OPS_PILOT_OFFLINE_CONTRACT_PIN_SHA,
+  liveShaPolicy: 'CAPABILITY_PINNED_SHA_MUST_EQUAL_GIT_HEAD_NOT_OFFLINE_PIN',
   windowsPg17: 'DENY',
   wsl2: 'DENY',
   remoteServer: 'DENY',
@@ -192,6 +211,11 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING: 'DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING',
   DENY_OWNER_CAPABILITY_INVALID: 'DENY_OWNER_CAPABILITY_INVALID',
   DENY_OWNER_CUSTODY_NOT_PROVEN: 'DENY_OWNER_CUSTODY_NOT_PROVEN',
+  DENY_OHSA_CUSTODY_CLAIM: 'DENY_OHSA_CUSTODY_CLAIM',
+  DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
+  DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
+  ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY: 'ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY',
+  ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB: 'ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB',
   DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
   DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
@@ -488,11 +512,26 @@ export function evaluateOwnerControlledLocalRunnerEvidence(evidence = {}, deps =
   }
 
   const repositorySha = String(evidence.repositorySha || '');
-  if (repositorySha !== OPS_PILOT_PINNED_MAIN_SHA) {
+  const skipOfflinePin = evidence.skipOfflinePinShaCheck === true
+    && evidence.liveCapabilityShaBinding === true;
+  if (!skipOfflinePin && repositorySha !== OPS_PILOT_PINNED_MAIN_SHA) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_WRONG_REPOSITORY_SHA, [
       `EXPECTED=${OPS_PILOT_PINNED_MAIN_SHA}`,
       `GOT=${repositorySha || 'MISSING'}`,
     ]);
+  }
+  if (skipOfflinePin) {
+    if (!/^[0-9a-f]{40}$/.test(repositorySha)) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+        'LIVE_REPOSITORY_SHA_MUST_BE_40_HEX',
+      ]);
+    }
+    if (repositorySha === OPS_PILOT_PINNED_MAIN_SHA) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+        'LIVE_SHA_MUST_NOT_BE_HISTORICAL_OFFLINE_PIN',
+        OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
+      ]);
+    }
   }
 
   const approvedActions = normalizeApprovedActions(evidence.approvedActions);
@@ -599,7 +638,7 @@ function createTicketRecord(publicFields, privilegeFields) {
     consumed: privilegeFields.consumed === true,
     cancelled: privilegeFields.cancelled === true,
     inert: privilegeFields.inert === true,
-    liveSpawnPermitted: false,
+    liveSpawnPermitted: privilegeFields.liveSpawnPermitted === true,
     prepareUsed: privilegeFields.prepareUsed === true,
     expiresAtMonotonicMs: privilegeFields.expiresAtMonotonicMs,
     createdAtMonotonicMs: privilegeFields.createdAtMonotonicMs,
@@ -1285,11 +1324,12 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           'REPEATED_ALLOCATION_FORBIDDEN',
         ]);
       }
-      // Filesystem allocation only for inert TEST_ONLY tickets under offline proof,
-      // or (future) live gate — never via ARGV/env/boolean/public factory alone.
-      if (!usingInertTicket) {
+      // Filesystem allocation only for inert TEST_ONLY tickets or capability-gated
+      // live one-shot (liveSpawnPermitted private privilege). Never via ARGV/env/boolean.
+      const allowLivePrepare = priv.liveSpawnPermitted === true && !usingInertTicket;
+      if (!usingInertTicket && !allowLivePrepare) {
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
-          'PREPARE_REQUIRES_INERT_OFFLINE_TICKET_WHILE_LIVE_GATE_CLOSED',
+          'PREPARE_REQUIRES_INERT_OR_LIVE_CAPABILITY_TICKET',
           'ARGV_ENV_BOOLEAN_PUBLIC_FACTORY_CANNOT_AUTHORIZE_FS_ALLOCATION',
         ]);
       }
@@ -1353,9 +1393,13 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
 
       const allowInertLifecycle = usingInertTicket && injectedSpawn;
       const ticketPriv = getTicketPrivilege(ticket);
+      // Live lifecycle is capability-gated one-shot privilege only.
+      // Global module consts MUST remain false (offline invariant).
       const allowLiveLifecycle = ticketPriv?.liveSpawnPermitted === true
-        && OPS_PILOT_DB_EXECUTION_AUTHORIZED === true
-        && !usingInertTicket;
+        && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
+        && OPS_PILOT_TIER3_AUTHORIZED === false
+        && !usingInertTicket
+        && !injectedSpawn;
 
       if (!allowInertLifecycle && !allowLiveLifecycle) {
         // Consume so failure cannot be retried with the same ticket.
@@ -1825,6 +1869,46 @@ export function evaluateIndependentOwnerCapability(capability = null) {
  * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
  * Never mints independentOwnerCapabilityLatch or live tickets in this offline slice.
  */
+export function evaluateLiveRepositoryHeadBinding(input = {}) {
+  const capabilitySha = String(input.capabilityPinnedSha || '');
+  const headSha = String(input.repositoryHeadSha || '');
+  if (!/^[0-9a-f]{40}$/.test(capabilitySha) || !/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'CAPABILITY_AND_HEAD_SHA_REQUIRED_40_HEX',
+    ]);
+  }
+  if (capabilitySha !== headSha) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'CAPABILITY_PINNED_SHA_MUST_EQUAL_GIT_HEAD',
+      `CAPABILITY=${capabilitySha}`,
+      `HEAD=${headSha}`,
+    ]);
+  }
+  if (capabilitySha === OPS_PILOT_PINNED_MAIN_SHA) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'LIVE_SHA_MUST_NOT_EQUAL_OFFLINE_CONTRACT_PIN',
+    ]);
+  }
+  if (capabilitySha === OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'PR310_ACTIVATION_ERA_TARGET_IS_HISTORICAL_PREP_NOT_LIVE_PIN',
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze(['LIVE_SHA_BINDING_OK']),
+    capabilityPinnedSha: capabilitySha,
+    repositoryHeadSha: headSha,
+  });
+}
+
+/**
+ * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
+ * Module consts remain false. Functional-lab custody class is accepted without
+ * fabricating OHSA / recovery-admin TRUE evidence.
+ */
 export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
   const verified = input.verifiedCapability || input.capabilityVerification || null;
   if (!verified || verified.ok !== true) {
@@ -1835,38 +1919,161 @@ export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
       liveSpawnEligible: false,
       ownerCustodyProven: false,
       recoveryAdminProven: false,
+      custodyClass: null,
     });
   }
-  if (input.ownerCustodyProven !== true) {
+  if (input.ohsaCustodyClaimed === true || input.claimOhsaIndependentCustody === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OHSA_CUSTODY_CLAIM, [
+      'OHSA_INDEPENDENT_CUSTODY_NOT_AUTHORIZED_IN_FUNCTIONAL_LAB_PATH',
+    ], { liveSpawnEligible: false, ohsaClaim: 'NOT_PROVEN' });
+  }
+  // Reject fabricated stronger custody/recovery booleans.
+  if (input.ownerCustodyProven === true || input.recoveryAdminProven === true) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
-      'OWNER_CUSTODY_NOT_PROVEN',
-      'VERIFY_ONLY_NOT_CUSTODY_PROOF',
+      'CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN',
+      'FUNCTIONAL_LAB_PATH_MUST_NOT_FABRICATE_OHSA_EVIDENCE',
     ], {
       liveSpawnEligible: false,
       ownerCustodyProven: false,
-    });
-  }
-  if (input.recoveryAdminProven !== true) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RECOVERY_ADMIN_NOT_PROVEN, [
-      'RECOVERY_ADMIN_NOT_PROVEN',
-    ], {
-      liveSpawnEligible: false,
       recoveryAdminProven: false,
     });
   }
-  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true || OPS_PILOT_TIER3_AUTHORIZED === true) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-      'LIVE_DB_GATE_CLOSED',
-      OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
-      'INDEPENDENT_OWNER_CAPABILITY_LATCH_NOT_MINTED_IN_REPO',
+  if (input.custodyClass !== OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_REQUIRED',
+      'OHSA_NOT_PROVEN',
+      'RECOVERY_ADMIN_NOT_PROVEN',
     ], {
       liveSpawnEligible: false,
-      liveGateClosed: true,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
     });
   }
-  return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-    'DEFAULT_FAIL_CLOSED_OFFLINE_IMPLEMENTATION',
-  ], { liveSpawnEligible: false });
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
+      'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
+      'LIVE_USES_CAPABILITY_GATED_ONESHOT_NOT_GLOBAL_CONST_FLIP',
+    ], { liveSpawnEligible: false, liveGateClosed: true });
+  }
+  const venue = String(input.venue || verified.claims?.venue || '');
+  if (venue !== OPS_PILOT_LIVE_VENUE) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_VENUE_BINDING, [
+      'SIMIN_HYPERV_VENUE_REQUIRED',
+      `GOT=${venue || 'MISSING'}`,
+    ], { liveSpawnEligible: false });
+  }
+  const shaBind = evaluateLiveRepositoryHeadBinding({
+    capabilityPinnedSha: verified.claims?.pinnedMainSha,
+    repositoryHeadSha: input.repositoryHeadSha,
+  });
+  if (!shaBind.ok) {
+    return deny(shaBind.decision, shaBind.reasons || [], { liveSpawnEligible: false });
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB,
+    reasons: Object.freeze([
+      'VERIFIED_OWNER_CAPABILITY',
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_ACCEPTED',
+      'MODULE_CONSTS_REMAIN_FALSE',
+      'OHSA_NOT_PROVEN',
+      'RECOVERY_ADMIN_NOT_PROVEN',
+      'LIVE_SHA_BINDING_OK',
+    ]),
+    liveSpawnEligible: true,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    venue: OPS_PILOT_LIVE_VENUE,
+    capabilityPinnedSha: verified.claims?.pinnedMainSha,
+  });
+}
+
+/**
+ * Brand a crypto-verified capability object for independent-capability checks.
+ * Does NOT mint/sign an Owner capability token.
+ */
+export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
+  if (!verifiedCapability || verifiedCapability.ok !== true || !verifiedCapability.claims) {
+    throw new TypeError('VERIFIED_CAPABILITY_REQUIRED_FOR_BRAND');
+  }
+  const branded = Object.freeze({
+    kind: 'VERIFIED_INDEPENDENT_OWNER_CAPABILITY_BRAND',
+    proofClass: 'CRYPTO_VERIFIED_OWNER_CAPABILITY_NOT_MINTED_HERE',
+    claims: Object.freeze({ ...verifiedCapability.claims }),
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    ohsaClaim: 'NOT_PROVEN',
+  });
+  independentOwnerCapabilityLatch.add(branded);
+  return branded;
+}
+
+/**
+ * Create a live one-shot ticket after capability authorization.
+ * liveSpawnPermitted is module-private only.
+ */
+export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
+  if (!isPlainObject(input)) {
+    throw new TypeError('LIVE_ONESHOT_OPTIONS_REQUIRED');
+  }
+  if (input.proofClass !== 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET') {
+    throw new TypeError('LIVE_CAPABILITY_GATED_ONESHOT_PROOF_CLASS_REQUIRED');
+  }
+  if (input.authorizeByBoolean === true || input.envAuthorized === true) {
+    throw new Error('LIVE_ONESHOT_BOOLEAN_ENV_FORBIDDEN');
+  }
+  const auth = evaluateLiveSpawnAuthorizationFromOwnerCapability(input);
+  if (!auth.ok || auth.liveSpawnEligible !== true) {
+    return auth;
+  }
+  const clock = deps.clock || {};
+  const ttlMs = Number(input.ttlMs ?? OPS_PILOT_DEFAULT_ONESHOT_TTL_MS);
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > OPS_PILOT_MAX_ONESHOT_TTL_MS) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, ['TTL_OUT_OF_BOUNDS']);
+  }
+  const suiteCheck = assertApprovedSuiteAllowlist(input.suitePath);
+  if (!suiteCheck.ok) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, suiteCheck.reasons || []);
+  }
+  const createdAtMonotonicMs = monotonicNowMs(clock);
+  const ticket = createTicketRecord({
+    proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+    repositorySha: auth.capabilityPinnedSha,
+    approvedActions: Object.freeze([suiteCheck.suitePath]),
+    venue: OPS_PILOT_LIVE_VENUE,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    authorizesLivePostgres: false,
+    ownerAuthenticationProven: true,
+    classification: 'CAPABILITY_GATED_LIVE_ONESHOT_MODULE_CONSTS_FALSE',
+  }, {
+    state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
+    consumed: false,
+    cancelled: false,
+    inert: false,
+    liveSpawnPermitted: true,
+    prepareUsed: false,
+    expiresAtMonotonicMs: createdAtMonotonicMs + ttlMs,
+    createdAtMonotonicMs,
+    ttlMs,
+    repositorySha: auth.capabilityPinnedSha,
+    approvedActions: [suiteCheck.suitePath],
+    nonce: randomBytes(16).toString('hex'),
+  });
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze(['LIVE_ONESHOT_CREATED', ...auth.reasons]),
+    ticket,
+    liveSpawnEligible: true,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    postgresActions: 0,
+  });
 }
 
 /**

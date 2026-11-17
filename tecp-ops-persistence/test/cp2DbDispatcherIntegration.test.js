@@ -83,6 +83,8 @@ import {
   consumeRunnerOfflineSuiteGrant,
   createRunnerOfflineSuiteGrantForTests,
   evaluateLiveSpawnAuthorizationFromOwnerCapability,
+  OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  OPS_PILOT_LIVE_VENUE,
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
   isPrivilegedTier3ActivationHandle,
@@ -862,7 +864,8 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       recoveryAdminProven: true,
     });
     assert.equal(liveCap.ok, false);
-    assert.equal(liveCap.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED);
+    assert.equal(liveCap.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN);
+    assert.ok(liveCap.reasons.includes('CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN'));
 
     assert.equal(
       evaluateVerifiedCapabilityLiveSpawnEligibility(valid, {

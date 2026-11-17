@@ -50,9 +50,14 @@ import {
   createRunnerOfflineSuiteGrantForTests,
   detectPostgresVersion,
   evaluateIndependentOwnerCapability,
+  evaluateLiveRepositoryHeadBinding,
+  evaluateLiveSpawnAuthorizationFromOwnerCapability,
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
+  OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  OPS_PILOT_LIVE_VENUE,
+  createLiveCapabilityGatedOneShotTicket,
   getOwnerOneShotTicketView,
   inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
@@ -1227,4 +1232,52 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offlin
     });
     assert.equal(isRunnerOfflineSuiteGrant(grant), true);
   });
+
+  it('22) capability-gated functional-lab live bridge authorizes without flipping consts or spawning PG', () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    const fakeVerified = {
+      ok: true,
+      claims: {
+        pinnedMainSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+        purpose: 'S2_SIMIN_HYPERV_LAB_OWNER_CAPABILITY_V1',
+        venue: OPS_PILOT_LIVE_VENUE,
+        suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      },
+    };
+    const deniedNoClass = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: fakeVerified,
+      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+      venue: OPS_PILOT_LIVE_VENUE,
+    });
+    assert.equal(deniedNoClass.ok, false);
+    const allowed = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: fakeVerified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+      venue: OPS_PILOT_LIVE_VENUE,
+    });
+    assert.equal(allowed.ok, true);
+    assert.equal(allowed.ownerCustodyProven, false);
+    assert.equal(allowed.recoveryAdminProven, false);
+    const ticketed = createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: fakeVerified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      ttlMs: 30_000,
+    }, { clock: { now: () => 1 } });
+    assert.equal(ticketed.ok, true);
+    assert.equal(ticketed.postgresActions, 0);
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    const offlinePinBind = evaluateLiveRepositoryHeadBinding({
+      capabilityPinnedSha: OPS_PILOT_PINNED_MAIN_SHA,
+      repositoryHeadSha: OPS_PILOT_PINNED_MAIN_SHA,
+    });
+    assert.equal(offlinePinBind.ok, false);
+  });
+
 });

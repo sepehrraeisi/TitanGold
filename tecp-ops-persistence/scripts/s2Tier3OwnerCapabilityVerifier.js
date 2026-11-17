@@ -6,14 +6,21 @@
  */
 
 import { createPublicKey, verify } from 'node:crypto';
-import { basename, resolve } from 'node:path';
+import { existsSync, readFileSync as readFsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join as pathJoin, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
   OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
   OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA,
+  OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  OPS_PILOT_LIVE_VENUE,
   OPS_PILOT_MAX_ONESHOT_TTL_MS,
+  OPS_PILOT_OWNER_TRUST_KID_FILENAME,
+  OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME,
+  OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR,
   OPS_PILOT_PINNED_MAIN_SHA,
   OPS_PILOT_TIER3_AUTHORIZED,
   normalizeApprovedSuitePath,
@@ -22,9 +29,14 @@ import {
 export const OPERATIONAL_ISSUANCE_ENABLED = false;
 export const S2_OWNER_CAPABILITY_KIND = 'TECP_OPS_S2_TIER3_OWNER_CAPABILITY_V1';
 export const S2_OWNER_CAPABILITY_PURPOSE = 'S2_WSL_LAB_OWNER_CAPABILITY_V1';
+export const S2_OWNER_CAPABILITY_PURPOSE_WSL_LEGACY = S2_OWNER_CAPABILITY_PURPOSE;
+export const S2_OWNER_CAPABILITY_PURPOSE_SIMIN = 'S2_SIMIN_HYPERV_LAB_OWNER_CAPABILITY_V1';
 export const S2_OWNER_CAPABILITY_REPOSITORY_ID = 'sepehrraeisi/TitanGold';
 export const S2_OWNER_CAPABILITY_ALG = 'Ed25519';
 export const S2_OWNER_CAPABILITY_ISSUER = 'titangold-owner-s2-wsl-lab';
+export const S2_OWNER_CAPABILITY_ISSUER_SIMIN = 'titangold-owner-s2-simin-hyperv-lab';
+export const S2_OWNER_CAPABILITY_VENUE_SIMIN = OPS_PILOT_LIVE_VENUE;
+export const S2_OWNER_INSTALLED_TRUST_DEPS_PROOF_CLASS = 'OWNER_INSTALLED_FIXED_TRUST_VERIFIER_DEPS_V1';
 
 export const S2_TIER3_OWNER_CAPABILITY_DECISIONS = Object.freeze({
   ALLOW_VERIFY_ONLY: 'ALLOW_VERIFY_ONLY',
@@ -50,9 +62,13 @@ export const S2_TIER3_OWNER_CAPABILITY_DECISIONS = Object.freeze({
   DENY_LIVE_SPAWN_INELIGIBLE: 'DENY_LIVE_SPAWN_INELIGIBLE',
   DENY_MISSING_TRUSTED_VERIFIER_DEPS: 'DENY_MISSING_TRUSTED_VERIFIER_DEPS',
   DENY_CALLER_SUPPLIED_TRUST_ANCHOR: 'DENY_CALLER_SUPPLIED_TRUST_ANCHOR',
+  DENY_WRONG_VENUE: 'DENY_WRONG_VENUE',
+  DENY_LEGACY_WSL_PURPOSE_FOR_SIMIN: 'DENY_LEGACY_WSL_PURPOSE_FOR_SIMIN',
+  DENY_OWNER_TRUST_REGISTRY_MISSING: 'DENY_OWNER_TRUST_REGISTRY_MISSING',
+  ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB: 'ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB',
 });
 
-const CLAIM_KEY_ORDER = Object.freeze([
+const CLAIM_KEY_ORDER_LEGACY_WSL = Object.freeze([
   'alg',
   'capabilityId',
   'exp',
@@ -66,6 +82,22 @@ const CLAIM_KEY_ORDER = Object.freeze([
   'repositoryId',
   'suitePath',
 ]);
+const CLAIM_KEY_ORDER_SIMIN = Object.freeze([
+  'alg',
+  'capabilityId',
+  'exp',
+  'iss',
+  'jti',
+  'kid',
+  'kind',
+  'nbf',
+  'pinnedMainSha',
+  'purpose',
+  'repositoryId',
+  'suitePath',
+  'venue',
+]);
+const CLAIM_KEY_ORDER = CLAIM_KEY_ORDER_LEGACY_WSL;
 
 const __testKeyRegistry = new Map();
 const __testReplayRegistry = new Set();
@@ -73,6 +105,8 @@ const __testRevokedRegistry = new Set();
 let __testRevocationAvailable = true;
 /** Brands TEST_ONLY verifier deps objects. Never operational trust. */
 const testOnlyVerifierDepsLatch = new WeakSet();
+/** Brands Owner-installed fixed-path trust deps. Not request-supplied. */
+const ownerInstalledTrustDepsLatch = new WeakSet();
 
 export const S2_OWNER_CAPABILITY_TEST_ONLY_DEPS_PROOF_CLASS =
   'TEST_ONLY_S2_OWNER_CAPABILITY_VERIFIER_DEPS';
@@ -127,22 +161,27 @@ function b64urlDecode(text) {
   }
 }
 
-function canonicalJson(value) {
+function canonicalJson(value, keyOrder = CLAIM_KEY_ORDER_LEGACY_WSL) {
   const parts = [];
-  for (const key of CLAIM_KEY_ORDER) {
+  for (const key of keyOrder) {
     if (!Object.prototype.hasOwnProperty.call(value, key)) {
       throw new TypeError(`MISSING_CLAIM:${key}`);
     }
-    const v = value[key];
-    if (typeof v === 'string') {
-      parts.push(`"${key}":"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-    } else if (typeof v === 'number') {
-      parts.push(`"${key}":${v}`);
+    const claimVal = value[key];
+    if (typeof claimVal === 'string') {
+      parts.push(`"${key}":"${claimVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+    } else if (typeof claimVal === 'number') {
+      parts.push(`"${key}":${claimVal}`);
     } else {
       throw new TypeError(`UNSUPPORTED_CLAIM_TYPE:${key}`);
     }
   }
   return `{${parts.join(',')}}`;
+}
+
+function claimKeyOrderForPurpose(purpose) {
+  if (purpose === S2_OWNER_CAPABILITY_PURPOSE_SIMIN) return CLAIM_KEY_ORDER_SIMIN;
+  return CLAIM_KEY_ORDER_LEGACY_WSL;
 }
 
 function parseJsonObject(text) {
@@ -163,6 +202,18 @@ function isExplicitTestOnlyVerifierDeps(deps = {}) {
     && testOnlyVerifierDepsLatch.has(deps);
 }
 
+function isOwnerInstalledTrustVerifierDeps(deps = {}) {
+  return deps != null
+    && typeof deps === 'object'
+    && deps.proofClass === S2_OWNER_INSTALLED_TRUST_DEPS_PROOF_CLASS
+    && deps.__ownerInstalledTrust === true
+    && ownerInstalledTrustDepsLatch.has(deps);
+}
+
+function isTrustedVerifierDeps(deps = {}) {
+  return isExplicitTestOnlyVerifierDeps(deps) || isOwnerInstalledTrustVerifierDeps(deps);
+}
+
 function rejectCallerTrustAnchorsInDeps(deps = {}) {
   if (!isPlainObject(deps)) return null;
   if (deps.trustAnchor || deps.publicKey || deps.verifier || deps.verifyKey
@@ -175,7 +226,7 @@ function rejectCallerTrustAnchorsInDeps(deps = {}) {
 }
 
 function resolveKeyRegistry(deps = {}) {
-  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+  if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
   if (deps.keyRegistry && typeof deps.keyRegistry.get === 'function') {
@@ -189,7 +240,7 @@ function resolveKeyRegistry(deps = {}) {
 }
 
 function resolveClock(deps = {}) {
-  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+  if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
   if (deps.clock && typeof deps.clock.nowMs === 'function') {
@@ -202,7 +253,7 @@ function resolveClock(deps = {}) {
 }
 
 function resolveRevocation(deps = {}) {
-  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+  if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
   if (deps.revocationRegistry) {
@@ -219,7 +270,7 @@ function resolveRevocation(deps = {}) {
 }
 
 function resolveReplay(deps = {}) {
-  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+  if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
   if (deps.replayRegistry) {
@@ -239,8 +290,28 @@ function validateClaimShape(claims, expectation = {}) {
   if (claims.alg !== S2_OWNER_CAPABILITY_ALG) return 'UNSUPPORTED_ALGORITHM';
   if (claims.kind !== S2_OWNER_CAPABILITY_KIND) return 'WRONG_KIND';
   if (claims.repositoryId !== S2_OWNER_CAPABILITY_REPOSITORY_ID) return 'WRONG_REPOSITORY';
-  if (claims.pinnedMainSha !== OPS_PILOT_PINNED_MAIN_SHA) return 'WRONG_SHA';
-  if (claims.purpose !== S2_OWNER_CAPABILITY_PURPOSE) return 'WRONG_PURPOSE';
+  const expectPurpose = expectation.purpose || null;
+  if (expectPurpose === S2_OWNER_CAPABILITY_PURPOSE_SIMIN) {
+    if (claims.purpose === S2_OWNER_CAPABILITY_PURPOSE_WSL_LEGACY) {
+      return 'LEGACY_WSL_PURPOSE_FOR_SIMIN';
+    }
+    if (claims.purpose !== S2_OWNER_CAPABILITY_PURPOSE_SIMIN) return 'WRONG_PURPOSE';
+    if (claims.iss !== S2_OWNER_CAPABILITY_ISSUER_SIMIN) return 'MALFORMED';
+    if (claims.venue !== S2_OWNER_CAPABILITY_VENUE_SIMIN) return 'WRONG_VENUE';
+    if (expectation.venue && expectation.venue !== claims.venue) return 'WRONG_VENUE';
+    if (!/^[0-9a-f]{40}$/.test(String(claims.pinnedMainSha || ''))) return 'WRONG_SHA';
+    if (expectation.pinnedMainSha && claims.pinnedMainSha !== expectation.pinnedMainSha) {
+      return 'WRONG_SHA';
+    }
+    if (expectation.forbidOfflinePinAsLiveSha === true
+      && claims.pinnedMainSha === OPS_PILOT_PINNED_MAIN_SHA) {
+      return 'WRONG_SHA';
+    }
+  } else {
+    if (claims.pinnedMainSha !== OPS_PILOT_PINNED_MAIN_SHA) return 'WRONG_SHA';
+    if (claims.purpose !== S2_OWNER_CAPABILITY_PURPOSE) return 'WRONG_PURPOSE';
+    if (claims.iss !== S2_OWNER_CAPABILITY_ISSUER) return 'MALFORMED';
+  }
   const suite = normalizeApprovedSuitePath(claims.suitePath);
   if (!suite) return 'WRONG_SUITE';
   if (expectation.suitePath && expectation.suitePath !== suite) return 'WRONG_SUITE';
@@ -251,7 +322,6 @@ function validateClaimShape(claims, expectation = {}) {
   if (!isSafeInteger(claims.nbf) || !isSafeInteger(claims.exp)) return 'MALFORMED';
   if (claims.exp <= claims.nbf) return 'MALFORMED';
   if (claims.exp - claims.nbf > OPS_PILOT_MAX_ONESHOT_TTL_MS) return 'EXCESSIVE_TTL';
-  if (claims.iss !== S2_OWNER_CAPABILITY_ISSUER) return 'MALFORMED';
   if (expectation.capabilityId && expectation.capabilityId !== claims.capabilityId) {
     return 'WRONG_CAPABILITY_ID';
   }
@@ -281,12 +351,12 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
   const depsTrustDeny = rejectCallerTrustAnchorsInDeps(deps);
   if (depsTrustDeny) return depsTrustDeny;
 
-  // Only explicitly branded TEST_ONLY verifier deps may proceed in this offline slice.
-  // Missing trusted configuration fails closed (no implicit __testMode).
-  if (!isExplicitTestOnlyVerifierDeps(deps)) {
+  // Branded TEST_ONLY or Owner-installed fixed-trust deps only. Fail closed otherwise.
+  if (!isTrustedVerifierDeps(deps)) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MISSING_TRUSTED_VERIFIER_DEPS, [
       'TRUSTED_OR_TEST_ONLY_VERIFIER_DEPS_REQUIRED',
       'NO_IMPLICIT_TEST_MODE',
+      'NO_REQUEST_SUPPLIED_TRUST_ANCHOR',
     ]);
   }
 
@@ -309,9 +379,10 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MALFORMED, [parsed.reason]);
   }
   const claims = parsed.value;
+  const keyOrder = claimKeyOrderForPurpose(claims.purpose);
   let canonical;
   try {
-    canonical = canonicalJson(claims);
+    canonical = canonicalJson(claims, keyOrder);
   } catch (err) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MALFORMED, [String(err.message || err)]);
   }
@@ -330,6 +401,8 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
       WRONG_KIND: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_KIND,
       WRONG_CAPABILITY_ID: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_CAPABILITY_ID,
       EXCESSIVE_TTL: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_EXCESSIVE_TTL,
+      WRONG_VENUE: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_VENUE,
+      LEGACY_WSL_PURPOSE_FOR_SIMIN: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LEGACY_WSL_PURPOSE_FOR_SIMIN,
     };
     const decision = map[shapeErr] || S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MALFORMED;
     return deny(decision, [shapeErr]);
@@ -425,25 +498,139 @@ export function evaluateVerifiedCapabilityLiveSpawnEligibility(verified = {}, co
       'VERIFIED_CAPABILITY_REQUIRED',
     ], { liveSpawnEligible: false });
   }
-  if (context.ownerCustodyProven !== true) {
+  if (context.ohsaCustodyClaimed === true || context.claimOhsaIndependentCustody === true) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
+      'OHSA_INDEPENDENT_CUSTODY_NOT_AUTHORIZED',
+    ], { liveSpawnEligible: false, ohsaClaim: 'NOT_PROVEN' });
+  }
+  if (context.ownerCustodyProven === true || context.recoveryAdminProven === true) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
+      'CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN',
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
+  }
+  if (context.custodyClass !== OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_REQUIRED',
       'OWNER_CUSTODY_NOT_PROVEN',
-    ], { liveSpawnEligible: false, ownerCustodyProven: false });
-  }
-  if (context.recoveryAdminProven !== true) {
-    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
       'RECOVERY_ADMIN_NOT_PROVEN',
-    ], { liveSpawnEligible: false, recoveryAdminProven: false });
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
   }
-  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true || OPS_PILOT_TIER3_AUTHORIZED === true) {
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
-      'DB_OR_TIER3_GATE_CLOSED',
-      'OFFLINE_IMPLEMENTATION',
+      'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
     ], { liveSpawnEligible: false });
   }
-  return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
-    'LIVE_SPAWN_NOT_AUTHORIZED_IN_OFFLINE_SLICE',
-  ], { liveSpawnEligible: false });
+  if (verified.claims?.purpose !== S2_OWNER_CAPABILITY_PURPOSE_SIMIN) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LIVE_SPAWN_INELIGIBLE, [
+      'SIMIN_PURPOSE_REQUIRED_FOR_LIVE_ELIGIBILITY',
+    ], { liveSpawnEligible: false });
+  }
+  if (verified.claims?.venue !== S2_OWNER_CAPABILITY_VENUE_SIMIN) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_VENUE, [
+      'SIMIN_VENUE_REQUIRED',
+    ], { liveSpawnEligible: false });
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: S2_TIER3_OWNER_CAPABILITY_DECISIONS.ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB,
+    reasons: Object.freeze([
+      'VERIFIED_SIMIN_CAPABILITY',
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_ACCEPTED',
+      'MODULE_CONSTS_REMAIN_FALSE',
+      'OHSA_NOT_PROVEN',
+      'RECOVERY_ADMIN_NOT_PROVEN',
+      'VERIFY_ONLY_PLUS_LAB_POLICY_NOT_STANDING_AUTHORITY',
+    ]),
+    liveSpawnEligible: true,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    claims: verified.claims,
+  });
+}
+
+export function resolveOwnerInstalledFixedTrustRegistryPath(home = homedir()) {
+  const dir = pathJoin(home, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
+  return Object.freeze({
+    dir,
+    pubkeyPath: pathJoin(dir, OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME),
+    kidPath: pathJoin(dir, OPS_PILOT_OWNER_TRUST_KID_FILENAME),
+  });
+}
+
+export function createOwnerInstalledFixedTrustVerifierDeps(options = {}) {
+  const paths = resolveOwnerInstalledFixedTrustRegistryPath(options.home);
+  if (!existsSync(paths.pubkeyPath) || !existsSync(paths.kidPath)) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
+      'OWNER_INSTALLED_PUBKEY_OR_KID_MISSING',
+      `PUBKEY=${paths.pubkeyPath}`,
+      `KID=${paths.kidPath}`,
+    ], {
+      liveSpawnEligible: false,
+      paths,
+    });
+  }
+  let pubkeyPem;
+  let kid;
+  try {
+    pubkeyPem = readFsSync(paths.pubkeyPath, 'utf8');
+    kid = readFsSync(paths.kidPath, 'utf8').trim();
+  } catch (err) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
+      'OWNER_TRUST_REGISTRY_UNREADABLE',
+      String(err.message || err),
+    ], { paths });
+  }
+  if (!isNonEmptyString(pubkeyPem) || !isNonEmptyString(kid)) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
+      'OWNER_TRUST_REGISTRY_EMPTY',
+    ], { paths });
+  }
+  if (/BEGIN .*PRIVATE KEY/i.test(pubkeyPem)) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
+      'PRIVATE_KEY_MATERIAL_FORBIDDEN_IN_TRUST_REGISTRY',
+    ], { paths });
+  }
+  const keyRegistry = {
+    get(queryKid) {
+      return queryKid === kid ? pubkeyPem : null;
+    },
+  };
+  const replay = new Set();
+  const revoked = new Set();
+  const deps = {
+    proofClass: S2_OWNER_INSTALLED_TRUST_DEPS_PROOF_CLASS,
+    __ownerInstalledTrust: true,
+    nowMs: options.nowMs,
+    clock: options.clock || { nowMs: () => Date.now() },
+    keyRegistry,
+    revocationRegistry: {
+      isRevoked(jti) {
+        return { ok: true, revoked: revoked.has(jti) };
+      },
+    },
+    replayRegistry: {
+      has(jti) { return replay.has(jti); },
+      record(jti) { replay.add(jti); },
+    },
+    trustRegistryPaths: paths,
+    installedKid: kid,
+  };
+  ownerInstalledTrustDepsLatch.add(deps);
+  return deps;
+}
+
+export function isOwnerInstalledFixedTrustVerifierDeps(deps) {
+  return isOwnerInstalledTrustVerifierDeps(deps);
 }
 
 export function getVerifierImportSideEffectsReport() {
