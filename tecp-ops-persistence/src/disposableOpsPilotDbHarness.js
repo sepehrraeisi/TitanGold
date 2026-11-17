@@ -30,7 +30,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
@@ -58,6 +58,27 @@ export const OPS_PILOT_ACTIVATION_PREP_VENUE =
 /** Prep status: binaries/Rule02 prep may advance; live gates remain closed. */
 export const OPS_PILOT_ACTIVATION_PREP_STATUS =
   'PG14_BINARIES_AND_RULE02_PREP_ONLY_LIVE_DB_AND_TIER3_GATES_REMAIN_CLOSED';
+/** Historical offline regression pin alias (immutable offline invariant). */
+export const OPS_PILOT_OFFLINE_CONTRACT_PIN_SHA = OPS_PILOT_PINNED_MAIN_SHA;
+/** Live venue binding for SIMIN Hyper-V lab capabilities. */
+export const OPS_PILOT_LIVE_VENUE = 'SIMIN_HYPERV_UBUNTU_VM_TITANGOLD_S2_LAB_ONLY';
+/** Functional-lab custody class — NOT OHSA / NOT independent recovery-admin proof. */
+export const OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB =
+  'FUNCTIONAL_LAB_OWNER_SIGNED_CAPABILITY_SAME_UID_ACCEPTED_FOR_DISPOSABLE_ONLY';
+export const OPS_PILOT_LIVE_BRIDGE_MODE =
+  'CAPABILITY_GATED_ONESHOT_LIVE_LIFECYCLE_MODULE_CONSTS_REMAIN_FALSE';
+export const OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR =
+  '.tecp-ops-pilot/s2-simin-owner-trust';
+export const OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME = 'ed25519-spki.pem';
+export const OPS_PILOT_OWNER_TRUST_KID_FILENAME = 'kid.txt';
+export const OPS_PILOT_CANONICAL_GIT_BIN = '/usr/bin/git';
+/** Repo root derived from this module path — never caller-supplied. */
+export const OPS_PILOT_CANONICAL_REPO_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+export const TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS = 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE';
+const testOnlyGitObservationLatch = new WeakSet();
 /** Governance merge base for offline five-path implementation (PR #307). */
 export const OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA =
   '361eaab9d449f3070b87b5ad0c88e5f5a38da49d';
@@ -104,6 +125,12 @@ export const TIER3_FINAL_EXECUTION_CONTRACT = Object.freeze({
   activationEraTargetMainSha: OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA,
   activationPrepVenue: OPS_PILOT_ACTIVATION_PREP_VENUE,
   activationPrepStatus: OPS_PILOT_ACTIVATION_PREP_STATUS,
+  activationEraTargetIsHistoricalPrepOnly: true,
+  liveBridgeMode: OPS_PILOT_LIVE_BRIDGE_MODE,
+  liveVenue: OPS_PILOT_LIVE_VENUE,
+  liveCustodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  offlineContractPinSha: OPS_PILOT_OFFLINE_CONTRACT_PIN_SHA,
+  liveShaPolicy: 'CAPABILITY_PINNED_SHA_MUST_EQUAL_GIT_HEAD_NOT_OFFLINE_PIN',
   windowsPg17: 'DENY',
   wsl2: 'DENY',
   remoteServer: 'DENY',
@@ -192,6 +219,15 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING: 'DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING',
   DENY_OWNER_CAPABILITY_INVALID: 'DENY_OWNER_CAPABILITY_INVALID',
   DENY_OWNER_CUSTODY_NOT_PROVEN: 'DENY_OWNER_CUSTODY_NOT_PROVEN',
+  DENY_OHSA_CUSTODY_CLAIM: 'DENY_OHSA_CUSTODY_CLAIM',
+  DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
+  DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
+  DENY_FORGED_VERIFIED_CAPABILITY: 'DENY_FORGED_VERIFIED_CAPABILITY',
+  DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS: 'DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS',
+  DENY_GIT_HEAD_OBSERVATION: 'DENY_GIT_HEAD_OBSERVATION',
+  DENY_CALLER_GIT_OVERRIDE: 'DENY_CALLER_GIT_OVERRIDE',
+  ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY: 'ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY',
+  ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB: 'ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB',
   DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
   DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
@@ -217,6 +253,17 @@ const runnerOfflineSuiteGrantLatch = new WeakSet();
  * until an out-of-process Owner custody boundary installs a verified capability.
  */
 const independentOwnerCapabilityLatch = new WeakSet();
+/**
+ * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
+ * There is no public registration/wire entrypoint — callers cannot substitute fake callbacks.
+ * Circular init is safe: verifier only reads harness consts inside functions; harness only
+ * calls these inside functions after both modules finish evaluating.
+ */
+import {
+  getVerifierIssuedCapabilityTrustClass,
+  isVerifierIssuedCapabilityProvenance,
+  verifierIssuedCapabilityAuthorizesLiveSubprocess,
+} from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
 /** Module-private privileged state. Exported ticket objects are frozen and non-authoritative. */
 const ticketPrivilegeByRef = new WeakMap();
 const controllerCleanupAuthority = new WeakMap();
@@ -488,11 +535,26 @@ export function evaluateOwnerControlledLocalRunnerEvidence(evidence = {}, deps =
   }
 
   const repositorySha = String(evidence.repositorySha || '');
-  if (repositorySha !== OPS_PILOT_PINNED_MAIN_SHA) {
+  const skipOfflinePin = evidence.skipOfflinePinShaCheck === true
+    && evidence.liveCapabilityShaBinding === true;
+  if (!skipOfflinePin && repositorySha !== OPS_PILOT_PINNED_MAIN_SHA) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_WRONG_REPOSITORY_SHA, [
       `EXPECTED=${OPS_PILOT_PINNED_MAIN_SHA}`,
       `GOT=${repositorySha || 'MISSING'}`,
     ]);
+  }
+  if (skipOfflinePin) {
+    if (!/^[0-9a-f]{40}$/.test(repositorySha)) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+        'LIVE_REPOSITORY_SHA_MUST_BE_40_HEX',
+      ]);
+    }
+    if (repositorySha === OPS_PILOT_PINNED_MAIN_SHA) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+        'LIVE_SHA_MUST_NOT_BE_HISTORICAL_OFFLINE_PIN',
+        OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
+      ]);
+    }
   }
 
   const approvedActions = normalizeApprovedActions(evidence.approvedActions);
@@ -599,7 +661,7 @@ function createTicketRecord(publicFields, privilegeFields) {
     consumed: privilegeFields.consumed === true,
     cancelled: privilegeFields.cancelled === true,
     inert: privilegeFields.inert === true,
-    liveSpawnPermitted: false,
+    liveSpawnPermitted: privilegeFields.liveSpawnPermitted === true,
     prepareUsed: privilegeFields.prepareUsed === true,
     expiresAtMonotonicMs: privilegeFields.expiresAtMonotonicMs,
     createdAtMonotonicMs: privilegeFields.createdAtMonotonicMs,
@@ -1285,11 +1347,12 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           'REPEATED_ALLOCATION_FORBIDDEN',
         ]);
       }
-      // Filesystem allocation only for inert TEST_ONLY tickets under offline proof,
-      // or (future) live gate — never via ARGV/env/boolean/public factory alone.
-      if (!usingInertTicket) {
+      // Filesystem allocation only for inert TEST_ONLY tickets or capability-gated
+      // live one-shot (liveSpawnPermitted private privilege). Never via ARGV/env/boolean.
+      const allowLivePrepare = priv.liveSpawnPermitted === true && !usingInertTicket;
+      if (!usingInertTicket && !allowLivePrepare) {
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
-          'PREPARE_REQUIRES_INERT_OFFLINE_TICKET_WHILE_LIVE_GATE_CLOSED',
+          'PREPARE_REQUIRES_INERT_OR_LIVE_CAPABILITY_TICKET',
           'ARGV_ENV_BOOLEAN_PUBLIC_FACTORY_CANNOT_AUTHORIZE_FS_ALLOCATION',
         ]);
       }
@@ -1353,9 +1416,13 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
 
       const allowInertLifecycle = usingInertTicket && injectedSpawn;
       const ticketPriv = getTicketPrivilege(ticket);
+      // Live lifecycle is capability-gated one-shot privilege only.
+      // Global module consts MUST remain false (offline invariant).
       const allowLiveLifecycle = ticketPriv?.liveSpawnPermitted === true
-        && OPS_PILOT_DB_EXECUTION_AUTHORIZED === true
-        && !usingInertTicket;
+        && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
+        && OPS_PILOT_TIER3_AUTHORIZED === false
+        && !usingInertTicket
+        && !injectedSpawn;
 
       if (!allowInertLifecycle && !allowLiveLifecycle) {
         // Consume so failure cannot be retried with the same ticket.
@@ -1825,6 +1892,225 @@ export function evaluateIndependentOwnerCapability(capability = null) {
  * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
  * Never mints independentOwnerCapabilityLatch or live tickets in this offline slice.
  */
+export function createTestOnlyGitHeadObservationFixture(input = {}) {
+  if (!isPlainObject(input) || input.proofClass !== TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS) {
+    throw new TypeError('TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS_REQUIRED');
+  }
+  if (input.authorizesLiveExecute === true || input.authorizesLiveSubprocess === true) {
+    throw new Error('TEST_ONLY_GIT_FIXTURE_CANNOT_AUTHORIZE_LIVE_EXECUTE');
+  }
+  const headSha = String(input.headSha || '');
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new TypeError('TEST_ONLY_GIT_FIXTURE_HEAD_SHA_REQUIRED');
+  }
+  const fixture = Object.freeze({
+    proofClass: TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS,
+    headSha,
+    authorizesLiveExecute: false,
+    source: 'TEST_ONLY_FIXTURE',
+  });
+  testOnlyGitObservationLatch.add(fixture);
+  return fixture;
+}
+
+export function isTestOnlyGitHeadObservationFixture(value) {
+  return value != null && typeof value === 'object' && testOnlyGitObservationLatch.has(value);
+}
+
+/**
+ * Independently observe repository HEAD via fixed /usr/bin/git and module-derived repo root.
+ * Caller repoRoot/gitBin/repositoryHeadSha overrides are rejected.
+ * TEST_ONLY fixture may be used only for offline authorization tests (never LIVE execute authority).
+ */
+export function observeCanonicalRepositoryHeadSha(options = {}) {
+  if (!isPlainObject(options)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, ['OPTIONS_OBJECT_REQUIRED']);
+  }
+  if (
+    options.repoRoot != null
+    || options.gitBin != null
+    || options.repositoryHeadSha != null
+    || options.cwd != null
+    || options.gitExecutable != null
+  ) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_GIT_OVERRIDE, [
+      'CALLER_GIT_OR_REPO_OVERRIDE_FORBIDDEN',
+    ]);
+  }
+  if (options.testOnlyGitObservationFixture != null) {
+    const fixture = options.testOnlyGitObservationFixture;
+    if (!isTestOnlyGitHeadObservationFixture(fixture)) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+        'UNBRANDED_GIT_FIXTURE_FORBIDDEN',
+      ]);
+    }
+    if (options.allowTestOnlyGitFixture !== true) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+        'TEST_ONLY_GIT_FIXTURE_NOT_ENABLED_FOR_THIS_CALL',
+      ]);
+    }
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+      reasons: Object.freeze(['TEST_ONLY_GIT_HEAD_FIXTURE']),
+      headSha: fixture.headSha,
+      source: 'TEST_ONLY_FIXTURE',
+      authorizesLiveExecute: false,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+      gitBin: OPS_PILOT_CANONICAL_GIT_BIN,
+    });
+  }
+  let result;
+  try {
+    result = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'rev-parse', 'HEAD'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+  } catch (err) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_SPAWN_FAILED',
+      String(err && err.message ? err.message : err),
+    ]);
+  }
+  if (!result || result.error || result.status !== 0) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_REV_PARSE_FAILED',
+      String(result?.stderr || result?.error || 'NO_STATUS'),
+    ], {
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    });
+  }
+  const headSha = String(result.stdout || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_HEAD_NOT_40_HEX',
+      `GOT=${headSha || 'EMPTY'}`,
+    ]);
+  }
+
+  let mainResult;
+  let symResult;
+  try {
+    mainResult = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'rev-parse', 'refs/heads/main'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+    symResult = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'symbolic-ref', '-q', 'HEAD'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+  } catch (err) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_OR_SYMBOLIC_REF_SPAWN_FAILED',
+      String(err && err.message ? err.message : err),
+    ], {
+      headSha,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    });
+  }
+  if (!mainResult || mainResult.error || mainResult.status !== 0) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_REF_UNREADABLE',
+      String(mainResult?.stderr || mainResult?.error || 'NO_STATUS'),
+    ], {
+      headSha,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+      authorizesLiveExecute: false,
+    });
+  }
+  const mainSha = String(mainResult.stdout || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(mainSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_MAIN_SHA_NOT_40_HEX',
+    ], { headSha, authorizesLiveExecute: false });
+  }
+  const symbolicHead = String(symResult?.stdout || '').trim();
+  const onMainBranch = symbolicHead === 'refs/heads/main'
+    && (symResult?.status === 0);
+  const headMatchesMain = headSha === mainSha;
+  // Live execute authority requires attached HEAD on refs/heads/main equal to main tip.
+  // Self-consistent feature-branch / detached worktrees observe HEAD but cannot authorize LIVE execute.
+  const authorizesLiveExecute = onMainBranch && headMatchesMain;
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze(authorizesLiveExecute
+      ? ['CANONICAL_MAIN_HEAD_OBSERVED']
+      : [
+        'CANONICAL_GIT_HEAD_OBSERVED_NON_MAIN_WORKTREE',
+        onMainBranch ? 'HEAD_ATTACHED_MAIN' : 'HEAD_NOT_ATTACHED_MAIN',
+        headMatchesMain ? 'HEAD_EQUALS_MAIN_TIP' : 'HEAD_DIFFERS_FROM_MAIN_TIP',
+        `HEAD=${headSha}`,
+        `MAIN=${mainSha}`,
+        `SYMBOLIC=${symbolicHead || 'DETACHED_OR_UNAVAILABLE'}`,
+      ]),
+    headSha,
+    mainSha,
+    symbolicHead: symbolicHead || null,
+    source: 'CANONICAL_GIT',
+    authorizesLiveExecute,
+    repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    gitBin: OPS_PILOT_CANONICAL_GIT_BIN,
+  });
+}
+
+export function evaluateLiveRepositoryHeadBinding(input = {}) {
+  const capabilitySha = String(input.capabilityPinnedSha || '');
+  const headSha = String(input.repositoryHeadSha || '');
+  if (!/^[0-9a-f]{40}$/.test(capabilitySha) || !/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'CAPABILITY_AND_HEAD_SHA_REQUIRED_40_HEX',
+    ]);
+  }
+  if (capabilitySha !== headSha) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'CAPABILITY_PINNED_SHA_MUST_EQUAL_GIT_HEAD',
+      `CAPABILITY=${capabilitySha}`,
+      `HEAD=${headSha}`,
+    ]);
+  }
+  if (capabilitySha === OPS_PILOT_PINNED_MAIN_SHA) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'LIVE_SHA_MUST_NOT_EQUAL_OFFLINE_CONTRACT_PIN',
+    ]);
+  }
+  if (capabilitySha === OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'PR310_ACTIVATION_ERA_TARGET_IS_HISTORICAL_PREP_NOT_LIVE_PIN',
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze(['LIVE_SHA_BINDING_OK']),
+    capabilityPinnedSha: capabilitySha,
+    repositoryHeadSha: headSha,
+  });
+}
+
+/**
+ * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
+ * Module consts remain false. Functional-lab custody class is accepted without
+ * fabricating OHSA / recovery-admin TRUE evidence.
+ */
 export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
   const verified = input.verifiedCapability || input.capabilityVerification || null;
   if (!verified || verified.ok !== true) {
@@ -1835,38 +2121,206 @@ export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
       liveSpawnEligible: false,
       ownerCustodyProven: false,
       recoveryAdminProven: false,
+      custodyClass: null,
     });
   }
-  if (input.ownerCustodyProven !== true) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
-      'OWNER_CUSTODY_NOT_PROVEN',
-      'VERIFY_ONLY_NOT_CUSTODY_PROOF',
+  // Unforgeable verifier-issued provenance required. Plain/frozen/copied objects DENY.
+  if (!isVerifierIssuedCapabilityProvenance(verified)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY, [
+      'VERIFIER_ISSUED_PROVENANCE_REQUIRED',
+      'PLAIN_OK_CLAIMS_OBJECT_NOT_AUTHORITY',
+      'COPIED_OR_FORGED_VERIFIED_CAPABILITY_DENIED',
     ], {
       liveSpawnEligible: false,
       ownerCustodyProven: false,
-    });
-  }
-  if (input.recoveryAdminProven !== true) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RECOVERY_ADMIN_NOT_PROVEN, [
-      'RECOVERY_ADMIN_NOT_PROVEN',
-    ], {
-      liveSpawnEligible: false,
       recoveryAdminProven: false,
     });
   }
-  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true || OPS_PILOT_TIER3_AUTHORIZED === true) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-      'LIVE_DB_GATE_CLOSED',
-      OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY,
-      'INDEPENDENT_OWNER_CAPABILITY_LATCH_NOT_MINTED_IN_REPO',
+  if (input.ohsaCustodyClaimed === true || input.claimOhsaIndependentCustody === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OHSA_CUSTODY_CLAIM, [
+      'OHSA_INDEPENDENT_CUSTODY_NOT_AUTHORIZED_IN_FUNCTIONAL_LAB_PATH',
+    ], { liveSpawnEligible: false, ohsaClaim: 'NOT_PROVEN' });
+  }
+  // Reject fabricated stronger custody/recovery booleans.
+  if (input.ownerCustodyProven === true || input.recoveryAdminProven === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
+      'CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN',
+      'FUNCTIONAL_LAB_PATH_MUST_NOT_FABRICATE_OHSA_EVIDENCE',
     ], {
       liveSpawnEligible: false,
-      liveGateClosed: true,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
     });
   }
-  return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-    'DEFAULT_FAIL_CLOSED_OFFLINE_IMPLEMENTATION',
-  ], { liveSpawnEligible: false });
+  if (input.custodyClass !== OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN, [
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_REQUIRED',
+      'OHSA_NOT_PROVEN',
+      'RECOVERY_ADMIN_NOT_PROVEN',
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
+  }
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
+      'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
+      'LIVE_USES_CAPABILITY_GATED_ONESHOT_NOT_GLOBAL_CONST_FLIP',
+    ], { liveSpawnEligible: false, liveGateClosed: true });
+  }
+  const venue = String(input.venue || verified.claims?.venue || '');
+  if (venue !== OPS_PILOT_LIVE_VENUE) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_VENUE_BINDING, [
+      'SIMIN_HYPERV_VENUE_REQUIRED',
+      `GOT=${venue || 'MISSING'}`,
+    ], { liveSpawnEligible: false });
+  }
+  const shaBind = evaluateLiveRepositoryHeadBinding({
+    capabilityPinnedSha: verified.claims?.pinnedMainSha,
+    repositoryHeadSha: input.repositoryHeadSha,
+  });
+  if (!shaBind.ok) {
+    return deny(shaBind.decision, shaBind.reasons || [], { liveSpawnEligible: false });
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB,
+    reasons: Object.freeze([
+      'VERIFIED_OWNER_CAPABILITY',
+      'FUNCTIONAL_LAB_CUSTODY_CLASS_ACCEPTED',
+      'MODULE_CONSTS_REMAIN_FALSE',
+      'OHSA_NOT_PROVEN',
+      'RECOVERY_ADMIN_NOT_PROVEN',
+      'LIVE_SHA_BINDING_OK',
+    ]),
+    liveSpawnEligible: true,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    venue: OPS_PILOT_LIVE_VENUE,
+    capabilityPinnedSha: verified.claims?.pinnedMainSha,
+  });
+}
+
+/**
+ * Brand a crypto-verified capability object for independent-capability checks.
+ * Does NOT mint/sign an Owner capability token.
+ */
+export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
+  if (!verifiedCapability || verifiedCapability.ok !== true || !verifiedCapability.claims) {
+    throw new TypeError('VERIFIED_CAPABILITY_REQUIRED_FOR_BRAND');
+  }
+  // Branding helper NEVER installs verifier provenance and NEVER grants live spawn.
+  // Even if input was verifier-issued, the returned object is a new plain brand
+  // that must not pass isVerifierIssuedCapabilityProvenance.
+  if (!isVerifierIssuedCapabilityProvenance(verifiedCapability)) {
+    throw new TypeError('BRAND_REQUIRES_VERIFIER_ISSUED_PROVENANCE_INPUT');
+  }
+  const branded = Object.freeze({
+    kind: 'VERIFIED_INDEPENDENT_OWNER_CAPABILITY_BRAND',
+    proofClass: 'CRYPTO_VERIFIED_OWNER_CAPABILITY_NOT_MINTED_HERE',
+    claims: Object.freeze({ ...verifiedCapability.claims }),
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    ohsaClaim: 'NOT_PROVEN',
+    authorizesLiveSpawn: false,
+  });
+  independentOwnerCapabilityLatch.add(branded);
+  return branded;
+}
+
+/**
+ * Create a live one-shot ticket after capability authorization.
+ * liveSpawnPermitted is module-private only.
+ */
+export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
+  if (!isPlainObject(input)) {
+    throw new TypeError('LIVE_ONESHOT_OPTIONS_REQUIRED');
+  }
+  if (input.proofClass !== 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET') {
+    throw new TypeError('LIVE_CAPABILITY_GATED_ONESHOT_PROOF_CLASS_REQUIRED');
+  }
+  if (input.authorizeByBoolean === true || input.envAuthorized === true) {
+    throw new Error('LIVE_ONESHOT_BOOLEAN_ENV_FORBIDDEN');
+  }
+  const verified = input.verifiedCapability || input.capabilityVerification || null;
+  if (!isVerifierIssuedCapabilityProvenance(verified)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY, [
+      'TICKET_FACTORY_REQUIRES_VERIFIER_ISSUED_PROVENANCE',
+    ]);
+  }
+  const auth = evaluateLiveSpawnAuthorizationFromOwnerCapability(input);
+  if (!auth.ok || auth.liveSpawnEligible !== true) {
+    return auth;
+  }
+  const trustClass = getVerifierIssuedCapabilityTrustClass(verified);
+  const allowLiveSubprocess = verifierIssuedCapabilityAuthorizesLiveSubprocess(verified) === true
+    && trustClass === 'OWNER_INSTALLED';
+  if (input.requireOwnerInstalledTrust === true && !allowLiveSubprocess) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS, [
+      'OWNER_INSTALLED_TRUST_REQUIRED_FOR_LIVE_SUBPROCESS',
+      `TRUST_CLASS=${trustClass || 'MISSING'}`,
+    ]);
+  }
+  const clock = deps.clock || {};
+  const ttlMs = Number(input.ttlMs ?? OPS_PILOT_DEFAULT_ONESHOT_TTL_MS);
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > OPS_PILOT_MAX_ONESHOT_TTL_MS) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, ['TTL_OUT_OF_BOUNDS']);
+  }
+  const suiteCheck = assertApprovedSuiteAllowlist(input.suitePath);
+  if (!suiteCheck.ok) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, suiteCheck.reasons || []);
+  }
+  const createdAtMonotonicMs = monotonicNowMs(clock);
+  const ticket = createTicketRecord({
+    proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+    repositorySha: auth.capabilityPinnedSha,
+    approvedActions: Object.freeze([suiteCheck.suitePath]),
+    venue: OPS_PILOT_LIVE_VENUE,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    authorizesLivePostgres: false,
+    ownerAuthenticationProven: true,
+    classification: allowLiveSubprocess
+      ? 'CAPABILITY_GATED_LIVE_ONESHOT_OWNER_INSTALLED_TRUST'
+      : 'CAPABILITY_GATED_OFFLINE_AUTH_TICKET_TEST_ONLY_TRUST_NO_SUBPROCESS',
+  }, {
+    state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
+    consumed: false,
+    cancelled: false,
+    inert: allowLiveSubprocess !== true,
+    liveSpawnPermitted: allowLiveSubprocess === true,
+    prepareUsed: false,
+    expiresAtMonotonicMs: createdAtMonotonicMs + ttlMs,
+    createdAtMonotonicMs,
+    ttlMs,
+    repositorySha: auth.capabilityPinnedSha,
+    approvedActions: [suiteCheck.suitePath],
+    nonce: randomBytes(16).toString('hex'),
+  });
+  if (allowLiveSubprocess !== true) {
+    inertOneShotLatch.add(ticket);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze([
+      allowLiveSubprocess ? 'LIVE_ONESHOT_CREATED_OWNER_INSTALLED' : 'OFFLINE_AUTH_TICKET_TEST_ONLY_TRUST',
+      `TRUST_CLASS=${trustClass}`,
+      ...auth.reasons,
+    ]),
+    ticket,
+    liveSpawnEligible: allowLiveSubprocess === true,
+    liveSubprocessAuthorized: allowLiveSubprocess === true,
+    trustClass,
+    ownerCustodyProven: false,
+    recoveryAdminProven: false,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    postgresActions: 0,
+  });
 }
 
 /**

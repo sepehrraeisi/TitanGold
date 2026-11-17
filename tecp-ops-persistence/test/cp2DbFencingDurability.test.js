@@ -47,6 +47,12 @@ import {
   createPrivilegedTier3ActivationHandleForTests,
   createRunnerOfflineSuiteGrantForTests,
   evaluateLiveSpawnAuthorizationFromOwnerCapability,
+  OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+  OPS_PILOT_LIVE_VENUE,
+  createLiveCapabilityGatedOneShotTicket,
+  createTestOnlyGitHeadObservationFixture,
+  evaluateLiveRepositoryHeadBinding,
+  observeCanonicalRepositoryHeadSha,
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
@@ -64,6 +70,10 @@ import {
   S2_OWNER_CAPABILITY_REPOSITORY_ID,
   S2_TIER3_OWNER_CAPABILITY_DECISIONS,
   verifyS2Tier3OwnerCapabilityArtifact,
+  S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+  S2_OWNER_CAPABILITY_ISSUER_SIMIN,
+  S2_OWNER_CAPABILITY_VENUE_SIMIN,
+  createOwnerInstalledFixedTrustVerifierDeps,
   runS2Tier3OwnerCapabilityVerifierCli,
   getVerifierImportSideEffectsReport,
   __testOnlyRegisterOwnerPublicKeyForVerification,
@@ -73,7 +83,7 @@ import {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries,
   __testOnlySetRevocationRegistryUnavailable,
 } from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
-import { invokeOwnerControlledTier3LocalRunner } from '../scripts/ownerControlledTier3LocalRunner.js';
+import { OWNER_RUNNER_DECISIONS, invokeOwnerControlledTier3LocalRunner } from '../scripts/ownerControlledTier3LocalRunner.js';
 import {
   OPERATIONAL_DISPATCH_AUTHORIZED as DISPATCHER_MODULE_OPERATIONAL_FLAG,
 } from '../src/operationalDispatcher.js';
@@ -749,7 +759,12 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       ownerCustodyProven: true,
       recoveryAdminProven: false,
     });
-    assert.equal(recoveryDenied.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_RECOVERY_ADMIN_NOT_PROVEN);
+    assert.equal(recoveryDenied.ok, false);
+    assert.equal(
+      recoveryDenied.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN,
+    );
+    assert.ok(recoveryDenied.reasons.includes('CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN'));
 
     const spawnEligibility = evaluateVerifiedCapabilityLiveSpawnEligibility(valid, {
       ownerCustodyProven: true,
@@ -973,6 +988,249 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       /STATIC_ATTESTATION_NOT_MEASURED/,
     );
     assert.equal(getRunnerImportSideEffectsReport().postgresActions, 0);
+  });
+});
+
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 SIMIN Hyper-V capability-gated live bridge (offline authorization only)', () => {
+  it('rejects legacy WSL purpose when SIMIN purpose expected', () => {
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+    __testOnlyRegisterOwnerPublicKeyForVerification('s2-simin-bridge-kid', publicPem);
+    const deps = __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({ nowMs: 1_700_000_000_500 });
+    const wslClaims = buildBaseS2OwnerCapabilityClaims();
+    const token = signS2OwnerCapabilityTokenForTests(wslClaims, privatePem);
+    const denied = verifyS2Tier3OwnerCapabilityArtifact(token, {
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+      suitePath: FENCING_SUITE_PATH,
+      pinnedMainSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+      forbidOfflinePinAsLiveSha: true,
+    }, deps);
+    assert.equal(denied.ok, false);
+    assert.ok([
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_LEGACY_WSL_PURPOSE_FOR_SIMIN,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_WRONG_PURPOSE,
+      S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MALFORMED,
+    ].includes(denied.decision));
+  });
+
+  it('authorizes functional-lab live one-shot without PG side effects or OHSA claim', async () => {
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const kid = 's2-simin-bridge-kid';
+    __testOnlyRegisterOwnerPublicKeyForVerification(kid, publicPem);
+    const deps = __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({ nowMs: 1_700_000_000_500 });
+    const headSha = '652892e96b0be1acc112dcf544e50afcdba93522';
+    const claims = {
+      alg: 'Ed25519',
+      capabilityId: 'cap-simin-fencing-1',
+      exp: 1_700_000_000_500 + 60_000,
+      iss: S2_OWNER_CAPABILITY_ISSUER_SIMIN,
+      jti: 'jti-simin-fencing-1',
+      kid,
+      kind: 'TECP_OPS_S2_TIER3_OWNER_CAPABILITY_V1',
+      nbf: 1_700_000_000_000,
+      pinnedMainSha: headSha,
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      repositoryId: 'sepehrraeisi/TitanGold',
+      suitePath: FENCING_SUITE_PATH,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+    };
+    const keyOrder = [
+      'alg','capabilityId','exp','iss','jti','kid','kind','nbf',
+      'pinnedMainSha','purpose','repositoryId','suitePath','venue',
+    ];
+    const parts = [];
+    for (const key of keyOrder) {
+      const v = claims[key];
+      parts.push(typeof v === 'string' ? `"${key}":"${v}"` : `"${key}":${v}`);
+    }
+    const canonical = `{${parts.join(',')}}`;
+    const sig = sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64url');
+    const token = `${Buffer.from(canonical, 'utf8').toString('base64url')}.${sig}`;
+
+    const verified = verifyS2Tier3OwnerCapabilityArtifact(token, {
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+      suitePath: FENCING_SUITE_PATH,
+      pinnedMainSha: headSha,
+      forbidOfflinePinAsLiveSha: true,
+    }, deps);
+    assert.equal(verified.ok, true);
+    assert.equal(verified.liveSpawnEligible, false);
+
+    const bind = evaluateLiveRepositoryHeadBinding({
+      capabilityPinnedSha: headSha,
+      repositoryHeadSha: headSha,
+    });
+    assert.equal(bind.ok, true);
+
+    const auth = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: verified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath: FENCING_SUITE_PATH,
+    });
+    assert.equal(auth.ok, true);
+    assert.equal(auth.liveSpawnEligible, true);
+    assert.equal(auth.ownerCustodyProven, false);
+    assert.equal(auth.recoveryAdminProven, false);
+
+    const ticketed = createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: verified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath: FENCING_SUITE_PATH,
+      ttlMs: 60_000,
+    }, { clock: { now: () => 0 } });
+    assert.equal(ticketed.ok, true);
+    assert.equal(ticketed.liveSubprocessAuthorized, false);
+    assert.equal(ticketed.trustClass, 'TEST_ONLY');
+    assert.equal(ticketed.postgresActions, 0);
+
+    const homeOverrideDenied = createOwnerInstalledFixedTrustVerifierDeps({
+      home: '/tmp/tecp-missing-owner-trust-home-should-not-exist',
+    });
+    assert.equal(homeOverrideDenied.ok, false);
+    assert.equal(homeOverrideDenied.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR);
+    assert.ok((homeOverrideDenied.reasons || []).includes('CALLER_TRUST_HOME_OR_KEY_OVERRIDE_FORBIDDEN'));
+    // Default Owner registry path (no override) may be missing on this host — still fail closed.
+    const missingRegistry = createOwnerInstalledFixedTrustVerifierDeps({});
+    if (missingRegistry && missingRegistry.ok === false) {
+      assert.ok(
+        missingRegistry.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING
+        || missingRegistry.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_CALLER_SUPPLIED_TRUST_ANCHOR,
+      );
+    }
+
+    // Fresh JTI required: verifier records replay on successful verify.
+    const claims2 = { ...claims, jti: 'jti-simin-fencing-2', capabilityId: 'cap-simin-fencing-2' };
+    const parts2 = [];
+    for (const key of keyOrder) {
+      const v = claims2[key];
+      parts2.push(typeof v === 'string' ? `"${key}":"${v}"` : `"${key}":${v}`);
+    }
+    const canonical2 = `{${parts2.join(',')}}`;
+    const sig2 = sign(null, Buffer.from(canonical2, 'utf8'), privateKey).toString('base64url');
+    const token2 = `${Buffer.from(canonical2, 'utf8').toString('base64url')}.${sig2}`;
+    const gitFixture = createTestOnlyGitHeadObservationFixture({
+      proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
+      headSha,
+    });
+    const runnerAuth = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      repositorySha: headSha,
+      repositoryHeadSha: headSha,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: deps,
+      testOnlyGitObservationFixture: gitFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(runnerAuth.ok, true);
+    assert.equal(runnerAuth.decision, 'ALLOW_LIVE_CAPABILITY_AUTHORIZATION');
+    assert.equal(runnerAuth.postgresActions, 0);
+    assert.equal(runnerAuth.ownerCustodyProven, false);
+    assert.equal(runnerAuth.trustClass, 'TEST_ONLY');
+    assert.equal(runnerAuth.gitObservation?.authorizesLiveExecute, false);
+    assert.equal(runnerAuth.ohsaClaim || 'NOT_PROVEN', 'NOT_PROVEN');
+    assert.equal(CP2_DB_FENCING_SUITE_STATUS, 'OFFLINE_ORCHESTRATION_WIRED_AWAITING_LIVE_TIER3_DB');
+
+    // Request SHA matching claim but differing from independently observed HEAD => DENY
+    const wrongHeadFixture = createTestOnlyGitHeadObservationFixture({
+      proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
+      headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+    const shaMismatch = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      repositorySha: headSha,
+      repositoryHeadSha: headSha,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: deps,
+      testOnlyGitObservationFixture: wrongHeadFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(shaMismatch.ok, false);
+    assert.equal(shaMismatch.decision, 'DENY_LIVE_SHA_BINDING');
+
+    // LIVE_EXECUTE must reject TEST_ONLY trust/fixture
+    const executeDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: deps,
+      testOnlyGitObservationFixture: gitFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(executeDenied.ok, false);
+    assert.ok(
+      executeDenied.decision === 'DENY_VERIFIER_TRUST_MISSING'
+      || executeDenied.decision === 'DENY_LIVE_SHA_BINDING',
+    );
+
+    // LIVE_EXECUTE must reject caller trustHome override even without injected deps.
+    const trustHomeDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustHome: '/tmp/tecp-attacker-trust-home',
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(trustHomeDenied.ok, false);
+    assert.equal(trustHomeDenied.decision, 'DENY_VERIFIER_TRUST_MISSING');
+    assert.ok((trustHomeDenied.reasons || []).includes('CALLER_TRUST_HOME_OVERRIDE_FORBIDDEN'));
+
+    // Fake branded trusted deps object (proofClass only) must DENY.
+    const fakeTrustedDeps = Object.freeze({
+      proofClass: 'OWNER_INSTALLED_FIXED_TRUST_VERIFIER_DEPS_V1',
+      __ownerInstalledTrust: true,
+    });
+    const fakeDepsDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      repositorySha: headSha,
+      repositoryHeadSha: headSha,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: fakeTrustedDeps,
+      testOnlyGitObservationFixture: gitFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(fakeDepsDenied.ok, false);
+    assert.equal(fakeDepsDenied.decision, 'DENY_VERIFIER_TRUST_MISSING');
   });
 });
 
