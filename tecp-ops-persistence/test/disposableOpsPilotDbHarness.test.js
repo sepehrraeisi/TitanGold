@@ -47,6 +47,7 @@ import {
   createDisposableOpsPilotClient,
   resolveOpsPilotPgClientDependency,
   endOwnedClusterClient,
+  isValidatedSuccessfulOwnedClientEnd,
   isOwnedClusterClient,
   isOwnedConnectedClusterClient,
   assertHarnessSourceHasOwnedClientConnectBeforeLatch,
@@ -86,6 +87,7 @@ import {
 } from '../src/disposableOpsPilotDbHarness.js';
 import {
   OWNER_RUNNER_DECISIONS,
+  evaluateLiveExecuteClosureGate,
   getRunnerImportSideEffectsReport,
   invokeOwnerControlledTier3LocalRunner,
   isDirectCliEntrypoint,
@@ -1719,6 +1721,231 @@ assert.equal(offlinePinBind.ok, false);
     assert.equal(liveDenied.ok, false);
     assert.equal(liveDenied.postgresActions || 0, 0);
   });
+
+
+  it('26) client-closure integrity: failed/thrown end cannot PASS; second end not false-success', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+
+    // Gate formula: successful suite + stop + cleanup still DENY without verified client close.
+    const denyMissingClose = evaluateLiveExecuteClosureGate({
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: true,
+      clientEndResult: null,
+    });
+    assert.equal(denyMissingClose.overallOk, false);
+    assert.equal(denyMissingClose.clientEndValidated, false);
+
+    const denyFailedClose = evaluateLiveExecuteClosureGate({
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: true,
+      clientEndResult: {
+        ok: false,
+        decision: OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED,
+        reasons: ['OWNED_CLIENT_END_FAILED'],
+        verifiedClosed: false,
+      },
+    });
+    assert.equal(denyFailedClose.overallOk, false);
+
+    const denyUnverifiedOkShape = evaluateLiveExecuteClosureGate({
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: true,
+      clientEndResult: {
+        ok: true,
+        decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+        reasons: ['CLIENT_END_NOOP_NULL'],
+        verifiedClosed: false,
+      },
+    });
+    assert.equal(denyUnverifiedOkShape.overallOk, false);
+    assert.equal(isValidatedSuccessfulOwnedClientEnd({
+      ok: true,
+      verifiedClosed: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: ['CLIENT_END_NOOP_NULL'],
+    }), false);
+
+    const allowVerified = evaluateLiveExecuteClosureGate({
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: true,
+      clientEndResult: {
+        ok: true,
+        decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+        reasons: ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'],
+        verifiedClosed: true,
+        endInvoked: true,
+      },
+    });
+    assert.equal(allowVerified.overallOk, true);
+
+    // Cleanup failure cannot live PASS even with verified close + suite ok.
+    assert.equal(evaluateLiveExecuteClosureGate({
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: false,
+      clientEndResult: {
+        ok: true,
+        decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+        reasons: ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'],
+        verifiedClosed: true,
+      },
+    }).overallOk, false);
+
+    // Connection failure / ordinary offline create remains deny; no live SQL.
+    const deniedConnectAuthority = await createDisposableOpsPilotClient({
+      explicitNonProd: true,
+      client: { end: async () => {} },
+    }, { NODE_ENV: 'test' });
+    assert.equal(deniedConnectAuthority.ok, false);
+    assert.equal(deniedConnectAuthority.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+
+    // Failed client.end() — not marked success; second end is DENY (no false idempotent success).
+    {
+      const clock = makeClock();
+      const ticket = createInertOfflineOneShotTicketForTests({
+        proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+        explicitNonProd: true,
+      }, { clock });
+      let endCount = 0;
+      const controller = createDisposableOpsPilotClusterController({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+        spawnSyncFn: inertSpawner().spawnSyncFn,
+        stopFn: () => ({ status: 0 }),
+        inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert_stopped' }),
+      }, { NODE_ENV: 'test' });
+      assert.equal((await controller.prepare()).ok, true);
+      assert.equal((await controller.start()).ok, true);
+      const clientResult = await controller.createOwnedClusterClient({
+        inertClientFactory: () => ({
+          async connect() {},
+          async query() { return { rows: [] }; },
+          async end() {
+            endCount += 1;
+            throw new Error('INERT_END_BOOM');
+          },
+        }),
+      });
+      assert.equal(clientResult.ok, true);
+      const firstEnd = await endOwnedClusterClient(clientResult.client);
+      assert.equal(firstEnd.ok, false);
+      assert.equal(firstEnd.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED);
+      assert.equal(firstEnd.verifiedClosed, false);
+      assert.equal(isValidatedSuccessfulOwnedClientEnd(firstEnd), false);
+      assert.equal(endCount, 1);
+      const secondEnd = await endOwnedClusterClient(clientResult.client);
+      assert.equal(secondEnd.ok, false);
+      assert.equal(secondEnd.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED);
+      assert.ok((secondEnd.reasons || []).includes('NO_FALSE_IDEMPOTENT_SUCCESS'));
+      assert.equal(endCount, 1, 'failed close must not unsafe double-invoke end');
+      const stopped = await controller.stop();
+      assert.equal(stopped.ok, false);
+      assert.equal(stopped.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED);
+      assert.equal(stopped.clientClosed, false);
+      const cleaned = await controller.cleanup();
+      assert.equal(cleaned.ok, false);
+      assert.equal(isValidatedSuccessfulOwnedClientEnd(cleaned.clientEndResult), false);
+    }
+
+    // Successful disconnect invokes end exactly once; idempotent second end does not re-invoke.
+    {
+      const clock2 = makeClock();
+      const ticket2 = createInertOfflineOneShotTicketForTests({
+        proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+        explicitNonProd: true,
+      }, { clock: clock2 });
+      let endCount = 0;
+      const controller = createDisposableOpsPilotClusterController({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket2,
+        clock: clock2,
+        spawnSyncFn: inertSpawner().spawnSyncFn,
+        stopFn: () => ({ status: 0 }),
+        inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert_stopped' }),
+      }, { NODE_ENV: 'test' });
+      assert.equal((await controller.prepare()).ok, true);
+      assert.equal((await controller.start()).ok, true);
+      const clientResult = await controller.createOwnedClusterClient({
+        inertClientFactory: () => ({
+          async connect() {},
+          async query() { return { rows: [] }; },
+          async end() { endCount += 1; },
+        }),
+      });
+      assert.equal(clientResult.ok, true);
+      const firstEnd = await endOwnedClusterClient(clientResult.client);
+      assert.equal(firstEnd.ok, true);
+      assert.equal(firstEnd.verifiedClosed, true);
+      assert.equal(firstEnd.endInvoked, true);
+      assert.equal(endCount, 1);
+      assert.equal(isValidatedSuccessfulOwnedClientEnd(firstEnd), true);
+      const secondEnd = await endOwnedClusterClient(clientResult.client);
+      assert.equal(secondEnd.ok, true);
+      assert.equal(secondEnd.alreadyEnded, true);
+      assert.equal(secondEnd.verifiedClosed, true);
+      assert.equal(secondEnd.endInvoked, false);
+      assert.equal(endCount, 1, 'exactly one end operation');
+      const stopped = await controller.stop();
+      assert.equal(stopped.ok, true);
+      await controller.cleanup();
+    }
+
+    // Soft-fail rejected end() also deny and blocks overall PASS.
+    {
+      const clock3 = makeClock();
+      const ticket3 = createInertOfflineOneShotTicketForTests({
+        proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+        explicitNonProd: true,
+      }, { clock: clock3 });
+      const controller = createDisposableOpsPilotClusterController({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket3,
+        clock: clock3,
+        spawnSyncFn: inertSpawner().spawnSyncFn,
+        stopFn: () => ({ status: 0 }),
+        inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert_stopped' }),
+      }, { NODE_ENV: 'test' });
+      assert.equal((await controller.prepare()).ok, true);
+      assert.equal((await controller.start()).ok, true);
+      const clientResult = await controller.createOwnedClusterClient({
+        inertClientFactory: () => ({
+          async connect() {},
+          async end() { return Promise.reject(new Error('END_REJECTED')); },
+        }),
+      });
+      const ended = await endOwnedClusterClient(clientResult.client);
+      assert.equal(ended.ok, false);
+      assert.equal(evaluateLiveExecuteClosureGate({
+        suiteOk: true,
+        stopValidated: true,
+        cleanupValidated: true,
+        clientEndResult: ended,
+      }).overallOk, false);
+      await controller.stop();
+      await controller.cleanup();
+    }
+
+    // Normal offline public live execution still denies; unchanged fail-closed.
+    const liveDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: '11eb27c968386ebfc93ece739a787fbe2184f2f9',
+    }, {
+      argv: [process.execPath, 'ownerControlledTier3LocalRunner.js'],
+      env: { NODE_ENV: 'test' },
+      uid: 1000,
+      execPath: process.execPath,
+    });
+    assert.equal(liveDenied.ok, false);
+    assert.equal(liveDenied.postgresActions || 0, 0);
+  });
+
 
 
 });

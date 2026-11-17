@@ -237,6 +237,7 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_PG_CONNECT_FAILED: 'DENY_PG_CONNECT_FAILED',
   DENY_CALLER_CLIENT_SUBSTITUTION: 'DENY_CALLER_CLIENT_SUBSTITUTION',
   ALLOW_OWNED_CLIENT_ENDED: 'ALLOW_OWNED_CLIENT_ENDED',
+  DENY_OWNED_CLIENT_END_FAILED: 'DENY_OWNED_CLIENT_END_FAILED',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -266,8 +267,10 @@ const liveSuiteExecutionAuthorityMeta = new WeakMap();
 const ownedClusterClientLatch = new WeakSet();
 /** Clients that successfully connected before latch. */
 const ownedConnectedClusterClientLatch = new WeakSet();
-/** Ended owned clients — idempotent end / no double-close. */
+/** Successfully ended owned clients — idempotent end only after verified success. */
 const ownedClusterClientEndedLatch = new WeakSet();
+/** Owned clients whose end() failed — never report false idempotent success. */
+const ownedClusterClientEndFailedLatch = new WeakSet();
 
 /**
  * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
@@ -1129,8 +1132,11 @@ export async function endOwnedClusterClient(client) {
       decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
       reasons: Object.freeze(['CLIENT_END_NOOP_NULL']),
       postgresActions: 0,
+      verifiedClosed: false,
+      endInvoked: false,
     });
   }
+  // Only successful prior closes are idempotent success. Failed closes never upgrade to PASS.
   if (ownedClusterClientEndedLatch.has(client)) {
     return Object.freeze({
       ok: true,
@@ -1139,31 +1145,73 @@ export async function endOwnedClusterClient(client) {
       reasons: Object.freeze(['CLIENT_END_IDEMPOTENT']),
       postgresActions: 0,
       alreadyEnded: true,
+      verifiedClosed: true,
+      endInvoked: false,
+    });
+  }
+  if (ownedClusterClientEndFailedLatch.has(client)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+      'PRIOR_OWNED_CLIENT_END_FAILED',
+      'NO_FALSE_IDEMPOTENT_SUCCESS',
+      'REFUSING_UNSAFE_SECOND_CLOSE',
+    ], {
+      clientEndAttempted: true,
+      verifiedClosed: false,
+      endInvoked: false,
     });
   }
   if (!ownedClusterClientLatch.has(client)) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
       'CLIENT_NOT_OWNED_LATCHED',
       'REFUSING_END_OF_FOREIGN_CLIENT',
-    ]);
+    ], { verifiedClosed: false, endInvoked: false });
   }
-  ownedClusterClientEndedLatch.add(client);
   const ended = await safeEndClient(client);
   if (!ended.ok) {
-    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+    ownedClusterClientEndFailedLatch.add(client);
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
       'OWNED_CLIENT_END_FAILED',
       ended.error || 'END_FAILED',
-    ], { clientEndAttempted: true });
+      'CLIENT_NOT_MARKED_SUCCESSFULLY_CLOSED',
+    ], {
+      clientEndAttempted: true,
+      verifiedClosed: false,
+      endInvoked: true,
+    });
   }
+  ownedClusterClientEndedLatch.add(client);
   try { ownedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
   try { ownedConnectedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  try { ownedClusterClientEndFailedLatch.delete(client); } catch (_) { /* WeakSet delete */ }
   return Object.freeze({
     ok: true,
     allowed: true,
     decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
     reasons: Object.freeze(['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP']),
     postgresActions: 0,
+    verifiedClosed: true,
+    endInvoked: true,
   });
+}
+
+/**
+ * Verified owned-client close required for live overall PASS.
+ * Null/missing/failed/unverified closes are not success.
+ */
+export function isValidatedSuccessfulOwnedClientEnd(result) {
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) {
+    return false;
+  }
+  if (result.ok !== true || result.verifiedClosed !== true) {
+    return false;
+  }
+  if (result.decision !== OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED) {
+    return false;
+  }
+  if (!Array.isArray(result.reasons)) {
+    return false;
+  }
+  return true;
 }
 
 export function isOwnedConnectedClusterClient(value) {
@@ -1765,8 +1813,18 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       }
       let clientEndResult = null;
       if (ownedClusterClientRef != null) {
-        clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
-        ownedClusterClientRef = null;
+        try {
+          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
+        } catch (error) {
+          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'OWNED_CLIENT_END_THREW',
+            String(error && error.message ? error.message : error),
+          ], { verifiedClosed: false, endInvoked: true });
+        }
+        // Clear ref only after verified close; retain for truthful failed-close evidence otherwise.
+        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          ownedClusterClientRef = null;
+        }
       }
       const proof = stopClusterAndProveTerminated(dataDir, {
         ownedController: this,
@@ -1788,21 +1846,33 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
           'STOP_DID_NOT_PROVE_TERMINATION',
           proof.reason || 'not_terminated',
-        ], { clientEndResult });
+        ], { clientEndResult, clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult) });
       }
       started = false;
+      if (clientEndResult != null && !isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+          'OWNED_CLIENT_END_FAILED_BEFORE_OR_DURING_STOP',
+          'POSTMASTER_STOP_ATTEMPTED_WITHOUT_CLAIMING_CLIENT_CLOSE',
+          ...(clientEndResult.reasons || []),
+        ], {
+          clientEndResult,
+          clientClosed: false,
+          terminationEvidence: Object.freeze(proof),
+        });
+      }
       return Object.freeze({
         ok: true,
         allowed: true,
         decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
         reasons: Object.freeze([
           'STOP_TERMINATION_PROVEN',
-          ...(clientEndResult?.ok === true ? ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'] : []),
+          ...(clientEndResult != null ? ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'] : ['STOP_NO_OWNED_CLIENT_REF']),
         ]),
         postgresActions: 0,
         dbExecutionAuthorized: false,
         tier3Authorized: false,
         clientEndResult,
+        clientClosed: clientEndResult == null ? null : true,
         terminationEvidence: Object.freeze(proof),
       });
     },
@@ -1835,9 +1905,19 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           }),
         });
       }
+      let clientEndResult = null;
       if (ownedClusterClientRef != null) {
-        await endOwnedClusterClient(ownedClusterClientRef);
-        ownedClusterClientRef = null;
+        try {
+          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
+        } catch (error) {
+          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'OWNED_CLIENT_END_THREW_DURING_CLEANUP',
+            String(error && error.message ? error.message : error),
+          ], { verifiedClosed: false, endInvoked: true });
+        }
+        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          ownedClusterClientRef = null;
+        }
       }
       if (started || startupAttempted) {
         const proof = stopClusterAndProveTerminated(dataDir, {
@@ -1860,11 +1940,14 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
             proof.reason || 'not_terminated',
             'PRESERVE_FAILED_CLEANUP_EVIDENCE',
           ], {
+            clientEndResult,
+            clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult),
             cleanupEvidence: Object.freeze({
               stopBeforeDelete: 'FAILED',
               root,
               dataDir,
               proof,
+              clientEndResult,
             }),
           });
         }
@@ -1878,15 +1961,36 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         const deletedRoot = removed.root;
         root = null;
         dataDir = null;
+        if (clientEndResult != null && !isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'CLEANUP_COMPLETED_WITHOUT_VERIFIED_CLIENT_CLOSE',
+            'NO_FALSE_CLIENT_DISCONNECT_CLAIM',
+            ...(clientEndResult.reasons || []),
+          ], {
+            clientEndResult,
+            clientClosed: false,
+            cleanupEvidence: Object.freeze({
+              stopBeforeDelete: 'REQUIRED_AND_PROVEN_OR_NEVER_STARTED',
+              deletedRoot,
+              clientEndResult,
+            }),
+          });
+        }
         return Object.freeze({
           ok: true,
           allowed: true,
           decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-          reasons: Object.freeze(['CLEANUP_SAFE_DELETE']),
+          reasons: Object.freeze([
+            'CLEANUP_SAFE_DELETE',
+            ...(clientEndResult != null ? ['OWNED_CLIENT_ENDED_BEFORE_CLEANUP'] : []),
+          ]),
           postgresActions: 0,
+          clientEndResult,
+          clientClosed: clientEndResult == null ? null : true,
           cleanupEvidence: Object.freeze({
             stopBeforeDelete: 'REQUIRED_AND_PROVEN_OR_NEVER_STARTED',
             deletedRoot,
+            clientEndResult,
           }),
         });
       } catch (error) {
@@ -1894,10 +1998,13 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           error.message || 'CLEANUP_FAILED',
           'PRESERVE_FAILED_CLEANUP_EVIDENCE',
         ], {
+          clientEndResult,
+          clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult),
           cleanupEvidence: Object.freeze({
             stopBeforeDelete: 'UNKNOWN',
             root,
             dataDir,
+            clientEndResult,
           }),
         });
       }

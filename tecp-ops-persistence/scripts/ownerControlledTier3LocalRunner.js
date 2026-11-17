@@ -36,6 +36,7 @@ import {
   LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
   isOwnedClusterClient,
   endOwnedClusterClient,
+  isValidatedSuccessfulOwnedClientEnd,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
   evaluateLiveRepositoryHeadBinding,
@@ -77,6 +78,7 @@ export const OWNER_RUNNER_DECISIONS = Object.freeze({
   DENY_ONESHOT_REPLAY: 'DENY_ONESHOT_REPLAY',
   DENY_INVALID_REQUEST: 'DENY_INVALID_REQUEST',
   DENY_STOP_OR_CLEANUP_FAILED: 'DENY_STOP_OR_CLEANUP_FAILED',
+  DENY_CLIENT_CLOSE_FAILED: 'DENY_CLIENT_CLOSE_FAILED',
   DENY_VERIFIER_TRUST_MISSING: 'DENY_VERIFIER_TRUST_MISSING',
   DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF: 'DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF',
   DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
@@ -129,6 +131,60 @@ function isValidatedSuccessfulLifecycleResult(result) {
     return false;
   }
   return true;
+}
+
+/**
+ * Live overall PASS requires verified owned-client disconnect evidence.
+ * Failed/thrown/missing/unverified closes cannot yield LIVE_S2_PASS.
+ */
+export function evaluateLiveExecuteClosureGate({
+  suiteOk,
+  stopValidated,
+  cleanupValidated,
+  clientEndResult,
+} = {}) {
+  const clientEndValidated = isValidatedSuccessfulOwnedClientEnd(clientEndResult);
+  const overallOk = suiteOk === true
+    && stopValidated === true
+    && cleanupValidated === true
+    && clientEndValidated === true;
+  return Object.freeze({
+    overallOk,
+    clientEndValidated,
+    suiteOk: suiteOk === true,
+    stopValidated: stopValidated === true,
+    cleanupValidated: cleanupValidated === true,
+  });
+}
+
+async function boundedEndStopCleanup(controller, client) {
+  let clientEndResult = null;
+  try {
+    if (client != null) {
+      clientEndResult = await endOwnedClusterClient(client);
+    }
+  } catch (error) {
+    clientEndResult = deny(OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED, [
+      'OWNED_CLIENT_END_THREW',
+      error.message || String(error),
+    ]);
+  }
+  let stopped = null;
+  let cleaned = null;
+  let stopError = null;
+  let cleanupError = null;
+  try { stopped = await controller.stop(); } catch (error) { stopError = error; stopped = null; }
+  try { cleaned = await controller.cleanup(); } catch (error) { cleanupError = error; cleaned = null; }
+  return Object.freeze({
+    clientEndResult,
+    stopped,
+    cleaned,
+    stopError,
+    cleanupError,
+    clientEndValidated: isValidatedSuccessfulOwnedClientEnd(clientEndResult),
+    stopValidated: isValidatedSuccessfulLifecycleResult(stopped),
+    cleanupValidated: isValidatedSuccessfulLifecycleResult(cleaned),
+  });
 }
 
 function lifecycleStageEvidence(stage, result, error = null) {
@@ -832,13 +888,17 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
     if (!isOwnedClusterClient(clientResult.client) && deps.offlineWiringProbe !== true) {
-      const stoppedEarly = await controller.stop();
-      const cleanedEarly = await controller.cleanup();
+      const closed = await boundedEndStopCleanup(controller, clientResult.client);
       return {
         ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
           'CLUSTER_CLIENT_NOT_OWNED_LATCHED',
         ]),
-        evidence: evidenceEnvelope({ start: started, stop: stoppedEarly, cleanup: cleanedEarly }),
+        evidence: evidenceEnvelope({
+          start: started,
+          clientEnd: closed.clientEndResult,
+          stop: lifecycleStageEvidence('stop', closed.stopped, closed.stopError),
+          cleanup: lifecycleStageEvidence('cleanup', closed.cleaned, closed.cleanupError),
+        }),
         postgresActions: started.postgresActions || 0,
       };
     }
@@ -854,26 +914,30 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       offlineWiringProbe: deps.offlineWiringProbe === true,
     });
     if (!authorityResult.ok) {
-      const stoppedEarly = await controller.stop();
-      const cleanedEarly = await controller.cleanup();
+      const closed = await boundedEndStopCleanup(controller, clientResult.client);
       return {
         ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, authorityResult.reasons || [
           'LIVE_SUITE_EXECUTION_AUTHORITY_MINT_FAILED',
         ]),
         evidence: evidenceEnvelope({
           start: started,
-          stop: stoppedEarly,
-          cleanup: cleanedEarly,
+          clientEnd: closed.clientEndResult,
+          stop: lifecycleStageEvidence('stop', closed.stopped, closed.stopError),
+          cleanup: lifecycleStageEvidence('cleanup', closed.cleaned, closed.cleanupError),
           failure: authorityResult,
         }),
         postgresActions: started.postgresActions || 0,
       };
     }
 
-    const suiteModule = await loadSuiteExecutor(suiteCheck.suitePath);
     let suiteResult;
     let clientEndResult = null;
+    let stopped;
+    let cleaned;
+    let stopError = null;
+    let cleanupError = null;
     try {
+      const suiteModule = await loadSuiteExecutor(suiteCheck.suitePath);
       try {
         suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
           mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
@@ -892,40 +956,55 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
           error.message || String(error),
         ]);
       }
+    } catch (error) {
+      suiteResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+        'SUITE_LOAD_OR_ORCHESTRATION_THREW',
+        error.message || String(error),
+      ]);
     } finally {
-      // Disconnect before Postmaster stop / disposable cleanup, including suite failures.
+      // Disconnect before Postmaster stop / disposable cleanup, including suite/load failures.
       try {
         clientEndResult = await endOwnedClusterClient(clientResult.client);
       } catch (endError) {
-        clientEndResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+        clientEndResult = deny(OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED, [
           'OWNED_CLIENT_END_THREW',
           endError.message || String(endError),
         ]);
       }
+      try { stopped = await controller.stop(); } catch (error) { stopError = error; stopped = null; }
+      try { cleaned = await controller.cleanup(); } catch (error) { cleanupError = error; cleaned = null; }
     }
-    let stopped;
-    let cleaned;
-    let stopError = null;
-    let cleanupError = null;
-    try { stopped = await controller.stop(); } catch (error) { stopError = error; stopped = null; }
     const stopValidated = isValidatedSuccessfulLifecycleResult(stopped);
-    try { cleaned = await controller.cleanup(); } catch (error) { cleanupError = error; cleaned = null; }
     const cleanupValidated = isValidatedSuccessfulLifecycleResult(cleaned);
-    const overallOk = suiteResult?.ok === true && stopValidated && cleanupValidated;
+    const closureGate = evaluateLiveExecuteClosureGate({
+      suiteOk: suiteResult?.ok === true,
+      stopValidated,
+      cleanupValidated,
+      clientEndResult,
+    });
+    const overallOk = closureGate.overallOk === true;
+    let decision;
+    if (overallOk) {
+      decision = OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION;
+    } else if (closureGate.clientEndValidated !== true) {
+      decision = OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED;
+    } else {
+      decision = OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED;
+    }
     return Object.freeze({
       ok: overallOk,
       allowed: overallOk,
-      decision: overallOk
-        ? OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION
-        : OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED,
+      decision,
       reasons: Object.freeze([
         'LIVE_CAPABILITY_GATED_EXECUTE',
         'MODULE_CONSTS_REMAIN_FALSE',
         'OHSA_NOT_PROVEN',
+        ...(closureGate.clientEndValidated !== true ? ['VERIFIED_OWNED_CLIENT_CLOSE_REQUIRED'] : []),
         ...(suiteResult?.reasons || []),
       ]),
       suitePath: suiteCheck.suitePath,
       suiteResult,
+      closureGate,
       postgresActions: started.postgresActions || 0,
       dbActions: suiteResult?.sqlExecuted === true ? 1 : 0,
       workerActions: 0,
