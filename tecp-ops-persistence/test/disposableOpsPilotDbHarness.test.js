@@ -61,6 +61,10 @@ import {
   createLiveCapabilityGatedOneShotTicket,
   createTestOnlyGitHeadObservationFixture,
   observeCanonicalRepositoryHeadSha,
+  isLiveSuiteExecutionAuthority,
+  assertLiveSuiteExecutionAuthorityForSuite,
+  LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+  createLiveSuiteExecutionAuthority,
   getOwnerOneShotTicketView,
   inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
@@ -1507,6 +1511,46 @@ assert.equal(offlinePinBind.ok, false);
     try { rmSync(scriptPath, { force: true }); } catch { /* ignore */ }
     assert.equal(proc.status, 0, `${proc.stderr || ''}\n${proc.stdout || ''}`);
     assert.match(String(proc.stdout || ''), /ISOLATED_FAKE_WIRE_ATTACK_DENY_AND_LEGIT_OK/);
+  });
+
+
+  it('24) live contract repair: non-inert liveSpawn ticket admits lifecycle; public LIVE_DISPOSABLE bypass denied via suite gates', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+
+    // Forged capability still denied by ticket factory.
+    const forgedTicket = createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: { ok: true, claims: { pinnedMainSha: '11eb27c968386ebfc93ece739a787fbe2184f2f9', suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0], venue: OPS_PILOT_LIVE_VENUE, purpose: 'S2_SIMIN_HYPERV_LAB_OWNER_CAPABILITY_V1' } },
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: '11eb27c968386ebfc93ece739a787fbe2184f2f9',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      ttlMs: 30_000,
+    }, { clock: { now: () => 1 } });
+    assert.equal(forgedTicket.ok, false);
+    assert.equal(forgedTicket.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY);
+
+    // Authority mint without controller/ticket fails closed.
+    const badAuth = createLiveSuiteExecutionAuthority({
+      proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+      ownedController: {},
+      ownerOneShotTicket: {},
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositoryHeadSha: '11eb27c968386ebfc93ece739a787fbe2184f2f9',
+      authorizesRealSql: true,
+    });
+    assert.equal(badAuth.ok, false);
+
+    // Direct public-style authority object is not latched.
+    assert.equal(isLiveSuiteExecutionAuthority({
+      proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+    }), false);
+    assert.equal(assertLiveSuiteExecutionAuthorityForSuite(null, OPS_PILOT_APPROVED_TEST_ACTIONS[0], '11eb27c968386ebfc93ece739a787fbe2184f2f9').ok, false);
+
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
   });
 
 });

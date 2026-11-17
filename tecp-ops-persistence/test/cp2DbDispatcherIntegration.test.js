@@ -74,6 +74,9 @@ import {
   OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
   OPS_PILOT_HARNESS_DECISIONS,
+  assertLiveSuiteExecutionAuthorityForSuite,
+  isLiveSuiteExecutionAuthority,
+
   OPS_PILOT_PINNED_MAIN_SHA,
   createDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
@@ -360,23 +363,51 @@ function mintPrincipal(h) {
  * Fully wired live DB matrix. Remains non-executing while live gate is closed.
  */
 async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
-  if (!isPrivilegedTier3ActivationHandle(opts.tier3ActivationHandle)) {
+  if (opts.tier3ActivationHandle != null) {
     return {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['PRIVILEGED_TIER3_HANDLE_REQUIRED']),
+      reasons: Object.freeze([
+        'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY',
+        'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+      ]),
       sqlExecuted: false,
       proofClass: DISPATCHER_PROOF_CLASS_LIVE,
     };
   }
-  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== true) {
+  const auth = opts.authorityCheck
+    || assertLiveSuiteExecutionAuthorityForSuite(
+      opts.liveExecutionAuthority,
+      DISPATCHER_DB_SUITE_PATH,
+      opts.repositoryHeadSha,
+    );
+  if (!auth.ok) {
+    return {
+      ...auth,
+      sqlExecuted: false,
+      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+    };
+  }
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
     return {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['MODULE_DB_EXECUTION_CONSTANT_FALSE']),
+      reasons: Object.freeze(['MODULE_CONSTANTS_MUST_REMAIN_FALSE']),
+      sqlExecuted: false,
+      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+    };
+  }
+  if (auth.offlineWiringProbe === true || auth.authorizesRealSql !== true) {
+    return {
+      ok: false,
+      decision: DB_TIER3_NOT_AUTHORIZED,
+      reasons: Object.freeze([
+        'OFFLINE_WIRING_OR_NON_SQL_AUTHORITY_CANNOT_PASS_LIVE_MATRIX',
+        'REAL_SQL_ASSERTIONS_REQUIRED_FOR_PASS',
+      ]),
       sqlExecuted: false,
       proofs: Object.freeze(Object.fromEntries(
-        DISPATCHER_LIVE_SQL_CATALOG.map((k) => [k, 'NOT_EXECUTED_LIVE_GATE_CLOSED']),
+        DISPATCHER_LIVE_SQL_CATALOG.map((k) => [k, 'NOT_EXECUTED_OFFLINE_WIRING_PROBE']),
       )),
       proofClass: DISPATCHER_PROOF_CLASS_LIVE,
     };
@@ -644,8 +675,34 @@ export async function executeTier3SuiteViaRunnerContract(ctx = {}) {
     return runOfflineDispatcherDbOrchestration(ctx);
   }
   if (ctx.mode === 'LIVE_DISPOSABLE') {
+    return {
+      ok: false,
+      decision: OPS_PILOT_HARNESS_DECISIONS.DENY_PUBLIC_LIVE_DISPOSABLE,
+      reasons: Object.freeze([
+        'PUBLIC_LIVE_DISPOSABLE_BYPASS_DENIED',
+        'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+      ]),
+      sqlExecuted: false,
+      postgresActions: 0,
+    };
+  }
+  if (ctx.mode === 'LIVE_CAPABILITY_GATED_EXECUTE') {
+    const auth = assertLiveSuiteExecutionAuthorityForSuite(
+      ctx.liveExecutionAuthority,
+      ctx.suitePath || DISPATCHER_DB_SUITE_PATH,
+      ctx.repositoryHeadSha || ctx.repositorySha,
+    );
+    if (!auth.ok) {
+      return {
+        ...auth,
+        sqlExecuted: false,
+        postgresActions: 0,
+        proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+      };
+    }
     return runLiveDispatcherDbMatrix(ctx.clusterClient, {
-      tier3ActivationHandle: ctx.tier3ActivationHandle,
+      liveExecutionAuthority: ctx.liveExecutionAuthority,
+      authorityCheck: auth,
     });
   }
   return {
@@ -701,7 +758,10 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(denied.committed, false);
 
     const live = await runDispatcherIntegrationAgainstDisposablePg(null, {});
-    assert.equal(live.decision, DB_TIER3_NOT_AUTHORIZED);
+    assert.ok([
+      DB_TIER3_NOT_AUTHORIZED,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY,
+    ].includes(live.decision));
   });
 
   it('2) forged lease / public brand / cross-txn rules hold offline', () => {
@@ -864,7 +924,10 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       recoveryAdminProven: true,
     });
     assert.equal(liveCap.ok, false);
-    assert.equal(liveCap.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_CUSTODY_NOT_PROVEN,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_PUBLIC_LIVE_DISPOSABLE,
+    ].includes(liveCap.decision));
     assert.ok(liveCap.reasons.includes('CALLER_CUSTODY_OR_RECOVERY_BOOLEAN_FORBIDDEN'));
 
     assert.equal(
@@ -1154,5 +1217,24 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(getRunnerImportSideEffectsAttestationMeta().reportIsMeasuredRuntimeEvidence, false);
     assert.equal(getRunnerImportSideEffectsReport().postgresActions, 0);
   });
-});
 
+  it('live contract: LIVE_CAPABILITY_GATED_EXECUTE without runner authority DENY; public LIVE_DISPOSABLE DENY', async () => {
+    const denied = await executeTier3SuiteViaRunnerContract({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      repositoryHeadSha: '11eb27c968386ebfc93ece739a787fbe2184f2f9',
+      clusterClient: { query: async () => ({ rows: [] }) },
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.sqlExecuted, false);
+    const pub = await executeTier3SuiteViaRunnerContract({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      clusterClient: { query: async () => ({ rows: [] }) },
+    });
+    assert.equal(pub.ok, false);
+    assert.equal(pub.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_PUBLIC_LIVE_DISPOSABLE);
+    assert.equal(OPERATIONAL_DISPATCH_AUTHORIZED, false);
+  });
+
+});

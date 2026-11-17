@@ -32,6 +32,9 @@ import {
   createDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
   createLiveCapabilityGatedOneShotTicket,
+  createLiveSuiteExecutionAuthority,
+  LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+  isOwnedClusterClient,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
   evaluateLiveRepositoryHeadBinding,
@@ -456,6 +459,26 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
           evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING } }),
         };
       }
+
+      // Offline wiring probe: inert spawn/client injection for contract tests only.
+      // Never authorizes real SQL PASS. Real LIVE_EXECUTE forbids these deps.
+      if (deps.offlineWiringProbe === true) {
+        if (typeof deps.spawnSyncFn !== 'function' || typeof deps.inertClientFactory !== 'function') {
+          return {
+            ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+              'OFFLINE_WIRING_PROBE_REQUIRES_INERT_SPAWN_AND_CLIENT_FACTORY',
+            ]),
+            evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST } }),
+          };
+        }
+      } else if (deps.spawnSyncFn != null || deps.inertClientFactory != null || deps.offlineWiringProbe != null) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+            'LIVE_EXECUTE_REJECTS_INERT_LIFECYCLE_INJECTION_WITHOUT_OFFLINE_WIRING_PROBE',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST } }),
+        };
+      }
       const installed = createOwnerInstalledFixedTrustVerifierDeps({});
       if (installed && installed.ok === false) {
         return {
@@ -741,7 +764,8 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       explicitNonProd: true,
       ownerOneShotTicket: liveTicketResult.ticket,
       clock,
-      spawnSyncFn: deps.spawnSyncFn, // optional inject for offline inert proofs only
+      offlineWiringProbe: deps.offlineWiringProbe === true,
+      spawnSyncFn: deps.spawnSyncFn, // optional inject for offline inert proofs / wiring probe only
     }, { NODE_ENV: 'test', ...(env || {}) });
     if (!isOwnedDisposableOpsPilotClusterController(controller)) {
       return {
@@ -771,13 +795,75 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
+    const clientResult = await controller.createOwnedClusterClient({
+      offlineWiringProbe: deps.offlineWiringProbe === true,
+      inertClientFactory: deps.inertClientFactory,
+    });
+    if (!clientResult?.ok || !clientResult.client) {
+      const stoppedEarly = await controller.stop();
+      const cleanedEarly = await controller.cleanup();
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, clientResult?.reasons || [
+          'OWNED_CLUSTER_CLIENT_REQUIRED',
+        ]),
+        evidence: evidenceEnvelope({
+          start: started,
+          stop: stoppedEarly,
+          cleanup: cleanedEarly,
+          failure: clientResult,
+        }),
+        postgresActions: (started.postgresActions || 0) + (clientResult?.postgresActions || 0),
+      };
+    }
+    if (!isOwnedClusterClient(clientResult.client) && deps.offlineWiringProbe !== true) {
+      const stoppedEarly = await controller.stop();
+      const cleanedEarly = await controller.cleanup();
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+          'CLUSTER_CLIENT_NOT_OWNED_LATCHED',
+        ]),
+        evidence: evidenceEnvelope({ start: started, stop: stoppedEarly, cleanup: cleanedEarly }),
+        postgresActions: started.postgresActions || 0,
+      };
+    }
+
+    const authorityResult = createLiveSuiteExecutionAuthority({
+      proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+      ownedController: controller,
+      ownerOneShotTicket: liveTicketResult.ticket,
+      suitePath: suiteCheck.suitePath,
+      repositoryHeadSha: headSha,
+      venue: OPS_PILOT_LIVE_VENUE,
+      authorizesRealSql: deps.offlineWiringProbe !== true && clientResult.inert !== true,
+      offlineWiringProbe: deps.offlineWiringProbe === true,
+    });
+    if (!authorityResult.ok) {
+      const stoppedEarly = await controller.stop();
+      const cleanedEarly = await controller.cleanup();
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, authorityResult.reasons || [
+          'LIVE_SUITE_EXECUTION_AUTHORITY_MINT_FAILED',
+        ]),
+        evidence: evidenceEnvelope({
+          start: started,
+          stop: stoppedEarly,
+          cleanup: cleanedEarly,
+          failure: authorityResult,
+        }),
+        postgresActions: started.postgresActions || 0,
+      };
+    }
+
     const suiteModule = await loadSuiteExecutor(suiteCheck.suitePath);
     let suiteResult;
     try {
       suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
         mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
         ownedController: controller,
+        clusterClient: clientResult.client,
+        liveExecutionAuthority: authorityResult.authority,
         repositorySha: headSha,
+        repositoryHeadSha: headSha,
         suitePath: suiteCheck.suitePath,
         liveCapabilityAuthorized: true,
         custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,

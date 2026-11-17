@@ -223,6 +223,8 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
   DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
   DENY_FORGED_VERIFIED_CAPABILITY: 'DENY_FORGED_VERIFIED_CAPABILITY',
+  DENY_LIVE_EXECUTION_AUTHORITY: 'DENY_LIVE_EXECUTION_AUTHORITY',
+  DENY_PUBLIC_LIVE_DISPOSABLE: 'DENY_PUBLIC_LIVE_DISPOSABLE',
   DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS: 'DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS',
   DENY_GIT_HEAD_OBSERVATION: 'DENY_GIT_HEAD_OBSERVATION',
   DENY_CALLER_GIT_OVERRIDE: 'DENY_CALLER_GIT_OVERRIDE',
@@ -253,6 +255,12 @@ const runnerOfflineSuiteGrantLatch = new WeakSet();
  * until an out-of-process Owner custody boundary installs a verified capability.
  */
 const independentOwnerCapabilityLatch = new WeakSet();
+/** Runner-issued live suite authority. Never public-factory mintable. */
+const liveSuiteExecutionAuthorityLatch = new WeakSet();
+const liveSuiteExecutionAuthorityMeta = new WeakMap();
+/** Owned unix-socket clients created by controller for live suites. */
+const ownedClusterClientLatch = new WeakSet();
+
 /**
  * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
  * There is no public registration/wire entrypoint — callers cannot substitute fake callbacks.
@@ -916,12 +924,17 @@ function requireOneShotForLifecycle(config = {}, clock = {}) {
       `INVALID_STATE=${priv.state}`,
     ]);
   }
-  // Real Owner authentication is unproven in this two-file scope. Only inert
-  // TEST_ONLY tickets may exercise offline fake-spawner lifecycle paths.
-  if (!isInertOfflineOneShotTicket(ticket)) {
+  // Admit: (1) inert offline tickets, or (2) module-private liveSpawnPermitted
+  // privilege minted only by createLiveCapabilityGatedOneShotTicket after verifier provenance.
+  // Booleans/proofClass/copied objects cannot forge liveSpawnPermitted.
+  const privLive = getTicketPrivilege(ticket);
+  const liveAdmitted = privLive?.liveSpawnPermitted === true
+    && privLive?.inert !== true
+    && isOwnerOneShotTicket(ticket);
+  if (!isInertOfflineOneShotTicket(ticket) && !liveAdmitted) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
       'NON_INERT_TICKET_NOT_AUTHORIZED_FOR_LIFECYCLE',
-      'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
+      'LIVE_SPAWN_PRIVILEGE_REQUIRED_OR_INERT_OFFLINE_TICKET',
     ]);
   }
   return null;
@@ -1418,11 +1431,16 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       const ticketPriv = getTicketPrivilege(ticket);
       // Live lifecycle is capability-gated one-shot privilege only.
       // Global module consts MUST remain false (offline invariant).
+      // Offline wiring probe may combine liveSpawnPermitted + injected spawn without real SQL authority.
+      const allowOfflineLiveWiring = ticketPriv?.liveSpawnPermitted === true
+        && !usingInertTicket
+        && injectedSpawn
+        && config.offlineWiringProbe === true;
       const allowLiveLifecycle = ticketPriv?.liveSpawnPermitted === true
         && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
         && OPS_PILOT_TIER3_AUTHORIZED === false
         && !usingInertTicket
-        && !injectedSpawn;
+        && (!injectedSpawn || allowOfflineLiveWiring);
 
       if (!allowInertLifecycle && !allowLiveLifecycle) {
         // Consume so failure cannot be retried with the same ticket.
@@ -1454,7 +1472,8 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         );
         const versionText = String(version?.stdout || '');
         if (!versionText.includes(OPS_PILOT_REQUIRED_PG_VERSION_PREFIX)
-          && !allowInertLifecycle) {
+          && !allowInertLifecycle
+          && !allowOfflineLiveWiring) {
           throw new Error(`PG_VERSION_MISMATCH:${versionText}`);
         }
         postgresActions += 1;
@@ -1489,7 +1508,9 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           reasons: Object.freeze([
             allowInertLifecycle
               ? 'INERT_OFFLINE_LIFECYCLE_EXECUTED_WITH_FAKE_SPAWNER'
-              : 'LIVE_DISPOSABLE_CLUSTER_STARTED',
+              : (allowOfflineLiveWiring
+                ? 'OFFLINE_LIVE_WIRING_PROBE_LIFECYCLE_WITH_FAKE_SPAWNER'
+                : 'LIVE_DISPOSABLE_CLUSTER_STARTED'),
           ]),
           paths: this.getPaths(),
           plannedArgs: planned,
@@ -1519,6 +1540,30 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           oneShotState: ONE_SHOT_STATES.DENIED_OR_TERMINATED,
         });
       }
+    },
+    async createOwnedClusterClient(options = {}) {
+      const again = recheckBeforeLifecycle('CREATE_CLIENT', {
+        ...config,
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+      }, env);
+      if (again) return again;
+      if (!started) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
+          'START_REQUIRED_BEFORE_OWNED_CLIENT',
+        ]);
+      }
+      const paths = this.getPaths();
+      return createDisposableOpsPilotClient({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+        socketDir: paths.socketDir,
+        socketPort: paths.socketPort,
+        offlineWiringProbe: options.offlineWiringProbe === true,
+        inertClientFactory: options.inertClientFactory,
+      }, env);
     },
     async stop() {
       const again = recheckBeforeLifecycle('STOP', {
@@ -1772,12 +1817,87 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
       inert: true,
     });
   }
-  const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
+  const ticket = config.ownerOneShotTicket;
+  const priv = isOwnerOneShotTicket(ticket) ? getTicketPrivilege(ticket) : null;
+  const liveClientAllowed = priv?.liveSpawnPermitted === true
+    && priv?.inert !== true
+    && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
+    && OPS_PILOT_TIER3_AUTHORIZED === false;
+
+  // Offline wiring: inert factory may pair with liveSpawnPermitted ticket ONLY when
+  // explicitly requested for probe (never reports real SQL PASS).
+  if (liveClientAllowed
+    && config.offlineWiringProbe === true
+    && typeof config.inertClientFactory === 'function') {
+    const client = config.inertClientFactory({
+      ...planOwnedUnixSocketClientConfig({
+        socketDir: config.socketDir,
+        socketPort: config.socketPort,
+      }),
+    });
+    ownedClusterClientLatch.add(client);
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+      reasons: Object.freeze(['OFFLINE_WIRING_OWNED_INERT_CLIENT']),
+      client,
+      postgresActions: 0,
+      inert: true,
+      offlineWiringProbe: true,
+    });
+  }
+
+  if (liveClientAllowed
+    && typeof config.socketDir === 'string'
+    && Number.isSafeInteger(config.socketPort)) {
+    // Capability-gated live client: dynamic pg import only after live privilege + unix socket plan.
+    let Client;
+    try {
+      ({ Client } = await import('pg'));
+    } catch (error) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_MODULE_LOAD_FAILED',
+        String(error && error.message ? error.message : error),
+      ]);
+    }
+    const planned = planOwnedUnixSocketClientConfig({
+      socketDir: config.socketDir,
+      socketPort: config.socketPort,
+    });
+    const client = new Client({
+      host: planned.host,
+      port: planned.port,
+      user: planned.user,
+      database: planned.database,
+      password: planned.password,
+    });
+    // Attach planned socket fields if host is socket dir style
+    if (planned.socketDir) {
+      client.host = planned.socketDir;
+      client.port = planned.socketPort || planned.port;
+    }
+    ownedClusterClientLatch.add(client);
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+      reasons: Object.freeze(['LIVE_OWNED_UNIX_SOCKET_CLIENT_CREATED']),
+      client,
+      plannedClient: planned,
+      postgresActions: 0,
+      inert: false,
+    });
+  }
+
+  const consumeDeny = consumeOneShotOrDeny(ticket, config.clock || {});
   if (consumeDeny) return consumeDeny;
-  writeTicketState(config.ownerOneShotTicket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  if (isOwnerOneShotTicket(ticket)) {
+    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  }
   return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-    'CREATE_CLIENT_FORBIDDEN_UNTIL_TIER3_EXECUTION_GATE',
-    'NO_PG_MODULE_LOAD_WHILE_DB_EXECUTION_UNAUTHORIZED',
+    'CREATE_CLIENT_FORBIDDEN_UNTIL_LIVE_CAPABILITY_GATE',
+    'NO_PG_MODULE_LOAD_WITHOUT_LIVE_SPAWN_PRIVILEGE',
     'UNIX_SOCKET_CLIENT_PLAN_ONLY',
   ], {
     plannedClient: config.socketDir && config.socketPort
@@ -2236,6 +2356,135 @@ export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
  * Create a live one-shot ticket after capability authorization.
  * liveSpawnPermitted is module-private only.
  */
+
+export const LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS = 'RUNNER_ISSUED_LIVE_SUITE_EXECUTION_AUTHORITY_V1';
+
+export function isLiveSuiteExecutionAuthority(value) {
+  return value != null && typeof value === 'object' && liveSuiteExecutionAuthorityLatch.has(value);
+}
+
+export function isOwnedClusterClient(value) {
+  return value != null && typeof value === 'object' && ownedClusterClientLatch.has(value);
+}
+
+/**
+ * Mint runner-owned live suite execution authority. Not a public Owner substitute.
+ * Requires owned controller + liveSpawnPermitted ticket + exact suite/sha binding.
+ */
+export function createLiveSuiteExecutionAuthority(input = {}) {
+  if (!isPlainObject(input) || input.proofClass !== LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS_REQUIRED',
+    ]);
+  }
+  if (!isOwnedDisposableOpsPilotClusterController(input.ownedController)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'OWNED_CONTROLLER_REQUIRED',
+    ]);
+  }
+  if (!isOwnerOneShotTicket(input.ownerOneShotTicket)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_ONESHOT_TICKET_REQUIRED',
+    ]);
+  }
+  const priv = getTicketPrivilege(input.ownerOneShotTicket);
+  if (!priv || priv.liveSpawnPermitted !== true || priv.inert === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_SPAWN_PRIVILEGE_REQUIRED',
+    ]);
+  }
+  if (priv.cancelled === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'TICKET_CANCELLED',
+    ]);
+  }
+  // start() consumes the one-shot before returning success; require that consumption.
+  if (priv.consumed !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'TICKET_MUST_BE_CONSUMED_BY_SUCCESSFUL_START_BEFORE_AUTHORITY',
+    ]);
+  }
+  const suiteCheck = assertApprovedSuiteAllowlist(input.suitePath);
+  if (!suiteCheck.ok) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, suiteCheck.reasons || []);
+  }
+  const headSha = String(input.repositoryHeadSha || '');
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, ['AUTHORITY_HEAD_SHA_REQUIRED']);
+  }
+  if (input.venue != null && input.venue !== OPS_PILOT_LIVE_VENUE) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_VENUE_BINDING, ['AUTHORITY_VENUE_MISMATCH']);
+  }
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TIER3_NOT_AUTHORIZED, [
+      'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
+    ]);
+  }
+  const offlineWiringProbe = input.offlineWiringProbe === true;
+  const authorizesRealSql = offlineWiringProbe !== true && input.authorizesRealSql === true;
+  const authority = Object.freeze({
+    proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+    suitePath: suiteCheck.suitePath,
+    repositoryHeadSha: headSha,
+    venue: OPS_PILOT_LIVE_VENUE,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    offlineWiringProbe,
+    authorizesRealSql,
+    ownerCustodyProven: false,
+    ohsaClaim: 'NOT_PROVEN',
+  });
+  liveSuiteExecutionAuthorityLatch.add(authority);
+  liveSuiteExecutionAuthorityMeta.set(authority, Object.freeze({
+    suitePath: suiteCheck.suitePath,
+    repositoryHeadSha: headSha,
+    ownedController: input.ownedController,
+    ownerOneShotTicket: input.ownerOneShotTicket,
+    authorizesRealSql,
+    offlineWiringProbe,
+  }));
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze([
+      offlineWiringProbe ? 'OFFLINE_WIRING_AUTHORITY_MINTED' : 'LIVE_SUITE_EXECUTION_AUTHORITY_MINTED',
+    ]),
+    authority,
+  });
+}
+
+export function assertLiveSuiteExecutionAuthorityForSuite(authority, suitePath, repositoryHeadSha) {
+  if (!isLiveSuiteExecutionAuthority(authority)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+    ]);
+  }
+  const meta = liveSuiteExecutionAuthorityMeta.get(authority);
+  if (!meta) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, ['AUTHORITY_META_MISSING']);
+  }
+  const normalized = normalizeApprovedSuitePath(suitePath);
+  if (meta.suitePath !== normalized) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, [
+      'AUTHORITY_SUITE_MISMATCH',
+    ]);
+  }
+  if (String(repositoryHeadSha || '') !== meta.repositoryHeadSha) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'AUTHORITY_SHA_MISMATCH',
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    authorizesRealSql: meta.authorizesRealSql === true,
+    offlineWiringProbe: meta.offlineWiringProbe === true,
+    suitePath: meta.suitePath,
+    repositoryHeadSha: meta.repositoryHeadSha,
+  });
+}
+
+
 export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
   if (!isPlainObject(input)) {
     throw new TypeError('LIVE_ONESHOT_OPTIONS_REQUIRED');
