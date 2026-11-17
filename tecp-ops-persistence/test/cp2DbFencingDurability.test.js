@@ -50,7 +50,9 @@ import {
   OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
   OPS_PILOT_LIVE_VENUE,
   createLiveCapabilityGatedOneShotTicket,
+  createTestOnlyGitHeadObservationFixture,
   evaluateLiveRepositoryHeadBinding,
+  observeCanonicalRepositoryHeadSha,
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
@@ -1090,6 +1092,8 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       ttlMs: 60_000,
     }, { clock: { now: () => 0 } });
     assert.equal(ticketed.ok, true);
+    assert.equal(ticketed.liveSubprocessAuthorized, false);
+    assert.equal(ticketed.trustClass, 'TEST_ONLY');
     assert.equal(ticketed.postgresActions, 0);
 
     const missingRegistry = createOwnerInstalledFixedTrustVerifierDeps({
@@ -1107,6 +1111,10 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     const canonical2 = `{${parts2.join(',')}}`;
     const sig2 = sign(null, Buffer.from(canonical2, 'utf8'), privateKey).toString('base64url');
     const token2 = `${Buffer.from(canonical2, 'utf8').toString('base64url')}.${sig2}`;
+    const gitFixture = createTestOnlyGitHeadObservationFixture({
+      proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
+      headSha,
+    });
     const runnerAuth = await invokeOwnerControlledTier3LocalRunner({
       mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
       suitePath: FENCING_SUITE_PATH,
@@ -1118,7 +1126,7 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       ttlMs: 60_000,
     }, {
       trustedVerifierDeps: deps,
-      repositoryHeadSha: headSha,
+      testOnlyGitObservationFixture: gitFixture,
       execPath: process.execPath,
       argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
     });
@@ -1126,8 +1134,53 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(runnerAuth.decision, 'ALLOW_LIVE_CAPABILITY_AUTHORIZATION');
     assert.equal(runnerAuth.postgresActions, 0);
     assert.equal(runnerAuth.ownerCustodyProven, false);
+    assert.equal(runnerAuth.trustClass, 'TEST_ONLY');
+    assert.equal(runnerAuth.gitObservation?.authorizesLiveExecute, false);
     assert.equal(runnerAuth.ohsaClaim || 'NOT_PROVEN', 'NOT_PROVEN');
     assert.equal(CP2_DB_FENCING_SUITE_STATUS, 'OFFLINE_ORCHESTRATION_WIRED_AWAITING_LIVE_TIER3_DB');
+
+    // Request SHA matching claim but differing from independently observed HEAD => DENY
+    const wrongHeadFixture = createTestOnlyGitHeadObservationFixture({
+      proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
+      headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+    const shaMismatch = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_AUTHORIZATION',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      repositorySha: headSha,
+      repositoryHeadSha: headSha,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: deps,
+      testOnlyGitObservationFixture: wrongHeadFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(shaMismatch.ok, false);
+    assert.equal(shaMismatch.decision, 'DENY_LIVE_SHA_BINDING');
+
+    // LIVE_EXECUTE must reject TEST_ONLY trust/fixture
+    const executeDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: FENCING_SUITE_PATH,
+      ownerCapabilityArtifact: token2,
+      executablePath: process.execPath,
+      affirmSameUidLimitationsAccepted: true,
+      ttlMs: 60_000,
+    }, {
+      trustedVerifierDeps: deps,
+      testOnlyGitObservationFixture: gitFixture,
+      execPath: process.execPath,
+      argv: [process.execPath, '--tecp-ops-s2-owner-controlled-local-runner', FENCING_SUITE_PATH],
+    });
+    assert.equal(executeDenied.ok, false);
+    assert.ok(
+      executeDenied.decision === 'DENY_VERIFIER_TRUST_MISSING'
+      || executeDenied.decision === 'DENY_LIVE_SHA_BINDING',
+    );
   });
 });
 

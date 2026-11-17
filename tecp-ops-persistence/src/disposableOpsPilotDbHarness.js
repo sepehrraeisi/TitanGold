@@ -30,7 +30,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
@@ -71,6 +71,14 @@ export const OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR =
   '.tecp-ops-pilot/s2-simin-owner-trust';
 export const OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME = 'ed25519-spki.pem';
 export const OPS_PILOT_OWNER_TRUST_KID_FILENAME = 'kid.txt';
+export const OPS_PILOT_CANONICAL_GIT_BIN = '/usr/bin/git';
+/** Repo root derived from this module path — never caller-supplied. */
+export const OPS_PILOT_CANONICAL_REPO_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+export const TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS = 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE';
+const testOnlyGitObservationLatch = new WeakSet();
 /** Governance merge base for offline five-path implementation (PR #307). */
 export const OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA =
   '361eaab9d449f3070b87b5ad0c88e5f5a38da49d';
@@ -214,6 +222,10 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_OHSA_CUSTODY_CLAIM: 'DENY_OHSA_CUSTODY_CLAIM',
   DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
   DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
+  DENY_FORGED_VERIFIED_CAPABILITY: 'DENY_FORGED_VERIFIED_CAPABILITY',
+  DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS: 'DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS',
+  DENY_GIT_HEAD_OBSERVATION: 'DENY_GIT_HEAD_OBSERVATION',
+  DENY_CALLER_GIT_OVERRIDE: 'DENY_CALLER_GIT_OVERRIDE',
   ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY: 'ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY',
   ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB: 'ALLOW_LIVE_SPAWN_ELIGIBLE_FUNCTIONAL_LAB',
   DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
@@ -241,6 +253,35 @@ const runnerOfflineSuiteGrantLatch = new WeakSet();
  * until an out-of-process Owner custody boundary installs a verified capability.
  */
 const independentOwnerCapabilityLatch = new WeakSet();
+/** Filled once by s2Tier3OwnerCapabilityVerifier.js module init (no circular import). */
+let __verifierProvenanceApi = null;
+export function __wireS2VerifierProvenanceApi(api) {
+  if (__verifierProvenanceApi != null) {
+    throw new Error('S2_VERIFIER_PROVENANCE_API_ALREADY_WIRED');
+  }
+  if (!api
+    || typeof api.isVerifierIssuedCapabilityProvenance !== 'function'
+    || typeof api.getVerifierIssuedCapabilityTrustClass !== 'function'
+    || typeof api.verifierIssuedCapabilityAuthorizesLiveSubprocess !== 'function') {
+    throw new TypeError('S2_VERIFIER_PROVENANCE_API_INVALID');
+  }
+  __verifierProvenanceApi = Object.freeze({ ...api });
+}
+function requireVerifierProvenanceApi() {
+  if (__verifierProvenanceApi == null) {
+    throw new Error('S2_VERIFIER_PROVENANCE_API_NOT_WIRED_IMPORT_VERIFIER_MODULE');
+  }
+  return __verifierProvenanceApi;
+}
+function isVerifierIssuedCapabilityProvenance(value) {
+  return requireVerifierProvenanceApi().isVerifierIssuedCapabilityProvenance(value) === true;
+}
+function getVerifierIssuedCapabilityTrustClass(value) {
+  return requireVerifierProvenanceApi().getVerifierIssuedCapabilityTrustClass(value);
+}
+function verifierIssuedCapabilityAuthorizesLiveSubprocess(value) {
+  return requireVerifierProvenanceApi().verifierIssuedCapabilityAuthorizesLiveSubprocess(value) === true;
+}
 /** Module-private privileged state. Exported ticket objects are frozen and non-authoritative. */
 const ticketPrivilegeByRef = new WeakMap();
 const controllerCleanupAuthority = new WeakMap();
@@ -1869,6 +1910,120 @@ export function evaluateIndependentOwnerCapability(capability = null) {
  * Fail-closed live spawn bridge from a crypto-verified Owner capability artifact.
  * Never mints independentOwnerCapabilityLatch or live tickets in this offline slice.
  */
+export function createTestOnlyGitHeadObservationFixture(input = {}) {
+  if (!isPlainObject(input) || input.proofClass !== TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS) {
+    throw new TypeError('TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS_REQUIRED');
+  }
+  if (input.authorizesLiveExecute === true || input.authorizesLiveSubprocess === true) {
+    throw new Error('TEST_ONLY_GIT_FIXTURE_CANNOT_AUTHORIZE_LIVE_EXECUTE');
+  }
+  const headSha = String(input.headSha || '');
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new TypeError('TEST_ONLY_GIT_FIXTURE_HEAD_SHA_REQUIRED');
+  }
+  const fixture = Object.freeze({
+    proofClass: TEST_ONLY_GIT_OBSERVATION_PROOF_CLASS,
+    headSha,
+    authorizesLiveExecute: false,
+    source: 'TEST_ONLY_FIXTURE',
+  });
+  testOnlyGitObservationLatch.add(fixture);
+  return fixture;
+}
+
+export function isTestOnlyGitHeadObservationFixture(value) {
+  return value != null && typeof value === 'object' && testOnlyGitObservationLatch.has(value);
+}
+
+/**
+ * Independently observe repository HEAD via fixed /usr/bin/git and module-derived repo root.
+ * Caller repoRoot/gitBin/repositoryHeadSha overrides are rejected.
+ * TEST_ONLY fixture may be used only for offline authorization tests (never LIVE execute authority).
+ */
+export function observeCanonicalRepositoryHeadSha(options = {}) {
+  if (!isPlainObject(options)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, ['OPTIONS_OBJECT_REQUIRED']);
+  }
+  if (
+    options.repoRoot != null
+    || options.gitBin != null
+    || options.repositoryHeadSha != null
+    || options.cwd != null
+    || options.gitExecutable != null
+  ) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_GIT_OVERRIDE, [
+      'CALLER_GIT_OR_REPO_OVERRIDE_FORBIDDEN',
+    ]);
+  }
+  if (options.testOnlyGitObservationFixture != null) {
+    const fixture = options.testOnlyGitObservationFixture;
+    if (!isTestOnlyGitHeadObservationFixture(fixture)) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+        'UNBRANDED_GIT_FIXTURE_FORBIDDEN',
+      ]);
+    }
+    if (options.allowTestOnlyGitFixture !== true) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+        'TEST_ONLY_GIT_FIXTURE_NOT_ENABLED_FOR_THIS_CALL',
+      ]);
+    }
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+      reasons: Object.freeze(['TEST_ONLY_GIT_HEAD_FIXTURE']),
+      headSha: fixture.headSha,
+      source: 'TEST_ONLY_FIXTURE',
+      authorizesLiveExecute: false,
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+      gitBin: OPS_PILOT_CANONICAL_GIT_BIN,
+    });
+  }
+  let result;
+  try {
+    result = spawnSync(
+      OPS_PILOT_CANONICAL_GIT_BIN,
+      ['-C', OPS_PILOT_CANONICAL_REPO_ROOT, 'rev-parse', 'HEAD'],
+      {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: '/usr/bin:/bin' },
+      },
+    );
+  } catch (err) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_SPAWN_FAILED',
+      String(err && err.message ? err.message : err),
+    ]);
+  }
+  if (!result || result.error || result.status !== 0) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_REV_PARSE_FAILED',
+      String(result?.stderr || result?.error || 'NO_STATUS'),
+    ], {
+      repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    });
+  }
+  const headSha = String(result.stdout || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_GIT_HEAD_OBSERVATION, [
+      'GIT_HEAD_NOT_40_HEX',
+      `GOT=${headSha || 'EMPTY'}`,
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze(['CANONICAL_GIT_HEAD_OBSERVED']),
+    headSha,
+    source: 'CANONICAL_GIT',
+    authorizesLiveExecute: true,
+    repoRoot: OPS_PILOT_CANONICAL_REPO_ROOT,
+    gitBin: OPS_PILOT_CANONICAL_GIT_BIN,
+  });
+}
+
 export function evaluateLiveRepositoryHeadBinding(input = {}) {
   const capabilitySha = String(input.capabilityPinnedSha || '');
   const headSha = String(input.repositoryHeadSha || '');
@@ -1920,6 +2075,18 @@ export function evaluateLiveSpawnAuthorizationFromOwnerCapability(input = {}) {
       ownerCustodyProven: false,
       recoveryAdminProven: false,
       custodyClass: null,
+    });
+  }
+  // Unforgeable verifier-issued provenance required. Plain/frozen/copied objects DENY.
+  if (!isVerifierIssuedCapabilityProvenance(verified)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY, [
+      'VERIFIER_ISSUED_PROVENANCE_REQUIRED',
+      'PLAIN_OK_CLAIMS_OBJECT_NOT_AUTHORITY',
+      'COPIED_OR_FORGED_VERIFIED_CAPABILITY_DENIED',
+    ], {
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
     });
   }
   if (input.ohsaCustodyClaimed === true || input.claimOhsaIndependentCustody === true) {
@@ -1998,6 +2165,12 @@ export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
   if (!verifiedCapability || verifiedCapability.ok !== true || !verifiedCapability.claims) {
     throw new TypeError('VERIFIED_CAPABILITY_REQUIRED_FOR_BRAND');
   }
+  // Branding helper NEVER installs verifier provenance and NEVER grants live spawn.
+  // Even if input was verifier-issued, the returned object is a new plain brand
+  // that must not pass isVerifierIssuedCapabilityProvenance.
+  if (!isVerifierIssuedCapabilityProvenance(verifiedCapability)) {
+    throw new TypeError('BRAND_REQUIRES_VERIFIER_ISSUED_PROVENANCE_INPUT');
+  }
   const branded = Object.freeze({
     kind: 'VERIFIED_INDEPENDENT_OWNER_CAPABILITY_BRAND',
     proofClass: 'CRYPTO_VERIFIED_OWNER_CAPABILITY_NOT_MINTED_HERE',
@@ -2006,6 +2179,7 @@ export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
     ownerCustodyProven: false,
     recoveryAdminProven: false,
     ohsaClaim: 'NOT_PROVEN',
+    authorizesLiveSpawn: false,
   });
   independentOwnerCapabilityLatch.add(branded);
   return branded;
@@ -2025,9 +2199,24 @@ export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
   if (input.authorizeByBoolean === true || input.envAuthorized === true) {
     throw new Error('LIVE_ONESHOT_BOOLEAN_ENV_FORBIDDEN');
   }
+  const verified = input.verifiedCapability || input.capabilityVerification || null;
+  if (!isVerifierIssuedCapabilityProvenance(verified)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY, [
+      'TICKET_FACTORY_REQUIRES_VERIFIER_ISSUED_PROVENANCE',
+    ]);
+  }
   const auth = evaluateLiveSpawnAuthorizationFromOwnerCapability(input);
   if (!auth.ok || auth.liveSpawnEligible !== true) {
     return auth;
+  }
+  const trustClass = getVerifierIssuedCapabilityTrustClass(verified);
+  const allowLiveSubprocess = verifierIssuedCapabilityAuthorizesLiveSubprocess(verified) === true
+    && trustClass === 'OWNER_INSTALLED';
+  if (input.requireOwnerInstalledTrust === true && !allowLiveSubprocess) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS, [
+      'OWNER_INSTALLED_TRUST_REQUIRED_FOR_LIVE_SUBPROCESS',
+      `TRUST_CLASS=${trustClass || 'MISSING'}`,
+    ]);
   }
   const clock = deps.clock || {};
   const ttlMs = Number(input.ttlMs ?? OPS_PILOT_DEFAULT_ONESHOT_TTL_MS);
@@ -2047,13 +2236,15 @@ export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
     custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
     authorizesLivePostgres: false,
     ownerAuthenticationProven: true,
-    classification: 'CAPABILITY_GATED_LIVE_ONESHOT_MODULE_CONSTS_FALSE',
+    classification: allowLiveSubprocess
+      ? 'CAPABILITY_GATED_LIVE_ONESHOT_OWNER_INSTALLED_TRUST'
+      : 'CAPABILITY_GATED_OFFLINE_AUTH_TICKET_TEST_ONLY_TRUST_NO_SUBPROCESS',
   }, {
     state: ONE_SHOT_STATES.ACTIVE_TEST_ONLY,
     consumed: false,
     cancelled: false,
-    inert: false,
-    liveSpawnPermitted: true,
+    inert: allowLiveSubprocess !== true,
+    liveSpawnPermitted: allowLiveSubprocess === true,
     prepareUsed: false,
     expiresAtMonotonicMs: createdAtMonotonicMs + ttlMs,
     createdAtMonotonicMs,
@@ -2062,13 +2253,22 @@ export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
     approvedActions: [suiteCheck.suitePath],
     nonce: randomBytes(16).toString('hex'),
   });
+  if (allowLiveSubprocess !== true) {
+    inertOneShotLatch.add(ticket);
+  }
   return Object.freeze({
     ok: true,
     allowed: true,
     decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
-    reasons: Object.freeze(['LIVE_ONESHOT_CREATED', ...auth.reasons]),
+    reasons: Object.freeze([
+      allowLiveSubprocess ? 'LIVE_ONESHOT_CREATED_OWNER_INSTALLED' : 'OFFLINE_AUTH_TICKET_TEST_ONLY_TRUST',
+      `TRUST_CLASS=${trustClass}`,
+      ...auth.reasons,
+    ]),
     ticket,
-    liveSpawnEligible: true,
+    liveSpawnEligible: allowLiveSubprocess === true,
+    liveSubprocessAuthorized: allowLiveSubprocess === true,
+    trustClass,
     ownerCustodyProven: false,
     recoveryAdminProven: false,
     custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,

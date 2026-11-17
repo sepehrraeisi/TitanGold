@@ -58,6 +58,8 @@ import {
   OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
   OPS_PILOT_LIVE_VENUE,
   createLiveCapabilityGatedOneShotTicket,
+  createTestOnlyGitHeadObservationFixture,
+  observeCanonicalRepositoryHeadSha,
   getOwnerOneShotTicketView,
   inspectPostmasterStatus,
   isActiveOwnerOneShotTicket,
@@ -77,6 +79,18 @@ import {
   invokeOwnerControlledTier3LocalRunner,
   isDirectCliEntrypoint,
 } from '../scripts/ownerControlledTier3LocalRunner.js';
+import '../scripts/s2Tier3OwnerCapabilityVerifier.js';
+import {
+  S2_OWNER_CAPABILITY_ISSUER_SIMIN,
+  S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+  S2_OWNER_CAPABILITY_VENUE_SIMIN,
+  __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps,
+  __testOnlyRegisterOwnerPublicKeyForVerification,
+  __testOnlyResetS2Tier3OwnerCapabilityRegistries,
+  isVerifierIssuedCapabilityProvenance,
+  verifyS2Tier3OwnerCapabilityArtifact,
+} from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
+import { generateKeyPairSync, sign } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HARNESS_SRC = join(__dirname, '../src/disposableOpsPilotDbHarness.js');
@@ -1233,44 +1247,154 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offlin
     assert.equal(isRunnerOfflineSuiteGrant(grant), true);
   });
 
-  it('22) capability-gated functional-lab live bridge authorizes without flipping consts or spawning PG', () => {
+  it('22) forged verifiedCapability objects cannot mint live tickets; crypto provenance required', () => {
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
-    const fakeVerified = {
+    const headSha = '652892e96b0be1acc112dcf544e50afcdba93522';
+    const plain = {
       ok: true,
       claims: {
-        pinnedMainSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+        pinnedMainSha: headSha,
         purpose: 'S2_SIMIN_HYPERV_LAB_OWNER_CAPABILITY_V1',
         venue: OPS_PILOT_LIVE_VENUE,
         suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
       },
     };
-    const deniedNoClass = evaluateLiveSpawnAuthorizationFromOwnerCapability({
-      verifiedCapability: fakeVerified,
-      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
-      venue: OPS_PILOT_LIVE_VENUE,
-    });
-    assert.equal(deniedNoClass.ok, false);
-    const allowed = evaluateLiveSpawnAuthorizationFromOwnerCapability({
-      verifiedCapability: fakeVerified,
+    assert.equal(isVerifierIssuedCapabilityProvenance(plain), false);
+    assert.equal(evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: plain,
       custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
-      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
+      repositoryHeadSha: headSha,
+      venue: OPS_PILOT_LIVE_VENUE,
+    }).decision, OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY);
+    assert.equal(createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: plain,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      ttlMs: 30_000,
+    }, { clock: { now: () => 1 } }).decision, OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY);
+
+    const frozenFake = Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: 'ALLOW_VERIFY_ONLY',
+      provenanceProofClass: 'VERIFIER_ISSUED_CAPABILITY_PROVENANCE_V1',
+      claims: Object.freeze({ ...plain.claims }),
+      liveSpawnEligible: false,
+      ownerCustodyProven: false,
+      recoveryAdminProven: false,
+    });
+    assert.equal(isVerifierIssuedCapabilityProvenance(frozenFake), false);
+    assert.equal(evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: frozenFake,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      repositoryHeadSha: headSha,
+      venue: OPS_PILOT_LIVE_VENUE,
+    }).ok, false);
+
+    __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+    const kid = 's2-harness-prov-kid';
+    __testOnlyRegisterOwnerPublicKeyForVerification(kid, publicPem);
+    const deps = __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({ nowMs: 1_700_000_000_500 });
+    const suitePath = OPS_PILOT_APPROVED_TEST_ACTIONS[0];
+    const claims = {
+      alg: 'Ed25519',
+      capabilityId: 'cap-harness-prov-1',
+      exp: 1_700_000_000_500 + 60_000,
+      iss: S2_OWNER_CAPABILITY_ISSUER_SIMIN,
+      jti: 'jti-harness-prov-1',
+      kid,
+      kind: 'TECP_OPS_S2_TIER3_OWNER_CAPABILITY_V1',
+      nbf: 1_700_000_000_000,
+      pinnedMainSha: headSha,
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      repositoryId: 'sepehrraeisi/TitanGold',
+      suitePath,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+    };
+    const keyOrder = ['alg','capabilityId','exp','iss','jti','kid','kind','nbf','pinnedMainSha','purpose','repositoryId','suitePath','venue'];
+    const parts = [];
+    for (const key of keyOrder) {
+      const val = claims[key];
+      parts.push(typeof val === 'string' ? `"${key}":"${val}"` : `"${key}":${val}`);
+    }
+    const canonical = `{${parts.join(',')}}`;
+    const token = `${Buffer.from(canonical, 'utf8').toString('base64url')}.${sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64url')}`;
+    const verified = verifyS2Tier3OwnerCapabilityArtifact(token, {
+      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+      suitePath,
+      pinnedMainSha: headSha,
+      forbidOfflinePinAsLiveSha: true,
+    }, deps);
+    assert.equal(verified.ok, true);
+    assert.equal(isVerifierIssuedCapabilityProvenance(verified), true);
+
+    const copied = Object.freeze({ ...verified, claims: Object.freeze({ ...verified.claims }) });
+    assert.equal(isVerifierIssuedCapabilityProvenance(copied), false);
+    assert.equal(evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: copied,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      repositoryHeadSha: headSha,
+      venue: OPS_PILOT_LIVE_VENUE,
+    }).decision, OPS_PILOT_HARNESS_DECISIONS.DENY_FORGED_VERIFIED_CAPABILITY);
+
+    const allowed = evaluateLiveSpawnAuthorizationFromOwnerCapability({
+      verifiedCapability: verified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      repositoryHeadSha: headSha,
       venue: OPS_PILOT_LIVE_VENUE,
     });
     assert.equal(allowed.ok, true);
     assert.equal(allowed.ownerCustodyProven, false);
-    assert.equal(allowed.recoveryAdminProven, false);
+
     const ticketed = createLiveCapabilityGatedOneShotTicket({
       proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
-      verifiedCapability: fakeVerified,
+      verifiedCapability: verified,
       custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
       venue: OPS_PILOT_LIVE_VENUE,
-      repositoryHeadSha: '652892e96b0be1acc112dcf544e50afcdba93522',
-      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositoryHeadSha: headSha,
+      suitePath,
       ttlMs: 30_000,
     }, { clock: { now: () => 1 } });
     assert.equal(ticketed.ok, true);
+    assert.equal(ticketed.liveSubprocessAuthorized, false);
+    assert.equal(ticketed.trustClass, 'TEST_ONLY');
     assert.equal(ticketed.postgresActions, 0);
+
+    assert.equal(createLiveCapabilityGatedOneShotTicket({
+      proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
+      verifiedCapability: verified,
+      custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+      venue: OPS_PILOT_LIVE_VENUE,
+      repositoryHeadSha: headSha,
+      suitePath,
+      ttlMs: 30_000,
+      requireOwnerInstalledTrust: true,
+    }, { clock: { now: () => 2 } }).decision, OPS_PILOT_HARNESS_DECISIONS.DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS);
+
+    const observed = observeCanonicalRepositoryHeadSha({});
+    assert.equal(observed.ok, true);
+    assert.equal(observed.source, 'CANONICAL_GIT');
+    assert.equal(observed.authorizesLiveExecute, true);
+    const fixture = createTestOnlyGitHeadObservationFixture({
+      proofClass: 'TEST_ONLY_GIT_HEAD_OBSERVATION_FIXTURE',
+      headSha,
+    });
+    const fixtureObs = observeCanonicalRepositoryHeadSha({
+      allowTestOnlyGitFixture: true,
+      testOnlyGitObservationFixture: fixture,
+    });
+    assert.equal(fixtureObs.ok, true);
+    assert.equal(fixtureObs.authorizesLiveExecute, false);
+    assert.equal(observeCanonicalRepositoryHeadSha({
+      repositoryHeadSha: headSha,
+    }).decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_GIT_OVERRIDE);
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
     const offlinePinBind = evaluateLiveRepositoryHeadBinding({

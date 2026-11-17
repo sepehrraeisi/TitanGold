@@ -40,14 +40,19 @@ import {
   isInertOfflineOneShotTicket,
   isOwnedDisposableOpsPilotClusterController,
   isOwnerOneShotTicket,
+  isTestOnlyGitHeadObservationFixture,
+  observeCanonicalRepositoryHeadSha,
 } from '../src/disposableOpsPilotDbHarness.js';
 import {
   S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
   S2_OWNER_CAPABILITY_VENUE_SIMIN,
   createOwnerInstalledFixedTrustVerifierDeps,
   evaluateVerifiedCapabilityLiveSpawnEligibility,
+  getVerifierIssuedCapabilityTrustClass,
   isOwnerInstalledFixedTrustVerifierDeps,
   isTestOnlyS2Tier3OwnerCapabilityVerifierDeps,
+  isVerifierIssuedCapabilityProvenance,
+  verifierIssuedCapabilityAuthorizesLiveSubprocess,
   verifyS2Tier3OwnerCapabilityArtifact,
 } from './s2Tier3OwnerCapabilityVerifier.js';
 
@@ -282,12 +287,12 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     || request.mode === 'LIVE_CAPABILITY_GATED_EXECUTE'
     || (typeof request.ownerCapabilityArtifact === 'string' && request.ownerCapabilityArtifact.length > 0)
   );
+  // For live modes, structural SHA is filled after independent Git observation.
+  // Do not treat request/deps SHA fields as authoritative here.
   const structural = evaluateOwnerControlledLocalRunnerEvidence({
-    repositorySha: request.repositorySha || (
-      liveRequestHint
-        ? (request.repositoryHeadSha || deps.repositoryHeadSha || '')
-        : OPS_PILOT_PINNED_MAIN_SHA
-    ),
+    repositorySha: liveRequestHint
+      ? '0000000000000000000000000000000000000000'
+      : (request.repositorySha || OPS_PILOT_PINNED_MAIN_SHA),
     approvedActions: [suiteCheck.suitePath],
     executablePath: request.executablePath || execPath,
     harnessModulePath: request.harnessModulePath || resolve(
@@ -430,24 +435,86 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
-    const headSha = String(
-      deps.repositoryHeadSha
-      || request.repositoryHeadSha
-      || request.repositorySha
-      || '',
-    );
+    const isExecuteMode = request.mode === 'LIVE_CAPABILITY_GATED_EXECUTE';
+    // Production-capable LIVE path: Owner-installed trust only. TEST_ONLY deps never execute PG.
+    if (isExecuteMode) {
+      if (!isOwnerInstalledFixedTrustVerifierDeps(trustedVerifierDeps)) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+            'LIVE_EXECUTE_REQUIRES_OWNER_INSTALLED_TRUST_REGISTRY',
+            'TEST_ONLY_OR_CALLER_DEPS_CANNOT_AUTHORIZE_SUBPROCESS',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
+        };
+      }
+      if (deps.testOnlyGitObservationFixture != null || request.testOnlyGitObservationFixture != null) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, [
+            'TEST_ONLY_GIT_FIXTURE_FORBIDDEN_IN_LIVE_EXECUTE',
+          ]),
+          evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING } }),
+        };
+      }
+    }
+
+    // Independently observe Git HEAD. Request/deps SHA are never authoritative.
+    const gitObservation = observeCanonicalRepositoryHeadSha({
+      allowTestOnlyGitFixture: isExecuteMode !== true,
+      testOnlyGitObservationFixture: isExecuteMode
+        ? null
+        : (isTestOnlyGitHeadObservationFixture(deps.testOnlyGitObservationFixture)
+          ? deps.testOnlyGitObservationFixture
+          : null),
+    });
+    if (!gitObservation.ok) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, gitObservation.reasons || [
+          'GIT_HEAD_OBSERVATION_FAILED',
+        ]),
+        evidence: evidenceEnvelope({ failure: gitObservation }),
+      };
+    }
+    if (isExecuteMode && gitObservation.authorizesLiveExecute !== true) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, [
+          'LIVE_EXECUTE_REQUIRES_CANONICAL_GIT_OBSERVATION',
+        ]),
+        evidence: evidenceEnvelope({ failure: gitObservation }),
+      };
+    }
+    const headSha = gitObservation.headSha;
+
+    // Optional consistency checks: if caller supplied SHA fields, they must match observed HEAD.
+    const callerShaFields = [
+      request.repositoryHeadSha,
+      request.repositorySha,
+      deps.repositoryHeadSha,
+    ].filter((v) => v != null && v !== '');
+    for (const callerSha of callerShaFields) {
+      if (String(callerSha) !== headSha) {
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, [
+            'CALLER_SUPPLIED_SHA_MISMATCHES_OBSERVED_GIT_HEAD',
+            `OBSERVED=${headSha}`,
+            `CALLER=${callerSha}`,
+          ]),
+          evidence: evidenceEnvelope({
+            failure: { observed: headSha, caller: callerSha, gitObservation },
+          }),
+        };
+      }
+    }
+
     const shaBind = evaluateLiveRepositoryHeadBinding({
       capabilityPinnedSha: headSha,
       repositoryHeadSha: headSha,
     });
-    // Preliminary format check only; exact capability claim match happens after verify.
-    if (!/^[0-9a-f]{40}$/.test(headSha) || headSha === OPS_PILOT_PINNED_MAIN_SHA) {
+    if (!shaBind.ok) {
       return {
-        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, [
-          'LIVE_HEAD_SHA_REQUIRED_AND_MUST_NOT_BE_OFFLINE_PIN',
-          ...(shaBind.reasons || []),
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_SHA_BINDING, shaBind.reasons || [
+          'LIVE_HEAD_SHA_BINDING_FAILED',
         ]),
-        evidence: evidenceEnvelope({ failure: shaBind }),
+        evidence: evidenceEnvelope({ failure: shaBind, gitObservation }),
       };
     }
 
@@ -471,6 +538,25 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
           authorization: Object.freeze({ structural, capabilityVerified }),
           failure: capabilityVerified,
         }),
+      };
+    }
+    if (!isVerifierIssuedCapabilityProvenance(capabilityVerified)) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE, [
+          'VERIFIER_ISSUED_PROVENANCE_MISSING_AFTER_VERIFY',
+        ]),
+        capabilityVerified,
+        evidence: evidenceEnvelope({ failure: { decision: 'DENY_FORGED_VERIFIED_CAPABILITY' } }),
+      };
+    }
+    if (isExecuteMode && verifierIssuedCapabilityAuthorizesLiveSubprocess(capabilityVerified) !== true) {
+      return {
+        ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, [
+          'LIVE_EXECUTE_REQUIRES_OWNER_INSTALLED_PROVENANCE',
+          `TRUST_CLASS=${getVerifierIssuedCapabilityTrustClass(capabilityVerified)}`,
+        ]),
+        capabilityVerified,
+        evidence: evidenceEnvelope({ failure: { decision: OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING } }),
       };
     }
 
@@ -519,6 +605,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     }
 
     // Brand verified capability (does not mint/sign). Create live one-shot ticket.
+    // Branding is non-authoritative bookkeeping only; ticket requires verifier provenance.
     brandVerifiedIndependentOwnerCapability(capabilityVerified);
     liveTicketResult = createLiveCapabilityGatedOneShotTicket({
       proofClass: 'LIVE_CAPABILITY_GATED_ONESHOT_TICKET',
@@ -528,6 +615,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       repositoryHeadSha: headSha,
       suitePath: suiteCheck.suitePath,
       ttlMs: request.ttlMs ?? OPS_PILOT_DEFAULT_ONESHOT_TTL_MS,
+      requireOwnerInstalledTrust: isExecuteMode === true,
     }, { clock: deps.clock || {} });
     if (!liveTicketResult.ok) {
       return {
@@ -575,12 +663,19 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
           OPS_PILOT_DB_EXECUTION_AUTHORIZED,
           OPS_PILOT_TIER3_AUTHORIZED,
         }),
+        gitObservation: Object.freeze({
+          headSha,
+          source: gitObservation.source,
+          authorizesLiveExecute: gitObservation.authorizesLiveExecute === true,
+        }),
+        trustClass: getVerifierIssuedCapabilityTrustClass(capabilityVerified),
         evidence: evidenceEnvelope({
           authorization: Object.freeze({
             structural,
             capabilityVerified,
             liveAuthorization,
             spawnEligibility,
+            gitObservation,
           }),
         }),
       });

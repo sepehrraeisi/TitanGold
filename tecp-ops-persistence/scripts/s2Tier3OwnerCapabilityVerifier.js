@@ -35,7 +35,7 @@ export const S2_OWNER_CAPABILITY_REPOSITORY_ID = 'sepehrraeisi/TitanGold';
 export const S2_OWNER_CAPABILITY_ALG = 'Ed25519';
 export const S2_OWNER_CAPABILITY_ISSUER = 'titangold-owner-s2-wsl-lab';
 export const S2_OWNER_CAPABILITY_ISSUER_SIMIN = 'titangold-owner-s2-simin-hyperv-lab';
-export const S2_OWNER_CAPABILITY_VENUE_SIMIN = OPS_PILOT_LIVE_VENUE;
+export const S2_OWNER_CAPABILITY_VENUE_SIMIN = 'SIMIN_HYPERV_UBUNTU_VM_TITANGOLD_S2_LAB_ONLY';
 export const S2_OWNER_INSTALLED_TRUST_DEPS_PROOF_CLASS = 'OWNER_INSTALLED_FIXED_TRUST_VERIFIER_DEPS_V1';
 
 export const S2_TIER3_OWNER_CAPABILITY_DECISIONS = Object.freeze({
@@ -107,6 +107,13 @@ let __testRevocationAvailable = true;
 const testOnlyVerifierDepsLatch = new WeakSet();
 /** Brands Owner-installed fixed-path trust deps. Not request-supplied. */
 const ownerInstalledTrustDepsLatch = new WeakSet();
+/**
+ * Module-private provenance for crypto-verified capability result objects.
+ * Only successful verifyS2Tier3OwnerCapabilityArtifact may add entries.
+ * Plain/frozen/copied caller objects cannot forge membership.
+ */
+const verifierIssuedProvenanceLatch = new WeakSet();
+const verifierIssuedProvenanceMeta = new WeakMap();
 
 export const S2_OWNER_CAPABILITY_TEST_ONLY_DEPS_PROOF_CLASS =
   'TEST_ONLY_S2_OWNER_CAPABILITY_VERIFIER_DEPS';
@@ -138,8 +145,14 @@ function deny(decision, reasons = [], extra = {}) {
   });
 }
 
-function allow(claims, reasons = []) {
-  return Object.freeze({
+function allow(claims, reasons = [], trustMeta = {}) {
+  const trustClass = trustMeta.trustClass === 'OWNER_INSTALLED'
+    ? 'OWNER_INSTALLED'
+    : (trustMeta.trustClass === 'TEST_ONLY' ? 'TEST_ONLY' : null);
+  if (trustClass == null) {
+    throw new TypeError('VERIFIER_TRUST_CLASS_REQUIRED_FOR_PROVENANCE');
+  }
+  const result = Object.freeze({
     ok: true,
     allowed: true,
     decision: S2_TIER3_OWNER_CAPABILITY_DECISIONS.ALLOW_VERIFY_ONLY,
@@ -150,7 +163,31 @@ function allow(claims, reasons = []) {
     liveSpawnEligible: false,
     ownerCustodyProven: false,
     recoveryAdminProven: false,
+    // Public marker is non-authoritative; WeakSet membership is authoritative.
+    provenanceProofClass: 'VERIFIER_ISSUED_CAPABILITY_PROVENANCE_V1',
   });
+  verifierIssuedProvenanceLatch.add(result);
+  verifierIssuedProvenanceMeta.set(result, Object.freeze({
+    trustClass,
+    authorizesLiveSubprocess: trustClass === 'OWNER_INSTALLED',
+  }));
+  return result;
+}
+
+export function isVerifierIssuedCapabilityProvenance(value) {
+  return value != null
+    && typeof value === 'object'
+    && verifierIssuedProvenanceLatch.has(value);
+}
+
+export function getVerifierIssuedCapabilityTrustClass(value) {
+  if (!isVerifierIssuedCapabilityProvenance(value)) return null;
+  return verifierIssuedProvenanceMeta.get(value)?.trustClass || null;
+}
+
+export function verifierIssuedCapabilityAuthorizesLiveSubprocess(value) {
+  if (!isVerifierIssuedCapabilityProvenance(value)) return false;
+  return verifierIssuedProvenanceMeta.get(value)?.authorizesLiveSubprocess === true;
 }
 
 function b64urlDecode(text) {
@@ -483,10 +520,18 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
     replay.record(claims.jti);
   }
 
+  const trustClass = isOwnerInstalledTrustVerifierDeps(deps)
+    ? 'OWNER_INSTALLED'
+    : (isExplicitTestOnlyVerifierDeps(deps) ? 'TEST_ONLY' : null);
+  if (trustClass == null) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_MISSING_TRUSTED_VERIFIER_DEPS, [
+      'TRUST_CLASS_UNRESOLVED',
+    ]);
+  }
   return allow({
     ...claims,
     suitePath: normalizeApprovedSuitePath(claims.suitePath),
-  }, ['SIGNATURE_VALID', 'CLAIMS_VALID']);
+  }, ['SIGNATURE_VALID', 'CLAIMS_VALID'], { trustClass });
 }
 
 /**
@@ -690,6 +735,14 @@ export function __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps(options = {})
 export function isTestOnlyS2Tier3OwnerCapabilityVerifierDeps(deps) {
   return isExplicitTestOnlyVerifierDeps(deps);
 }
+
+
+import { __wireS2VerifierProvenanceApi } from '../src/disposableOpsPilotDbHarness.js';
+__wireS2VerifierProvenanceApi(Object.freeze({
+  isVerifierIssuedCapabilityProvenance,
+  getVerifierIssuedCapabilityTrustClass,
+  verifierIssuedCapabilityAuthorizesLiveSubprocess,
+}));
 
 export function isDirectVerifierCliEntrypoint(argv = process.argv, metaUrl = import.meta.url) {
   if (!Array.isArray(argv) || argv.length < 2) return false;
