@@ -31,6 +31,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
@@ -223,6 +224,8 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_LIVE_SHA_BINDING: 'DENY_LIVE_SHA_BINDING',
   DENY_LIVE_VENUE_BINDING: 'DENY_LIVE_VENUE_BINDING',
   DENY_FORGED_VERIFIED_CAPABILITY: 'DENY_FORGED_VERIFIED_CAPABILITY',
+  DENY_LIVE_EXECUTION_AUTHORITY: 'DENY_LIVE_EXECUTION_AUTHORITY',
+  DENY_PUBLIC_LIVE_DISPOSABLE: 'DENY_PUBLIC_LIVE_DISPOSABLE',
   DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS: 'DENY_TEST_ONLY_TRUST_FOR_LIVE_SUBPROCESS',
   DENY_GIT_HEAD_OBSERVATION: 'DENY_GIT_HEAD_OBSERVATION',
   DENY_CALLER_GIT_OVERRIDE: 'DENY_CALLER_GIT_OVERRIDE',
@@ -231,6 +234,10 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
   DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
+  DENY_PG_CONNECT_FAILED: 'DENY_PG_CONNECT_FAILED',
+  DENY_CALLER_CLIENT_SUBSTITUTION: 'DENY_CALLER_CLIENT_SUBSTITUTION',
+  ALLOW_OWNED_CLIENT_ENDED: 'ALLOW_OWNED_CLIENT_ENDED',
+  DENY_OWNED_CLIENT_END_FAILED: 'DENY_OWNED_CLIENT_END_FAILED',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -253,6 +260,18 @@ const runnerOfflineSuiteGrantLatch = new WeakSet();
  * until an out-of-process Owner custody boundary installs a verified capability.
  */
 const independentOwnerCapabilityLatch = new WeakSet();
+/** Runner-issued live suite authority. Never public-factory mintable. */
+const liveSuiteExecutionAuthorityLatch = new WeakSet();
+const liveSuiteExecutionAuthorityMeta = new WeakMap();
+/** Owned unix-socket clients created by controller for live suites. */
+const ownedClusterClientLatch = new WeakSet();
+/** Clients that successfully connected before latch. */
+const ownedConnectedClusterClientLatch = new WeakSet();
+/** Successfully ended owned clients — idempotent end only after verified success. */
+const ownedClusterClientEndedLatch = new WeakSet();
+/** Owned clients whose end() failed — never report false idempotent success. */
+const ownedClusterClientEndFailedLatch = new WeakSet();
+
 /**
  * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
  * There is no public registration/wire entrypoint — callers cannot substitute fake callbacks.
@@ -916,12 +935,17 @@ function requireOneShotForLifecycle(config = {}, clock = {}) {
       `INVALID_STATE=${priv.state}`,
     ]);
   }
-  // Real Owner authentication is unproven in this two-file scope. Only inert
-  // TEST_ONLY tickets may exercise offline fake-spawner lifecycle paths.
-  if (!isInertOfflineOneShotTicket(ticket)) {
+  // Admit: (1) inert offline tickets, or (2) module-private liveSpawnPermitted
+  // privilege minted only by createLiveCapabilityGatedOneShotTicket after verifier provenance.
+  // Booleans/proofClass/copied objects cannot forge liveSpawnPermitted.
+  const privLive = getTicketPrivilege(ticket);
+  const liveAdmitted = privLive?.liveSpawnPermitted === true
+    && privLive?.inert !== true
+    && isOwnerOneShotTicket(ticket);
+  if (!isInertOfflineOneShotTicket(ticket) && !liveAdmitted) {
     return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNER_AUTHENTICATION_UNPROVEN, [
       'NON_INERT_TICKET_NOT_AUTHORIZED_FOR_LIFECYCLE',
-      'OWNER_AUTHENTICATION_NOT_PROVEN_IN_TWO_FILE_SCOPE',
+      'LIVE_SPAWN_PRIVILEGE_REQUIRED_OR_INERT_OFFLINE_TICKET',
     ]);
   }
   return null;
@@ -1015,6 +1039,187 @@ export function buildPgCtlStartArgs({ dataDir, logFile, socketDir, socketPort })
 
 export function buildPgCtlStopArgs(dataDir) {
   return Object.freeze(['-D', dataDir, '-m', 'fast', '-w', 'stop']);
+}
+
+
+const harnessRequire = createRequire(import.meta.url);
+
+export function resolveOpsPilotPgClientDependency() {
+  try {
+    const resolved = harnessRequire.resolve('pg');
+    const version = harnessRequire('pg/package.json').version;
+    const pg = harnessRequire('pg');
+    const Client = pg && pg.Client;
+    if (typeof Client !== 'function') {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_CLIENT_CONSTRUCTOR_MISSING',
+      ]);
+    }
+    if (String(version) !== '8.16.3') {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_CLIENT_VERSION_UNEXPECTED',
+        String(version),
+      ]);
+    }
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      version: String(version),
+      resolved,
+      clientCtorType: 'function',
+      packageName: '@titangold/tecp-ops-persistence',
+    });
+  } catch (error) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+      'PG_MODULE_LOAD_FAILED',
+      String(error && error.message ? error.message : error),
+    ]);
+  }
+}
+
+function loadPgClientConstructor() {
+  const dep = resolveOpsPilotPgClientDependency();
+  if (!dep.ok) {
+    const err = new Error((dep.reasons || ['PG_MODULE_LOAD_FAILED']).join(','));
+    err.dependencyResult = dep;
+    throw err;
+  }
+  return harnessRequire('pg').Client;
+}
+
+function rejectCallerClientAuthority(config = {}) {
+  if (
+    config.client != null
+    || config.Client != null
+    || config.clientConstructor != null
+    || config.pgClient != null
+    || config.connectionString != null
+    || config.databaseUrl != null
+    || config.DATABASE_URL != null
+  ) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+      'CALLER_CLIENT_OR_DATABASE_URL_FORBIDDEN',
+      'OWNED_CONTROLLER_SOCKET_PLAN_ONLY',
+    ]);
+  }
+  return null;
+}
+
+async function safeEndClient(client) {
+  if (!client || typeof client.end !== 'function') {
+    return { ok: true, ended: false };
+  }
+  try {
+    await client.end();
+    return { ok: true, ended: true };
+  } catch (error) {
+    return {
+      ok: false,
+      ended: false,
+      error: String(error && error.message ? error.message : error),
+    };
+  }
+}
+
+/**
+ * End an owned latched client once. Idempotent. Never treats end as SQL PASS.
+ */
+export async function endOwnedClusterClient(client) {
+  if (client == null) {
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: Object.freeze(['CLIENT_END_NOOP_NULL']),
+      postgresActions: 0,
+      verifiedClosed: false,
+      endInvoked: false,
+    });
+  }
+  // Only successful prior closes are idempotent success. Failed closes never upgrade to PASS.
+  if (ownedClusterClientEndedLatch.has(client)) {
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: Object.freeze(['CLIENT_END_IDEMPOTENT']),
+      postgresActions: 0,
+      alreadyEnded: true,
+      verifiedClosed: true,
+      endInvoked: false,
+    });
+  }
+  if (ownedClusterClientEndFailedLatch.has(client)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+      'PRIOR_OWNED_CLIENT_END_FAILED',
+      'NO_FALSE_IDEMPOTENT_SUCCESS',
+      'REFUSING_UNSAFE_SECOND_CLOSE',
+    ], {
+      clientEndAttempted: true,
+      verifiedClosed: false,
+      endInvoked: false,
+    });
+  }
+  if (!ownedClusterClientLatch.has(client)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+      'CLIENT_NOT_OWNED_LATCHED',
+      'REFUSING_END_OF_FOREIGN_CLIENT',
+    ], { verifiedClosed: false, endInvoked: false });
+  }
+  const ended = await safeEndClient(client);
+  if (!ended.ok) {
+    ownedClusterClientEndFailedLatch.add(client);
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+      'OWNED_CLIENT_END_FAILED',
+      ended.error || 'END_FAILED',
+      'CLIENT_NOT_MARKED_SUCCESSFULLY_CLOSED',
+    ], {
+      clientEndAttempted: true,
+      verifiedClosed: false,
+      endInvoked: true,
+    });
+  }
+  ownedClusterClientEndedLatch.add(client);
+  try { ownedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  try { ownedConnectedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  try { ownedClusterClientEndFailedLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+    reasons: Object.freeze(['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP']),
+    postgresActions: 0,
+    verifiedClosed: true,
+    endInvoked: true,
+  });
+}
+
+/**
+ * Verified owned-client close required for live overall PASS.
+ * Null/missing/failed/unverified closes are not success.
+ */
+export function isValidatedSuccessfulOwnedClientEnd(result) {
+  if (result == null || typeof result !== 'object' || Array.isArray(result)) {
+    return false;
+  }
+  if (result.ok !== true || result.verifiedClosed !== true) {
+    return false;
+  }
+  if (result.decision !== OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED) {
+    return false;
+  }
+  if (!Array.isArray(result.reasons)) {
+    return false;
+  }
+  return true;
+}
+
+export function isOwnedConnectedClusterClient(value) {
+  return value != null
+    && typeof value === 'object'
+    && ownedClusterClientLatch.has(value)
+    && ownedConnectedClusterClientLatch.has(value)
+    && !ownedClusterClientEndedLatch.has(value);
 }
 
 export function planOwnedUnixSocketClientConfig({ socketDir, socketPort, user = 'tecp_ops_pilot_proof', database = 'postgres' }) {
@@ -1310,6 +1515,7 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
   let started = false;
   let startupAttempted = false;
   let cleaned = false;
+  let ownedClusterClientRef = null;
   let postgresActions = 0;
   const clock = config.clock || {};
   const ticket = config.ownerOneShotTicket;
@@ -1418,11 +1624,16 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       const ticketPriv = getTicketPrivilege(ticket);
       // Live lifecycle is capability-gated one-shot privilege only.
       // Global module consts MUST remain false (offline invariant).
+      // Offline wiring probe may combine liveSpawnPermitted + injected spawn without real SQL authority.
+      const allowOfflineLiveWiring = ticketPriv?.liveSpawnPermitted === true
+        && !usingInertTicket
+        && injectedSpawn
+        && config.offlineWiringProbe === true;
       const allowLiveLifecycle = ticketPriv?.liveSpawnPermitted === true
         && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
         && OPS_PILOT_TIER3_AUTHORIZED === false
         && !usingInertTicket
-        && !injectedSpawn;
+        && (!injectedSpawn || allowOfflineLiveWiring);
 
       if (!allowInertLifecycle && !allowLiveLifecycle) {
         // Consume so failure cannot be retried with the same ticket.
@@ -1454,7 +1665,8 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         );
         const versionText = String(version?.stdout || '');
         if (!versionText.includes(OPS_PILOT_REQUIRED_PG_VERSION_PREFIX)
-          && !allowInertLifecycle) {
+          && !allowInertLifecycle
+          && !allowOfflineLiveWiring) {
           throw new Error(`PG_VERSION_MISMATCH:${versionText}`);
         }
         postgresActions += 1;
@@ -1489,7 +1701,9 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           reasons: Object.freeze([
             allowInertLifecycle
               ? 'INERT_OFFLINE_LIFECYCLE_EXECUTED_WITH_FAKE_SPAWNER'
-              : 'LIVE_DISPOSABLE_CLUSTER_STARTED',
+              : (allowOfflineLiveWiring
+                ? 'OFFLINE_LIVE_WIRING_PROBE_LIFECYCLE_WITH_FAKE_SPAWNER'
+                : 'LIVE_DISPOSABLE_CLUSTER_STARTED'),
           ]),
           paths: this.getPaths(),
           plannedArgs: planned,
@@ -1520,6 +1734,58 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         });
       }
     },
+    async createOwnedClusterClient(options = {}) {
+      const again = recheckBeforeLifecycle('CREATE_CLIENT', {
+        ...config,
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+      }, env);
+      // start() consumes/terminates the one-shot by design; CREATE_CLIENT remains
+      // allowed only on this still-started owned controller (not a replayed start).
+      if (again
+        && !(started === true
+          && again.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY)) {
+        return again;
+      }
+      if (!started) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
+          'START_REQUIRED_BEFORE_OWNED_CLIENT',
+        ]);
+      }
+      if (
+        options.client != null
+        || options.Client != null
+        || options.clientConstructor != null
+        || options.pgClient != null
+        || options.socketDir != null
+        || options.socketPort != null
+        || options.connectionString != null
+        || options.databaseUrl != null
+        || options.DATABASE_URL != null
+      ) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+          'CALLER_CLIENT_SOCKET_OR_DATABASE_URL_FORBIDDEN',
+          'CONTROLLER_PATHS_ONLY',
+        ]);
+      }
+      const paths = this.getPaths();
+      const clientResult = await createDisposableOpsPilotClient({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+        socketDir: paths.socketDir,
+        socketPort: paths.socketPort,
+        ownedControllerIssued: true,
+        allowConsumedTicketAfterOwnedStart: true,
+        offlineWiringProbe: options.offlineWiringProbe === true,
+        inertClientFactory: options.inertClientFactory,
+      }, env);
+      if (clientResult?.ok && clientResult.client) {
+        ownedClusterClientRef = clientResult.client;
+      }
+      return clientResult;
+    },
     async stop() {
       const again = recheckBeforeLifecycle('STOP', {
         ...config,
@@ -1545,6 +1811,21 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           tier3Authorized: false,
         });
       }
+      let clientEndResult = null;
+      if (ownedClusterClientRef != null) {
+        try {
+          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
+        } catch (error) {
+          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'OWNED_CLIENT_END_THREW',
+            String(error && error.message ? error.message : error),
+          ], { verifiedClosed: false, endInvoked: true });
+        }
+        // Clear ref only after verified close; retain for truthful failed-close evidence otherwise.
+        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          ownedClusterClientRef = null;
+        }
+      }
       const proof = stopClusterAndProveTerminated(dataDir, {
         ownedController: this,
         stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
@@ -1565,17 +1846,33 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
           'STOP_DID_NOT_PROVE_TERMINATION',
           proof.reason || 'not_terminated',
-        ]);
+        ], { clientEndResult, clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult) });
       }
       started = false;
+      if (clientEndResult != null && !isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+          'OWNED_CLIENT_END_FAILED_BEFORE_OR_DURING_STOP',
+          'POSTMASTER_STOP_ATTEMPTED_WITHOUT_CLAIMING_CLIENT_CLOSE',
+          ...(clientEndResult.reasons || []),
+        ], {
+          clientEndResult,
+          clientClosed: false,
+          terminationEvidence: Object.freeze(proof),
+        });
+      }
       return Object.freeze({
         ok: true,
         allowed: true,
         decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-        reasons: Object.freeze(['STOP_TERMINATION_PROVEN']),
+        reasons: Object.freeze([
+          'STOP_TERMINATION_PROVEN',
+          ...(clientEndResult != null ? ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'] : ['STOP_NO_OWNED_CLIENT_REF']),
+        ]),
         postgresActions: 0,
         dbExecutionAuthorized: false,
         tier3Authorized: false,
+        clientEndResult,
+        clientClosed: clientEndResult == null ? null : true,
         terminationEvidence: Object.freeze(proof),
       });
     },
@@ -1608,6 +1905,20 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           }),
         });
       }
+      let clientEndResult = null;
+      if (ownedClusterClientRef != null) {
+        try {
+          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
+        } catch (error) {
+          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'OWNED_CLIENT_END_THREW_DURING_CLEANUP',
+            String(error && error.message ? error.message : error),
+          ], { verifiedClosed: false, endInvoked: true });
+        }
+        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          ownedClusterClientRef = null;
+        }
+      }
       if (started || startupAttempted) {
         const proof = stopClusterAndProveTerminated(dataDir, {
           stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
@@ -1629,11 +1940,14 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
             proof.reason || 'not_terminated',
             'PRESERVE_FAILED_CLEANUP_EVIDENCE',
           ], {
+            clientEndResult,
+            clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult),
             cleanupEvidence: Object.freeze({
               stopBeforeDelete: 'FAILED',
               root,
               dataDir,
               proof,
+              clientEndResult,
             }),
           });
         }
@@ -1647,15 +1961,36 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         const deletedRoot = removed.root;
         root = null;
         dataDir = null;
+        if (clientEndResult != null && !isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
+            'CLEANUP_COMPLETED_WITHOUT_VERIFIED_CLIENT_CLOSE',
+            'NO_FALSE_CLIENT_DISCONNECT_CLAIM',
+            ...(clientEndResult.reasons || []),
+          ], {
+            clientEndResult,
+            clientClosed: false,
+            cleanupEvidence: Object.freeze({
+              stopBeforeDelete: 'REQUIRED_AND_PROVEN_OR_NEVER_STARTED',
+              deletedRoot,
+              clientEndResult,
+            }),
+          });
+        }
         return Object.freeze({
           ok: true,
           allowed: true,
           decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-          reasons: Object.freeze(['CLEANUP_SAFE_DELETE']),
+          reasons: Object.freeze([
+            'CLEANUP_SAFE_DELETE',
+            ...(clientEndResult != null ? ['OWNED_CLIENT_ENDED_BEFORE_CLEANUP'] : []),
+          ]),
           postgresActions: 0,
+          clientEndResult,
+          clientClosed: clientEndResult == null ? null : true,
           cleanupEvidence: Object.freeze({
             stopBeforeDelete: 'REQUIRED_AND_PROVEN_OR_NEVER_STARTED',
             deletedRoot,
+            clientEndResult,
           }),
         });
       } catch (error) {
@@ -1663,10 +1998,13 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           error.message || 'CLEANUP_FAILED',
           'PRESERVE_FAILED_CLEANUP_EVIDENCE',
         ], {
+          clientEndResult,
+          clientClosed: isValidatedSuccessfulOwnedClientEnd(clientEndResult),
           cleanupEvidence: Object.freeze({
             stopBeforeDelete: 'UNKNOWN',
             root,
             dataDir,
+            clientEndResult,
           }),
         });
       }
@@ -1747,21 +2085,67 @@ export async function stopDisposableOpsPilotCluster(config = {}, env = process.e
 }
 
 export async function createDisposableOpsPilotClient(config = {}, env = process.env) {
+  // Fail closed on caller client/DATABASE_URL substitution before any other gate.
+  const substitution = rejectCallerClientAuthority(config);
+  if (substitution) return substitution;
+
   const gate = recheckBeforeLifecycle('CREATE_CLIENT', {
     ...config,
     explicitNonProd: config.explicitNonProd ?? true,
   }, env);
-  if (gate) return gate;
+  if (gate) {
+    const allowAfterStart = config.allowConsumedTicketAfterOwnedStart === true
+      && config.ownedControllerIssued === true
+      && gate.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY;
+    if (!allowAfterStart) return gate;
+  }
+
   if (typeof config.inertClientFactory === 'function'
     && isInertOfflineOneShotTicket(config.ownerOneShotTicket)) {
-    const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
-    if (consumeDeny) return consumeDeny;
+    const privExisting = getTicketPrivilege(config.ownerOneShotTicket);
+    const alreadyConsumedForOwnedStart = config.allowConsumedTicketAfterOwnedStart === true
+      && config.ownedControllerIssued === true
+      && privExisting?.consumed === true;
+    if (!alreadyConsumedForOwnedStart) {
+      const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
+      if (consumeDeny) return consumeDeny;
+    }
     const client = config.inertClientFactory({
       ...planOwnedUnixSocketClientConfig({
         socketDir: config.socketDir || '/tmp/tecp-ops-pilot-s2-inert/socket',
         socketPort: config.socketPort || 56111,
       }),
     });
+    // Controller-issued inert clients: connect hook (if any) before latch; never SQL PASS authority.
+    if (config.ownedControllerIssued === true) {
+      if (typeof client?.connect === 'function') {
+        try {
+          await client.connect();
+        } catch (error) {
+          await safeEndClient(client);
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+            'OWNED_INERT_CLIENT_CONNECT_FAILED',
+            String(error && error.message ? error.message : error),
+            'FAIL_CLOSED_NO_LATCH',
+          ]);
+        }
+      }
+      ownedConnectedClusterClientLatch.add(client);
+      ownedClusterClientLatch.add(client);
+      return Object.freeze({
+        ok: true,
+        allowed: true,
+        decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+        reasons: Object.freeze([
+          'INERT_OWNED_CLIENT_CONNECTED_BEFORE_SQL_GATE',
+          'INERT_CLIENT_FACTORY_USED',
+        ]),
+        client,
+        postgresActions: 0,
+        inert: true,
+        connected: true,
+      });
+    }
     return Object.freeze({
       ok: true,
       allowed: true,
@@ -1770,14 +2154,125 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
       client,
       postgresActions: 0,
       inert: true,
+      connected: false,
     });
   }
-  const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
+  const ticket = config.ownerOneShotTicket;
+  const priv = isOwnerOneShotTicket(ticket) ? getTicketPrivilege(ticket) : null;
+  const liveClientAllowed = priv?.liveSpawnPermitted === true
+    && priv?.inert !== true
+    && OPS_PILOT_DB_EXECUTION_AUTHORIZED === false
+    && OPS_PILOT_TIER3_AUTHORIZED === false;
+
+  // Offline wiring: inert factory may pair with liveSpawnPermitted ticket ONLY when
+  // explicitly requested for probe (never reports real SQL PASS).
+  if (liveClientAllowed
+    && config.offlineWiringProbe === true
+    && typeof config.inertClientFactory === 'function') {
+    const client = config.inertClientFactory({
+      ...planOwnedUnixSocketClientConfig({
+        socketDir: config.socketDir,
+        socketPort: config.socketPort,
+      }),
+    });
+    if (typeof client?.connect === 'function') {
+      try {
+        await client.connect();
+      } catch (error) {
+        await safeEndClient(client);
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+          'OFFLINE_WIRING_CLIENT_CONNECT_FAILED',
+          String(error && error.message ? error.message : error),
+          'FAIL_CLOSED_NO_LATCH',
+        ]);
+      }
+    }
+    ownedConnectedClusterClientLatch.add(client);
+    ownedClusterClientLatch.add(client);
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+      reasons: Object.freeze([
+        'OFFLINE_WIRING_OWNED_INERT_CLIENT',
+        'CONNECT_BEFORE_LATCH',
+      ]),
+      client,
+      postgresActions: 0,
+      inert: true,
+      offlineWiringProbe: true,
+      connected: true,
+    });
+  }
+
+  if (liveClientAllowed
+    && typeof config.socketDir === 'string'
+    && Number.isSafeInteger(config.socketPort)) {
+    // Capability-gated live client: resolve pg from this package only after live privilege.
+    let Client;
+    try {
+      Client = loadPgClientConstructor();
+    } catch (error) {
+      const dep = error && error.dependencyResult;
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_MODULE_LOAD_FAILED',
+        ...(dep?.reasons || [String(error && error.message ? error.message : error)]),
+      ]);
+    }
+    const planned = planOwnedUnixSocketClientConfig({
+      socketDir: config.socketDir,
+      socketPort: config.socketPort,
+    });
+    const client = new Client({
+      host: planned.host,
+      port: planned.port,
+      user: planned.user,
+      database: planned.database,
+      password: planned.password,
+    });
+    // Unix-socket directory is host for node-pg; never connectionString / DATABASE_URL.
+    if (planned.socketDir || planned.host) {
+      client.host = planned.host;
+      client.port = planned.port;
+    }
+    try {
+      await client.connect();
+    } catch (error) {
+      await safeEndClient(client);
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+        'UNIX_SOCKET_CONNECT_FAILED',
+        String(error && error.message ? error.message : error),
+        'FAIL_CLOSED_BEFORE_SQL',
+        'CLIENT_NOT_LATCHED',
+      ]);
+    }
+    // Latch ONLY after genuine connect — constructed-but-never-connected is not live SQL evidence.
+    ownedConnectedClusterClientLatch.add(client);
+    ownedClusterClientLatch.add(client);
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+      reasons: Object.freeze([
+        'LIVE_OWNED_UNIX_SOCKET_CLIENT_CONNECTED',
+        'CONNECT_BEFORE_SQL',
+      ]),
+      client,
+      plannedClient: planned,
+      postgresActions: 0,
+      inert: false,
+      connected: true,
+    });
+  }
+
+  const consumeDeny = consumeOneShotOrDeny(ticket, config.clock || {});
   if (consumeDeny) return consumeDeny;
-  writeTicketState(config.ownerOneShotTicket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  if (isOwnerOneShotTicket(ticket)) {
+    writeTicketState(ticket, ONE_SHOT_STATES.DENIED_OR_TERMINATED);
+  }
   return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED, [
-    'CREATE_CLIENT_FORBIDDEN_UNTIL_TIER3_EXECUTION_GATE',
-    'NO_PG_MODULE_LOAD_WHILE_DB_EXECUTION_UNAUTHORIZED',
+    'CREATE_CLIENT_FORBIDDEN_UNTIL_LIVE_CAPABILITY_GATE',
+    'NO_PG_MODULE_LOAD_WITHOUT_LIVE_SPAWN_PRIVILEGE',
     'UNIX_SOCKET_CLIENT_PLAN_ONLY',
   ], {
     plannedClient: config.socketDir && config.socketPort
@@ -1818,6 +2313,43 @@ export function assertHarnessSourceHasNoEagerPgImport(sourceText) {
   return Object.freeze({
     ok: !eager,
     eagerPgImport: eager,
+  });
+}
+
+export function assertHarnessSourceHasOwnedClientConnectBeforeLatch(sourceText) {
+  const text = String(sourceText || '');
+  const connectIdx = text.indexOf('await client.connect()');
+  const latchIdx = text.indexOf('ownedClusterClientLatch.add(client)');
+  // Build needles at runtime so this helper source cannot false-positive itself.
+  const createdEmit = "reasons: Object.freeze(['LIVE_OWNED_UNIX_SOCKET_CLIENT_" + "CREATED'])";
+  const connectedToken = 'LIVE_OWNED_UNIX_SOCKET_CLIENT_' + 'CONNECTED';
+  const createdOnlyReason = text.includes(createdEmit);
+  const connectedReason = text.includes(connectedToken);
+  const ok = connectIdx >= 0
+    && latchIdx >= 0
+    && connectIdx < latchIdx
+    && connectedReason
+    && !createdOnlyReason;
+  return Object.freeze({
+    ok,
+    connectBeforeLatch: connectIdx >= 0 && latchIdx >= 0 && connectIdx < latchIdx,
+    connectedReasonPresent: connectedReason,
+    createdOnlyReasonAbsent: !createdOnlyReason,
+  });
+}
+
+export function assertHarnessSourceHasClientEndBeforePostgresStop(sourceText) {
+  const text = String(sourceText || '');
+  const marker = 'await endOwnedClusterClient(ownedClusterClientRef)';
+  const endIdx = text.indexOf(marker);
+  if (endIdx < 0) {
+    return Object.freeze({ ok: false, endBeforeStop: false });
+  }
+  const stopRel = text.slice(endIdx).indexOf('stopClusterAndProveTerminated(dataDir');
+  const ok = stopRel >= 0;
+  return Object.freeze({
+    ok,
+    endBeforeStop: ok,
   });
 }
 
@@ -2236,6 +2768,135 @@ export function brandVerifiedIndependentOwnerCapability(verifiedCapability) {
  * Create a live one-shot ticket after capability authorization.
  * liveSpawnPermitted is module-private only.
  */
+
+export const LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS = 'RUNNER_ISSUED_LIVE_SUITE_EXECUTION_AUTHORITY_V1';
+
+export function isLiveSuiteExecutionAuthority(value) {
+  return value != null && typeof value === 'object' && liveSuiteExecutionAuthorityLatch.has(value);
+}
+
+export function isOwnedClusterClient(value) {
+  return value != null && typeof value === 'object' && ownedClusterClientLatch.has(value);
+}
+
+/**
+ * Mint runner-owned live suite execution authority. Not a public Owner substitute.
+ * Requires owned controller + liveSpawnPermitted ticket + exact suite/sha binding.
+ */
+export function createLiveSuiteExecutionAuthority(input = {}) {
+  if (!isPlainObject(input) || input.proofClass !== LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS_REQUIRED',
+    ]);
+  }
+  if (!isOwnedDisposableOpsPilotClusterController(input.ownedController)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'OWNED_CONTROLLER_REQUIRED',
+    ]);
+  }
+  if (!isOwnerOneShotTicket(input.ownerOneShotTicket)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_ONESHOT_TICKET_REQUIRED',
+    ]);
+  }
+  const priv = getTicketPrivilege(input.ownerOneShotTicket);
+  if (!priv || priv.liveSpawnPermitted !== true || priv.inert === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'LIVE_SPAWN_PRIVILEGE_REQUIRED',
+    ]);
+  }
+  if (priv.cancelled === true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'TICKET_CANCELLED',
+    ]);
+  }
+  // start() consumes the one-shot before returning success; require that consumption.
+  if (priv.consumed !== true) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'TICKET_MUST_BE_CONSUMED_BY_SUCCESSFUL_START_BEFORE_AUTHORITY',
+    ]);
+  }
+  const suiteCheck = assertApprovedSuiteAllowlist(input.suitePath);
+  if (!suiteCheck.ok) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, suiteCheck.reasons || []);
+  }
+  const headSha = String(input.repositoryHeadSha || '');
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, ['AUTHORITY_HEAD_SHA_REQUIRED']);
+  }
+  if (input.venue != null && input.venue !== OPS_PILOT_LIVE_VENUE) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_VENUE_BINDING, ['AUTHORITY_VENUE_MISMATCH']);
+  }
+  if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_TIER3_NOT_AUTHORIZED, [
+      'MODULE_CONSTANTS_MUST_REMAIN_FALSE',
+    ]);
+  }
+  const offlineWiringProbe = input.offlineWiringProbe === true;
+  const authorizesRealSql = offlineWiringProbe !== true && input.authorizesRealSql === true;
+  const authority = Object.freeze({
+    proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
+    suitePath: suiteCheck.suitePath,
+    repositoryHeadSha: headSha,
+    venue: OPS_PILOT_LIVE_VENUE,
+    custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+    offlineWiringProbe,
+    authorizesRealSql,
+    ownerCustodyProven: false,
+    ohsaClaim: 'NOT_PROVEN',
+  });
+  liveSuiteExecutionAuthorityLatch.add(authority);
+  liveSuiteExecutionAuthorityMeta.set(authority, Object.freeze({
+    suitePath: suiteCheck.suitePath,
+    repositoryHeadSha: headSha,
+    ownedController: input.ownedController,
+    ownerOneShotTicket: input.ownerOneShotTicket,
+    authorizesRealSql,
+    offlineWiringProbe,
+  }));
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIVE_ONESHOT_FROM_VERIFIED_CAPABILITY,
+    reasons: Object.freeze([
+      offlineWiringProbe ? 'OFFLINE_WIRING_AUTHORITY_MINTED' : 'LIVE_SUITE_EXECUTION_AUTHORITY_MINTED',
+    ]),
+    authority,
+  });
+}
+
+export function assertLiveSuiteExecutionAuthorityForSuite(authority, suitePath, repositoryHeadSha) {
+  if (!isLiveSuiteExecutionAuthority(authority)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, [
+      'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+    ]);
+  }
+  const meta = liveSuiteExecutionAuthorityMeta.get(authority);
+  if (!meta) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY, ['AUTHORITY_META_MISSING']);
+  }
+  const normalized = normalizeApprovedSuitePath(suitePath);
+  if (meta.suitePath !== normalized) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION, [
+      'AUTHORITY_SUITE_MISMATCH',
+    ]);
+  }
+  if (String(repositoryHeadSha || '') !== meta.repositoryHeadSha) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_SHA_BINDING, [
+      'AUTHORITY_SHA_MISMATCH',
+    ]);
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    authorizesRealSql: meta.authorizesRealSql === true,
+    offlineWiringProbe: meta.offlineWiringProbe === true,
+    suitePath: meta.suitePath,
+    repositoryHeadSha: meta.repositoryHeadSha,
+  });
+}
+
+
 export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
   if (!isPlainObject(input)) {
     throw new TypeError('LIVE_ONESHOT_OPTIONS_REQUIRED');
