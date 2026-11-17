@@ -31,6 +31,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 export const OPS_PILOT_HARNESS_MODE = 'DISPOSABLE_OPS_PILOT_ONESHOT_ACTIVATION_DEFAULT_DENY';
@@ -233,6 +234,9 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_RECOVERY_ADMIN_NOT_PROVEN: 'DENY_RECOVERY_ADMIN_NOT_PROVEN',
   DENY_RUNNER_SUITE_GRANT_INVALID: 'DENY_RUNNER_SUITE_GRANT_INVALID',
   ALLOW_OFFLINE_SUITE_ORCHESTRATION: 'ALLOW_OFFLINE_SUITE_ORCHESTRATION',
+  DENY_PG_CONNECT_FAILED: 'DENY_PG_CONNECT_FAILED',
+  DENY_CALLER_CLIENT_SUBSTITUTION: 'DENY_CALLER_CLIENT_SUBSTITUTION',
+  ALLOW_OWNED_CLIENT_ENDED: 'ALLOW_OWNED_CLIENT_ENDED',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -260,6 +264,10 @@ const liveSuiteExecutionAuthorityLatch = new WeakSet();
 const liveSuiteExecutionAuthorityMeta = new WeakMap();
 /** Owned unix-socket clients created by controller for live suites. */
 const ownedClusterClientLatch = new WeakSet();
+/** Clients that successfully connected before latch. */
+const ownedConnectedClusterClientLatch = new WeakSet();
+/** Ended owned clients — idempotent end / no double-close. */
+const ownedClusterClientEndedLatch = new WeakSet();
 
 /**
  * Provenance checks are bound exclusively to the in-repo verifier module via ESM import.
@@ -1030,6 +1038,142 @@ export function buildPgCtlStopArgs(dataDir) {
   return Object.freeze(['-D', dataDir, '-m', 'fast', '-w', 'stop']);
 }
 
+
+const harnessRequire = createRequire(import.meta.url);
+
+export function resolveOpsPilotPgClientDependency() {
+  try {
+    const resolved = harnessRequire.resolve('pg');
+    const version = harnessRequire('pg/package.json').version;
+    const pg = harnessRequire('pg');
+    const Client = pg && pg.Client;
+    if (typeof Client !== 'function') {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_CLIENT_CONSTRUCTOR_MISSING',
+      ]);
+    }
+    if (String(version) !== '8.16.3') {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+        'PG_CLIENT_VERSION_UNEXPECTED',
+        String(version),
+      ]);
+    }
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      version: String(version),
+      resolved,
+      clientCtorType: 'function',
+      packageName: '@titangold/tecp-ops-persistence',
+    });
+  } catch (error) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+      'PG_MODULE_LOAD_FAILED',
+      String(error && error.message ? error.message : error),
+    ]);
+  }
+}
+
+function loadPgClientConstructor() {
+  const dep = resolveOpsPilotPgClientDependency();
+  if (!dep.ok) {
+    const err = new Error((dep.reasons || ['PG_MODULE_LOAD_FAILED']).join(','));
+    err.dependencyResult = dep;
+    throw err;
+  }
+  return harnessRequire('pg').Client;
+}
+
+function rejectCallerClientAuthority(config = {}) {
+  if (
+    config.client != null
+    || config.Client != null
+    || config.clientConstructor != null
+    || config.pgClient != null
+    || config.connectionString != null
+    || config.databaseUrl != null
+    || config.DATABASE_URL != null
+  ) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+      'CALLER_CLIENT_OR_DATABASE_URL_FORBIDDEN',
+      'OWNED_CONTROLLER_SOCKET_PLAN_ONLY',
+    ]);
+  }
+  return null;
+}
+
+async function safeEndClient(client) {
+  if (!client || typeof client.end !== 'function') {
+    return { ok: true, ended: false };
+  }
+  try {
+    await client.end();
+    return { ok: true, ended: true };
+  } catch (error) {
+    return {
+      ok: false,
+      ended: false,
+      error: String(error && error.message ? error.message : error),
+    };
+  }
+}
+
+/**
+ * End an owned latched client once. Idempotent. Never treats end as SQL PASS.
+ */
+export async function endOwnedClusterClient(client) {
+  if (client == null) {
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: Object.freeze(['CLIENT_END_NOOP_NULL']),
+      postgresActions: 0,
+    });
+  }
+  if (ownedClusterClientEndedLatch.has(client)) {
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: Object.freeze(['CLIENT_END_IDEMPOTENT']),
+      postgresActions: 0,
+      alreadyEnded: true,
+    });
+  }
+  if (!ownedClusterClientLatch.has(client)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+      'CLIENT_NOT_OWNED_LATCHED',
+      'REFUSING_END_OF_FOREIGN_CLIENT',
+    ]);
+  }
+  ownedClusterClientEndedLatch.add(client);
+  const ended = await safeEndClient(client);
+  if (!ended.ok) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
+      'OWNED_CLIENT_END_FAILED',
+      ended.error || 'END_FAILED',
+    ], { clientEndAttempted: true });
+  }
+  try { ownedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  try { ownedConnectedClusterClientLatch.delete(client); } catch (_) { /* WeakSet delete */ }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+    reasons: Object.freeze(['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP']),
+    postgresActions: 0,
+  });
+}
+
+export function isOwnedConnectedClusterClient(value) {
+  return value != null
+    && typeof value === 'object'
+    && ownedClusterClientLatch.has(value)
+    && ownedConnectedClusterClientLatch.has(value)
+    && !ownedClusterClientEndedLatch.has(value);
+}
+
 export function planOwnedUnixSocketClientConfig({ socketDir, socketPort, user = 'tecp_ops_pilot_proof', database = 'postgres' }) {
   if (typeof socketDir !== 'string' || !socketDir.startsWith('/')) {
     throw new Error('ABSOLUTE_SOCKET_DIR_REQUIRED');
@@ -1323,6 +1467,7 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
   let started = false;
   let startupAttempted = false;
   let cleaned = false;
+  let ownedClusterClientRef = null;
   let postgresActions = 0;
   const clock = config.clock || {};
   const ticket = config.ownerOneShotTicket;
@@ -1548,22 +1693,50 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         ownerOneShotTicket: ticket,
         clock,
       }, env);
-      if (again) return again;
+      // start() consumes/terminates the one-shot by design; CREATE_CLIENT remains
+      // allowed only on this still-started owned controller (not a replayed start).
+      if (again
+        && !(started === true
+          && again.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY)) {
+        return again;
+      }
       if (!started) {
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
           'START_REQUIRED_BEFORE_OWNED_CLIENT',
         ]);
       }
+      if (
+        options.client != null
+        || options.Client != null
+        || options.clientConstructor != null
+        || options.pgClient != null
+        || options.socketDir != null
+        || options.socketPort != null
+        || options.connectionString != null
+        || options.databaseUrl != null
+        || options.DATABASE_URL != null
+      ) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION, [
+          'CALLER_CLIENT_SOCKET_OR_DATABASE_URL_FORBIDDEN',
+          'CONTROLLER_PATHS_ONLY',
+        ]);
+      }
       const paths = this.getPaths();
-      return createDisposableOpsPilotClient({
+      const clientResult = await createDisposableOpsPilotClient({
         explicitNonProd: true,
         ownerOneShotTicket: ticket,
         clock,
         socketDir: paths.socketDir,
         socketPort: paths.socketPort,
+        ownedControllerIssued: true,
+        allowConsumedTicketAfterOwnedStart: true,
         offlineWiringProbe: options.offlineWiringProbe === true,
         inertClientFactory: options.inertClientFactory,
       }, env);
+      if (clientResult?.ok && clientResult.client) {
+        ownedClusterClientRef = clientResult.client;
+      }
+      return clientResult;
     },
     async stop() {
       const again = recheckBeforeLifecycle('STOP', {
@@ -1590,6 +1763,11 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           tier3Authorized: false,
         });
       }
+      let clientEndResult = null;
+      if (ownedClusterClientRef != null) {
+        clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
+        ownedClusterClientRef = null;
+      }
       const proof = stopClusterAndProveTerminated(dataDir, {
         ownedController: this,
         stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
@@ -1610,17 +1788,21 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
           'STOP_DID_NOT_PROVE_TERMINATION',
           proof.reason || 'not_terminated',
-        ]);
+        ], { clientEndResult });
       }
       started = false;
       return Object.freeze({
         ok: true,
         allowed: true,
         decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-        reasons: Object.freeze(['STOP_TERMINATION_PROVEN']),
+        reasons: Object.freeze([
+          'STOP_TERMINATION_PROVEN',
+          ...(clientEndResult?.ok === true ? ['OWNED_CLIENT_ENDED_BEFORE_POSTGRES_STOP'] : []),
+        ]),
         postgresActions: 0,
         dbExecutionAuthorized: false,
         tier3Authorized: false,
+        clientEndResult,
         terminationEvidence: Object.freeze(proof),
       });
     },
@@ -1652,6 +1834,10 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
             residualDataDir: 'NONE_CREATED',
           }),
         });
+      }
+      if (ownedClusterClientRef != null) {
+        await endOwnedClusterClient(ownedClusterClientRef);
+        ownedClusterClientRef = null;
       }
       if (started || startupAttempted) {
         const proof = stopClusterAndProveTerminated(dataDir, {
@@ -1792,21 +1978,67 @@ export async function stopDisposableOpsPilotCluster(config = {}, env = process.e
 }
 
 export async function createDisposableOpsPilotClient(config = {}, env = process.env) {
+  // Fail closed on caller client/DATABASE_URL substitution before any other gate.
+  const substitution = rejectCallerClientAuthority(config);
+  if (substitution) return substitution;
+
   const gate = recheckBeforeLifecycle('CREATE_CLIENT', {
     ...config,
     explicitNonProd: config.explicitNonProd ?? true,
   }, env);
-  if (gate) return gate;
+  if (gate) {
+    const allowAfterStart = config.allowConsumedTicketAfterOwnedStart === true
+      && config.ownedControllerIssued === true
+      && gate.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY;
+    if (!allowAfterStart) return gate;
+  }
+
   if (typeof config.inertClientFactory === 'function'
     && isInertOfflineOneShotTicket(config.ownerOneShotTicket)) {
-    const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
-    if (consumeDeny) return consumeDeny;
+    const privExisting = getTicketPrivilege(config.ownerOneShotTicket);
+    const alreadyConsumedForOwnedStart = config.allowConsumedTicketAfterOwnedStart === true
+      && config.ownedControllerIssued === true
+      && privExisting?.consumed === true;
+    if (!alreadyConsumedForOwnedStart) {
+      const consumeDeny = consumeOneShotOrDeny(config.ownerOneShotTicket, config.clock || {});
+      if (consumeDeny) return consumeDeny;
+    }
     const client = config.inertClientFactory({
       ...planOwnedUnixSocketClientConfig({
         socketDir: config.socketDir || '/tmp/tecp-ops-pilot-s2-inert/socket',
         socketPort: config.socketPort || 56111,
       }),
     });
+    // Controller-issued inert clients: connect hook (if any) before latch; never SQL PASS authority.
+    if (config.ownedControllerIssued === true) {
+      if (typeof client?.connect === 'function') {
+        try {
+          await client.connect();
+        } catch (error) {
+          await safeEndClient(client);
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+            'OWNED_INERT_CLIENT_CONNECT_FAILED',
+            String(error && error.message ? error.message : error),
+            'FAIL_CLOSED_NO_LATCH',
+          ]);
+        }
+      }
+      ownedConnectedClusterClientLatch.add(client);
+      ownedClusterClientLatch.add(client);
+      return Object.freeze({
+        ok: true,
+        allowed: true,
+        decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+        reasons: Object.freeze([
+          'INERT_OWNED_CLIENT_CONNECTED_BEFORE_SQL_GATE',
+          'INERT_CLIENT_FACTORY_USED',
+        ]),
+        client,
+        postgresActions: 0,
+        inert: true,
+        connected: true,
+      });
+    }
     return Object.freeze({
       ok: true,
       allowed: true,
@@ -1815,6 +2047,7 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
       client,
       postgresActions: 0,
       inert: true,
+      connected: false,
     });
   }
   const ticket = config.ownerOneShotTicket;
@@ -1835,30 +2068,48 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
         socketPort: config.socketPort,
       }),
     });
+    if (typeof client?.connect === 'function') {
+      try {
+        await client.connect();
+      } catch (error) {
+        await safeEndClient(client);
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+          'OFFLINE_WIRING_CLIENT_CONNECT_FAILED',
+          String(error && error.message ? error.message : error),
+          'FAIL_CLOSED_NO_LATCH',
+        ]);
+      }
+    }
+    ownedConnectedClusterClientLatch.add(client);
     ownedClusterClientLatch.add(client);
     return Object.freeze({
       ok: true,
       allowed: true,
       decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-      reasons: Object.freeze(['OFFLINE_WIRING_OWNED_INERT_CLIENT']),
+      reasons: Object.freeze([
+        'OFFLINE_WIRING_OWNED_INERT_CLIENT',
+        'CONNECT_BEFORE_LATCH',
+      ]),
       client,
       postgresActions: 0,
       inert: true,
       offlineWiringProbe: true,
+      connected: true,
     });
   }
 
   if (liveClientAllowed
     && typeof config.socketDir === 'string'
     && Number.isSafeInteger(config.socketPort)) {
-    // Capability-gated live client: dynamic pg import only after live privilege + unix socket plan.
+    // Capability-gated live client: resolve pg from this package only after live privilege.
     let Client;
     try {
-      ({ Client } = await import('pg'));
+      Client = loadPgClientConstructor();
     } catch (error) {
+      const dep = error && error.dependencyResult;
       return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_INVALID_CONFIG, [
         'PG_MODULE_LOAD_FAILED',
-        String(error && error.message ? error.message : error),
+        ...(dep?.reasons || [String(error && error.message ? error.message : error)]),
       ]);
     }
     const planned = planOwnedUnixSocketClientConfig({
@@ -1872,21 +2123,38 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
       database: planned.database,
       password: planned.password,
     });
-    // Attach planned socket fields if host is socket dir style
-    if (planned.socketDir) {
-      client.host = planned.socketDir;
-      client.port = planned.socketPort || planned.port;
+    // Unix-socket directory is host for node-pg; never connectionString / DATABASE_URL.
+    if (planned.socketDir || planned.host) {
+      client.host = planned.host;
+      client.port = planned.port;
     }
+    try {
+      await client.connect();
+    } catch (error) {
+      await safeEndClient(client);
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_PG_CONNECT_FAILED, [
+        'UNIX_SOCKET_CONNECT_FAILED',
+        String(error && error.message ? error.message : error),
+        'FAIL_CLOSED_BEFORE_SQL',
+        'CLIENT_NOT_LATCHED',
+      ]);
+    }
+    // Latch ONLY after genuine connect — constructed-but-never-connected is not live SQL evidence.
+    ownedConnectedClusterClientLatch.add(client);
     ownedClusterClientLatch.add(client);
     return Object.freeze({
       ok: true,
       allowed: true,
       decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
-      reasons: Object.freeze(['LIVE_OWNED_UNIX_SOCKET_CLIENT_CREATED']),
+      reasons: Object.freeze([
+        'LIVE_OWNED_UNIX_SOCKET_CLIENT_CONNECTED',
+        'CONNECT_BEFORE_SQL',
+      ]),
       client,
       plannedClient: planned,
       postgresActions: 0,
       inert: false,
+      connected: true,
     });
   }
 
@@ -1938,6 +2206,43 @@ export function assertHarnessSourceHasNoEagerPgImport(sourceText) {
   return Object.freeze({
     ok: !eager,
     eagerPgImport: eager,
+  });
+}
+
+export function assertHarnessSourceHasOwnedClientConnectBeforeLatch(sourceText) {
+  const text = String(sourceText || '');
+  const connectIdx = text.indexOf('await client.connect()');
+  const latchIdx = text.indexOf('ownedClusterClientLatch.add(client)');
+  // Build needles at runtime so this helper source cannot false-positive itself.
+  const createdEmit = "reasons: Object.freeze(['LIVE_OWNED_UNIX_SOCKET_CLIENT_" + "CREATED'])";
+  const connectedToken = 'LIVE_OWNED_UNIX_SOCKET_CLIENT_' + 'CONNECTED';
+  const createdOnlyReason = text.includes(createdEmit);
+  const connectedReason = text.includes(connectedToken);
+  const ok = connectIdx >= 0
+    && latchIdx >= 0
+    && connectIdx < latchIdx
+    && connectedReason
+    && !createdOnlyReason;
+  return Object.freeze({
+    ok,
+    connectBeforeLatch: connectIdx >= 0 && latchIdx >= 0 && connectIdx < latchIdx,
+    connectedReasonPresent: connectedReason,
+    createdOnlyReasonAbsent: !createdOnlyReason,
+  });
+}
+
+export function assertHarnessSourceHasClientEndBeforePostgresStop(sourceText) {
+  const text = String(sourceText || '');
+  const marker = 'await endOwnedClusterClient(ownedClusterClientRef)';
+  const endIdx = text.indexOf(marker);
+  if (endIdx < 0) {
+    return Object.freeze({ ok: false, endBeforeStop: false });
+  }
+  const stopRel = text.slice(endIdx).indexOf('stopClusterAndProveTerminated(dataDir');
+  const ok = stopRel >= 0;
+  return Object.freeze({
+    ok,
+    endBeforeStop: ok,
   });
 }
 

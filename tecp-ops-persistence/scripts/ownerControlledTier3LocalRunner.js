@@ -35,6 +35,7 @@ import {
   createLiveSuiteExecutionAuthority,
   LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
   isOwnedClusterClient,
+  endOwnedClusterClient,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
   evaluateLiveRepositoryHeadBinding,
@@ -174,9 +175,24 @@ export function getRunnerImportSideEffectsAttestationMeta() {
   });
 }
 
-function rejectExternalDbTargets(request = {}, env = process.env) {
+function rejectExternalDbTargets(request = {}, env = process.env, deps = {}) {
   if (request.connectionString || request.databaseUrl || request.DATABASE_URL) {
     return deny(OWNER_RUNNER_DECISIONS.DENY_EXTERNAL_DB_TARGET, ['CALLER_DATABASE_URL_FORBIDDEN']);
+  }
+  if (
+    request.client != null
+    || request.Client != null
+    || request.clientConstructor != null
+    || request.clusterClient != null
+    || deps.client != null
+    || deps.Client != null
+    || deps.clientConstructor != null
+    || deps.clusterClient != null
+  ) {
+    return deny(OWNER_RUNNER_DECISIONS.DENY_EXTERNAL_DB_TARGET, [
+      'CALLER_CLIENT_OR_CONSTRUCTOR_FORBIDDEN',
+      'OWNED_CONTROLLER_CLIENT_ONLY',
+    ]);
   }
   if (request.host || request.pgHost || request.PGHOST) {
     return deny(OWNER_RUNNER_DECISIONS.DENY_EXTERNAL_DB_TARGET, ['CALLER_PGHOST_FORBIDDEN']);
@@ -216,7 +232,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
   }
 
   const env = deps.env || process.env;
-  const externalTargetDeny = rejectExternalDbTargets(request, env);
+  const externalTargetDeny = rejectExternalDbTargets(request, env, deps);
   if (externalTargetDeny) {
     return {
       ...externalTargetDeny,
@@ -856,23 +872,36 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
 
     const suiteModule = await loadSuiteExecutor(suiteCheck.suitePath);
     let suiteResult;
+    let clientEndResult = null;
     try {
-      suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
-        mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
-        ownedController: controller,
-        clusterClient: clientResult.client,
-        liveExecutionAuthority: authorityResult.authority,
-        repositorySha: headSha,
-        repositoryHeadSha: headSha,
-        suitePath: suiteCheck.suitePath,
-        liveCapabilityAuthorized: true,
-        custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
-      });
-    } catch (error) {
-      suiteResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
-        'SUITE_ORCHESTRATION_THREW',
-        error.message || String(error),
-      ]);
+      try {
+        suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
+          mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+          ownedController: controller,
+          clusterClient: clientResult.client,
+          liveExecutionAuthority: authorityResult.authority,
+          repositorySha: headSha,
+          repositoryHeadSha: headSha,
+          suitePath: suiteCheck.suitePath,
+          liveCapabilityAuthorized: true,
+          custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+        });
+      } catch (error) {
+        suiteResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+          'SUITE_ORCHESTRATION_THREW',
+          error.message || String(error),
+        ]);
+      }
+    } finally {
+      // Disconnect before Postmaster stop / disposable cleanup, including suite failures.
+      try {
+        clientEndResult = await endOwnedClusterClient(clientResult.client);
+      } catch (endError) {
+        clientEndResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
+          'OWNED_CLIENT_END_THREW',
+          endError.message || String(endError),
+        ]);
+      }
     }
     let stopped;
     let cleaned;
@@ -911,6 +940,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       evidence: evidenceEnvelope({
         authorization: Object.freeze({ structural, capabilityVerified, liveAuthorization }),
         start: started,
+        clientEnd: clientEndResult,
         stop: lifecycleStageEvidence('stop', stopped, stopError),
         cleanup: lifecycleStageEvidence('cleanup', cleaned, cleanupError),
         suite: suiteResult,

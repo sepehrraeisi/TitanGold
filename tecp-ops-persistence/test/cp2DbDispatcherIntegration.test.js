@@ -73,9 +73,12 @@ import {
 import {
   OPS_PILOT_APPROVED_TEST_ACTIONS,
   OPS_PILOT_DB_EXECUTION_AUTHORIZED,
+  OPS_PILOT_TIER3_AUTHORIZED,
   OPS_PILOT_HARNESS_DECISIONS,
   assertLiveSuiteExecutionAuthorityForSuite,
   isLiveSuiteExecutionAuthority,
+  isOwnedClusterClient,
+  isOwnedConnectedClusterClient,
 
   OPS_PILOT_PINNED_MAIN_SHA,
   createDisposableOpsPilotClusterController,
@@ -417,6 +420,17 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
       reasons: Object.freeze(['DISPOSABLE_CLIENT_REQUIRED']),
+      sqlExecuted: false,
+    };
+  }
+  if (!isOwnedClusterClient(dbClient) || !isOwnedConnectedClusterClient(dbClient)) {
+    return {
+      ok: false,
+      decision: DB_TIER3_NOT_AUTHORIZED,
+      reasons: Object.freeze([
+        'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
+        'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
+      ]),
       sqlExecuted: false,
     };
   }
@@ -762,6 +776,27 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       DB_TIER3_NOT_AUTHORIZED,
       OPS_PILOT_HARNESS_DECISIONS.DENY_LIVE_EXECUTION_AUTHORITY,
     ].includes(live.decision));
+  });
+
+
+  it('fake dbClient cannot satisfy owned-connected live SQL gate', async () => {
+    const fake = {
+      query: async () => ({ rows: [{ ok: true }] }),
+      connect: async () => {},
+      end: async () => {},
+    };
+    assert.equal(isOwnedClusterClient(fake), false);
+    assert.equal(isOwnedConnectedClusterClient(fake), false);
+    const denied = await runLiveDispatcherDbMatrix(fake, {
+      authorityCheck: {
+        ok: true,
+        authorizesRealSql: true,
+        offlineWiringProbe: false,
+      },
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.sqlExecuted, false);
+    assert.ok((denied.reasons || []).includes('FAKE_OR_UNCONNECTED_CLIENT_DENIED'));
   });
 
   it('2) forged lease / public brand / cross-txn rules hold offline', () => {

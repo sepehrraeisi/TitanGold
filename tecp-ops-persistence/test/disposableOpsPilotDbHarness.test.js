@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import {
   ONE_SHOT_STATES,
@@ -45,6 +45,12 @@ import {
   cancelOwnerOneShotTicket,
   cleanupDisposableOpsPilotCluster,
   createDisposableOpsPilotClient,
+  resolveOpsPilotPgClientDependency,
+  endOwnedClusterClient,
+  isOwnedClusterClient,
+  isOwnedConnectedClusterClient,
+  assertHarnessSourceHasOwnedClientConnectBeforeLatch,
+  assertHarnessSourceHasClientEndBeforePostgresStop,
   createDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
   createPrivilegedTier3ActivationHandleForTests,
@@ -1552,5 +1558,167 @@ assert.equal(offlinePinBind.ok, false);
     assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
     assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
   });
+
+  it('25) client lifecycle: connect-before-SQL contract, end-before-stop, fail-closed, no fake client / no PG', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+
+    const dep = resolveOpsPilotPgClientDependency();
+    assert.equal(dep.ok, true);
+    assert.equal(dep.version, '8.16.3');
+    assert.equal(dep.clientCtorType, 'function');
+    assert.ok(String(dep.resolved).includes('/tecp-ops-persistence/node_modules/pg'));
+
+    const src = readFileSync(join(__dirname, '../src/disposableOpsPilotDbHarness.js'), 'utf8');
+    assert.equal(assertHarnessSourceHasNoEagerPgImport(src).ok, true);
+    const connectContract = assertHarnessSourceHasOwnedClientConnectBeforeLatch(src);
+    assert.equal(connectContract.ok, true);
+    const endContract = assertHarnessSourceHasClientEndBeforePostgresStop(src);
+    assert.equal(endContract.ok, true);
+
+    // Ordinary offline createClient: no live privilege → deny; no latch; no SQL.
+    const deniedClient = await createDisposableOpsPilotClient({
+      explicitNonProd: true,
+    }, { NODE_ENV: 'test' });
+    assert.equal(deniedClient.ok, false);
+    assert.equal(deniedClient.postgresActions, 0);
+
+    // Caller-supplied client / DATABASE_URL cannot become authority.
+    const sub = await createDisposableOpsPilotClient({
+      explicitNonProd: true,
+      client: { query: async () => ({ rows: [] }) },
+    }, { NODE_ENV: 'test' });
+    assert.equal(sub.ok, false);
+    assert.equal(sub.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+
+    const subUrl = await createDisposableOpsPilotClient({
+      explicitNonProd: true,
+      DATABASE_URL: 'postgres://evil',
+    }, { NODE_ENV: 'test' });
+    assert.equal(subUrl.ok, false);
+    assert.equal(subUrl.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+
+    // Constructed-but-never-connected pg.Client is not owned/connected evidence.
+    const { createRequire } = await import('node:module');
+    const req = createRequire(join(__dirname, '../src/disposableOpsPilotDbHarness.js'));
+    const PgClient = req('pg').Client;
+    const orphan = new PgClient({
+      host: '/tmp/tecp-ops-pilot-s2-no-such-socket',
+      port: 1,
+      user: 'tecp_ops_pilot_proof',
+      database: 'postgres',
+    });
+    assert.equal(isOwnedClusterClient(orphan), false);
+    assert.equal(isOwnedConnectedClusterClient(orphan), false);
+    let connectFailed = false;
+    try {
+      await orphan.connect();
+    } catch {
+      connectFailed = true;
+    }
+    assert.equal(connectFailed, true);
+    assert.equal(isOwnedClusterClient(orphan), false);
+    try { await orphan.end(); } catch { /* ignore */ }
+
+    // Foreign end denied; null end noop.
+    const foreignEnd = await endOwnedClusterClient({ end: async () => {} });
+    assert.equal(foreignEnd.ok, false);
+    assert.equal(foreignEnd.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+    const nullEnd = await endOwnedClusterClient(null);
+    assert.equal(nullEnd.ok, true);
+
+    // Controller-issued inert client: connect before latch; end before postmaster stop; idempotent end.
+    const order = [];
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const spawner = inertSpawner();
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn: (bin, args = []) => {
+        const argv = args.map(String);
+        if (String(bin).endsWith('pg_ctl') && argv.includes('start')) {
+          order.push('postmaster_start');
+        }
+        return spawner.spawnSyncFn(bin, args);
+      },
+      stopFn: () => {
+        order.push('postmaster_stop');
+        return { status: 0 };
+      },
+      inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert_stopped' }),
+    }, { NODE_ENV: 'test' });
+    assert.equal(isOwnedDisposableOpsPilotClusterController(controller), true);
+    const prepared = await controller.prepare();
+    assert.equal(prepared.ok, true);
+    const started = await controller.start();
+    assert.equal(started.ok, true, started.reasons && started.reasons.join(','));
+
+    const rejected = await controller.createOwnedClusterClient({
+      client: { query: async () => ({ rows: [] }) },
+    });
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+
+    const rejectedSock = await controller.createOwnedClusterClient({
+      socketDir: '/tmp/evil-socket',
+    });
+    assert.equal(rejectedSock.ok, false);
+    assert.equal(rejectedSock.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_CLIENT_SUBSTITUTION);
+
+    let connectCount = 0;
+    let endCount = 0;
+    const clientResult = await controller.createOwnedClusterClient({
+      inertClientFactory: () => ({
+        async connect() { connectCount += 1; order.push('connect'); },
+        async query() { order.push('sql'); return { rows: [] }; },
+        async end() { endCount += 1; order.push('end'); },
+      }),
+    });
+    assert.equal(clientResult.ok, true, clientResult.reasons && clientResult.reasons.join(','));
+    assert.equal(clientResult.connected, true);
+    assert.equal(connectCount, 1);
+    assert.equal(isOwnedClusterClient(clientResult.client), true);
+    assert.equal(isOwnedConnectedClusterClient(clientResult.client), true);
+    assert.ok(order.indexOf('connect') >= 0);
+    assert.ok(order.indexOf('sql') < 0, 'no SQL from ordinary client create');
+
+    // SQL-failure style path: disconnect then stop; end before postmaster_stop; no double-close.
+    order.push('sql_failed');
+    const firstEnd = await endOwnedClusterClient(clientResult.client);
+    assert.equal(firstEnd.ok, true);
+    assert.equal(endCount, 1);
+    const secondEnd = await endOwnedClusterClient(clientResult.client);
+    assert.equal(secondEnd.ok, true);
+    assert.equal(secondEnd.alreadyEnded, true);
+    assert.equal(endCount, 1, 'no double-close');
+
+    const stopped = await controller.stop();
+    assert.equal(stopped.ok, true, stopped.reasons && stopped.reasons.join(','));
+    const endAt = order.indexOf('end');
+    const stopAt = order.indexOf('postmaster_stop');
+    assert.ok(endAt >= 0 && stopAt >= 0 && endAt < stopAt, 'disconnect before Postmaster stop');
+
+    await controller.cleanup();
+
+    // Direct public live execution still denies; no capability issued/consumed here.
+    const liveDenied = await invokeOwnerControlledTier3LocalRunner({
+      mode: 'LIVE_DISPOSABLE',
+      suitePath: OPS_PILOT_APPROVED_TEST_ACTIONS[0],
+      repositorySha: '11eb27c968386ebfc93ece739a787fbe2184f2f9',
+    }, {
+      argv: [process.execPath, 'ownerControlledTier3LocalRunner.js'],
+      env: { NODE_ENV: 'test' },
+      uid: 1000,
+      execPath: process.execPath,
+    });
+    assert.equal(liveDenied.ok, false);
+    assert.equal(liveDenied.postgresActions || 0, 0);
+  });
+
 
 });

@@ -56,6 +56,8 @@ import {
   evaluateOpsPilotHarnessSafety,
   assertLiveSuiteExecutionAuthorityForSuite,
   isLiveSuiteExecutionAuthority,
+  isOwnedClusterClient,
+  isOwnedConnectedClusterClient,
 
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
@@ -291,6 +293,18 @@ async function runLiveFencingSqlMatrix(clusterClient, opts = {}) {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
       reasons: Object.freeze(['DISPOSABLE_CLIENT_REQUIRED']),
+      proofs: null,
+      sqlExecuted: false,
+    };
+  }
+  if (!isOwnedClusterClient(clusterClient) || !isOwnedConnectedClusterClient(clusterClient)) {
+    return {
+      ok: false,
+      decision: DB_TIER3_NOT_AUTHORIZED,
+      reasons: Object.freeze([
+        'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
+        'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
+      ]),
       proofs: null,
       sqlExecuted: false,
     };
@@ -569,6 +583,30 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(stillDenied.ok, false);
     assert.equal(stillDenied.decision, DB_TIER3_NOT_AUTHORIZED);
     assert.equal(stillDenied.sqlExecuted, false);
+  });
+
+
+  it('fake clusterClient cannot satisfy owned-connected live SQL gate', async () => {
+    const fake = {
+      query: async () => ({ rows: [{ ok: true }] }),
+      connect: async () => {},
+      end: async () => {},
+    };
+    assert.equal(isOwnedClusterClient(fake), false);
+    assert.equal(isOwnedConnectedClusterClient(fake), false);
+    const denied = await runLiveFencingSqlMatrix(fake, {
+      liveExecutionAuthority: {
+        proofClass: 'LIVE_SUITE_EXECUTION_AUTHORITY_V1',
+      },
+      authorityCheck: {
+        ok: true,
+        authorizesRealSql: true,
+        offlineWiringProbe: false,
+      },
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.sqlExecuted, false);
+    assert.ok((denied.reasons || []).includes('FAKE_OR_UNCONNECTED_CLIENT_DENIED'));
   });
 
   it('ordinary discovery cannot Owner-activate or live-start PostgreSQL', async () => {
