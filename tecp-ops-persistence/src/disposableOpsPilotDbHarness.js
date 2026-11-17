@@ -10,6 +10,11 @@
  * Privileged ticket state is module-private (WeakMap); exported tickets are frozen.
  * Offline tests may inject inert spawnSyncFn under an inert one-shot ticket only.
  * Public pg_ctl helpers require an owned disposable controller identity.
+ *
+ * SIMIN Hyper-V activation prep (2026-11-17): records activation-era target SHA and
+ * venue metadata only. Does NOT flip live DB/Tier-3 hard-deny constants, does NOT
+ * mint Owner capability latches, and does NOT allow npm test / env / ARGV to spawn PG.
+ * Live Tier-3 remains separately Owner-gated after Human QA / merge / capability proof.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -39,13 +44,25 @@ export const OPS_PILOT_HARNESS_MARKER_MAGIC = 'TECP-OPS-PILOT-S2-DISPOSABLE-HARN
 export const OPS_PILOT_DB_EXECUTION_AUTHORIZED = false;
 export const OPS_PILOT_TIER3_AUTHORIZED = false;
 export const TIER3_ACTIVATION_AUTHORITY = 'TIER3_ACTIVATION_AUTHORITY_UNPROVEN';
-/** Canonical main tip after PR #295 merge. Future Owner Tier-3 execution must re-pin. */
+/** Canonical main tip after PR #295 merge. Offline pin retained; live pin-swap gated. */
 export const OPS_PILOT_PINNED_MAIN_SHA = 'ee26aa367475c0002b077bd0ae02838ce8c055e6';
+/**
+ * Activation-era target tip for future Owner-authorized live Tier-3 on SIMIN Hyper-V.
+ * NOT interchangeable with OPS_PILOT_PINNED_MAIN_SHA until a separate Owner live
+ * instruction flips the runtime pin AND updates locked offline assertions.
+ */
+export const OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA = '5df4ae58572a79acdefccaa5e868e2f191e0a4d2';
+/** Venue binding for activation prep — guest Hyper-V VM only. */
+export const OPS_PILOT_ACTIVATION_PREP_VENUE =
+  'SIMIN_HYPERV_UBUNTU_VM_TITANGOLD_S2_LAB_ONLY';
+/** Prep status: binaries/Rule02 prep may advance; live gates remain closed. */
+export const OPS_PILOT_ACTIVATION_PREP_STATUS =
+  'PG14_BINARIES_AND_RULE02_PREP_ONLY_LIVE_DB_AND_TIER3_GATES_REMAIN_CLOSED';
 /** Governance merge base for offline five-path implementation (PR #307). */
 export const OPS_PILOT_GOVERNANCE_MERGE_BASE_SHA =
   '361eaab9d449f3070b87b5ad0c88e5f5a38da49d';
 export const OPS_PILOT_LIVE_ACTIVATION_SHA_POLICY =
-  'REQUIRES_SEPARATE_OWNER_AUTHORIZED_ACTIVATION_ERA_PIN_NOT_THIS_OFFLINE_IMPL';
+  'REQUIRES_SEPARATE_OWNER_LIVE_TIER3_INSTRUCTION_PLUS_PIN_SWAP_AND_TEST_ALLOWLIST_UPDATE';
 export const OPS_PILOT_OWNER_RUNNER_ARGV_MARKER = '--tecp-ops-s2-owner-controlled-local-runner';
 export const OPS_PILOT_DEFAULT_ONESHOT_TTL_MS = 120000;
 export const OPS_PILOT_MAX_ONESHOT_TTL_MS = 300000;
@@ -84,6 +101,12 @@ export const TIER3_FINAL_EXECUTION_CONTRACT = Object.freeze({
   production: 'DENY',
   liveDbExecutionAuthorized: false,
   executableLaunchCommand: null,
+  activationEraTargetMainSha: OPS_PILOT_ACTIVATION_ERA_TARGET_MAIN_SHA,
+  activationPrepVenue: OPS_PILOT_ACTIVATION_PREP_VENUE,
+  activationPrepStatus: OPS_PILOT_ACTIVATION_PREP_STATUS,
+  windowsPg17: 'DENY',
+  wsl2: 'DENY',
+  remoteServer: 'DENY',
 });
 
 export const TIER3_READINESS_VERDICTS = Object.freeze({
@@ -114,6 +137,8 @@ export const TIER3_REQUIRED_EXTERNAL_TRUST_COMPONENTS = Object.freeze([
   'VERIFIED_S2_TIER3_OWNER_CAPABILITY_VIA_PUBLIC_KEY_ONLY_VERIFIER',
   'OPS_PILOT_OWNER_CAPABILITY_VERIFIER_RELATIVE_PATH',
   'OWNER_CUSTODY_AND_RECOVERY_ADMIN_INDEPENDENTLY_PROVEN_OUTSIDE_UNTRUSTED_NODE',
+  'ACTIVATION_ERA_PIN_SWAP_FROM_OFFLINE_ee26aa_TO_TARGET_TIP_REQUIRES_SEPARATE_OWNER_AND_TEST_ALLOWLIST',
+  'DO_NOT_FLIP_OPS_PILOT_DB_EXECUTION_AUTHORIZED_WITHOUT_CAPABILITY_GATED_LIVE_PATH',
 ]);
 
 export const ONE_SHOT_STATES = Object.freeze({
