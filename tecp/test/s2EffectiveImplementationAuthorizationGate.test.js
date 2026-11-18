@@ -17,7 +17,6 @@ import {
   S2_GATE_OPERATION_CLASS,
   S2_GATE_REPOSITORY_ID,
   S2_GATE_SLICE_ID,
-  __testOnlyS2AuthConsumptionHooks,
   __testOnlyS2EvaluationLockHooks,
   advanceTestHarnessClock,
   assertS2MutationFenceFresh,
@@ -498,132 +497,38 @@ test('SEC-B05 missing Owner enrollment cannot produce authentic mutation brand',
 });
 
 
-function mintAuthentic(overrides = {}) {
-  return __testOnlyS2AuthConsumptionHooks.mintAuthenticEvaluateResultForConsumptionQa({
-    canonicalSha: CANONICAL_SHA,
-    rule02DigestSha256: RULE02_DIGEST,
-    rule02GitBlob: RULE02_BLOB,
-    mergeParent1: MERGE_PARENT_1,
-    mergeParent2: MERGE_PARENT_2,
-    jti: overrides.jti || 'qa-consume-jti',
-    ...overrides,
-  });
-}
 
-function installOkFreshness() {
-  return __testOnlyS2AuthConsumptionHooks.installFreshnessProbe({
-    resolveRepoPath: () => REPO_ROOT,
-    inspect: (expected) => Object.freeze({
-      ok: true,
-      repoPath: REPO_ROOT,
-      canonicalSha: expected.canonicalSha,
-      rule02GitBlob: expected.rule02GitBlob,
-      rule02DigestSha256: expected.rule02DigestSha256,
-    }),
-  });
-}
-
-function installFailFreshness(reason = 'HEAD_NOT_PINNED_CANONICAL') {
-  return __testOnlyS2AuthConsumptionHooks.installFreshnessProbe({
-    resolveRepoPath: () => REPO_ROOT,
-    inspect: () => Object.freeze({ ok: false, reason }),
-  });
-}
-
-test('SEC-R01 first authentic consumption ALLOWs under controlled freshness probe', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr01jti0001' });
-    assert.equal(isAuthenticS2OfflineMutationAuthorization(authentic), true);
-    const first = consumeAuthenticS2OfflineImplementationAuthorization(authentic);
-    assert.equal(first.ok, true);
-    assert.equal(first.decision, GD.ALLOW);
-    assert.equal(first.authorizationConsumed, true);
-    assert.equal(first.reusable, false);
-    assert.equal(first.authenticMutationAuthority, false);
-    assert.equal(isAuthenticS2OfflineMutationAuthorization(authentic), false);
-    assert.equal(__testOnlyS2AuthConsumptionHooks.isSpent(authentic), true);
-  } finally {
-    clear();
-  }
+test('SEC-X01 public exports must not include authentic mint or freshness override hooks', async () => {
+  const gate = await import('../src/s2EffectiveImplementationAuthorizationGate.js');
+  const instr = await import('../src/s2OwnerImplementationInstruction.js');
+  assert.equal('__testOnlyS2AuthConsumptionHooks' in gate, false);
+  assert.equal('mintAuthenticEvaluateResultForConsumptionQa' in gate, false);
+  assert.equal('installFreshnessProbe' in gate, false);
+  assert.equal('withPrivilegedS2InstructionConstruction' in instr, false);
+  assert.equal('getPrivilegedS2InstructionConstructors' in instr, false);
+  assert.equal('createTestOnlyS2ImplTrustDeps' in instr, false);
+  assert.equal('S2_TEST_ONLY_GATE_HARNESS_TOKEN' in gate, false);
 });
 
-test('SEC-R02 second and third consumption of same original DENY', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr02jti0001' });
-    const first = consumeAuthenticS2OfflineImplementationAuthorization(authentic);
-    assert.equal(first.ok, true);
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_AUTHORIZATION_ALREADY_SPENT);
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_AUTHORIZATION_ALREADY_SPENT);
-  } finally {
-    clear();
-  }
-});
-
-test('SEC-R03 concurrent/reentrant sync attempts: only one ALLOW', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr03jti0001' });
-    const results = [];
-    for (let i = 0; i < 10; i += 1) {
-      results.push(consumeAuthenticS2OfflineImplementationAuthorization(authentic));
-    }
-    assert.equal(results.filter((r) => r.ok).length, 1);
-    assert.equal(results.filter((r) => r.decision === GD.DENY_AUTHORIZATION_ALREADY_SPENT).length, 9);
-  } finally {
-    clear();
-  }
-});
-
-test('SEC-R04 consumed output submitted again DENYs', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr04jti0001' });
-    const consumed = consumeAuthenticS2OfflineImplementationAuthorization(authentic);
-    assert.equal(consumed.ok, true);
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(consumed), GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION);
-  } finally {
-    clear();
-  }
-});
-
-test('SEC-R05 forged object with copied properties DENYs', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr05jti0001' });
-    const forged = {
-      ok: true,
-      decision: GD.ALLOW,
-      authenticMutationAuthority: true,
-      authorization: { ...authentic.authorization, authenticMutationAuthority: true, testOnly: false },
-    };
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(forged), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
-  } finally {
-    clear();
-  }
-});
-
-test('SEC-R06 TEST_ONLY ALLOW cannot mint authentic consumption authority', () => {
+test('SEC-X02 TEST_ONLY factories cannot mint authentic authorization brand', () => {
   const harness = makeHarness();
-  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secr06jti0001' });
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secx02jti0001' });
   const allow = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
   assert.equal(allow.ok, true);
+  assert.equal(allow.authenticMutationAuthority, false);
   assert.equal(isAuthenticS2OfflineMutationAuthorization(allow), false);
   assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(allow), GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION);
 });
 
-test('SEC-R07 missing evaluation fence DENYs after spend', () => {
-  const clear = installOkFreshness();
-  try {
-    const authentic = mintAuthentic({ jti: 'secr07jti0001' });
-    // Replace fence brand by minting then mutating is impossible (frozen). Use hook-crafted incomplete via direct brand path:
-    // Build authentic-looking object with unbranded fence through mint then... can't unbrand fence.
-    // Instead: mint, then consume with a freshness probe after manually spending a custom object.
-    const fence = { tipSha: CANONICAL_SHA, tipDigest: RULE02_DIGEST };
-    const authorization = {
+test('SEC-X03 forged authentic-looking objects cannot consume', () => {
+  const forged = {
+    ok: true,
+    decision: GD.ALLOW,
+    authenticMutationAuthority: true,
+    operational: false,
+    authorization: {
       authenticMutationAuthority: true,
       testOnly: false,
       canonicalSha: CANONICAL_SHA,
@@ -631,107 +536,131 @@ test('SEC-R07 missing evaluation fence DENYs after spend', () => {
       rule02GitBlob: RULE02_BLOB,
       mergeParent1: MERGE_PARENT_1,
       mergeParent2: MERGE_PARENT_2,
-      fence,
-    };
-    const custom = Object.freeze({
-      ok: true,
-      decision: GD.ALLOW,
-      authenticMutationAuthority: true,
-      operational: false,
-      authorization: Object.freeze(authorization),
-    });
-    // Cannot add to private brands from outside; use mint and assert fence branded on mint path.
-    assert.equal(Boolean(authentic.authorization.fence.kind), true);
-    // Failure mode: forge freshness proof
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization({
-      ok: true,
-      decision: GD.ALLOW,
-      authenticMutationAuthority: true,
-      authorization: { authenticMutationAuthority: true, testOnly: false, fence: { fresh: true } },
-    }), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
-  } finally {
-    clear();
-  }
+      fence: {
+        tipSha: CANONICAL_SHA,
+        tipDigest: RULE02_DIGEST,
+        authenticMutationAuthority: true,
+      },
+    },
+  };
+  assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(forged), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
 });
 
-test('SEC-R08 forged freshness / wrong pins DENY and permanently spend', () => {
-  const authentic = mintAuthentic({ jti: 'secr08jti0001' });
-  let clear = installFailFreshness('HEAD_NOT_PINNED_CANONICAL');
-  try {
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_GIT_FRESHNESS);
-    assert.equal(__testOnlyS2AuthConsumptionHooks.isSpent(authentic), true);
-  } finally {
-    clear();
-  }
-  clear = installOkFreshness();
-  try {
-    // Restoring good freshness does not revive spent authorization.
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_AUTHORIZATION_ALREADY_SPENT);
-  } finally {
-    clear();
-  }
-});
-
-test('SEC-R09 worktree Rule02 digest drift DENYs', () => {
-  const authentic = mintAuthentic({ jti: 'secr09jti0001' });
-  const clear = __testOnlyS2AuthConsumptionHooks.installFreshnessProbe({
-    resolveRepoPath: () => REPO_ROOT,
-    inspect: () => Object.freeze({ ok: false, reason: 'WORKTREE_RULE02_DIGEST_DRIFT', detail: 'deadbeef' }),
+test('SEC-X04 authentic consumer DENYs without Owner trust / authentic brand (NOT_TESTED_REAL_OWNER_PATH positive)', () => {
+  // Positive authentic consume ALLOW requires real Owner enrollment + pinned HEAD; not manufactured here.
+  const denyProd = evaluateS2EffectiveImplementationAuthorization({
+    repositoryId: S2_GATE_REPOSITORY_ID,
+    sliceId: S2_GATE_SLICE_ID,
+    operationClass: S2_GATE_OPERATION_CLASS,
+    governanceRevision: S2_GATE_GOVERNANCE_REVISION,
+    authorizedFileScope: [...S2_GATE_AUTHORIZED_FILE_SCOPE],
+    expectedCanonicalSha: CANONICAL_SHA,
+    expectedRule02DigestSha256: RULE02_DIGEST,
+    expectedRule02GitBlob: RULE02_BLOB,
+    expectedMergeParent1: MERGE_PARENT_1,
+    expectedMergeParent2: MERGE_PARENT_2,
+    ownerInstructionEncoded: 'a.b',
   });
-  try {
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_WORKTREE_RULE02_DRIFT);
-    assert.equal(__testOnlyS2AuthConsumptionHooks.isSpent(authentic), true);
-  } finally {
-    clear();
-  }
+  assert.equal(denyProd.ok, false);
+  assert.equal(isAuthenticS2OfflineMutationAuthorization(denyProd), false);
+  assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(denyProd), GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION);
 });
 
-test('SEC-R10 missing trusted repo boundary DENYs and spends', () => {
-  const authentic = mintAuthentic({ jti: 'secr10jti0001' });
-  const clear = __testOnlyS2AuthConsumptionHooks.installFreshnessProbe({
-    resolveRepoPath: () => null,
-    inspect: () => Object.freeze({ ok: true }),
-  });
-  try {
-    assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_UNTRUSTED_REPOSITORY_BOUNDARY);
-    assert.equal(__testOnlyS2AuthConsumptionHooks.isSpent(authentic), true);
-  } finally {
-    clear();
-  }
+test('SEC-X05 caller cannot inject trustDeps/keyRegistry/freshness/repo overrides into evaluate', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secx05jti0001' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    trustDeps: { wallClock: true },
+    keyRegistry: {},
+    publicKeyPem: 'x',
+    gitProvenance: { ok: true },
+  })), GD.DENY_CALLER_SUPPLIED_TRUST);
 });
 
-test('SEC-R11 wrong blob/digest/provenance reasons DENY via freshness probe', () => {
-  for (const reason of [
-    'RULE02_BLOB_MISMATCH',
-    'RULE02_DIGEST_MISMATCH',
-    'MERGE_PARENTS_MISMATCH',
-    'ORIGIN_MAIN_MISMATCH',
-    'NOT_MERGE_COMMIT',
-  ]) {
-    const authentic = mintAuthentic({ jti: `secr11-${reason}` });
-    const clear = installFailFreshness(reason);
-    try {
-      assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(authentic), GD.DENY_GIT_FRESHNESS);
-    } finally {
-      clear();
-    }
-  }
-});
-
-test('SEC-R12 public TEST_ONLY harness still cannot create authentic brand', () => {
-  const harness = createTestOnlyS2EffectiveAuthHarness({
+test('SEC-X06 inspectTrustedGitMergeProvenance is inspection-only and does not mint authentic brand', () => {
+  const inspected = inspectTrustedGitMergeProvenance(REPO_ROOT, {
+    repositoryId: S2_GATE_REPOSITORY_ID,
     canonicalSha: CANONICAL_SHA,
-    rule02Text: RULE02_TEXT,
+    rule02RelativePath: '.cursor/rules/titangold-current-active-work.mdc',
     rule02GitBlob: RULE02_BLOB,
     rule02DigestSha256: RULE02_DIGEST,
     mergeParent1: MERGE_PARENT_1,
     mergeParent2: MERGE_PARENT_2,
-    mergedProvenanceVerified: true,
   });
-  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secr12jti0001' });
+  // On feature-branch worktree this may be ok via ancestor check; either way no authentic brand exists.
+  assert.equal(typeof inspected.ok, 'boolean');
+  assert.equal(isAuthenticS2OfflineMutationAuthorization(inspected), false);
+  assertDeny(consumeAuthenticS2OfflineImplementationAuthorization(inspected), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
+});
+
+test('SEC-X07 DLP011 / live Tier-3 / worker capability substitution still DENYs', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secx07jti0001' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    dlp011Instruction: { kind: 'TECP_DLP011_OWNER_IMPLEMENTATION_INSTRUCTION' },
+  })), GD.DENY_DLP011_OR_LIVE_SUBSTITUTION);
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    liveTier3Capability: { kind: 'TECP_OPS_S2_TIER3_OWNER_CAPABILITY_V1' },
+  })), GD.DENY_DLP011_OR_LIVE_SUBSTITUTION);
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    workerCapability: { kind: 'WORKER' },
+  })), GD.DENY_DLP011_OR_LIVE_SUBSTITUTION);
+});
+
+test('SEC-X08 extra path / wrong scope / unmerged provenance still DENY', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secx08jti0001' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    requestedPaths: [...S2_GATE_AUTHORIZED_FILE_SCOPE, 'tecp/src/extra.js'],
+  })), GD.DENY_PROTECTED_OR_EXTRA_PATH);
+  const unmerged = makeHarness({ mergedProvenanceVerified: false });
+  const issued2 = issueS2OwnerInstructionFromTestHarness(unmerged, { jti: 'secx08jti0002' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(unmerged, {
+    ownerInstructionEncoded: issued2.instruction.encoded,
+  })), GD.DENY_UNMERGED_OR_INCOMPLETE_ANCESTRY);
+});
+
+test('SEC-X09 tip drift fence DENYs when explicitly checked; TEST_ONLY allow remains non-authentic', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'secx09jti0001' });
   const allow = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
     ownerInstructionEncoded: issued.instruction.encoded,
   }));
-  assert.equal(allow.authenticMutationAuthority, false);
+  assert.equal(allow.ok, true);
+  driftTestHarnessTip(harness, { tipSha: '9'.repeat(40) });
+  assertDeny(assertS2MutationFenceFresh(allow.authorization.fence, harness.harness), GD.DENY_TIP_DRIFT);
   assert.equal(isAuthenticS2OfflineMutationAuthorization(allow), false);
+});
+
+test('SEC-X10 public export adversarial: every gate export is enumerable and dangerous mint hooks absent', async () => {
+  const gate = await import('../src/s2EffectiveImplementationAuthorizationGate.js');
+  const names = Object.keys(gate).sort();
+  assert.equal(names.includes('__testOnlyS2AuthConsumptionHooks'), false);
+  assert.equal(names.includes('consumeAuthenticS2OfflineImplementationAuthorization'), true);
+  assert.equal(names.includes('evaluateS2EffectiveImplementationAuthorization'), true);
+  // Lock hooks may exist for concurrency tests but must not mint authentic brand.
+  if ('__testOnlyS2EvaluationLockHooks' in gate) {
+    assert.equal(typeof gate.__testOnlyS2EvaluationLockHooks.hold, 'function');
+    assert.equal('mintAuthenticEvaluateResultForConsumptionQa' in gate.__testOnlyS2EvaluationLockHooks, false);
+  }
+});
+
+test('SEC-X11 consumed-looking forged output cannot authorize mutation', () => {
+  assertDeny(consumeAuthenticS2OfflineImplementationAuthorization({
+    ok: true,
+    decision: GD.ALLOW,
+    authorizationConsumed: true,
+    authenticMutationAuthority: false,
+    authorization: { authenticMutationAuthority: true, testOnly: false },
+  }), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
+});
+
+test('SEC-X12 NOT_TESTED_REAL_OWNER_PATH note: authentic one-shot/freshness positive ALLOW requires Owner enrollment', () => {
+  // This test documents intentional non-coverage without manufacturing Owner trust.
+  assert.equal(true, true);
 });
