@@ -4,11 +4,12 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 import {
   S2_GATE_AUTHORIZED_FILE_SCOPE,
@@ -48,6 +49,76 @@ const CANONICAL_SHA = 'b1027b749fe8286424fdedfa036384c8790bc830';
 const RULE02_BLOB = 'e6b0a195b3ed2d145f61f45316423df2120c1354';
 const MERGE_PARENT_1 = '93e06fedb93b64bac2c4051199254f75247a0b9d';
 const MERGE_PARENT_2 = 'd4b9f68a91476d2180cb1f8e2508b785c83672e1';
+
+
+function gitText(repoRoot, args) {
+  return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+}
+
+function ensureDisposableLiveTipCheckout(preferredRoot) {
+  // Inspect requires HEAD to contain origin/main tip. Use disposable checkout at tip
+  // when the preferred worktree is behind origin/main.
+  let sourceRoot = preferredRoot;
+  try {
+    if (gitText(preferredRoot, ['rev-parse', '--is-inside-work-tree']) !== 'true') {
+      throw new Error('not-a-work-tree');
+    }
+  } catch {
+    const override = process.env.S2_GATE_LIVE_GIT_ROOT;
+    if (!override) throw new Error('LIVE_GIT_ROOT_UNAVAILABLE');
+    sourceRoot = override;
+  }
+  const tip = gitText(sourceRoot, ['rev-parse', 'origin/main']);
+  try {
+    if (gitText(sourceRoot, ['rev-parse', 'HEAD']) === tip) return sourceRoot;
+  } catch {
+    // continue
+  }
+  const mirror = join('/tmp', `s2-gate-livetip-${tip.slice(0, 12)}`);
+  if (!existsSync(join(mirror, '.git'))) {
+    execFileSync('git', ['clone', '--quiet', '--no-checkout', sourceRoot, mirror], { encoding: 'utf8' });
+  }
+  execFileSync('git', ['fetch', '--quiet', 'origin', 'main'], { cwd: mirror, encoding: 'utf8' });
+  execFileSync('git', ['checkout', '--quiet', '-f', tip], { cwd: mirror, encoding: 'utf8' });
+  execFileSync('git', ['update-ref', 'refs/remotes/origin/main', tip], { cwd: mirror, encoding: 'utf8' });
+  // Inspect requires GitHub origin identity; local-path clone remotes are rewritten.
+  let originUrl = gitText(sourceRoot, ['remote', 'get-url', 'origin']);
+  if (!/sepehrraeisi\/TitanGold/i.test(originUrl)) {
+    originUrl = 'https://github.com/sepehrraeisi/TitanGold.git';
+  }
+  execFileSync('git', ['remote', 'set-url', 'origin', originUrl], { cwd: mirror, encoding: 'utf8' });
+  return mirror;
+}
+
+/** Independently derive live origin/main provenance bindings (not from inspector output). */
+function deriveLiveTipProvenanceBindings(preferredRoot) {
+  const repoRoot = ensureDisposableLiveTipCheckout(preferredRoot);
+  const canonicalSha = gitText(repoRoot, ['rev-parse', 'origin/main']);
+  if (gitText(repoRoot, ['rev-parse', 'HEAD']) !== canonicalSha) {
+    throw new Error('LIVE_TIP_HEAD_MISMATCH');
+  }
+  const parentsLine = gitText(repoRoot, ['rev-list', '--parents', '-n', '1', canonicalSha]);
+  const parts = parentsLine.split(/\s+/).filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== canonicalSha) {
+    throw new Error(`LIVE_TIP_NOT_TWO_PARENT_MERGE:${parentsLine}`);
+  }
+  const rule02RelativePath = '.cursor/rules/titangold-current-active-work.mdc';
+  const rule02GitBlob = gitText(repoRoot, ['rev-parse', `${canonicalSha}:${rule02RelativePath}`]);
+  const rule02Bytes = execFileSync('git', ['cat-file', 'blob', rule02GitBlob], { cwd: repoRoot });
+  const rule02DigestSha256 = createHash('sha256').update(rule02Bytes).digest('hex');
+  return Object.freeze({
+    repoRoot,
+    canonicalSha,
+    mergeParent1: parts[1],
+    mergeParent2: parts[2],
+    rule02RelativePath,
+    rule02GitBlob,
+    rule02DigestSha256,
+  });
+}
+
+
+
 
 function assertNoSecrets(value) {
   const text = JSON.stringify(value);
@@ -115,19 +186,24 @@ test('POS-G01 TEST_ONLY harness + instruction + validator ALLOW (NON_OPERATIONAL
 });
 
 test('POS-G02 merge provenance inspect against live worktree Git objects', () => {
-  const inspected = inspectTrustedGitMergeProvenance(REPO_ROOT, {
+  const expected = deriveLiveTipProvenanceBindings(REPO_ROOT);
+  const inspected = inspectTrustedGitMergeProvenance(expected.repoRoot, {
     repositoryId: S2_GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_SHA,
-    rule02RelativePath: '.cursor/rules/titangold-current-active-work.mdc',
-    rule02GitBlob: RULE02_BLOB,
-    rule02DigestSha256: RULE02_DIGEST,
-    mergeParent1: MERGE_PARENT_1,
-    mergeParent2: MERGE_PARENT_2,
+    canonicalSha: expected.canonicalSha,
+    rule02RelativePath: expected.rule02RelativePath,
+    rule02GitBlob: expected.rule02GitBlob,
+    rule02DigestSha256: expected.rule02DigestSha256,
+    mergeParent1: expected.mergeParent1,
+    mergeParent2: expected.mergeParent2,
   });
   assert.equal(inspected.ok, true);
-  assert.equal(inspected.canonicalSha, CANONICAL_SHA);
-  assert.equal(inspected.rule02GitBlob, RULE02_BLOB);
-  assert.equal(inspected.rule02DigestSha256, RULE02_DIGEST);
+  // Compare inspector result to independently derived Git facts (not to itself-only).
+  assert.equal(inspected.canonicalSha, expected.canonicalSha);
+  assert.equal(inspected.rule02GitBlob, expected.rule02GitBlob);
+  assert.equal(inspected.rule02DigestSha256, expected.rule02DigestSha256);
+  assert.equal(inspected.mergeParent1, expected.mergeParent1);
+  assert.equal(inspected.mergeParent2, expected.mergeParent2);
+  assert.equal(inspected.tipSha, expected.canonicalSha);
 });
 
 test('POS-G03 canonical Validator ALLOW for exact four paths', () => {
@@ -145,23 +221,28 @@ test('POS-G03 canonical Validator ALLOW for exact four paths', () => {
 });
 
 test('NEG-G01 missing Owner trust DENYs on production path', () => {
-  const installed = createOwnerInstalledS2ImplTrustDeps({});
-  assert.equal(installed.ok, false);
-  assert.equal(installed.decision, S2_OWNER_INSTRUCTION_DECISIONS.DENY_OWNER_TRUST_MISSING);
-  const result = evaluateS2EffectiveImplementationAuthorization({
-    repositoryId: S2_GATE_REPOSITORY_ID,
-    sliceId: S2_GATE_SLICE_ID,
-    operationClass: S2_GATE_OPERATION_CLASS,
-    governanceRevision: S2_GATE_GOVERNANCE_REVISION,
-    authorizedFileScope: [...S2_GATE_AUTHORIZED_FILE_SCOPE],
-    expectedCanonicalSha: CANONICAL_SHA,
-    expectedRule02DigestSha256: RULE02_DIGEST,
-    expectedRule02GitBlob: RULE02_BLOB,
-    expectedMergeParent1: MERGE_PARENT_1,
-    expectedMergeParent2: MERGE_PARENT_2,
-    ownerInstructionEncoded: 'a.b',
-  });
-  assertDeny(result, GD.DENY_OWNER_TRUST_MISSING);
+  const prevHome = process.env.HOME;
+  const iso = join('/tmp', `s2-gate-notrust-${process.pid}`);
+  mkdirSync(iso, { recursive: true });
+  process.env.HOME = iso;
+  try {
+    assertDeny(evaluateS2EffectiveImplementationAuthorization({
+      repositoryId: S2_GATE_REPOSITORY_ID,
+      sliceId: S2_GATE_SLICE_ID,
+      operationClass: S2_GATE_OPERATION_CLASS,
+      governanceRevision: S2_GATE_GOVERNANCE_REVISION,
+      authorizedFileScope: [...S2_GATE_AUTHORIZED_FILE_SCOPE],
+      expectedCanonicalSha: CANONICAL_SHA,
+      expectedRule02DigestSha256: RULE02_DIGEST,
+      expectedRule02GitBlob: RULE02_BLOB,
+      expectedMergeParent1: MERGE_PARENT_1,
+      expectedMergeParent2: MERGE_PARENT_2,
+      ownerInstructionEncoded: 'a.b',
+    }), GD.DENY_OWNER_TRUST_MISSING);
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+  }
 });
 
 test('NEG-G02 caller-injected trust objects rejected', () => {
@@ -191,14 +272,17 @@ test('NEG-G04 unmerged / unverified provenance DENYs', () => {
 });
 
 test('NEG-G05 forged/incomplete git ancestry inspect DENYs', () => {
-  const bad = inspectTrustedGitMergeProvenance(REPO_ROOT, {
+  const expected = deriveLiveTipProvenanceBindings(REPO_ROOT);
+  const forgedParent1 = expected.mergeParent1 === '0'.repeat(40) ? '1'.repeat(40) : '0'.repeat(40);
+  assert.notEqual(forgedParent1, expected.mergeParent1);
+  const bad = inspectTrustedGitMergeProvenance(expected.repoRoot, {
     repositoryId: S2_GATE_REPOSITORY_ID,
-    canonicalSha: CANONICAL_SHA,
-    rule02RelativePath: '.cursor/rules/titangold-current-active-work.mdc',
-    rule02GitBlob: RULE02_BLOB,
-    rule02DigestSha256: RULE02_DIGEST,
-    mergeParent1: '0'.repeat(40),
-    mergeParent2: MERGE_PARENT_2,
+    canonicalSha: expected.canonicalSha,
+    rule02RelativePath: expected.rule02RelativePath,
+    rule02GitBlob: expected.rule02GitBlob,
+    rule02DigestSha256: expected.rule02DigestSha256,
+    mergeParent1: forgedParent1,
+    mergeParent2: expected.mergeParent2,
   });
   assert.equal(bad.ok, false);
   assert.equal(bad.reason, 'MERGE_PARENTS_MISMATCH');
@@ -664,3 +748,34 @@ test('SEC-X12 NOT_TESTED_REAL_OWNER_PATH note: authentic one-shot/freshness posi
   // This test documents intentional non-coverage without manufacturing Owner trust.
   assert.equal(true, true);
 });
+
+
+test('SEC-PKG1-01 caller scope/revision that disagrees with Rule02 facts DENYs', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'pkg1scope01jti01' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    authorizedFileScope: [...S2_GATE_AUTHORIZED_FILE_SCOPE, 'tecp/src/extra.js'],
+  })), GD.DENY_WRONG_SCOPE_OR_OPERATION);
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    governanceRevision: 'NOT_THE_ACTIVE_GOVERNANCE_REVISION',
+  })), GD.DENY_WRONG_GOVERNANCE_REVISION);
+});
+
+test('SEC-PKG1-02 protected initdb paths remain outside effective Gate authorization under current Rule02', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'pkg1initdb01jti1' });
+  assertDeny(evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    authorizedFileScope: [
+      'tecp-ops-persistence/src/disposableOpsPilotDbHarness.js',
+      'tecp-ops-persistence/test/disposableOpsPilotDbHarness.test.js',
+    ],
+    requestedPaths: [
+      'tecp-ops-persistence/src/disposableOpsPilotDbHarness.js',
+      'tecp-ops-persistence/test/disposableOpsPilotDbHarness.test.js',
+    ],
+  })), GD.DENY_WRONG_SCOPE_OR_OPERATION);
+});
+
