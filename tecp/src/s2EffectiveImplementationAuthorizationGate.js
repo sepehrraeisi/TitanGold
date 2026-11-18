@@ -36,6 +36,11 @@ export const S2_GATE_PURPOSE = 'OFFLINE_IMPLEMENTATION';
 export const S2_GATE_REPOSITORY_ID = 'sepehrraeisi/TitanGold';
 export const S2_GATE_SLICE_ID = 'TECP-OPS-PILOT-001-CONTROLLED-ONE-TO-FIVE-CURSOR';
 export const S2_GATE_OPERATION_CLASS = OPERATION_CLASSES.IMPLEMENT;
+/**
+ * Baseline documentation constants matching current shipped Rule02 AWP.
+ * Runtime Gate authority for scope/revision is derived from independently
+ * authenticated Rule02 Git bytes + Parser/Validator — not these constants.
+ */
 export const S2_GATE_GOVERNANCE_REVISION = 'OPS_PILOT_001_S2_EFF_AUTH_ARCHITECTURE_GOVERNANCE_20261118';
 export const S2_GATE_AUTHORIZED_FILE_SCOPE = Object.freeze([
   'tecp/src/s2OwnerImplementationInstruction.js',
@@ -534,14 +539,8 @@ function evaluateUnlocked(input) {
     || provenance.repositoryId !== S2_GATE_REPOSITORY_ID) {
     return deny(S2_GATE_DECISIONS.DENY_WRONG_REPOSITORY_OR_SLICE);
   }
-  if (!scopesMatch(input.authorizedFileScope, S2_GATE_AUTHORIZED_FILE_SCOPE)
-    || input.operationClass !== S2_GATE_OPERATION_CLASS) {
-    return deny(S2_GATE_DECISIONS.DENY_WRONG_SCOPE_OR_OPERATION);
-  }
-  if (Array.isArray(input.requestedPaths)) {
-    if (!scopesMatch(input.requestedPaths, S2_GATE_AUTHORIZED_FILE_SCOPE)) {
-      return deny(S2_GATE_DECISIONS.DENY_PROTECTED_OR_EXTRA_PATH, ['REQUESTED_PATHS_MUST_EQUAL_AUTHORIZED_SET']);
-    }
+  if (input.operationClass !== S2_GATE_OPERATION_CLASS) {
+    return deny(S2_GATE_DECISIONS.DENY_WRONG_SCOPE_OR_OPERATION, ['OPERATION_CLASS_MUST_BE_IMPLEMENT']);
   }
   if (!safeEqualHex(provenance.tipSha, provenance.canonicalSha)
     || !safeEqualHex(provenance.tipDigest, provenance.rule02DigestSha256)) {
@@ -563,6 +562,7 @@ function evaluateUnlocked(input) {
     ]);
   }
 
+  // Runtime authority: authenticated Rule02 Git bytes → Parser → Validator facts.
   let parsed;
   try { parsed = parseRule02(provenance.rule02Text); }
   catch (err) {
@@ -580,13 +580,28 @@ function evaluateUnlocked(input) {
       'PARSED_SLICE_MISMATCH', `PARSED_SLICE:${String(parsedSliceId)}`,
     ]);
   }
-  if (!scopesMatch(facts.authorizedFileScope, S2_GATE_AUTHORIZED_FILE_SCOPE)) {
-    return deny(S2_GATE_DECISIONS.DENY_WRONG_SCOPE_OR_OPERATION, ['PARSED_SCOPE_MISMATCH']);
+  if (!Array.isArray(facts.authorizedFileScope) || facts.authorizedFileScope.length === 0) {
+    return deny(S2_GATE_DECISIONS.DENY_FORGED_RULE02, ['AUTHORIZED_FILE_SCOPE_MISSING']);
   }
-  if (!isNonEmptyString(parsedGovernanceRevision)
-    || input.governanceRevision !== parsedGovernanceRevision
-    || parsedGovernanceRevision !== S2_GATE_GOVERNANCE_REVISION) {
-    return deny(S2_GATE_DECISIONS.DENY_WRONG_GOVERNANCE_REVISION);
+  const effectiveAuthorizedScope = Object.freeze([...facts.authorizedFileScope]);
+  if (!isNonEmptyString(parsedGovernanceRevision)) {
+    return deny(S2_GATE_DECISIONS.DENY_WRONG_GOVERNANCE_REVISION, ['GOVERNANCE_REVISION_MISSING']);
+  }
+  // Caller/input must agree with authenticated Rule02 facts — never the reverse.
+  if (!scopesMatch(input.authorizedFileScope, effectiveAuthorizedScope)) {
+    return deny(S2_GATE_DECISIONS.DENY_WRONG_SCOPE_OR_OPERATION, [
+      'INPUT_SCOPE_NOT_EQUAL_RULE02_FACTS',
+    ]);
+  }
+  if (input.governanceRevision !== parsedGovernanceRevision) {
+    return deny(S2_GATE_DECISIONS.DENY_WRONG_GOVERNANCE_REVISION, [
+      'INPUT_REVISION_NOT_EQUAL_RULE02_FACTS',
+    ]);
+  }
+  if (Array.isArray(input.requestedPaths)) {
+    if (!scopesMatch(input.requestedPaths, effectiveAuthorizedScope)) {
+      return deny(S2_GATE_DECISIONS.DENY_PROTECTED_OR_EXTRA_PATH, ['REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET']);
+    }
   }
 
   let validatorResult;
@@ -595,7 +610,7 @@ function evaluateUnlocked(input) {
       sliceId: S2_GATE_SLICE_ID,
       authorityClass: facts.authorityClass,
       riskTier: facts.riskTier,
-      requestedPaths: Object.freeze([...S2_GATE_AUTHORIZED_FILE_SCOPE]),
+      requestedPaths: Object.freeze([...effectiveAuthorizedScope]),
       operationClass: OPERATION_CLASSES.IMPLEMENT,
       requiresDeploy: false,
       requiresProductionMutation: false,
@@ -619,7 +634,7 @@ function evaluateUnlocked(input) {
     sliceId: S2_GATE_SLICE_ID,
     canonicalSha: input.expectedCanonicalSha,
     rule02DigestSha256: input.expectedRule02DigestSha256,
-    authorizedFileScope: S2_GATE_AUTHORIZED_FILE_SCOPE,
+    authorizedFileScope: effectiveAuthorizedScope,
     operationClass: S2_GATE_OPERATION_CLASS,
     governanceRevision: parsedGovernanceRevision,
   });
@@ -697,7 +712,7 @@ function evaluateUnlocked(input) {
     rule02GitBlob: provenance.rule02GitBlob,
     mergeParent1: provenance.mergeParent1,
     mergeParent2: provenance.mergeParent2,
-    authorizedFileScope: S2_GATE_AUTHORIZED_FILE_SCOPE,
+    authorizedFileScope: effectiveAuthorizedScope,
     operationClass: S2_GATE_OPERATION_CLASS,
     governanceRevision: parsedGovernanceRevision,
     jti: instructionResult.instruction.jti,
