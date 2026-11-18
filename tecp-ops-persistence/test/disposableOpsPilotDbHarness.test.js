@@ -266,6 +266,10 @@ describe('S2 disposableOpsPilotDbHarness Tier-3 final execution readiness offlin
     });
     assert.ok(initArgs.includes('-D'));
     assert.ok(!initArgs.some((a) => String(a).includes(';')));
+    assert.equal(initArgs.includes('--encoding=UTF8'), true);
+    assert.equal(initArgs.includes('--locale=C.utf8'), true);
+    assert.equal(initArgs.includes('--locale=C'), false);
+    assert.equal(initArgs.filter((a) => String(a).startsWith('--locale=')).length, 1);
 
     const startArgs = buildPgCtlStartArgs({
       dataDir: '/tmp/tecp-ops-pilot-s2-xyz/data',
@@ -1949,3 +1953,174 @@ assert.equal(offlinePinBind.ok, false);
 
 
 });
+
+
+describe('PKG3 initdb locale C.utf8 fixed-constant security', () => {
+  it('emits fixed --locale=C.utf8 and --encoding=UTF8 with unchanged essential args', () => {
+    const args = buildInitdbArgs({
+      dataDir: '/tmp/tecp-ops-pilot-s2-pkg3/data',
+      pwfile: '/tmp/tecp-ops-pilot-s2-pkg3/pwfile',
+      user: 'tecp_ops_pilot_proof',
+    });
+    assert.deepEqual(args, Object.freeze([
+      '-D', '/tmp/tecp-ops-pilot-s2-pkg3/data',
+      '-U', 'tecp_ops_pilot_proof',
+      '--auth-local=trust',
+      '--auth-host=scram-sha-256',
+      '--pwfile', '/tmp/tecp-ops-pilot-s2-pkg3/pwfile',
+      '--encoding=UTF8',
+      '--locale=C.utf8',
+    ]));
+    assert.equal(args.includes('--locale=C'), false);
+    assert.equal(args.some((a) => /^--locale=/.test(String(a)) && a !== '--locale=C.utf8'), false);
+  });
+
+  it('caller-supplied locale-like fields cannot alter fixed initdb locale', () => {
+    const args = buildInitdbArgs({
+      dataDir: '/tmp/tecp-ops-pilot-s2-pkg3b/data',
+      pwfile: '/tmp/tecp-ops-pilot-s2-pkg3b/pwfile',
+      locale: 'en_US.UTF-8',
+      LC_ALL: 'en_US.UTF-8',
+      config: { locale: 'C' },
+    });
+    assert.equal(args.includes('--locale=C.utf8'), true);
+    assert.equal(args.includes('--locale=C'), false);
+    assert.equal(args.includes('--locale=en_US.UTF-8'), false);
+    assert.equal(args.includes('--encoding=UTF8'), true);
+  });
+
+  it('environment locale variables do not alter buildInitdbArgs', () => {
+    const prev = {
+      LC_ALL: process.env.LC_ALL,
+      LANG: process.env.LANG,
+      LC_CTYPE: process.env.LC_CTYPE,
+    };
+    try {
+      process.env.LC_ALL = 'en_US.UTF-8';
+      process.env.LANG = 'en_US.UTF-8';
+      process.env.LC_CTYPE = 'en_US.UTF-8';
+      const args = buildInitdbArgs({
+        dataDir: '/tmp/tecp-ops-pilot-s2-pkg3c/data',
+        pwfile: '/tmp/tecp-ops-pilot-s2-pkg3c/pwfile',
+      });
+      assert.equal(args.includes('--locale=C.utf8'), true);
+      assert.equal(args.includes('--locale=en_US.UTF-8'), false);
+      assert.equal(args.includes('--encoding=UTF8'), true);
+    } finally {
+      for (const [k, v] of Object.entries(prev)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('source builder has no locale fallback/retry and no env-driven locale selection', () => {
+    const src = readFileSync(HARNESS_SRC, 'utf8');
+    const start = src.indexOf('export function buildInitdbArgs');
+    const end = src.indexOf('export function buildPgCtlStartArgs');
+    assert.ok(start > 0 && end > start);
+    const body = src.slice(start, end);
+    assert.match(body, /'--locale=C\.utf8'/);
+    assert.equal(/'--locale=C'/.test(body), false);
+    assert.equal(/process\.env/.test(body), false);
+    assert.equal(/LC_ALL|LANG/.test(body), false);
+    assert.equal(/fallback|retry/i.test(body), false);
+  });
+
+  it('inert PKG3 locale checks do not start PostgreSQL or execute SQL', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    const started = await controller.start();
+    assert.equal(started.ok, false);
+    assert.equal(started.postgresActions, 0);
+    assert.equal(
+      started.decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED,
+    );
+    assert.equal(started.plannedArgs.initdbArgs.includes('--locale=C.utf8'), true);
+    assert.equal(started.plannedArgs.initdbArgs.includes('--encoding=UTF8'), true);
+    assert.equal(started.plannedArgs.initdbArgs.includes('--locale=C'), false);
+    await controller.cleanup();
+  });
+
+  it('denied Owner capability yields zero real PostgreSQL actions', () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    const denied = evaluateTier3FinalExecutionReadiness({
+      repositorySha: OPS_PILOT_PINNED_MAIN_SHA,
+      approvedActions: [...OPS_PILOT_APPROVED_TEST_ACTIONS],
+      executablePath: process.execPath,
+      harnessModulePath: HARNESS_SRC,
+      affirmSameUidLimitationsAccepted: true,
+      ownerControlledLocalRunnerInvocation: true,
+      fiveFileOfflineIntegrationComplete: true,
+    }, {
+      argv: [
+        process.execPath,
+        OPS_PILOT_OWNER_RUNNER_ARGV_MARKER,
+        ...OPS_PILOT_APPROVED_TEST_ACTIONS,
+      ],
+      execPath: process.execPath,
+      getuid: () => process.getuid(),
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.allowed, false);
+    assert.equal(denied.postgresActions, 0);
+    assert.equal(denied.liveDbGate.closed, true);
+    assert.equal(denied.executionContract.executableLaunchCommand, null);
+    assert.equal(
+      evaluateIndependentOwnerCapability(null).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_INDEPENDENT_OWNER_CAPABILITY_MISSING,
+    );
+  });
+
+  it('test-only fake spawner cannot become operational authority; failed startup stays fail-closed', async () => {
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    let calls = 0;
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn() {
+        calls += 1;
+        if (calls === 1) return { status: 0, stdout: 'postgres (PostgreSQL) 14.24\n' };
+        return { status: 1, stdout: '', stderr: 'initdb boom' };
+      },
+      inspectFn: () => ({ status: 'STOPPED', reason: 'inert' }),
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    const started = await controller.start();
+    assert.equal(started.ok, false);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    assert.ok(calls >= 1);
+    const replay = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn: () => ({ status: 0, stdout: 'ok' }),
+    }, { NODE_ENV: 'test' });
+    assert.equal(replay.ok, false);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED,
+    ].includes(replay.decision));
+    await controller.cleanup();
+  });
+});
+

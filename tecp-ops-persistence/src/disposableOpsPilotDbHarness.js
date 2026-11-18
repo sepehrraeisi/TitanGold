@@ -1017,7 +1017,7 @@ export function buildInitdbArgs({ dataDir, pwfile, user = 'tecp_ops_pilot_proof'
     '--auth-host=scram-sha-256',
     '--pwfile', pwfile,
     '--encoding=UTF8',
-    '--locale=C',
+    '--locale=C.utf8',
   ]);
 }
 
