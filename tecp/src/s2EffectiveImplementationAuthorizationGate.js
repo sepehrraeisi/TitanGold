@@ -22,14 +22,13 @@ import {
   S2_OWNER_INSTRUCTION_PURPOSE,
   S2_IMPL_TRUST_REGISTRY_RELATIVE_DIR,
   createOwnerInstalledS2ImplTrustDeps,
-  createTestOnlyS2ImplTrustDeps,
+  createS2OfflineTestOnlyInstructionFixtures,
   isBrandedVerifiedS2OwnerInstruction,
   isOwnerInstalledS2ImplTrustDeps,
   isTestOnlyS2ImplTrustDeps,
   issueS2OwnerImplementationInstruction,
   safeEqualHex,
   sha256Hex,
-  withPrivilegedS2InstructionConstruction,
 } from './s2OwnerImplementationInstruction.js';
 
 export const S2_GATE_KIND = 'TECP_OPS_S2_EFFECTIVE_IMPLEMENTATION_AUTHORIZATION_GATE_V1';
@@ -46,7 +45,6 @@ export const S2_GATE_AUTHORIZED_FILE_SCOPE = Object.freeze([
 ]);
 export const S2_GATE_RULE02_RELATIVE_PATH = '.cursor/rules/titangold-current-active-work.mdc';
 export const S2_IMPL_TRUST_REPO_PATH_FILENAME = 'trusted-repo-path.txt';
-export const S2_TEST_ONLY_GATE_HARNESS_TOKEN = 'TECP_OPS_S2_TEST_ONLY_EFF_AUTH_HARNESS_V1';
 
 export const S2_GATE_DECISIONS = Object.freeze({
   ALLOW: 'ALLOW',
@@ -79,6 +77,8 @@ export const S2_GATE_DECISIONS = Object.freeze({
   DENY_NON_ATOMIC_REPLAY: 'DENY_NON_ATOMIC_REPLAY',
   DENY_REVOCATION_UNAVAILABLE: 'DENY_REVOCATION_UNAVAILABLE',
   DENY_DLP011_OR_LIVE_SUBSTITUTION: 'DENY_DLP011_OR_LIVE_SUBSTITUTION',
+  DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION: 'DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION',
+  DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT: 'DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT',
   DENY_FAIL_CLOSED: 'DENY_FAIL_CLOSED',
 });
 
@@ -86,6 +86,8 @@ const trustRootPrivate = new WeakMap();
 const gateDecisionBrand = new WeakSet();
 const evaluationFenceBrand = new WeakSet();
 const harnessBrand = new WeakSet();
+/** Only Owner-installed evaluation success is added here. TEST_ONLY ALLOW never is. */
+const authenticOfflineMutationAuthorizationBrand = new WeakSet();
 let evaluationLock = null;
 
 function isPlainObject(v) {
@@ -185,13 +187,24 @@ export function inspectTrustedGitMergeProvenance(repoPath, expected) {
     return Object.freeze({ ok: false, reason: 'ORIGIN_IDENTITY_MISMATCH', detail: remote.text });
   }
 
-  const head = gitCapture(resolved, ['rev-parse', 'HEAD']);
-  if (!head.ok || head.text !== expected.canonicalSha) {
-    return Object.freeze({ ok: false, reason: 'HEAD_MISMATCH', detail: head.text || head.error });
-  }
   const tip = gitCapture(resolved, ['rev-parse', 'origin/main']);
   if (!tip.ok || tip.text !== expected.canonicalSha) {
     return Object.freeze({ ok: false, reason: 'ORIGIN_MAIN_MISMATCH', detail: tip.text || tip.error });
+  }
+  // Worktree may be on an implementation branch; require canonical tip to be an ancestor of HEAD.
+  const head = gitCapture(resolved, ['rev-parse', 'HEAD']);
+  if (!head.ok) {
+    return Object.freeze({ ok: false, reason: 'HEAD_UNAVAILABLE', detail: head.error });
+  }
+  if (head.text !== expected.canonicalSha) {
+    const ancestor = gitCapture(resolved, ['merge-base', '--is-ancestor', expected.canonicalSha, 'HEAD']);
+    if (!ancestor.ok) {
+      return Object.freeze({
+        ok: false,
+        reason: 'CANONICAL_SHA_NOT_ANCESTOR_OF_HEAD',
+        detail: `${head.text}|${ancestor.error || ''}`.trim(),
+      });
+    }
   }
   const parents = gitCapture(resolved, ['rev-list', '--parents', '-n', '1', expected.canonicalSha]);
   if (!parents.ok) return Object.freeze({ ok: false, reason: 'PARENTS_UNAVAILABLE', detail: parents.error });
@@ -234,11 +247,12 @@ export function inspectTrustedGitMergeProvenance(repoPath, expected) {
 }
 
 /**
- * TEST_ONLY offline harness. Not Owner enrollment. Not production authority.
+ * TEST_ONLY offline harness. Not Owner enrollment. Not authentic mutation authority.
+ * Callable by same-process importers; results cannot pass consumeAuthenticS2OfflineImplementationAuthorization.
  */
 export function createTestOnlyS2EffectiveAuthHarness(config = {}) {
-  if (!isPlainObject(config) || config.testOnlyHarnessToken !== S2_TEST_ONLY_GATE_HARNESS_TOKEN) {
-    throw new TypeError('S2_TEST_ONLY_GATE_HARNESS_TOKEN_REQUIRED');
+  if (!isPlainObject(config)) {
+    throw new TypeError('TEST_HARNESS_CONFIG_REQUIRED');
   }
   for (const key of ['keyRegistry', 'ownerInstructionVerifier', 'publicKeyPem', 'privateKeyPem', 'validatorAllowed', 'merged']) {
     if (config[key] != null) throw new TypeError(`CALLER_SUPPLIED_TRUST_FORBIDDEN:${key}`);
@@ -249,11 +263,12 @@ export function createTestOnlyS2EffectiveAuthHarness(config = {}) {
     throw new TypeError('TEST_HARNESS_PROVENANCE_REQUIRED');
   }
 
-  return withPrivilegedS2InstructionConstruction(() => {
-    const trustDeps = createTestOnlyS2ImplTrustDeps({
+  {
+    const trustDeps = createS2OfflineTestOnlyInstructionFixtures({
       startMs: Number.isSafeInteger(config.startMs) ? config.startMs : 1_700_000_000_000,
       consumeOnAllow: config.consumeOnAllow !== false,
       unavailableClock: config.unavailableClock === true,
+      ownerStyleWallClock: config.ownerStyleWallClock === true,
       kid: config.kid,
       issuer: config.issuer,
       keyPair: config.keyPair,
@@ -293,8 +308,9 @@ export function createTestOnlyS2EffectiveAuthHarness(config = {}) {
       testOnly: true,
       operational: false,
       fullS2EffectiveAuthorization: false,
+      authenticMutationAuthority: false,
     });
-  });
+  }
 }
 
 export function isTestOnlyS2EffectiveAuthHarness(value) { return harnessBrand.has(value); }
@@ -647,6 +663,11 @@ function evaluateUnlocked(input) {
     }
   }
 
+  const isAuthenticOwnerInstalledPath = input.testOnlyHarness == null
+    && isOwnerInstalledS2ImplTrustDeps(trustDeps)
+    && provenance.testOnly !== true
+    && trustDeps.wallClock === true;
+
   const fence = Object.freeze({
     kind: 'TECP_OPS_S2_EVALUATION_FENCE',
     evaluationId: digestText(`${provenance.canonicalSha}|${provenance.rule02DigestSha256}|${instructionResult.instruction.jti}`),
@@ -656,6 +677,7 @@ function evaluateUnlocked(input) {
     rule02DigestSha256: provenance.rule02DigestSha256,
     jti: instructionResult.instruction.jti,
     standingAuthority: false,
+    authenticMutationAuthority: isAuthenticOwnerInstalledPath,
   });
   evaluationFenceBrand.add(fence);
 
@@ -677,6 +699,7 @@ function evaluateUnlocked(input) {
     operational: false,
     fullS2EffectiveAuthorization: false,
     testOnly: provenance.testOnly === true,
+    authenticMutationAuthority: isAuthenticOwnerInstalledPath,
   });
   const result = Object.freeze({
     ok: true,
@@ -685,6 +708,9 @@ function evaluateUnlocked(input) {
       'VALIDATOR_ALLOW',
       'GIT_MERGE_PROVENANCE_VERIFIED',
       'S2_OWNER_INSTRUCTION_VERIFIED',
+      isAuthenticOwnerInstalledPath
+        ? 'OWNER_INSTALLED_AUTHENTIC_OFFLINE_MUTATION_CANDIDATE'
+        : 'TEST_ONLY_NON_AUTHENTIC_FIXTURE',
       'NON_OPERATIONAL_OFFLINE_BOOTSTRAP',
     ]),
     authorization,
@@ -692,11 +718,61 @@ function evaluateUnlocked(input) {
     operational: false,
     purpose: S2_GATE_PURPOSE,
     fullS2EffectiveAuthorization: false,
+    authenticMutationAuthority: isAuthenticOwnerInstalledPath,
     performsDatabaseWrite: false,
     executesWorker: false,
   });
   gateDecisionBrand.add(result);
+  // Critical: TEST_ONLY evaluate ALLOW is never branded as authentic mutation authority.
+  if (isAuthenticOwnerInstalledPath) {
+    authenticOfflineMutationAuthorizationBrand.add(result);
+  }
   return result;
+}
+
+/**
+ * Real offline mutation authorization boundary.
+ * Rejects forged plain objects and all TEST_ONLY evaluate ALLOW results, even if ok/decision flags are ignored by callers.
+ */
+export function consumeAuthenticS2OfflineImplementationAuthorization(gateResult) {
+  if (!isBrandedS2GateDecision(gateResult)) {
+    return deny(S2_GATE_DECISIONS.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT, ['GATE_DECISION_NOT_BRANDED']);
+  }
+  if (!authenticOfflineMutationAuthorizationBrand.has(gateResult)) {
+    return deny(S2_GATE_DECISIONS.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION, [
+      'AUTHENTIC_OWNER_INSTALLED_BRAND_REQUIRED',
+      'TEST_ONLY_OR_FORGED_ALLOW_CANNOT_AUTHORIZE_MUTATION',
+    ]);
+  }
+  if (gateResult.ok !== true || gateResult.decision !== S2_GATE_DECISIONS.ALLOW) {
+    return deny(S2_GATE_DECISIONS.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT, ['ALLOW_REQUIRED']);
+  }
+  if (gateResult.authenticMutationAuthority !== true
+    || !gateResult.authorization
+    || gateResult.authorization.authenticMutationAuthority !== true
+    || gateResult.authorization.testOnly === true
+    || gateResult.operational === true) {
+    return deny(S2_GATE_DECISIONS.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION, ['AUTHENTIC_MUTATION_FLAGS_INVALID']);
+  }
+  const consumed = Object.freeze({
+    ok: true,
+    decision: S2_GATE_DECISIONS.ALLOW,
+    reasons: Object.freeze(['AUTHENTIC_OWNER_INSTALLED_OFFLINE_MUTATION_AUTHORIZATION_CONSUMED']),
+    authorization: gateResult.authorization,
+    standingAuthority: false,
+    operational: false,
+    purpose: S2_GATE_PURPOSE,
+    fullS2EffectiveAuthorization: false,
+    authenticMutationAuthority: true,
+    performsDatabaseWrite: false,
+    executesWorker: false,
+  });
+  gateDecisionBrand.add(consumed);
+  return consumed;
+}
+
+export function isAuthenticS2OfflineMutationAuthorization(value) {
+  return authenticOfflineMutationAuthorizationBrand.has(value);
 }
 
 export function assertS2MutationFenceFresh(fence, harnessOrNull, liveRepoPath = null) {

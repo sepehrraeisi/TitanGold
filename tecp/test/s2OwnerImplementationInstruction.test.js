@@ -21,12 +21,10 @@ import {
   createS2InstructionKeyRegistry,
   createS2InstructionRevocationRegistry,
   createS2InstructionVerifier,
-  createTestOnlyS2ImplTrustDeps,
-  generateEphemeralS2InstructionKeyPair,
-  getPrivilegedS2InstructionConstructors,
+  createS2OfflineTestOnlyInstructionFixtures,
+  isS2OwnerWallClock,
   issueS2OwnerImplementationInstruction,
   verifyS2OwnerImplementationInstruction,
-  withPrivilegedS2InstructionConstruction,
 } from '../src/s2OwnerImplementationInstruction.js';
 
 const SCOPE = Object.freeze([
@@ -47,7 +45,7 @@ const CLAIM_KEY_ORDER = Object.freeze([
 ]);
 
 function fixtureTrust(overrides = {}) {
-  return withPrivilegedS2InstructionConstruction(() => createTestOnlyS2ImplTrustDeps(overrides));
+  return createS2OfflineTestOnlyInstructionFixtures(overrides);
 }
 
 function baseRequest(deps, overrides = {}) {
@@ -176,11 +174,16 @@ test('NEG-02 caller-injected trust options rejected', () => {
   assert.equal(r.decision, D.DENY_CALLER_SUPPLIED_TRUST);
 });
 
-test('NEG-03 public constructors sealed', () => {
+test('NEG-03 public constructors sealed + privileged latch not exported', async () => {
   assert.throws(() => createS2InstructionKeyRegistry(), /FORBIDDEN/);
   assert.throws(() => createS2InstructionRevocationRegistry(), /FORBIDDEN/);
   assert.throws(() => createS2InstructionClock(), /FORBIDDEN/);
   assert.throws(() => createS2InstructionVerifier(), /FORBIDDEN/);
+  const mod = await import('../src/s2OwnerImplementationInstruction.js');
+  assert.equal('withPrivilegedS2InstructionConstruction' in mod, false);
+  assert.equal('getPrivilegedS2InstructionConstructors' in mod, false);
+  assert.equal('createTestOnlyS2ImplTrustDeps' in mod, false);
+  assert.equal(typeof mod.createS2OfflineTestOnlyInstructionFixtures, 'function');
 });
 
 test('NEG-04 forged signature DENYs', () => {
@@ -215,17 +218,11 @@ test('NEG-06 wrong KID DENYs', () => {
   const issued = issueS2OwnerImplementationInstruction(baseRequest(deps), {
     keyRegistry: deps.keyRegistry, clock: deps.clock,
   });
-  const alt = withPrivilegedS2InstructionConstruction(() => {
-    const ctors = getPrivilegedS2InstructionConstructors();
-    const keys = generateEphemeralS2InstructionKeyPair();
-    return ctors.createKeyRegistry([{
-      kid: 'wrong-kid', issuer: deps.issuer, publicKeyPem: keys.publicKeyPem, status: 'ACTIVE',
-    }]);
-  });
+  const other = fixtureTrust({ kid: 'wrong-kid', issuer: deps.issuer });
   assertDeny(verifyS2OwnerImplementationInstruction(
     issued.instruction.encoded,
     expectation(),
-    { keyRegistry: alt, revocationRegistry: deps.revocationRegistry, clock: deps.clock },
+    { keyRegistry: other.keyRegistry, revocationRegistry: deps.revocationRegistry, clock: deps.clock },
   ), D.DENY_UNKNOWN_ISSUER_OR_KID);
 });
 
@@ -571,4 +568,51 @@ test('NEG-30 private key never accepted in Owner trust options / runtime verify'
     expectation(),
     { ...depsTriple(deps), privateKeyPem: deps.keyPair.privateKeyPem },
   ), D.DENY_CALLER_SUPPLIED_TRUST);
+});
+
+
+test('SEC-A01 Owner-style wall clock expires in real time without clock.advance', async () => {
+  const deps = fixtureTrust({ ownerStyleWallClock: true });
+  assert.equal(isS2OwnerWallClock(deps.clock), true);
+  assert.equal(deps.clock.wallClock, true);
+  assert.throws(() => deps.clock.set(123), /OWNER_WALL_CLOCK_MUTATION_FORBIDDEN/);
+  assert.throws(() => deps.clock.advance(1), /OWNER_WALL_CLOCK_MUTATION_FORBIDDEN/);
+  const issued = issueS2OwnerImplementationInstruction(
+    baseRequest(deps, { ttlMs: 1, jti: 'wallclockexp01' }),
+    { keyRegistry: deps.keyRegistry, clock: deps.clock },
+  );
+  assert.equal(issued.ok, true);
+  await new Promise((r) => setTimeout(r, 15));
+  assert.ok(Date.now() >= issued.instruction.claims.exp);
+  assertDeny(verifyS2OwnerImplementationInstruction(
+    issued.instruction.encoded,
+    expectation(),
+    depsTriple(deps, { consumeOnAllow: true }),
+  ), D.DENY_EXPIRED);
+});
+
+test('SEC-A02 mutable clock injection into Owner-style wall registry DENYs', () => {
+  const wallDeps = fixtureTrust({ ownerStyleWallClock: true });
+  const mutableDeps = fixtureTrust({ startMs: Date.now() });
+  const issued = issueS2OwnerImplementationInstruction(
+    baseRequest(wallDeps, { ttlMs: 60_000, jti: 'mutclockinj01' }),
+    { keyRegistry: wallDeps.keyRegistry, clock: wallDeps.clock },
+  );
+  assert.equal(issued.ok, true);
+  assertDeny(verifyS2OwnerImplementationInstruction(
+    issued.instruction.encoded,
+    expectation(),
+    {
+      keyRegistry: wallDeps.keyRegistry,
+      revocationRegistry: wallDeps.revocationRegistry,
+      clock: mutableDeps.clock,
+      consumeOnAllow: true,
+    },
+  ), D.DENY_NON_WALL_CLOCK);
+});
+
+test('SEC-B01 TEST_ONLY fixture factory does not mint Owner-installed brand', () => {
+  const deps = fixtureTrust();
+  assert.equal(deps.testOnly, true);
+  assert.equal(deps.proofClass.includes('TEST_ONLY'), true);
 });

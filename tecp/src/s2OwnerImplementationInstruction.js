@@ -68,6 +68,8 @@ export const S2_OWNER_INSTRUCTION_DECISIONS = Object.freeze({
   DENY_OWNER_TRUST_MISSING: 'DENY_OWNER_TRUST_MISSING',
   DENY_PRIVATE_KEY_IN_TRUST: 'DENY_PRIVATE_KEY_IN_TRUST',
   DENY_UNKNOWN_SIGNED_FIELD: 'DENY_UNKNOWN_SIGNED_FIELD',
+  DENY_NON_WALL_CLOCK: 'DENY_NON_WALL_CLOCK',
+  DENY_CLOCK_MUTATION_API: 'DENY_CLOCK_MUTATION_API',
   DENY_DEFAULT_FAIL_CLOSED: 'DENY_DEFAULT_FAIL_CLOSED',
 });
 
@@ -84,6 +86,8 @@ const verifierBrand = new WeakSet();
 const verifiedInstructionBrand = new WeakSet();
 const ownerInstalledTrustBrand = new WeakSet();
 const testOnlyTrustBrand = new WeakSet();
+const wallClockBrand = new WeakSet();
+const keyRegistryRequiresWallClock = new WeakMap();
 let privilegedDepth = 0;
 
 function assertPrivileged() {
@@ -139,10 +143,18 @@ function signingPayload(claims) {
   return `${S2_OWNER_INSTRUCTION_DOMAIN}\n${canonicalJson(orderedClaims(claims))}`;
 }
 
-export function withPrivilegedS2InstructionConstruction(fn) {
+function withPrivilegedS2InstructionConstruction(fn) {
   if (typeof fn !== 'function') throw new TypeError('CONSTRUCTION_CALLBACK_REQUIRED');
   privilegedDepth += 1;
   try { return fn(); } finally { privilegedDepth -= 1; }
+}
+
+/**
+ * TEST_ONLY fixture factory. Not Owner enrollment. Not authentic mutation authority.
+ * Same-process callers may invoke this; minted material remains TEST_ONLY-branded only.
+ */
+export function createS2OfflineTestOnlyInstructionFixtures(config = {}) {
+  return withPrivilegedS2InstructionConstruction(() => createTestOnlyS2ImplTrustDeps(config));
 }
 
 export function generateEphemeralS2InstructionKeyPair() {
@@ -211,11 +223,33 @@ function createClockInternal(startMs = 1_700_000_000_000) {
   let now = startMs;
   const clock = Object.freeze({
     kind: 'TECP_OPS_S2_OWNER_INSTRUCTION_CLOCK',
+    clockClass: 'TEST_ONLY_MUTABLE',
+    wallClock: false,
     now() { return now; },
     set(ms) { if (!Number.isSafeInteger(ms)) throw new TypeError('INVALID_CLOCK'); now = ms; },
     advance(ms) { if (!Number.isSafeInteger(ms) || ms < 0) throw new TypeError('INVALID_ADVANCE'); now += ms; },
   });
   clockBrand.add(clock);
+  return clock;
+}
+
+/** Production Owner-installed wall clock: fresh Date.now() each read; no set/advance. */
+function createWallClockInternal() {
+  assertPrivileged();
+  const clock = Object.freeze({
+    kind: 'TECP_OPS_S2_OWNER_INSTRUCTION_WALL_CLOCK',
+    clockClass: 'OWNER_INSTALLED_WALL',
+    wallClock: true,
+    now() {
+      const value = Date.now();
+      if (!Number.isSafeInteger(value)) throw new Error('CLOCK_UNAVAILABLE');
+      return value;
+    },
+    set() { throw new TypeError('OWNER_WALL_CLOCK_MUTATION_FORBIDDEN'); },
+    advance() { throw new TypeError('OWNER_WALL_CLOCK_MUTATION_FORBIDDEN'); },
+  });
+  clockBrand.add(clock);
+  wallClockBrand.add(clock);
   return clock;
 }
 
@@ -254,12 +288,13 @@ function createVerifierInternal(deps) {
   return verifier;
 }
 
-export function getPrivilegedS2InstructionConstructors() {
+function getPrivilegedS2InstructionConstructors() {
   assertPrivileged();
   return Object.freeze({
     createKeyRegistry: createKeyRegistryInternal,
     createRevocationRegistry: createRevocationRegistryInternal,
     createClock: createClockInternal,
+    createWallClock: createWallClockInternal,
     createUnavailableClock: createUnavailableClockInternal,
     createVerifier: createVerifierInternal,
   });
@@ -277,6 +312,7 @@ export function isBrandedS2InstructionVerifier(v) { return verifierBrand.has(v);
 export function isBrandedVerifiedS2OwnerInstruction(v) { return verifiedInstructionBrand.has(v); }
 export function isOwnerInstalledS2ImplTrustDeps(v) { return ownerInstalledTrustBrand.has(v); }
 export function isTestOnlyS2ImplTrustDeps(v) { return testOnlyTrustBrand.has(v); }
+export function isS2OwnerWallClock(v) { return wallClockBrand.has(v); }
 
 export function resolveS2ImplOwnerTrustRegistryPath() {
   const dir = pathJoin(homedir(), S2_IMPL_TRUST_REGISTRY_RELATIVE_DIR);
@@ -381,13 +417,18 @@ export function createOwnerInstalledS2ImplTrustDeps(options = {}) {
         'OWNER_DURABLE_JTI_REGISTRY_UNAVAILABLE', String(err && err.message || err),
       ]);
     }
-    const clock = ctors.createClock(Date.now());
+    const clock = ctors.createWallClock();
+    keyRegistryRequiresWallClock.set(keyRegistry, true);
+    if (!wallClockBrand.has(clock) || clock.wallClock !== true) {
+      return deny(S2_OWNER_INSTRUCTION_DECISIONS.DENY_NON_WALL_CLOCK, ['OWNER_WALL_CLOCK_REQUIRED']);
+    }
     const verifier = ctors.createVerifier({ keyRegistry, revocationRegistry, clock, consumeOnAllow: true });
     const deps = Object.freeze({
       proofClass: S2_IMPL_OWNER_INSTALLED_TRUST_PROOF_CLASS,
       keyRegistry, revocationRegistry, clock, verifier,
       installedKid: kid, trustRegistryPaths: paths, consumeOnAllow: true,
       durableReplay: true, atomicReplay: true,
+      wallClock: true,
     });
     ownerInstalledTrustBrand.add(deps);
     return deps;
@@ -395,7 +436,7 @@ export function createOwnerInstalledS2ImplTrustDeps(options = {}) {
 }
 
 /** TEST_ONLY trust bundle for offline unit tests. Privileged latch required. */
-export function createTestOnlyS2ImplTrustDeps(config = {}) {
+function createTestOnlyS2ImplTrustDeps(config = {}) {
   assertPrivileged();
   const keys = config.keyPair || generateEphemeralS2InstructionKeyPair();
   const kid = config.kid || 's2-impl-test-ed25519-1';
@@ -405,7 +446,15 @@ export function createTestOnlyS2ImplTrustDeps(config = {}) {
     kid, issuer, publicKeyPem: keys.publicKeyPem, privateKeyPem: keys.privateKeyPem, status: 'ACTIVE',
   }]);
   const revocationRegistry = ctors.createRevocationRegistry();
-  const clock = config.unavailableClock ? ctors.createUnavailableClock() : ctors.createClock(config.startMs || 1_700_000_000_000);
+  let clock;
+  if (config.unavailableClock) {
+    clock = ctors.createUnavailableClock();
+  } else if (config.ownerStyleWallClock === true) {
+    clock = ctors.createWallClock();
+    keyRegistryRequiresWallClock.set(keyRegistry, true);
+  } else {
+    clock = ctors.createClock(config.startMs || 1_700_000_000_000);
+  }
   const verifier = ctors.createVerifier({
     keyRegistry, revocationRegistry, clock, consumeOnAllow: config.consumeOnAllow !== false,
   });
@@ -414,6 +463,7 @@ export function createTestOnlyS2ImplTrustDeps(config = {}) {
     keyRegistry, revocationRegistry, clock, verifier,
     installedKid: kid, issuer, keyPair: keys, consumeOnAllow: config.consumeOnAllow !== false,
     testOnly: true,
+    ownerStyleWallClock: config.ownerStyleWallClock === true,
   });
   testOnlyTrustBrand.add(deps);
   return deps;
@@ -487,6 +537,13 @@ export function verifyS2OwnerImplementationInstruction(encodedInstruction, expec
   for (const k of ['publicKeyPem', 'privateKeyPem', 'verificationKey', 'keyRegistryOverride']) {
     if (Object.prototype.hasOwnProperty.call(deps, k)) {
       return deny(S2_OWNER_INSTRUCTION_DECISIONS.DENY_CALLER_SUPPLIED_TRUST, [`FORBIDDEN_DEP_KEY=${k}`]);
+    }
+  }
+  if (keyRegistryRequiresWallClock.get(deps.keyRegistry) === true) {
+    if (!wallClockBrand.has(deps.clock)
+      || deps.clock.wallClock !== true
+      || deps.clock.clockClass !== 'OWNER_INSTALLED_WALL') {
+      return deny(S2_OWNER_INSTRUCTION_DECISIONS.DENY_NON_WALL_CLOCK, ['OWNER_REGISTRY_REQUIRES_WALL_CLOCK']);
     }
   }
   if (!isPlainObject(expectation)) return deny(S2_OWNER_INSTRUCTION_DECISIONS.DENY_MALFORMED, ['EXPECTATION_REQUIRED']);

@@ -17,14 +17,15 @@ import {
   S2_GATE_OPERATION_CLASS,
   S2_GATE_REPOSITORY_ID,
   S2_GATE_SLICE_ID,
-  S2_TEST_ONLY_GATE_HARNESS_TOKEN,
   __testOnlyS2EvaluationLockHooks,
   advanceTestHarnessClock,
   assertS2MutationFenceFresh,
+  consumeAuthenticS2OfflineImplementationAuthorization,
   createTestOnlyS2EffectiveAuthHarness,
   driftTestHarnessTip,
   evaluateS2EffectiveImplementationAuthorization,
   inspectTrustedGitMergeProvenance,
+  isAuthenticS2OfflineMutationAuthorization,
   isBrandedS2GateDecision,
   issueS2OwnerInstructionFromTestHarness,
   replaceTestHarnessProvenance,
@@ -66,7 +67,6 @@ function assertDeny(result, decision) {
 
 function makeHarness(overrides = {}) {
   return createTestOnlyS2EffectiveAuthHarness({
-    testOnlyHarnessToken: S2_TEST_ONLY_GATE_HARNESS_TOKEN,
     canonicalSha: CANONICAL_SHA,
     rule02Text: RULE02_TEXT,
     rule02GitBlob: RULE02_BLOB,
@@ -408,15 +408,20 @@ test('NEG-G24 forged Rule02 text DENYs', () => {
   })), GD.DENY_WRONG_RULE02_BLOB_OR_DIGEST);
 });
 
-test('NEG-G25 public harness construction without token forbidden', () => {
-  assert.throws(() => createTestOnlyS2EffectiveAuthHarness({
-    canonicalSha: CANONICAL_SHA,
-    rule02Text: RULE02_TEXT,
-    rule02GitBlob: RULE02_BLOB,
-    rule02DigestSha256: RULE02_DIGEST,
-    mergeParent1: MERGE_PARENT_1,
-    mergeParent2: MERGE_PARENT_2,
-  }), /S2_TEST_ONLY_GATE_HARNESS_TOKEN_REQUIRED/);
+test('NEG-G25 TEST_ONLY harness ALLOW cannot pass authentic mutation boundary', () => {
+  const harness = makeHarness();
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'authbound25jti' });
+  const result = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+  }));
+  assert.equal(result.ok, true);
+  assert.equal(result.authorization.testOnly, true);
+  assert.equal(result.authenticMutationAuthority, false);
+  assert.equal(isAuthenticS2OfflineMutationAuthorization(result), false);
+  assertDeny(
+    consumeAuthenticS2OfflineImplementationAuthorization(result),
+    GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION,
+  );
 });
 
 test('NEG-G26 validatorAllowed flag rejected', () => {
@@ -426,4 +431,67 @@ test('NEG-G26 validatorAllowed flag rejected', () => {
     ownerInstructionEncoded: issued.instruction.encoded,
     validatorAllowed: true,
   })), GD.DENY_FAKE_MERGED_FLAG);
+});
+
+
+test('SEC-B02 forged plain ALLOW object cannot authorize mutation', () => {
+  assertDeny(consumeAuthenticS2OfflineImplementationAuthorization({
+    ok: true,
+    decision: GD.ALLOW,
+    authenticMutationAuthority: true,
+    authorization: { testOnly: false, authenticMutationAuthority: true },
+  }), GD.DENY_UNAUTHENTIC_AUTHORIZATION_OBJECT);
+});
+
+test('SEC-B03 public test-harness abuse yields only non-authentic ALLOW', () => {
+  const harness = createTestOnlyS2EffectiveAuthHarness({
+    canonicalSha: CANONICAL_SHA,
+    rule02Text: RULE02_TEXT,
+    rule02GitBlob: RULE02_BLOB,
+    rule02DigestSha256: RULE02_DIGEST,
+    mergeParent1: MERGE_PARENT_1,
+    mergeParent2: MERGE_PARENT_2,
+    mergedProvenanceVerified: true,
+  });
+  assert.equal(harness.testOnly, true);
+  assert.equal(harness.authenticMutationAuthority, false);
+  const issued = issueS2OwnerInstructionFromTestHarness(harness, { jti: 'abuseharness01' });
+  const allow = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+  }));
+  assert.equal(allow.ok, true);
+  assertDeny(
+    consumeAuthenticS2OfflineImplementationAuthorization(allow),
+    GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION,
+  );
+});
+
+test('SEC-B04 no exported harness token / privileged latch on gate module', async () => {
+  const mod = await import('../src/s2EffectiveImplementationAuthorizationGate.js');
+  assert.equal('S2_TEST_ONLY_GATE_HARNESS_TOKEN' in mod, false);
+  const instr = await import('../src/s2OwnerImplementationInstruction.js');
+  assert.equal('withPrivilegedS2InstructionConstruction' in instr, false);
+  assert.equal('getPrivilegedS2InstructionConstructors' in instr, false);
+});
+
+test('SEC-B05 missing Owner enrollment cannot produce authentic mutation brand', () => {
+  const denyProd = evaluateS2EffectiveImplementationAuthorization({
+    repositoryId: S2_GATE_REPOSITORY_ID,
+    sliceId: S2_GATE_SLICE_ID,
+    operationClass: S2_GATE_OPERATION_CLASS,
+    governanceRevision: S2_GATE_GOVERNANCE_REVISION,
+    authorizedFileScope: [...S2_GATE_AUTHORIZED_FILE_SCOPE],
+    expectedCanonicalSha: CANONICAL_SHA,
+    expectedRule02DigestSha256: RULE02_DIGEST,
+    expectedRule02GitBlob: RULE02_BLOB,
+    expectedMergeParent1: MERGE_PARENT_1,
+    expectedMergeParent2: MERGE_PARENT_2,
+    ownerInstructionEncoded: 'a.b',
+  });
+  assert.equal(denyProd.ok, false);
+  assert.equal(isAuthenticS2OfflineMutationAuthorization(denyProd), false);
+  assertDeny(
+    consumeAuthenticS2OfflineImplementationAuthorization(denyProd),
+    GD.DENY_TEST_ONLY_NOT_AUTHENTIC_MUTATION,
+  );
 });
