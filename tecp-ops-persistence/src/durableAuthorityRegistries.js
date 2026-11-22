@@ -7,6 +7,11 @@
  * Durable atomicity is NOT proven until Tier-3 disposable PostgreSQL runs.
  */
 
+import {
+  WRITE_LEASE_TXN_OWNER_GUC,
+  WRITE_LEASE_TXN_OWNER_TOKEN,
+} from '../../tecp-persistence/src/writeLeaseRepository.js';
+
 export const DURABLE_REGISTRY_PROOF_CLASS = 'SQL_BACKED_OR_TEST_ONLY_NOT_OPERATIONAL';
 export const DURABLE_REGISTRY_MODE = 'S2_GATE_CD_SQL_IMPLEMENTED_DEFAULT_DENY_WITHOUT_OWNED_TXN';
 
@@ -19,6 +24,7 @@ export const DURABLE_REGISTRY_DECISIONS = Object.freeze({
   DENY_DB_ERROR: 'DENY_DB_ERROR',
   DENY_UNAVAILABLE: 'DENY_UNAVAILABLE',
   DENY_NO_TRANSACTION: 'DENY_NO_TRANSACTION',
+  DENY_TXN_OWNER_MARKER_REQUIRED: 'DENY_TXN_OWNER_MARKER_REQUIRED',
   DENY_CALLER_SQL: 'DENY_CALLER_SQL',
   DENY_SCOPE_MISMATCH: 'DENY_SCOPE_MISMATCH',
   DENY_DEFAULT_FAIL_CLOSED: 'DENY_DEFAULT_FAIL_CLOSED',
@@ -169,33 +175,36 @@ export function createOfflineTestOnlyDurableRegistryDoubles() {
   });
 }
 
-async function assertOwnedTransactionOpen(client) {
+async function assertOwnedTransactionOpen(client, options = {}) {
   if (!client || typeof client.query !== 'function') {
     return deny(DURABLE_REGISTRY_DECISIONS.DENY_MALFORMED, ['DB_CLIENT_REQUIRED']);
   }
+  const requireDlpTxnOwnerMarker = options.requireDlpTxnOwnerMarker !== false;
   try {
     const res = await client.query(
       `SELECT
          current_setting('transaction_read_only', true) AS txn_ro,
          pg_current_xact_id_if_assigned() IS NOT NULL AS in_txn`,
     );
-    // Prefer explicit ownership marker when present (DLP write-lease owned txn).
+    const inTxn = res.rows[0]?.in_txn === true;
     try {
       const marker = await client.query(
-        `SELECT current_setting('tecp.dlp_write_lease_txn_owner', true) AS owned`,
+        `SELECT current_setting('${WRITE_LEASE_TXN_OWNER_GUC}', true) AS owned`,
       );
-      if (
-        marker.rows[0]?.owned === 'TECP_DLP_WRITE_LEASE_TXN_OWNER_V1'
-        || marker.rows[0]?.owned === '1'
-        || marker.rows[0]?.owned === 'true'
-      ) {
+      if (marker.rows[0]?.owned === WRITE_LEASE_TXN_OWNER_TOKEN) {
         return allow(['OWNED_TXN_MARKER_PRESENT'], { durable: true });
       }
     } catch {
-      // fall through to generic in-txn check
+      // marker unreadable
     }
-    if (res.rows[0]?.in_txn === true) {
-      return allow(['OPEN_TXN_DETECTED'], { durable: true });
+    if (inTxn && requireDlpTxnOwnerMarker) {
+      return deny(DURABLE_REGISTRY_DECISIONS.DENY_TXN_OWNER_MARKER_REQUIRED, [
+        'DLP_WRITE_LEASE_TXN_OWNER_MARKER_REQUIRED',
+        `GUC=${WRITE_LEASE_TXN_OWNER_GUC}`,
+      ]);
+    }
+    if (inTxn && !requireDlpTxnOwnerMarker) {
+      return allow(['OPEN_TXN_DETECTED_TEST_DOUBLE'], { durable: false });
     }
     return deny(DURABLE_REGISTRY_DECISIONS.DENY_NO_TRANSACTION, [
       'OWNED_OPEN_TRANSACTION_REQUIRED',
@@ -298,6 +307,8 @@ export function createDurableAuthorityRegistries(dbClient, options = {}) {
   }
 
   const requireOwnedTxn = options.requireOwnedTxn !== false;
+  const requireDlpTxnOwnerMarker = options.requireDlpTxnOwnerMarker !== false;
+  const txnProbeOptions = Object.freeze({ requireDlpTxnOwnerMarker });
   const defaultIssuerId = options.issuerId || null;
   const defaultAudience = options.audience || null;
 
@@ -314,7 +325,7 @@ export function createDurableAuthorityRegistries(dbClient, options = {}) {
         return deny(DURABLE_REGISTRY_DECISIONS.DENY_MALFORMED, ['JTI_REQUIRED']);
       }
       if (requireOwnedTxn) {
-        const txn = await assertOwnedTransactionOpen(dbClient);
+        const txn = await assertOwnedTransactionOpen(dbClient, txnProbeOptions);
         if (!txn.ok) return txn;
       }
       try {
@@ -353,7 +364,7 @@ export function createDurableAuthorityRegistries(dbClient, options = {}) {
         ]);
       }
       if (requireOwnedTxn) {
-        const txn = await assertOwnedTransactionOpen(dbClient);
+        const txn = await assertOwnedTransactionOpen(dbClient, txnProbeOptions);
         if (!txn.ok) return txn;
       }
       try {
@@ -373,7 +384,7 @@ export function createDurableAuthorityRegistries(dbClient, options = {}) {
         return deny(DURABLE_REGISTRY_DECISIONS.DENY_MALFORMED, ['JTI_REQUIRED']);
       }
       if (requireOwnedTxn) {
-        const txn = await assertOwnedTransactionOpen(dbClient);
+        const txn = await assertOwnedTransactionOpen(dbClient, txnProbeOptions);
         if (!txn.ok) return txn;
       }
       try {
@@ -413,7 +424,7 @@ export function createDurableAuthorityRegistries(dbClient, options = {}) {
       if (bindingErr) return bindingErr;
 
       if (requireOwnedTxn) {
-        const txn = await assertOwnedTransactionOpen(dbClient);
+        const txn = await assertOwnedTransactionOpen(dbClient, txnProbeOptions);
         if (!txn.ok) return txn;
       }
 

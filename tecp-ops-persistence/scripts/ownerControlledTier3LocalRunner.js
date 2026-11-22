@@ -37,6 +37,9 @@ import {
   isOwnedClusterClient,
   endOwnedClusterClient,
   isValidatedSuccessfulOwnedClientEnd,
+  endAllOwnedClusterClients,
+  listRegisteredOwnedClients,
+  getOwnedClientAccounting,
   createRunnerOfflineSuiteGrantForTests,
   evaluateIndependentOwnerCapability,
   evaluateLiveRepositoryHeadBinding,
@@ -48,6 +51,9 @@ import {
   isTestOnlyGitHeadObservationFixture,
   observeCanonicalRepositoryHeadSha,
 } from '../src/disposableOpsPilotDbHarness.js';
+import {
+  applyDisposableOpsPilotSchemaBootstrap,
+} from '../src/disposableOpsPilotSchemaBootstrap.js';
 import {
   S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
   S2_OWNER_CAPABILITY_VENUE_SIMIN,
@@ -142,8 +148,12 @@ export function evaluateLiveExecuteClosureGate({
   stopValidated,
   cleanupValidated,
   clientEndResult,
+  allClientsEndResult,
 } = {}) {
-  const clientEndValidated = isValidatedSuccessfulOwnedClientEnd(clientEndResult);
+  const registryEndValidated = allClientsEndResult?.ok === true
+    && allClientsEndResult?.allVerifiedClosed === true;
+  const clientEndValidated = registryEndValidated
+    || isValidatedSuccessfulOwnedClientEnd(clientEndResult);
   const overallOk = suiteOk === true
     && stopValidated === true
     && cleanupValidated === true
@@ -151,6 +161,7 @@ export function evaluateLiveExecuteClosureGate({
   return Object.freeze({
     overallOk,
     clientEndValidated,
+    registryEndValidated,
     suiteOk: suiteOk === true,
     stopValidated: stopValidated === true,
     cleanupValidated: cleanupValidated === true,
@@ -903,6 +914,9 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
+    let schemaBootstrapEvidence = null;
+    let dlpProofClient = null;
+    const isSuiteA = suiteCheck.suitePath === 'tecp-ops-persistence/test/cp2DbFencingDurability.test.js';
     const authorityResult = createLiveSuiteExecutionAuthority({
       proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
       ownedController: controller,
@@ -930,8 +944,77 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
+    if (isSuiteA && authorityResult.ok && deps.offlineWiringProbe === true) {
+      schemaBootstrapEvidence = Object.freeze({
+        offlineWiringProbe: true,
+        inert: true,
+        filesAllowlisted: 6,
+      });
+    } else if (isSuiteA && authorityResult.ok) {
+      const preamble = await applyDisposableOpsPilotSchemaBootstrap({
+        clusterClient: clientResult.client,
+        liveExecutionAuthority: authorityResult.authority,
+        suitePath: suiteCheck.suitePath,
+        repositoryHeadSha: headSha,
+        authorizesRealSql: authorityResult.authority?.authorizesRealSql === true,
+        offlineWiringProbe: deps.offlineWiringProbe === true,
+        phase: 'PREAMBLE_ONLY',
+      });
+      if (!preamble.ok) {
+        const closed = await boundedEndStopCleanup(controller, clientResult.client);
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, preamble.reasons || [
+            'SCHEMA_BOOTSTRAP_PREAMBLE_FAILED',
+          ]),
+          evidence: evidenceEnvelope({
+            start: started,
+            bootstrap: preamble,
+            clientEnd: closed.clientEndResult,
+            stop: lifecycleStageEvidence('stop', closed.stopped, closed.stopError),
+            cleanup: lifecycleStageEvidence('cleanup', closed.cleaned, closed.cleanupError),
+          }),
+          postgresActions: started.postgresActions || 0,
+        };
+      }
+      const dlpClientResult = await controller.createOwnedClusterClient({
+        database: 'dlp_proof',
+        offlineWiringProbe: deps.offlineWiringProbe === true,
+        inertClientFactory: deps.inertClientFactory,
+      });
+      dlpProofClient = dlpClientResult?.client || null;
+      const bootstrap = await applyDisposableOpsPilotSchemaBootstrap({
+        clusterClient: clientResult.client,
+        dlpProofClient,
+        liveExecutionAuthority: authorityResult.authority,
+        suitePath: suiteCheck.suitePath,
+        repositoryHeadSha: headSha,
+        authorizesRealSql: authorityResult.authority?.authorizesRealSql === true,
+        offlineWiringProbe: deps.offlineWiringProbe === true,
+        phase: 'APPLY_SCHEMAS',
+        preambleEvidence: preamble,
+      });
+      schemaBootstrapEvidence = bootstrap.schemaBootstrapEvidence || bootstrap;
+      if (!bootstrap.ok) {
+        const closed = await boundedEndStopCleanup(controller, clientResult.client);
+        return {
+          ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, bootstrap.reasons || [
+            'SCHEMA_BOOTSTRAP_FAILED',
+          ]),
+          evidence: evidenceEnvelope({
+            start: started,
+            bootstrap,
+            clientEnd: closed.clientEndResult,
+            stop: lifecycleStageEvidence('stop', closed.stopped, closed.stopError),
+            cleanup: lifecycleStageEvidence('cleanup', closed.cleaned, closed.cleanupError),
+          }),
+          postgresActions: started.postgresActions || 0,
+        };
+      }
+    }
+
     let suiteResult;
     let clientEndResult = null;
+    let allClientsEndResult = null;
     let stopped;
     let cleaned;
     let stopError = null;
@@ -942,13 +1025,18 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
         suiteResult = await suiteModule.executeTier3SuiteViaRunnerContract({
           mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
           ownedController: controller,
-          clusterClient: clientResult.client,
+          clusterClient: dlpProofClient || clientResult.client,
+          extraClients: isSuiteA
+            ? listRegisteredOwnedClients(controller).filter((c) => c !== (dlpProofClient || clientResult.client))
+            : [],
           liveExecutionAuthority: authorityResult.authority,
           repositorySha: headSha,
           repositoryHeadSha: headSha,
           suitePath: suiteCheck.suitePath,
           liveCapabilityAuthorized: true,
           custodyClass: OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
+          schemaBootstrapEvidence,
+          restartBudget: getOwnedClientAccounting(controller)?.restartBudgetRemaining ?? 0,
         });
       } catch (error) {
         suiteResult = deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, [
@@ -964,7 +1052,12 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     } finally {
       // Disconnect before Postmaster stop / disposable cleanup, including suite/load failures.
       try {
-        clientEndResult = await endOwnedClusterClient(clientResult.client);
+        allClientsEndResult = await endAllOwnedClusterClients(controller);
+        clientEndResult = allClientsEndResult;
+        if (allClientsEndResult?.ok !== true) {
+          const single = await endOwnedClusterClient(clientResult.client);
+          clientEndResult = clientEndResult?.ok ? clientEndResult : single;
+        }
       } catch (endError) {
         clientEndResult = deny(OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED, [
           'OWNED_CLIENT_END_THREW',
@@ -981,6 +1074,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       stopValidated,
       cleanupValidated,
       clientEndResult,
+      allClientsEndResult,
     });
     const overallOk = closureGate.overallOk === true;
     let decision;
