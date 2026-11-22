@@ -1458,16 +1458,14 @@ export function removeHarnessRootIfSafe(root, dataDir, { inspectFn, ownedControl
 }
 
 function runFixedSpawn(spawnSyncFn, bin, args, label) {
+  // Explicit minimal env only. Omit PG* / DATABASE_URL keys entirely:
+  // an empty string is NOT equivalent to absence for PostgreSQL (empty PGPORT
+  // caused initdb FATAL: invalid value for parameter "port": "").
+  // Do not inherit caller process.env — never spread process.env here.
   const result = spawnSyncFn(bin, args, {
     encoding: 'utf8',
     env: Object.freeze({
       PATH: '',
-      PGHOST: '',
-      PGPORT: '',
-      PGDATABASE: '',
-      PGUSER: '',
-      PGPASSWORD: '',
-      DATABASE_URL: '',
       LANG: 'C',
       LC_ALL: 'C',
     }),
