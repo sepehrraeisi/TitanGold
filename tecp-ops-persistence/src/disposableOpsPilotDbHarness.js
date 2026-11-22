@@ -1462,12 +1462,6 @@ function runFixedSpawn(spawnSyncFn, bin, args, label) {
     encoding: 'utf8',
     env: Object.freeze({
       PATH: '',
-      PGHOST: '',
-      PGPORT: '',
-      PGDATABASE: '',
-      PGUSER: '',
-      PGPASSWORD: '',
-      DATABASE_URL: '',
       LANG: 'C',
       LC_ALL: 'C',
     }),
