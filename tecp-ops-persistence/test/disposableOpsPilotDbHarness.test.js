@@ -120,9 +120,13 @@ function inertSpawner() {
   const calls = [];
   return {
     calls,
-    spawnSyncFn(bin, args) {
+    spawnSyncFn(bin, args, options = {}) {
       // Closure-bound: safe when extracted as request.spawnSyncFn without .bind(this).
-      calls.push({ bin, args: [...args] });
+      calls.push({
+        bin,
+        args: [...args],
+        options: options && typeof options === 'object' ? { ...options, env: options.env ? { ...options.env } : options.env } : options,
+      });
       if (String(bin).endsWith('postgres') && args[0] === '--version') {
         return { status: 0, stdout: 'postgres (PostgreSQL) 14.24 (Ubuntu)\n', stderr: '' };
       }
@@ -2124,3 +2128,254 @@ describe('PKG3 initdb locale C.utf8 fixed-constant security', () => {
   });
 });
 
+
+
+describe('PKG4 PGPORT env sterilization offline security', () => {
+  const FORBIDDEN_CHILD_ENV_KEYS = Object.freeze([
+    'PGHOST',
+    'PGPORT',
+    'PGDATABASE',
+    'PGUSER',
+    'PGPASSWORD',
+    'PGSERVICE',
+    'PGSERVICEFILE',
+    'PGOPTIONS',
+    'PGHOSTADDR',
+    'PGPASSFILE',
+    'DATABASE_URL',
+  ]);
+
+  function assertControlledSpawnEnv(env) {
+    assert.ok(env && typeof env === 'object');
+    assert.equal(Object.prototype.hasOwnProperty.call(env, 'PGPORT'), false);
+    assert.notEqual(env.PGPORT, '');
+    for (const key of FORBIDDEN_CHILD_ENV_KEYS) {
+      assert.equal(Object.prototype.hasOwnProperty.call(env, key), false, `child must omit ${key}`);
+    }
+    assert.equal(env.PATH, '');
+    assert.equal(env.LANG, 'C');
+    assert.equal(env.LC_ALL, 'C');
+    // Must remain an explicit minimal freeze, not a process.env spread.
+    assert.deepEqual(Object.keys(env).sort(), ['LANG', 'LC_ALL', 'PATH']);
+  }
+
+  async function startWithCapturingSpawner(spawner, extraConfig = {}) {
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn: spawner.spawnSyncFn.bind(spawner),
+      inspectFn: () => ({ status: POSTMASTER_STATUS.STOPPED, reason: 'inert' }),
+      stopFn: () => ({ status: 0 }),
+      ...extraConfig,
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    const started = await controller.start();
+    try {
+      return { controller, started, ticket, clock };
+    } finally {
+      await controller.cleanup();
+    }
+  }
+
+  it('A) child env must not contain empty PGPORT', async () => {
+    const spawner = inertSpawner();
+    const { started } = await startWithCapturingSpawner(spawner);
+    assert.equal(started.ok, true);
+    assert.ok(spawner.calls.length >= 2);
+    for (const call of spawner.calls) {
+      assertControlledSpawnEnv(call.options.env);
+      assert.equal(call.options.shell, false);
+    }
+  });
+
+  it('B) caller-hostile PGPORT is not inherited by controlled subprocess env', async () => {
+    const prev = process.env.PGPORT;
+    const spawner = inertSpawner();
+    try {
+      process.env.PGPORT = '65432';
+      const { started } = await startWithCapturingSpawner(spawner);
+      assert.equal(started.ok, true);
+      for (const call of spawner.calls) {
+        assert.equal(Object.prototype.hasOwnProperty.call(call.options.env, 'PGPORT'), false);
+        assert.notEqual(call.options.env.PGPORT, '65432');
+        assertControlledSpawnEnv(call.options.env);
+      }
+    } finally {
+      if (prev === undefined) delete process.env.PGPORT;
+      else process.env.PGPORT = prev;
+    }
+  });
+
+  it('C) caller-hostile PostgreSQL connection env cannot reach child', async () => {
+    const hostile = {
+      PGHOST: 'SYNTHETIC_HOSTILE_PGHOST',
+      PGPORT: '65531',
+      PGDATABASE: 'SYNTHETIC_HOSTILE_DB',
+      PGUSER: 'SYNTHETIC_HOSTILE_USER',
+      PGPASSWORD: 'SYNTHETIC_NONSECRET_MARKER',
+      PGSERVICE: 'SYNTHETIC_HOSTILE_SERVICE',
+      PGSERVICEFILE: '/tmp/synthetic-hostile.pg_service.conf',
+      PGOPTIONS: '-c search_path=synthetic_hostile',
+      PGHOSTADDR: '192.0.2.1',
+      PGPASSFILE: '/tmp/synthetic-hostile.pgpass',
+      DATABASE_URL: 'synthetic-nonsecret://marker.invalid/hostile-fixture',
+    };
+    const prev = {};
+    for (const k of Object.keys(hostile)) prev[k] = process.env[k];
+    const spawner = inertSpawner();
+    try {
+      Object.assign(process.env, hostile);
+      const { started } = await startWithCapturingSpawner(spawner);
+      assert.equal(started.ok, true);
+      for (const call of spawner.calls) {
+        assertControlledSpawnEnv(call.options.env);
+        for (const [k, v] of Object.entries(hostile)) {
+          assert.notEqual(call.options.env[k], v, `${k} must not leak`);
+        }
+      }
+    } finally {
+      for (const [k, v] of Object.entries(prev)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('D/E) fixed locale env, absolute bins, shell false, version/initdb/socket args unchanged', async () => {
+    const spawner = inertSpawner();
+    const { started } = await startWithCapturingSpawner(spawner);
+    assert.equal(started.ok, true);
+    assert.ok(started.plannedArgs?.initdbArgs);
+    assert.ok(started.plannedArgs?.startArgs);
+
+    const versionCall = spawner.calls.find((c) => String(c.bin).endsWith('postgres') && c.args[0] === '--version');
+    const initdbCall = spawner.calls.find((c) => String(c.bin).endsWith('initdb'));
+    const startCall = spawner.calls.find((c) => String(c.bin).endsWith('pg_ctl') && c.args.includes('start'));
+    assert.ok(versionCall, 'version probe required');
+    assert.ok(initdbCall, 'initdb required');
+    assert.ok(startCall, 'pg_ctl start required');
+
+    assert.equal(versionCall.args.length, 1);
+    assert.deepEqual(versionCall.args, ['--version']);
+    assert.match(String(versionCall.bin), /\/postgres$/);
+    assert.match(String(initdbCall.bin), /\/initdb$/);
+    assert.match(String(startCall.bin), /\/pg_ctl$/);
+    assert.equal(String(versionCall.bin).includes(' '), false);
+
+    assert.deepEqual(initdbCall.args, started.plannedArgs.initdbArgs);
+    assert.equal(initdbCall.args.includes('--locale=C.utf8'), true);
+    assert.equal(initdbCall.args.includes('--encoding=UTF8'), true);
+    assert.deepEqual(startCall.args, started.plannedArgs.startArgs);
+    assert.equal(startCall.args.includes('-o'), true);
+    // Unix-socket-only start policy markers remain present in planned args.
+    const startJoined = startCall.args.join(' ');
+    assert.match(startJoined, /unix_socket_directories=/);
+    assert.match(startJoined, /listen_addresses=\s/);
+    assert.equal(/listen_addresses=\*/.test(startJoined), false);
+
+    for (const call of [versionCall, initdbCall, startCall]) {
+      assertControlledSpawnEnv(call.options.env);
+      assert.equal(call.options.shell, false);
+      assert.equal(call.options.encoding, 'utf8');
+    }
+  });
+
+  it('F) inert nonzero subprocess fails closed; one-shot cannot replay; no live DB', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    let calls = 0;
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn(bin, args, options) {
+        calls += 1;
+        assertControlledSpawnEnv(options.env);
+        assert.equal(options.shell, false);
+        if (String(bin).endsWith('postgres') && args[0] === '--version') {
+          return { status: 0, stdout: 'postgres (PostgreSQL) 14.24 (Ubuntu)\n', stderr: '' };
+        }
+        return { status: 1, stdout: '', stderr: 'FATAL: invalid value for parameter "port": ""' };
+      },
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    const started = await controller.start();
+    assert.equal(started.ok, false);
+    assert.ok(calls >= 1);
+    assert.equal(isActiveOwnerOneShotTicket(ticket, clock), false);
+    // One-shot consumed / no unauthorized continuation with same ticket.
+    const replayController = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn: () => ({ status: 0, stdout: 'ok' }),
+    }, { NODE_ENV: 'test' });
+    assert.equal(replayController.ok, false);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_DISABLED,
+    ].includes(replayController.decision));
+    await controller.cleanup();
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+  });
+
+  it('G) default-deny / suite allowlist / caller boolean / TEST_ONLY / cleanup / dispatcher boundaries', async () => {
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    assert.deepEqual([...OPS_PILOT_APPROVED_TEST_ACTIONS], [
+      'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+      'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+    ]);
+
+    assert.equal(
+      evaluateOpsPilotHarnessSafety(
+        { explicitNonProd: true, tier3Authorized: true, authorizeTier3: true },
+        { NODE_ENV: 'test', TITANGOLD_TECP_OPS_S2_TIER3: '1', OPS_PILOT_DB_EXECUTION_AUTHORIZED: 'true' },
+      ).decision,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_CALLER_BOOLEAN_ACTIVATION,
+    );
+
+    // TEST_ONLY inert ticket is not live capability / cannot flip module consts.
+    const clock = makeClock();
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    assert.equal(ticket.proofClass, 'TEST_ONLY_INERT_ONESHOT_TICKET');
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+
+    const src = readFileSync(HARNESS_SRC, 'utf8');
+    assert.match(src, /OPS_PILOT_DB_EXECUTION_AUTHORIZED\s*=\s*false/);
+    assert.match(src, /OPS_PILOT_TIER3_AUTHORIZED\s*=\s*false/);
+    assert.match(src, /OPS_PILOT_HARNESS_DECISIONS/);
+    assert.match(src, /cp2DbDispatcherIntegration\.test\.js/);
+    // Cleanup protections remain in source contract.
+    assert.match(src, /cleanup|CLEANUP|deny\(/i);
+
+    // runFixedSpawn remains shell:false and does not spread process.env / empty PGPORT.
+    const start = src.indexOf('function runFixedSpawn');
+    const end = src.indexOf('export function createDisposableOpsPilotClusterController');
+    assert.ok(start > 0 && end > start);
+    const body = src.slice(start, end);
+    assert.match(body, /shell:\s*false/);
+    assert.equal(/PGPORT:\s*''/.test(body), false);
+    assert.equal(/PGHOST:\s*''/.test(body), false);
+    assert.equal(/DATABASE_URL:\s*''/.test(body), false);
+    assert.equal(/\.\.\.\s*process\.env/.test(body), false);
+    assert.match(body, /LANG:\s*'C'/);
+    assert.match(body, /LC_ALL:\s*'C'/);
+    assert.match(body, /PATH:\s*''/);
+  });
+});
