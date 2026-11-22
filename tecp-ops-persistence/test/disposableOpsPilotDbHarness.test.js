@@ -2214,17 +2214,17 @@ describe('PKG4 PGPORT env sterilization offline security', () => {
 
   it('C) caller-hostile PostgreSQL connection env cannot reach child', async () => {
     const hostile = {
-      PGHOST: 'evil.example',
-      PGPORT: '5432',
-      PGDATABASE: 'stolen',
-      PGUSER: 'attacker',
-      PGPASSWORD: 'secret',
-      PGSERVICE: 'evil-service',
-      PGSERVICEFILE: '/tmp/evil.pg_service.conf',
-      PGOPTIONS: '-c search_path=evil',
-      PGHOSTADDR: '203.0.113.9',
-      PGPASSFILE: '/tmp/evil.pgpass',
-      DATABASE_URL: 'postgres://attacker:secret@evil.example:5432/stolen',
+      PGHOST: 'SYNTHETIC_HOSTILE_PGHOST',
+      PGPORT: '65531',
+      PGDATABASE: 'SYNTHETIC_HOSTILE_DB',
+      PGUSER: 'SYNTHETIC_HOSTILE_USER',
+      PGPASSWORD: 'SYNTHETIC_NONSECRET_MARKER',
+      PGSERVICE: 'SYNTHETIC_HOSTILE_SERVICE',
+      PGSERVICEFILE: '/tmp/synthetic-hostile.pg_service.conf',
+      PGOPTIONS: '-c search_path=synthetic_hostile',
+      PGHOSTADDR: '192.0.2.1',
+      PGPASSFILE: '/tmp/synthetic-hostile.pgpass',
+      DATABASE_URL: 'synthetic-nonsecret://marker.invalid/hostile-fixture',
     };
     const prev = {};
     for (const k of Object.keys(hostile)) prev[k] = process.env[k];
