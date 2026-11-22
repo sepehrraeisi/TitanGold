@@ -238,6 +238,10 @@ export const OPS_PILOT_HARNESS_DECISIONS = Object.freeze({
   DENY_CALLER_CLIENT_SUBSTITUTION: 'DENY_CALLER_CLIENT_SUBSTITUTION',
   ALLOW_OWNED_CLIENT_ENDED: 'ALLOW_OWNED_CLIENT_ENDED',
   DENY_OWNED_CLIENT_END_FAILED: 'DENY_OWNED_CLIENT_END_FAILED',
+  DENY_OWNED_CLIENT_REGISTRY_ACCOUNTING: 'DENY_OWNED_CLIENT_REGISTRY_ACCOUNTING',
+  DENY_RESTART_BUDGET_EXHAUSTED: 'DENY_RESTART_BUDGET_EXHAUSTED',
+  DENY_RESTART_LIFECYCLE: 'DENY_RESTART_LIFECYCLE',
+  DENY_RESTART_WITHOUT_STARTED_CLUSTER: 'DENY_RESTART_WITHOUT_STARTED_CLUSTER',
 });
 
 export const POSTMASTER_STATUS = Object.freeze({
@@ -682,6 +686,9 @@ function createTicketRecord(publicFields, privilegeFields) {
     inert: privilegeFields.inert === true,
     liveSpawnPermitted: privilegeFields.liveSpawnPermitted === true,
     prepareUsed: privilegeFields.prepareUsed === true,
+    restartBudgetRemaining: Number.isSafeInteger(privilegeFields.restartBudgetRemaining)
+      ? privilegeFields.restartBudgetRemaining
+      : (privilegeFields.liveSpawnPermitted === true && privilegeFields.inert !== true ? 1 : 0),
     expiresAtMonotonicMs: privilegeFields.expiresAtMonotonicMs,
     createdAtMonotonicMs: privilegeFields.createdAtMonotonicMs,
     ttlMs: privilegeFields.ttlMs,
@@ -1484,6 +1491,127 @@ function runFixedSpawn(spawnSyncFn, bin, args, label) {
  * Live postgres binaries run only when module DB const is true (currently false)
  * or an injected inert spawnSyncFn is supplied for offline tests.
  */
+
+const ownedClientsByController = new WeakMap();
+
+const ALLOWED_OWNED_CLIENT_DATABASES = Object.freeze(['postgres', 'dlp_proof']);
+
+function getOwnedClientRegistry(controller) {
+  return ownedClientsByController.get(controller) || null;
+}
+
+export function listRegisteredOwnedClients(controller) {
+  if (!isOwnedDisposableOpsPilotClusterController(controller)) {
+    return Object.freeze([]);
+  }
+  const reg = getOwnedClientRegistry(controller);
+  const clients = reg ? [...reg.clients] : [];
+  return Object.freeze(clients);
+}
+
+export function getOwnedClientAccounting(controller) {
+  if (!isOwnedDisposableOpsPilotClusterController(controller)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER, [
+      'OWNED_CONTROLLER_REQUIRED',
+    ]);
+  }
+  const reg = getOwnedClientRegistry(controller);
+  const registered = reg ? reg.clients.size : 0;
+  return Object.freeze({
+    ok: true,
+    registeredCount: registered,
+    primaryClientLatched: reg?.primary != null,
+    restartBudgetRemaining: reg?.restartBudgetRemaining ?? 0,
+  });
+}
+
+async function endAllRegisteredOwnedClientsForController(controller, { clearPrimary = true } = {}) {
+  const reg = getOwnedClientRegistry(controller);
+  if (!reg || reg.clients.size === 0) {
+    return Object.freeze({
+      ok: true,
+      allowed: true,
+      decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+      reasons: Object.freeze(['NO_REGISTERED_OWNED_CLIENTS']),
+      results: Object.freeze([]),
+      allVerifiedClosed: true,
+      verifiedClosed: true,
+      endInvoked: false,
+      postgresActions: 0,
+    });
+  }
+  const results = [];
+  for (const client of [...reg.clients]) {
+    try {
+      const ended = await endOwnedClusterClient(client);
+      results.push(Object.freeze({ client, result: ended }));
+      if (!isValidatedSuccessfulOwnedClientEnd(ended)) {
+        const decision = ended.decision === OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED
+          ? OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED
+          : OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_REGISTRY_ACCOUNTING;
+        return deny(decision, [
+          'ALL_REGISTERED_OWNED_CLIENTS_MUST_CLOSE',
+          'PARTIAL_CLIENT_END_FAILURE',
+          ...(ended.reasons || []),
+        ], {
+          results: Object.freeze(results),
+          allVerifiedClosed: false,
+          clientEndResult: ended,
+        });
+      }
+      reg.clients.delete(client);
+    } catch (error) {
+      return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_REGISTRY_ACCOUNTING, [
+        'OWNED_CLIENT_END_THREW',
+        String(error && error.message ? error.message : error),
+      ], { results: Object.freeze(results), allVerifiedClosed: false });
+    }
+  }
+  if (clearPrimary) {
+    reg.primary = null;
+  }
+  return Object.freeze({
+    ok: true,
+    allowed: true,
+    decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_OWNED_CLIENT_ENDED,
+    reasons: Object.freeze(['ALL_REGISTERED_OWNED_CLIENTS_ENDED']),
+    results: Object.freeze(results),
+    allVerifiedClosed: true,
+    verifiedClosed: true,
+    endInvoked: true,
+    postgresActions: 0,
+  });
+}
+
+export async function endAllOwnedClusterClients(controller, options = {}) {
+  if (!isOwnedDisposableOpsPilotClusterController(controller)) {
+    return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_HELPER_WITHOUT_OWNED_CONTROLLER, [
+      'OWNED_CONTROLLER_REQUIRED',
+    ]);
+  }
+  return endAllRegisteredOwnedClientsForController(controller, options);
+}
+
+function latchOwnedClientOnController(controller, client) {
+  let reg = ownedClientsByController.get(controller);
+  if (!reg) {
+    reg = {
+      clients: new Set(),
+      primary: null,
+      restartBudgetRemaining: 0,
+    };
+    ownedClientsByController.set(controller, reg);
+  }
+  if (client != null) {
+    reg.clients.add(client);
+    if (reg.primary == null) {
+      reg.primary = client;
+    }
+  }
+  return reg;
+}
+
+
 export function createDisposableOpsPilotClusterController(config = {}, env = process.env) {
   const gate = recheckBeforeLifecycle('CREATE_CONTROLLER', {
     ...config,
@@ -1514,6 +1642,14 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
   const clock = config.clock || {};
   const ticket = config.ownerOneShotTicket;
   const usingInertTicket = isInertOfflineOneShotTicket(ticket);
+  const ticketRestartBudget = (() => {
+    const priv = getTicketPrivilege(ticket);
+    if (!priv) return 0;
+    if (Number.isSafeInteger(priv.restartBudgetRemaining)) {
+      return priv.restartBudgetRemaining;
+    }
+    return priv.liveSpawnPermitted === true && !usingInertTicket ? 1 : 0;
+  })();
   const injectedSpawn = typeof config.spawnSyncFn === 'function';
   const runners = {
     spawnSyncFn: injectedSpawn ? config.spawnSyncFn : spawnSync,
@@ -1763,6 +1899,9 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           'CONTROLLER_PATHS_ONLY',
         ]);
       }
+      const dbChoice = ALLOWED_OWNED_CLIENT_DATABASES.includes(options.database)
+        ? options.database
+        : 'postgres';
       const paths = this.getPaths();
       const clientResult = await createDisposableOpsPilotClient({
         explicitNonProd: true,
@@ -1770,13 +1909,16 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         clock,
         socketDir: paths.socketDir,
         socketPort: paths.socketPort,
+        database: dbChoice,
         ownedControllerIssued: true,
         allowConsumedTicketAfterOwnedStart: true,
-        offlineWiringProbe: options.offlineWiringProbe === true,
-        inertClientFactory: options.inertClientFactory,
+        offlineWiringProbe: options.offlineWiringProbe === true
+          || config.offlineWiringProbe === true,
+        inertClientFactory: options.inertClientFactory || config.inertClientFactory,
       }, env);
       if (clientResult?.ok && clientResult.client) {
-        ownedClusterClientRef = clientResult.client;
+        const reg = latchOwnedClientOnController(this, clientResult.client);
+        ownedClusterClientRef = reg.primary;
       }
       return clientResult;
     },
@@ -1805,21 +1947,14 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           tier3Authorized: false,
         });
       }
-      let clientEndResult = null;
-      if (ownedClusterClientRef != null) {
-        try {
-          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
-        } catch (error) {
-          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
-            'OWNED_CLIENT_END_THREW',
-            String(error && error.message ? error.message : error),
-          ], { verifiedClosed: false, endInvoked: true });
-        }
-        // Clear ref only after verified close; retain for truthful failed-close evidence otherwise.
-        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
-          ownedClusterClientRef = null;
-        }
+      const multiEnd = await endAllRegisteredOwnedClientsForController(this);
+      const clientEndResult = multiEnd;
+      if (!multiEnd.ok) {
+        return deny(multiEnd.decision, multiEnd.reasons || [
+          'STOP_BLOCKED_ALL_CLIENTS_MUST_CLOSE',
+        ], { clientEndResult, clientClosed: false });
       }
+      ownedClusterClientRef = null;
       const proof = stopClusterAndProveTerminated(dataDir, {
         ownedController: this,
         stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
@@ -1870,6 +2005,126 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
         terminationEvidence: Object.freeze(proof),
       });
     },
+
+    async restartPostmaster(options = {}) {
+      const again = recheckBeforeLifecycle('RESTART_POSTMASTER', {
+        ...config,
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+      }, env);
+      if (again
+        && again.decision !== OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY
+        && again.decision !== OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_EXPIRED
+        && !(started === true)) {
+        return again;
+      }
+      if (!started || root == null || dataDir == null) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_WITHOUT_STARTED_CLUSTER, [
+          'STARTED_CLUSTER_REQUIRED_FOR_RESTART',
+        ]);
+      }
+      const reg = getOwnedClientRegistry(this);
+      const budget = reg?.restartBudgetRemaining ?? 0;
+      if (budget < 1) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_BUDGET_EXHAUSTED, [
+          'RESTART_BUDGET_EXHAUSTED',
+        ]);
+      }
+      const allEnded = await endAllRegisteredOwnedClientsForController(this, { clearPrimary: true });
+      if (!allEnded.ok) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_LIFECYCLE, [
+          'RESTART_BLOCKED_CLIENT_CLOSE_REQUIRED',
+          ...(allEnded.reasons || []),
+        ], { clientEndResult: allEnded });
+      }
+      const stopProof = stopClusterAndProveTerminated(dataDir, {
+        ownedController: this,
+        stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
+          join(binDir, 'pg_ctl'),
+          [...buildPgCtlStopArgs(dir)],
+          { encoding: 'utf8', shell: false },
+        )),
+        inspectFn: runners.inspectFn || ((dir) => inspectPostmasterStatus(dir, {
+          ownedController: this,
+          pgCtlStatusFn: (d) => runners.spawnSyncFn(
+            join(binDir, 'pg_ctl'),
+            ['-D', d, 'status'],
+            { encoding: 'utf8', shell: false },
+          ),
+        })),
+      });
+      if (!stopProof.terminated) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_LIFECYCLE, [
+          'RESTART_STOP_PROOF_REQUIRED',
+          stopProof.reason || 'not_terminated',
+        ], { terminationEvidence: Object.freeze(stopProof), recoveryEvidence: stopProof });
+      }
+      try {
+        if (typeof runners.startClusterFn === 'function') {
+          runners.startClusterFn({
+            bin: join(binDir, 'pg_ctl'),
+            args: buildPgCtlStartArgs({ dataDir, logFile, socketDir, socketPort }),
+            paths: this.getPaths(),
+            restart: true,
+          });
+        } else {
+          runFixedSpawn(
+            runners.spawnSyncFn,
+            join(binDir, 'pg_ctl'),
+            [...buildPgCtlStartArgs({ dataDir, logFile, socketDir, socketPort })],
+            'PG_CTL_RESTART_START',
+          );
+        }
+        postgresActions += 1;
+        const inspected = inspectPostmasterStatus(dataDir, {
+          ownedController: this,
+          pgCtlStatusFn: (d) => runners.spawnSyncFn(
+            join(binDir, 'pg_ctl'),
+            ['-D', d, 'status'],
+            { encoding: 'utf8', shell: false },
+          ),
+        });
+        if (inspected.status !== POSTMASTER_STATUS.RUNNING) {
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_LIFECYCLE, [
+            'RESTART_START_NOT_PROVEN',
+          ], { recoveryEvidence: Object.freeze(inspected) });
+        }
+        started = true;
+        if (reg) {
+          reg.restartBudgetRemaining = budget - 1;
+        }
+        const reconnect = await this.createOwnedClusterClient({
+          offlineWiringProbe: options.offlineWiringProbe === true,
+          inertClientFactory: options.inertClientFactory,
+        });
+        if (!reconnect?.ok) {
+          return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_LIFECYCLE, [
+            'RESTART_RECONNECT_FAILED',
+            ...(reconnect?.reasons || []),
+          ], { reconnect });
+        }
+        return Object.freeze({
+          ok: true,
+          allowed: true,
+          decision: OPS_PILOT_HARNESS_DECISIONS.ALLOW_LIFECYCLE,
+          initdbExecuted: false,
+          oneshotReplayed: false,
+          reasons: Object.freeze(['RESTART_POSTMASTER_OPTION_A_COMPLETE']),
+          restartBudgetRemaining: reg?.restartBudgetRemaining ?? 0,
+          reconnect,
+          terminationEvidence: Object.freeze(stopProof),
+          startupEvidence: Object.freeze(inspected),
+          postgresActions,
+        });
+      } catch (error) {
+        return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_LIFECYCLE, [
+          'RESTART_FAILED',
+          error.message || String(error),
+        ]);
+      }
+    },
+
     async cleanup() {
       if (!isOwnedDisposableOpsPilotClusterController(this)) {
         return deny(OPS_PILOT_HARNESS_DECISIONS.DENY_LIFECYCLE_WITHOUT_OWNERSHIP, [
@@ -1899,21 +2154,19 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
           }),
         });
       }
-      let clientEndResult = null;
-      if (ownedClusterClientRef != null) {
-        try {
-          clientEndResult = await endOwnedClusterClient(ownedClusterClientRef);
-        } catch (error) {
-          clientEndResult = deny(OPS_PILOT_HARNESS_DECISIONS.DENY_OWNED_CLIENT_END_FAILED, [
-            'OWNED_CLIENT_END_THREW_DURING_CLEANUP',
-            String(error && error.message ? error.message : error),
-          ], { verifiedClosed: false, endInvoked: true });
-        }
-        if (isValidatedSuccessfulOwnedClientEnd(clientEndResult)) {
-          ownedClusterClientRef = null;
-        }
+      const multiEndCleanup = await endAllRegisteredOwnedClientsForController(this);
+      const clientEndResult = multiEndCleanup;
+      if (!multiEndCleanup.ok) {
+        return deny(multiEndCleanup.decision, multiEndCleanup.reasons || [
+          'CLEANUP_BLOCKED_ALL_CLIENTS_MUST_CLOSE',
+        ], {
+          clientEndResult,
+          clientClosed: false,
+          cleanupEvidence: Object.freeze({ allClientsEnd: multiEndCleanup }),
+        });
       }
       if (started || startupAttempted) {
+        ownedClusterClientRef = null;
         const proof = stopClusterAndProveTerminated(dataDir, {
           stopFn: runners.stopFn || ((dir) => runners.spawnSyncFn(
             join(binDir, 'pg_ctl'),
@@ -2004,6 +2257,16 @@ export function createDisposableOpsPilotClusterController(config = {}, env = pro
       }
     },
   };
+  ownedClientsByController.set(controller, {
+    clients: new Set(),
+    primary: null,
+    restartBudgetRemaining: ticketRestartBudget,
+  });
+    ownedClientsByController.set(controller, {
+    clients: new Set(),
+    primary: null,
+    restartBudgetRemaining: ticketRestartBudget,
+  });
   ownedClusterLatch.add(controller);
   controllerCleanupAuthority.set(controller, { root: null, dataDir: null, socketDir: null });
   return controller;
@@ -2216,6 +2479,9 @@ export async function createDisposableOpsPilotClient(config = {}, env = process.
     const planned = planOwnedUnixSocketClientConfig({
       socketDir: config.socketDir,
       socketPort: config.socketPort,
+      database: ALLOWED_OWNED_CLIENT_DATABASES.includes(config.database)
+        ? config.database
+        : 'postgres',
     });
     const client = new Client({
       host: planned.host,
@@ -2334,7 +2600,7 @@ export function assertHarnessSourceHasOwnedClientConnectBeforeLatch(sourceText) 
 
 export function assertHarnessSourceHasClientEndBeforePostgresStop(sourceText) {
   const text = String(sourceText || '');
-  const marker = 'await endOwnedClusterClient(ownedClusterClientRef)';
+  const marker = 'await endAllRegisteredOwnedClientsForController';
   const endIdx = text.indexOf(marker);
   if (endIdx < 0) {
     return Object.freeze({ ok: false, endBeforeStop: false });
@@ -2947,6 +3213,7 @@ export function createLiveCapabilityGatedOneShotTicket(input = {}, deps = {}) {
     cancelled: false,
     inert: allowLiveSubprocess !== true,
     liveSpawnPermitted: allowLiveSubprocess === true,
+    restartBudgetRemaining: allowLiveSubprocess === true ? 1 : 0,
     prepareUsed: false,
     expiresAtMonotonicMs: createdAtMonotonicMs + ttlMs,
     createdAtMonotonicMs,

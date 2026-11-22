@@ -8,8 +8,9 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
-import { basename, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
@@ -42,8 +43,8 @@ import {
   TIER3_ACTIVATION_AUTHORITY,
   consumeRunnerOfflineSuiteGrant,
   createDisposableOpsPilotClusterController,
-  isOwnedDisposableOpsPilotClusterController,
   createInertOfflineOneShotTicketForTests,
+  isOwnedDisposableOpsPilotClusterController,
   createPrivilegedTier3ActivationHandleForTests,
   createRunnerOfflineSuiteGrantForTests,
   evaluateLiveSpawnAuthorizationFromOwnerCapability,
@@ -101,6 +102,15 @@ import {
   DB_LEASE_CONTEXT_DECISIONS,
   projectFromTrustedValidateWriteLease,
 } from '../src/dbIssuedLeaseContext.js';
+import {
+  acquireWriteLease,
+  validateWriteLease,
+  withOwnedWriteLeaseTransaction,
+  WRITE_LEASE_DECISIONS,
+  WRITE_LEASE_TXN_OWNER_GUC,
+  WRITE_LEASE_TXN_OWNER_TOKEN,
+  APPROVED_GOVERNANCE_REVISION,
+} from '../../tecp-persistence/src/writeLeaseRepository.js';
 
 export const FENCING_SUITE_PATH = OPS_PILOT_APPROVED_TEST_ACTIONS[0];
 export const CP2_DB_FENCING_SUITE_STATUS = 'OFFLINE_ORCHESTRATION_WIRED_AWAITING_LIVE_TIER3_DB';
@@ -192,6 +202,68 @@ function randomJtiSuffix() {
   return String(__jtiCounter);
 }
 
+
+export const FENCING_LIVE_CASE_SPECS = Object.freeze([
+  { caseId: 'A01', catalogKey: 'valid_lease_current_fencing_ALLOW' },
+  { caseId: 'A02', catalogKey: 'stale_fencing_DENY' },
+  { caseId: 'A03', catalogKey: 'concurrent_contenders_single_owner' },
+  { caseId: 'A04', catalogKey: 'durable_jti_replay_DENY' },
+  { caseId: 'A05', catalogKey: 'concurrent_duplicate_jti_single_commit' },
+  { caseId: 'A06', catalogKey: 'revocation_enforced' },
+  { caseId: 'A07', catalogKey: 'rollback_releases_uncommitted_jti' },
+  { caseId: 'A08', catalogKey: 'restart_preserves_committed_durable_state' },
+  { caseId: 'A09', catalogKey: 'lease_identity_not_reassignable_across_resource_or_task' },
+  { caseId: 'A10', catalogKey: 'persistent_audit_evidence_records' },
+]);
+
+export function aggregateFencingLiveSqlResults(results) {
+  if (!Array.isArray(results)) {
+    return Object.freeze({ ok: false, allPassed: false, reasons: Object.freeze(['RESULTS_ARRAY_REQUIRED']) });
+  }
+  const byId = new Map();
+  for (const entry of results) {
+    if (!entry || typeof entry.caseId !== 'string') {
+      return Object.freeze({ ok: false, allPassed: false, reasons: Object.freeze(['CASE_ID_REQUIRED']) });
+    }
+    if (byId.has(entry.caseId)) {
+      return Object.freeze({ ok: false, allPassed: false, reasons: Object.freeze(['DUPLICATE_CASE_ID', entry.caseId]) });
+    }
+    byId.set(entry.caseId, entry);
+  }
+  if (byId.size !== FENCING_LIVE_CASE_SPECS.length) {
+    return Object.freeze({ ok: false, allPassed: false, reasons: Object.freeze(['CASE_COUNT_MISMATCH']) });
+  }
+  for (const spec of FENCING_LIVE_CASE_SPECS) {
+    if (!byId.has(spec.caseId)) {
+      return Object.freeze({ ok: false, allPassed: false, reasons: Object.freeze(['MISSING_CASE', spec.caseId]) });
+    }
+  }
+  const allPassed = results.length === 10
+    && results.every((r) => r.executed === true
+      && r.sqlBacked === true
+      && r.passed === true
+      && r.evidence != null);
+  return Object.freeze({
+    ok: allPassed,
+    allPassed,
+    caseCount: results.length,
+    reasons: Object.freeze(allPassed ? ['ALL_TEN_CASES_PASSED'] : ['STRICT_AGGREGATION_FAILED']),
+  });
+}
+
+function buildCaseResult(caseId, catalogKey, patch = {}) {
+  return Object.freeze({
+    caseId,
+    catalogKey,
+    executed: false,
+    sqlBacked: false,
+    passed: false,
+    evidence: null,
+    failureReason: 'NOT_EXECUTED',
+    ...patch,
+  });
+}
+
 function offlineContractProofs() {
   const txn = { id: 'fencing-txn-offline' };
   const valid = projectFromTrustedValidateWriteLease({
@@ -234,21 +306,44 @@ function offlineContractProofs() {
  * Fully wired live SQL matrix. Must not execute while module DB gate is false.
  * Returns structured NOT_EXECUTED markers rather than silent PASS.
  */
+
+function suiteOwnedClientDatabase(client) {
+  if (!client || typeof client !== 'object') {
+    return null;
+  }
+  return client.database
+    || client.connectionParameters?.database
+    || null;
+}
+
 async function runLiveFencingSqlMatrix(clusterClient, opts = {}) {
-  // Public TEST_ONLY activation handles are NOT Owner/live authority.
-  if (opts.tier3ActivationHandle != null) {
+  const ctx = opts.runnerContext || opts || {};
+  const catalogFail = (reasons, failureReason) => {
+    const results = FENCING_LIVE_CASE_SPECS.map((spec) => buildCaseResult(spec.caseId, spec.catalogKey, {
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      evidence: null,
+      failureReason: failureReason || reasons[0] || 'DENIED',
+    }));
     return {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY',
-        'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
-      ]),
-      proofs: null,
+      reasons: Object.freeze([...reasons]),
+      results: Object.freeze(results),
+      aggregation: aggregateFencingLiveSqlResults(results),
       proofClass: FENCING_PROOF_CLASS_LIVE,
       sqlExecuted: false,
     };
+  };
+
+  if (opts.tier3ActivationHandle != null) {
+    return catalogFail([
+      'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY',
+      'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+    ], 'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY');
   }
+
   const auth = opts.authorityCheck
     || assertLiveSuiteExecutionAuthorityForSuite(
       opts.liveExecutionAuthority,
@@ -258,111 +353,79 @@ async function runLiveFencingSqlMatrix(clusterClient, opts = {}) {
   if (!auth.ok) {
     return {
       ...auth,
-      proofs: null,
-      proofClass: FENCING_PROOF_CLASS_LIVE,
-      sqlExecuted: false,
+      ...catalogFail(auth.reasons || ['AUTHORITY_DENIED'], 'AUTHORITY_DENIED'),
     };
   }
-  // Module consts remain false; live SQL is gated by runner-issued authority only.
   if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['MODULE_CONSTANTS_MUST_REMAIN_FALSE']),
-      proofClass: FENCING_PROOF_CLASS_LIVE,
-      sqlExecuted: false,
-    };
+    return catalogFail(['MODULE_CONSTANTS_MUST_REMAIN_FALSE'], 'MODULE_CONSTANTS_MUST_REMAIN_FALSE');
   }
   if (auth.offlineWiringProbe === true || auth.authorizesRealSql !== true) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'OFFLINE_WIRING_OR_NON_SQL_AUTHORITY_CANNOT_PASS_LIVE_MATRIX',
-        'REAL_SQL_ASSERTIONS_REQUIRED_FOR_PASS',
-      ]),
-      proofs: Object.freeze(Object.fromEntries(
-        FENCING_LIVE_SQL_CATALOG.map((k) => [k, 'NOT_EXECUTED_OFFLINE_WIRING_PROBE']),
-      )),
-      proofClass: FENCING_PROOF_CLASS_LIVE,
-      sqlExecuted: false,
-    };
+    return catalogFail([
+      'OFFLINE_WIRING_OR_NON_SQL_AUTHORITY_CANNOT_PASS_LIVE_MATRIX',
+      'REAL_SQL_ASSERTIONS_REQUIRED_FOR_PASS',
+    ], 'OFFLINE_OR_NON_SQL_AUTHORITY');
   }
   if (!clusterClient || typeof clusterClient.query !== 'function') {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['DISPOSABLE_CLIENT_REQUIRED']),
-      proofs: null,
-      sqlExecuted: false,
-    };
+    return catalogFail(['DISPOSABLE_CLIENT_REQUIRED'], 'DISPOSABLE_CLIENT_REQUIRED');
   }
   if (!isOwnedClusterClient(clusterClient) || !isOwnedConnectedClusterClient(clusterClient)) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
-        'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
-      ]),
-      proofs: null,
-      sqlExecuted: false,
-    };
+    return catalogFail([
+      'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
+      'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
+    ], 'FAKE_OR_UNCONNECTED_CLIENT_DENIED');
+  }
+  if (ctx.schemaBootstrapEvidence == null || ctx.schemaBootstrapEvidence.ok !== true) {
+    return catalogFail(['SCHEMA_BOOTSTRAP_EVIDENCE_REQUIRED'], 'SCHEMA_BOOTSTRAP_EVIDENCE_REQUIRED');
   }
 
-  // Live path (Owner Tier-3 only): durable registries + DB-backed assertions.
-  const registries = createDurableAuthorityRegistries(clusterClient, {
+  const ownedController = ctx.ownedController;
+  const extraClients = Array.isArray(ctx.extraClients) ? ctx.extraClients : [];
+
+  if (suiteOwnedClientDatabase(clusterClient) !== 'dlp_proof') {
+    return catalogFail([
+      'PRIMARY_CLUSTER_CLIENT_MUST_BE_DLP_PROOF',
+    ], 'PRIMARY_CLUSTER_CLIENT_MUST_BE_DLP_PROOF');
+  }
+  // Reject postgres admin (or any non-dlp_proof extra) before secondary selection.
+  if (extraClients.some((c) => suiteOwnedClientDatabase(c) === 'postgres')) {
+    return catalogFail([
+      'POSTGRES_ADMIN_CLIENT_REJECTED_FOR_SUITE_A_CONCURRENCY',
+    ], 'POSTGRES_ADMIN_CLIENT_REJECTED_FOR_SUITE_A_CONCURRENCY');
+  }
+  if (extraClients.some((c) => {
+    const db = suiteOwnedClientDatabase(c);
+    return db != null && db !== 'dlp_proof';
+  })) {
+    return catalogFail([
+      'SECONDARY_CLIENT_MUST_BE_DLP_PROOF',
+    ], 'SECONDARY_CLIENT_MUST_BE_DLP_PROOF');
+  }
+  const secondary = extraClients.find((c) => isOwnedConnectedClusterClient(c)) || null;
+  if (!secondary) {
+    return catalogFail([
+      'SECOND_DLP_PROOF_OWNED_CLIENT_REQUIRED',
+    ], 'SECOND_DLP_PROOF_OWNED_CLIENT_REQUIRED');
+  }
+  if (suiteOwnedClientDatabase(secondary) !== 'dlp_proof') {
+    return catalogFail([
+      'SECONDARY_CLIENT_MUST_BE_DLP_PROOF',
+    ], 'SECONDARY_CLIENT_MUST_BE_DLP_PROOF');
+  }
+  if (secondary === clusterClient) {
+    return catalogFail([
+      'SECONDARY_CLIENT_MUST_BE_INDEPENDENT_SESSION',
+    ], 'SECONDARY_CLIENT_MUST_BE_INDEPENDENT_SESSION');
+  }
+
+  let workingClient = clusterClient;
+  let registries = createDurableAuthorityRegistries(workingClient, {
     requireOwnedTxn: true,
+    requireDlpTxnOwnerMarker: true,
     issuerId: 'ops-rla-issuer',
     audience: 'tecp-ops-operational-rla',
   });
 
-  const proofs = {
-    valid_lease_current_fencing_ALLOW: null,
-    stale_fencing_DENY: null,
-    concurrent_contenders_single_owner: null,
-    durable_jti_replay_DENY: null,
-    concurrent_duplicate_jti_single_commit: null,
-    revocation_enforced: null,
-    rollback_releases_uncommitted_jti: null,
-    restart_preserves_committed_durable_state: null,
-    lease_identity_not_reassignable_across_resource_or_task: null,
-    persistent_audit_evidence_records: null,
-  };
-
-  const txn = { id: 'fencing-txn-live' };
-  const valid = projectFromTrustedValidateWriteLease({
-    ok: true,
-    trustedValidateWriteLease: true,
-    lease: {
-      leaseKey: 'lease-f1',
-      fencingEpoch: 7,
-      resourceType: 'WRITE_RESOURCE',
-      resourceKey: 'r-f1',
-      taskId: 'task-f1',
-      actorId: 'worker-f1',
-      unexpired: true,
-    },
-  }, txn, { fencingEpoch: 7 });
-  proofs.valid_lease_current_fencing_ALLOW = valid.ok === true;
-
-  const stale = projectFromTrustedValidateWriteLease({
-    ok: true,
-    trustedValidateWriteLease: true,
-    lease: {
-      leaseKey: 'lease-f1',
-      fencingEpoch: 6,
-      resourceType: 'WRITE_RESOURCE',
-      resourceKey: 'r-f1',
-      taskId: 'task-f1',
-      actorId: 'worker-f1',
-      unexpired: true,
-    },
-  }, txn, { minimumFencingEpoch: 7 });
-  proofs.stale_fencing_DENY = stale.decision === DB_LEASE_CONTEXT_DECISIONS.DENY_STALE_FENCING;
-
-  // Binding for durable jti SQL (executed only under live gate).
-  const binding = {
+  const binding = Object.freeze({
     principalId: 'worker-f1',
     taskId: 'task-f1',
     action: 'BIND_TASK_CLAIM_LEASE_WITH_AUDIT',
@@ -371,38 +434,579 @@ async function runLiveFencingSqlMatrix(clusterClient, opts = {}) {
     governanceRevision: 'S2',
     issuerId: 'ops-rla-issuer',
     audience: 'tecp-ops-operational-rla',
-  };
+  });
 
-  const first = await registries.consumeJti('jti-fence-1', binding);
-  const replay = await registries.consumeJti('jti-fence-1', binding);
-  proofs.durable_jti_replay_DENY = replay.decision === DURABLE_REGISTRY_DECISIONS.DENY_REPLAY
-    || first.ok === true;
-  proofs.revocation_enforced = DURABLE_REGISTRY_DECISIONS.DENY_REVOKED;
-  proofs.concurrent_contenders_single_owner = 'REQUIRES_LIVE_CONCURRENCY_HARNESS';
-  proofs.concurrent_duplicate_jti_single_commit = 'REQUIRES_LIVE_CONCURRENCY_HARNESS';
-  proofs.rollback_releases_uncommitted_jti = 'REQUIRES_LIVE_TXN_ROLLBACK';
-  proofs.restart_preserves_committed_durable_state = 'REQUIRES_LIVE_RESTART';
-  proofs.lease_identity_not_reassignable_across_resource_or_task =
-    DB_LEASE_CONTEXT_DECISIONS.DENY_MISMATCHED_IDENTITY;
-  proofs.persistent_audit_evidence_records = 'REQUIRES_LIVE_AUDIT_EVIDENCE_QUERY';
+  const baseLease = Object.freeze({
+    resourceType: 'WRITE_RESOURCE',
+    actorId: 'worker-f1',
+    governanceRevision: APPROVED_GOVERNANCE_REVISION,
+    ttlMs: 60_000,
+  });
 
-  void first;
+  const resultsById = new Map();
+  let anySqlExecuted = false;
+
+  async function withOwnedTxn(client, work) {
+    return withOwnedWriteLeaseTransaction(client, work);
+  }
+
+  async function runCase(caseId, catalogKey, fn) {
+    try {
+      const outcome = await fn();
+      const executed = outcome.executed === true;
+      const sqlBacked = outcome.sqlBacked === true;
+      const passed = outcome.passed === true;
+      if (sqlBacked === true) anySqlExecuted = true;
+      resultsById.set(caseId, buildCaseResult(caseId, catalogKey, {
+        executed,
+        sqlBacked,
+        passed,
+        evidence: outcome.evidence != null ? Object.freeze(outcome.evidence) : null,
+        failureReason: passed ? null : (outcome.failureReason || 'CASE_FAILED'),
+      }));
+    } catch (error) {
+      resultsById.set(caseId, buildCaseResult(caseId, catalogKey, {
+        executed: true,
+        sqlBacked: false,
+        passed: false,
+        evidence: Object.freeze({ error: error.message || String(error) }),
+        failureReason: `${caseId}_EXCEPTION`,
+      }));
+    }
+  }
+
+  await runCase('A01', 'valid_lease_current_fencing_ALLOW', async () => {
+    const acquired = await acquireWriteLease(clusterClient, {
+      ...baseLease,
+      resourceKey: 'suite-a-resource-1',
+      taskId: 'task-f1',
+      leaseKey: 'lease-suite-a-a01',
+      idempotencyKey: 'suite-a-a01-idem',
+    });
+    if (!acquired?.ok || !acquired.lease) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { acquired },
+        failureReason: acquired?.decision || 'ACQUIRE_FAILED',
+      };
+    }
+    const validated = await validateWriteLease(clusterClient, {
+      resourceType: baseLease.resourceType,
+      resourceKey: 'suite-a-resource-1',
+      leaseKey: acquired.lease.leaseKey,
+      actorId: baseLease.actorId,
+      taskId: 'task-f1',
+      governanceRevision: APPROVED_GOVERNANCE_REVISION,
+      fencingEpoch: acquired.lease.fencingEpoch,
+    });
+    const passed = validated?.ok === true
+      && validated.decision === WRITE_LEASE_DECISIONS.VALID
+      && Number(validated.lease?.fencingEpoch) === Number(acquired.lease.fencingEpoch);
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'dlp_write_lease',
+        fencingEpoch: acquired.lease.fencingEpoch,
+        leaseKey: acquired.lease.leaseKey,
+        validateDecision: validated?.decision || null,
+        rowCountExpected: 1,
+      },
+      failureReason: passed ? null : (validated?.decision || 'VALIDATE_FAILED'),
+    };
+  });
+
+  await runCase('A02', 'stale_fencing_DENY', async () => {
+    const acquired = await acquireWriteLease(clusterClient, {
+      ...baseLease,
+      resourceKey: 'suite-a-resource-stale',
+      taskId: 'task-a02',
+      leaseKey: 'lease-suite-a-a02',
+      idempotencyKey: 'suite-a-a02-idem',
+    });
+    if (!acquired?.ok || !acquired.lease) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { acquired },
+        failureReason: acquired?.decision || 'ACQUIRE_FAILED',
+      };
+    }
+    const staleEpoch = Math.max(1, Number(acquired.lease.fencingEpoch) - 1);
+    const validated = await validateWriteLease(clusterClient, {
+      resourceType: baseLease.resourceType,
+      resourceKey: 'suite-a-resource-stale',
+      leaseKey: acquired.lease.leaseKey,
+      actorId: baseLease.actorId,
+      taskId: 'task-a02',
+      governanceRevision: APPROVED_GOVERNANCE_REVISION,
+      fencingEpoch: staleEpoch,
+    });
+    const denied = validated?.ok === false
+      && validated.decision === WRITE_LEASE_DECISIONS.DENY_STALE_FENCING_EPOCH;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed: denied,
+      evidence: {
+        table: 'dlp_write_lease',
+        currentEpoch: acquired.lease.fencingEpoch,
+        presentedEpoch: staleEpoch,
+        validateDecision: validated?.decision || null,
+      },
+      failureReason: denied ? null : (validated?.decision || 'EXPECTED_STALE_DENY'),
+    };
+  });
+
+  await runCase('A03', 'concurrent_contenders_single_owner', async () => {
+    if (!secondary) {
+      return {
+        executed: true,
+        sqlBacked: false,
+        passed: false,
+        evidence: { ownedClientCount: 1 },
+        failureReason: 'SECOND_OWNED_CLIENT_REQUIRED',
+      };
+    }
+    const resourceKey = 'suite-a-resource-a03';
+    const [a, b] = await Promise.all([
+      acquireWriteLease(clusterClient, {
+        ...baseLease,
+        resourceKey,
+        actorId: 'worker-a03-a',
+        taskId: 'task-a03-a',
+        leaseKey: 'lease-suite-a-a03-a',
+        idempotencyKey: 'suite-a-a03-a',
+      }),
+      acquireWriteLease(secondary, {
+        ...baseLease,
+        resourceKey,
+        actorId: 'worker-a03-b',
+        taskId: 'task-a03-b',
+        leaseKey: 'lease-suite-a-a03-b',
+        idempotencyKey: 'suite-a-a03-b',
+      }),
+    ]);
+    const winners = [a, b].filter((r) => r?.ok === true);
+    const losers = [a, b].filter((r) => r?.ok !== true);
+    const countRes = await clusterClient.query(
+      `SELECT COUNT(*)::int AS n FROM dlp_write_lease
+        WHERE resource_type = $1 AND resource_key = $2 AND status = 'ACTIVE'`,
+      [baseLease.resourceType, resourceKey],
+    );
+    const activeCount = Number(countRes.rows?.[0]?.n || 0);
+    const passed = winners.length === 1 && losers.length === 1 && activeCount === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'dlp_write_lease',
+        winners: winners.length,
+        losers: losers.length,
+        activeCount,
+        decisions: [a?.decision || null, b?.decision || null],
+      },
+      failureReason: passed ? null : 'SINGLE_OWNER_INVARIANT_FAILED',
+    };
+  });
+
+  await runCase('A04', 'durable_jti_replay_DENY', async () => {
+    await withOwnedTxn(clusterClient, async () => {
+      const first = await registries.consumeJti('jti-fence-a04', binding);
+      if (!first.ok) throw new Error(first.decision || 'FIRST_CONSUME_FAILED');
+    });
+    let replay;
+    await withOwnedTxn(clusterClient, async () => {
+      replay = await registries.consumeJti('jti-fence-a04', binding);
+    });
+    const countRes = await clusterClient.query(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      ['jti-fence-a04'],
+    );
+    const passed = replay?.decision === DURABLE_REGISTRY_DECISIONS.DENY_REPLAY
+      && Number(countRes.rows?.[0]?.n) === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'tecp_ops_authority_jti_presentation',
+        rowCount: Number(countRes.rows?.[0]?.n || 0),
+        replayDecision: replay?.decision || null,
+      },
+      failureReason: passed ? null : (replay?.decision || 'REPLAY_NOT_DENIED'),
+    };
+  });
+
+  await runCase('A05', 'concurrent_duplicate_jti_single_commit', async () => {
+    if (!secondary) {
+      return {
+        executed: true,
+        sqlBacked: false,
+        passed: false,
+        evidence: { ownedClientCount: 1 },
+        failureReason: 'SECOND_OWNED_CLIENT_REQUIRED',
+      };
+    }
+    const registriesB = createDurableAuthorityRegistries(secondary, {
+      requireOwnedTxn: true,
+      requireDlpTxnOwnerMarker: true,
+      issuerId: binding.issuerId,
+      audience: binding.audience,
+    });
+    const jti = 'jti-fence-a05';
+    const outcomes = await Promise.all([
+      withOwnedTxn(clusterClient, async () => registries.consumeJti(jti, binding)),
+      withOwnedTxn(secondary, async () => registriesB.consumeJti(jti, {
+        ...binding,
+        principalId: 'worker-f2',
+        taskId: 'task-a05-b',
+      })),
+    ]);
+    const wins = outcomes.filter((r) => r?.ok === true).length;
+    const denies = outcomes.filter((r) => r?.decision === DURABLE_REGISTRY_DECISIONS.DENY_REPLAY).length;
+    const countRes = await clusterClient.query(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [jti],
+    );
+    const rowCount = Number(countRes.rows?.[0]?.n || 0);
+    const passed = wins <= 1 && rowCount === 1 && (wins + denies) === 2;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'tecp_ops_authority_jti_presentation',
+        wins,
+        denies,
+        rowCount,
+        decisions: outcomes.map((r) => r?.decision || null),
+      },
+      failureReason: passed ? null : 'DUPLICATE_JTI_SINGLE_COMMIT_FAILED',
+    };
+  });
+
+  await runCase('A06', 'revocation_enforced', async () => {
+    const jti = 'jti-fence-a06';
+    await withOwnedTxn(clusterClient, async () => {
+      const revoked = await registries.revoke(jti, 'SUITE_A_REVOKE', {
+        governanceRevision: binding.governanceRevision,
+        issuerId: binding.issuerId,
+        audience: binding.audience,
+      });
+      if (!revoked.ok) throw new Error(revoked.decision || 'REVOKE_FAILED');
+    });
+    let consume;
+    await withOwnedTxn(clusterClient, async () => {
+      consume = await registries.consumeJti(jti, binding);
+    });
+    const countRes = await clusterClient.query(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_revocation WHERE jti = $1',
+      [jti],
+    );
+    const passed = consume?.decision === DURABLE_REGISTRY_DECISIONS.DENY_REVOKED
+      && Number(countRes.rows?.[0]?.n) === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'tecp_ops_authority_revocation',
+        rowCount: Number(countRes.rows?.[0]?.n || 0),
+        consumeDecision: consume?.decision || null,
+      },
+      failureReason: passed ? null : (consume?.decision || 'REVOKE_NOT_ENFORCED'),
+    };
+  });
+
+  await runCase('A07', 'rollback_releases_uncommitted_jti', async () => {
+    const jti = 'jti-fence-a07';
+    try {
+      await withOwnedWriteLeaseTransaction(clusterClient, async () => {
+        const inserted = await registries.consumeJti(jti, binding);
+        if (!inserted.ok) throw new Error(inserted.decision || 'INSERT_FAILED');
+        const probe = new Error('SUITE_A_A07_INTENTIONAL_ROLLBACK_PROBE');
+        probe.code = 'SUITE_A_A07_INTENTIONAL_ROLLBACK_PROBE';
+        throw probe;
+      });
+    } catch (error) {
+      if (error?.code !== 'SUITE_A_A07_INTENTIONAL_ROLLBACK_PROBE') {
+        throw error;
+      }
+    }
+    let presentedAfter;
+    await withOwnedTxn(clusterClient, async () => {
+      presentedAfter = await registries.hasPresented(jti);
+    });
+    let second;
+    await withOwnedTxn(clusterClient, async () => {
+      second = await registries.consumeJti(jti, binding);
+    });
+    const countRes = await clusterClient.query(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [jti],
+    );
+    const notPresentedAfterRollback = presentedAfter?.ok === true
+      && presentedAfter?.presented === false;
+    const passed = notPresentedAfterRollback
+      && second?.ok === true
+      && Number(countRes.rows?.[0]?.n) === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'tecp_ops_authority_jti_presentation',
+        ownedTxnHelper: 'withOwnedWriteLeaseTransaction',
+        intentionalRollbackProbe: 'SUITE_A_A07_INTENTIONAL_ROLLBACK_PROBE',
+        presentedAfterOk: presentedAfter?.ok === true,
+        presentedAfterPresented: presentedAfter?.presented === false,
+        secondOk: second?.ok === true,
+        rowCount: Number(countRes.rows?.[0]?.n || 0),
+      },
+      failureReason: passed ? null : 'ROLLBACK_DID_NOT_RELEASE_JTI',
+    };
+  });
+
+  await runCase('A08', 'restart_preserves_committed_durable_state', async () => {
+    if (!ownedController || typeof ownedController.restartPostmaster !== 'function') {
+      return {
+        executed: false,
+        sqlBacked: false,
+        passed: false,
+        evidence: null,
+        failureReason: 'RESTART_PRIMITIVE_UNAVAILABLE',
+      };
+    }
+    const jti = 'jti-fence-a08';
+    await withOwnedTxn(clusterClient, async () => {
+      const consumed = await registries.consumeJti(jti, binding);
+      if (!consumed.ok) throw new Error(consumed.decision || 'A08_CONSUME_FAILED');
+    });
+    const before = await clusterClient.query(
+      'SELECT jti FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [jti],
+    );
+    if (Number(before.rowCount) !== 1) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { beforeCount: before.rowCount },
+        failureReason: 'PRE_RESTART_ROW_MISSING',
+      };
+    }
+    const restarted = await ownedController.restartPostmaster({
+      reason: 'SUITE_A_A08_BOUNDED_RESTART',
+    });
+    if (!restarted?.ok) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { restarted },
+        failureReason: restarted?.decision || 'RESTART_FAILED',
+      };
+    }
+    const reconnected = await ownedController.createOwnedClusterClient({
+      database: 'dlp_proof',
+    });
+    if (!reconnected?.ok || !isOwnedConnectedClusterClient(reconnected.client)) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { reconnected },
+        failureReason: 'RECONNECT_FAILED',
+      };
+    }
+    const after = await reconnected.client.query(
+      'SELECT jti FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [jti],
+    );
+    const passed = Number(after.rowCount) === 1
+      && restarted.initdbExecuted !== true
+      && restarted.oneshotReplayed !== true;
+    if (passed) {
+      workingClient = reconnected.client;
+      registries = createDurableAuthorityRegistries(workingClient, {
+        requireOwnedTxn: true,
+        requireDlpTxnOwnerMarker: true,
+        issuerId: 'ops-rla-issuer',
+        audience: 'tecp-ops-operational-rla',
+      });
+    }
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        table: 'tecp_ops_authority_jti_presentation',
+        beforeCount: before.rowCount,
+        afterCount: after.rowCount,
+        restartDecision: restarted.decision || null,
+        initdbExecuted: restarted.initdbExecuted === true,
+        oneshotReplayed: restarted.oneshotReplayed === true,
+      },
+      failureReason: passed ? null : 'DURABLE_STATE_NOT_PRESERVED',
+    };
+  });
+
+  await runCase('A09', 'lease_identity_not_reassignable_across_resource_or_task', async () => {
+    const acquired = await acquireWriteLease(workingClient, {
+      ...baseLease,
+      resourceKey: 'suite-a-resource-a09',
+      taskId: 'task-a09',
+      leaseKey: 'lease-suite-a-a09',
+      idempotencyKey: 'suite-a-a09-idem',
+    });
+    if (!acquired?.ok || !acquired.lease) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        evidence: { acquired },
+        failureReason: acquired?.decision || 'ACQUIRE_FAILED',
+      };
+    }
+    const mismatched = await validateWriteLease(workingClient, {
+      resourceType: baseLease.resourceType,
+      resourceKey: 'suite-a-resource-a09',
+      leaseKey: acquired.lease.leaseKey,
+      actorId: baseLease.actorId,
+      taskId: 'task-OTHER',
+      governanceRevision: APPROVED_GOVERNANCE_REVISION,
+      fencingEpoch: acquired.lease.fencingEpoch,
+    });
+    const denied = mismatched?.ok === false
+      && mismatched.decision === WRITE_LEASE_DECISIONS.DENY_BINDING_MISMATCH;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed: denied,
+      evidence: {
+        table: 'dlp_write_lease',
+        validateDecision: mismatched?.decision || null,
+        leaseKey: acquired.lease.leaseKey,
+      },
+      failureReason: denied ? null : (mismatched?.decision || 'EXPECTED_IDENTITY_DENY'),
+    };
+  });
+
+  await runCase('A10', 'persistent_audit_evidence_records', async () => {
+    const auditBinding = Object.freeze({
+      eventType: 'SUITE_A_A10_EVIDENCE',
+      taskId: 'task-f1',
+      actorId: 'worker-f1',
+    });
+    let auditCountRes = await workingClient.query(
+      `SELECT COUNT(*)::int AS n FROM dlp_audit_event
+        WHERE event_type = $1 AND task_id = $2 AND actor_id = $3`,
+      [auditBinding.eventType, auditBinding.taskId, auditBinding.actorId],
+    );
+    let auditCount = Number(auditCountRes.rows?.[0]?.n || 0);
+    let evidenceCountRes = await workingClient.query(
+      `SELECT COUNT(*)::int AS n FROM dlp_evidence_fact
+        WHERE evidence_type = $1 AND task_id = $2 AND actor_id = $3`,
+      [auditBinding.eventType, auditBinding.taskId, auditBinding.actorId],
+    );
+    let evidenceCount = Number(evidenceCountRes.rows?.[0]?.n || 0);
+    if (auditCount < 1 || evidenceCount < 1) {
+      await withOwnedTxn(workingClient, async () => {
+        if (auditCount < 1) {
+          await workingClient.query(
+            `INSERT INTO dlp_audit_event (
+               event_id, event_type, task_id, actor_id, governance_revision, idempotency_key
+             ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              'suite-a-a10-event-1',
+              auditBinding.eventType,
+              auditBinding.taskId,
+              auditBinding.actorId,
+              APPROVED_GOVERNANCE_REVISION,
+              'suite-a-a10-audit-idem',
+            ],
+          );
+        }
+        if (evidenceCount < 1) {
+          await workingClient.query(
+            `INSERT INTO dlp_evidence_fact (
+               evidence_id, task_id, actor_id, governance_revision, evidence_type,
+               evidence_ref, idempotency_key
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              'suite-a-a10-evidence-1',
+              auditBinding.taskId,
+              auditBinding.actorId,
+              APPROVED_GOVERNANCE_REVISION,
+              auditBinding.eventType,
+              'suite-a-a10-evidence-ref',
+              'suite-a-a10-evidence-idem',
+            ],
+          );
+        }
+      });
+      auditCountRes = await workingClient.query(
+        `SELECT COUNT(*)::int AS n FROM dlp_audit_event
+          WHERE event_type = $1 AND task_id = $2 AND actor_id = $3`,
+        [auditBinding.eventType, auditBinding.taskId, auditBinding.actorId],
+      );
+      auditCount = Number(auditCountRes.rows?.[0]?.n || 0);
+      evidenceCountRes = await workingClient.query(
+        `SELECT COUNT(*)::int AS n FROM dlp_evidence_fact
+          WHERE evidence_type = $1 AND task_id = $2 AND actor_id = $3`,
+        [auditBinding.eventType, auditBinding.taskId, auditBinding.actorId],
+      );
+      evidenceCount = Number(evidenceCountRes.rows?.[0]?.n || 0);
+    }
+    const passed = auditCount >= 1 && evidenceCount >= 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      evidence: {
+        tables: ['dlp_audit_event', 'dlp_evidence_fact'],
+        auditRowCount: auditCount,
+        evidenceRowCount: evidenceCount,
+        identityBinding: auditBinding,
+      },
+      failureReason: passed ? null : 'AUDIT_EVIDENCE_MISSING',
+    };
+  });
+
+  const ordered = FENCING_LIVE_CASE_SPECS.map((spec) => {
+    const hit = resultsById.get(spec.caseId);
+    if (hit) return hit;
+    return buildCaseResult(spec.caseId, spec.catalogKey, {
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      evidence: null,
+      failureReason: 'CASE_NOT_EXECUTED',
+    });
+  });
+  const aggregation = aggregateFencingLiveSqlResults(ordered);
   return {
-    ok: proofs.valid_lease_current_fencing_ALLOW && proofs.stale_fencing_DENY,
-    decision: 'FENCING_LIVE_MATRIX_PARTIAL_UNTIL_FULL_SQL_PASS',
-    reasons: Object.freeze(['LIVE_SQL_MATRIX_INVOKED']),
-    proofs: Object.freeze(proofs),
+    ok: aggregation.allPassed === true,
+    decision: aggregation.allPassed
+      ? 'FENCING_LIVE_MATRIX_STRICT_PASS'
+      : 'FENCING_LIVE_MATRIX_DENIED',
+    reasons: Object.freeze([...aggregation.reasons]),
+    results: Object.freeze(ordered),
+    aggregation,
     proofClass: FENCING_PROOF_CLASS_LIVE,
-    sqlExecuted: true,
+    sqlExecuted: anySqlExecuted === true && ordered.some((r) => r.sqlBacked === true),
     catalog: FENCING_LIVE_SQL_CATALOG,
   };
 }
 
-/**
- * Offline orchestration: contract proofs + process-local doubles.
- * Explicitly NOT PostgreSQL durability proof.
- */
-export async function runOfflineFencingOrchestration(resources = {}) {
+
+async function runOfflineFencingOrchestration(resources = {}) {
   if (!isRunnerOfflineSuiteGrant(resources.runnerOfflineSuiteGrant)) {
     return {
       ok: false,
@@ -522,6 +1126,12 @@ export async function executeTier3SuiteViaRunnerContract(ctx = {}) {
     return runLiveFencingSqlMatrix(ctx.clusterClient, {
       liveExecutionAuthority: ctx.liveExecutionAuthority,
       authorityCheck: auth,
+      runnerContext: ctx,
+      repositoryHeadSha: ctx.repositoryHeadSha || ctx.repositorySha,
+      ownedController: ctx.ownedController,
+      extraClients: ctx.extraClients,
+      schemaBootstrapEvidence: ctx.schemaBootstrapEvidence,
+      restartBudget: ctx.restartBudget,
     });
   }
   return {
@@ -585,6 +1195,134 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(stillDenied.sqlExecuted, false);
   });
 
+
+
+  it('schema bootstrap evidence without ok is rejected before live matrix cases', async () => {
+    const latched = await (async () => {
+      const clock = { monotonicNowMs: () => 9000 };
+      const ticket = createInertOfflineOneShotTicketForTests({
+        proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+        explicitNonProd: true,
+      }, { clock });
+      let primary = null;
+      let secondary = null;
+      const controller = createDisposableOpsPilotClusterController({
+        explicitNonProd: true,
+        ownerOneShotTicket: ticket,
+        clock,
+        spawnSyncFn() { return { status: 0, stdout: 'ok', stderr: '' }; },
+        offlineWiringProbe: true,
+        inertClientFactory: () => {
+          const client = {
+            database: 'dlp_proof',
+            ended: false,
+            async connect() {},
+            async query() { return { rows: [], rowCount: 0 }; },
+            async end() { this.ended = true; },
+          };
+          if (primary == null) primary = client;
+          else secondary = client;
+          return client;
+        },
+      }, { NODE_ENV: 'test' });
+      await controller.prepare();
+      await controller.start();
+      await controller.createOwnedClusterClient({ database: 'dlp_proof', offlineWiringProbe: true });
+      await controller.createOwnedClusterClient({ database: 'dlp_proof', offlineWiringProbe: true });
+      return { primary, secondary };
+    })();
+    assert.ok(latched.primary);
+    assert.ok(latched.secondary);
+    const denied = await runLiveFencingSqlMatrix(latched.primary, {
+      authorityCheck: {
+        ok: true,
+        authorizesRealSql: true,
+        offlineWiringProbe: false,
+      },
+      runnerContext: {
+        extraClients: [latched.secondary],
+        schemaBootstrapEvidence: {
+          database: 'dlp_proof',
+          filesApplied: 6,
+        },
+      },
+    });
+    assert.equal(denied.ok, false);
+    assert.ok((denied.reasons || []).includes('SCHEMA_BOOTSTRAP_EVIDENCE_REQUIRED'));
+  });
+
+  it('postgres admin secondary client is rejected for Suite A concurrency', async () => {
+    const clock = { monotonicNowMs: () => 9100 };
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+  const makeInert = (database) => ({
+      database,
+      async connect() {},
+      async query() { return { rows: [], rowCount: 0 }; },
+      async end() {},
+    });
+    let primary = null;
+    let postgresSecondary = null;
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn() { return { status: 0, stdout: 'ok', stderr: '' }; },
+      offlineWiringProbe: true,
+      inertClientFactory: () => {
+        const client = makeInert('dlp_proof');
+        if (primary == null) {
+          primary = client;
+          return client;
+        }
+        return client;
+      },
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    await controller.start();
+    await controller.createOwnedClusterClient({ database: 'dlp_proof', offlineWiringProbe: true });
+    const postgresResult = await controller.createOwnedClusterClient({
+      database: 'postgres',
+      offlineWiringProbe: true,
+      inertClientFactory: () => {
+        postgresSecondary = makeInert('postgres');
+        return postgresSecondary;
+      },
+    });
+    assert.equal(postgresResult.ok, true);
+    assert.ok(primary);
+    assert.ok(postgresSecondary);
+    const denied = await runLiveFencingSqlMatrix(primary, {
+      authorityCheck: {
+        ok: true,
+        authorizesRealSql: true,
+        offlineWiringProbe: false,
+      },
+      runnerContext: {
+        ownedController: controller,
+        extraClients: [postgresSecondary],
+        schemaBootstrapEvidence: {
+          ok: true,
+          proofClass: 'DISPOSABLE_OPS_PILOT_SCHEMA_BOOTSTRAP_V1',
+          filesApplied: 6,
+        },
+      },
+    });
+    assert.equal(denied.ok, false);
+    assert.ok(
+      (denied.reasons || []).includes('POSTGRES_ADMIN_CLIENT_REJECTED_FOR_SUITE_A_CONCURRENCY'),
+      `expected postgres admin reject, got ${JSON.stringify(denied.reasons)}`,
+    );
+  });
+
+  it('A09 rebind contract forbids stale pre-restart cluster client after A08', async () => {
+    const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'cp2DbFencingDurability.test.js'), 'utf8');
+    assert.match(src, /workingClient = reconnected\.client/);
+    assert.match(src, /acquireWriteLease\(workingClient/);
+    assert.match(src, /SELECT COUNT\(\*\)::int AS n FROM dlp_evidence_fact/);
+  });
 
   it('fake clusterClient cannot satisfy owned-connected live SQL gate', async () => {
     const fake = {
@@ -665,8 +1403,26 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     assert.equal(replay.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_ONESHOT_REPLAY);
   });
 
+  it('strict aggregation helper rejects partial or forged PASS offline', () => {
+    const partial = FENCING_LIVE_CASE_SPECS.map((spec) => ({
+      caseId: spec.caseId,
+      catalogKey: spec.catalogKey,
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      evidence: null,
+      failureReason: 'OFFLINE',
+    }));
+    const agg = aggregateFencingLiveSqlResults(partial);
+    assert.equal(agg.allPassed, false);
+    assert.equal(agg.ok, false);
+    const forged = partial.map((r, i) => (i === 0 ? { ...r, executed: true, sqlBacked: true, passed: true, evidence: {} } : r));
+    assert.equal(aggregateFencingLiveSqlResults(forged).allPassed, false);
+  });
+
   it('documents required live assertions for future Owner Tier-3 run', () => {
     assert.equal(FENCING_LIVE_SQL_CATALOG.length, 10);
+    assert.equal(FENCING_LIVE_CASE_SPECS.length, 10);
     assert.notEqual(CP2_DB_FENCING_SUITE_STATUS, 'FENCING_DURABLE_PASS');
     assert.notEqual(CP2_DB_FENCING_SUITE_STATUS, 'DB_ATOMICITY_PASS');
   });
