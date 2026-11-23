@@ -19,12 +19,25 @@ import { describe, it } from 'node:test';
  * node --test parent, skip describe registration to avoid nested suite cancellation.
  * Direct `node --test cp2DbFencingDurability.test.js` still registers normally.
  */
-function isDirectSuiteTestEntrypoint(argv = process.argv) {
+/**
+ * True only for genuine direct Node test entry of THIS file.
+ * Rejects: dynamic import by launcher, secondary suite-path argv, basename-only collisions.
+ * Fail-closed on any resolution/input error.
+ */
+export function isDirectSuiteTestEntrypoint(argv = process.argv) {
   try {
     const self = resolve(fileURLToPath(import.meta.url));
-    return Array.isArray(argv) && argv.some((a) => {
+    if (!Array.isArray(argv) || argv.length < 2) return false;
+    const entries = argv.map((a) => String(a));
+    const testFlagIdx = entries.findIndex((a) => a === '--test');
+    const candidates = testFlagIdx >= 1
+      ? entries.slice(testFlagIdx + 1).filter((a) => a && !a.startsWith('-'))
+      : [entries[1]].filter((a) => a && !a.startsWith('-'));
+    if (candidates.length === 0) return false;
+    return candidates.some((a) => {
       try {
-        return resolve(String(a)) === self || basename(String(a)) === basename(self);
+        // Exact resolved path only — never basename-equality (G5 transport false-positive).
+        return resolve(a) === self;
       } catch {
         return false;
       }
@@ -1222,6 +1235,92 @@ async function runFencingDurabilityAgainstDisposablePg(clusterClient, opts = {})
 }
 
 const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 Suite A transport entrypoint regressions (G5-R3 offline)', () => {
+  const selfPath = resolve(fileURLToPath(import.meta.url));
+  const selfBase = basename(selfPath);
+
+  it('direct node --test argv with exact resolved path registers', () => {
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, '--test', selfPath]),
+      true,
+    );
+  });
+
+  it('direct node path argv (no --test) with exact resolved path registers', () => {
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, selfPath]),
+      true,
+    );
+  });
+
+  it('dynamic-import launcher argv with secondary suite path does not register', () => {
+    const launcher = resolve('/home/titanlab/.tecp-ops-pilot/live-launch/run-live-suite.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, selfPath]),
+      false,
+    );
+  });
+
+  it('basename-only collision against unrelated path does not register', () => {
+    const decoy = resolve('/tmp', selfBase);
+    assert.notEqual(decoy, selfPath);
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, '/tmp/unrelated-launcher.mjs', decoy]),
+      false,
+    );
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, '--test', decoy]),
+      false,
+    );
+  });
+
+  it('incorrect entrypoint context fails closed', () => {
+    assert.equal(isDirectSuiteTestEntrypoint([]), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath]), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath, '--test']), false);
+    assert.equal(isDirectSuiteTestEntrypoint(null), false);
+    // undefined uses default process.argv (genuine direct-run semantics); non-array garbage fails closed.
+    assert.equal(isDirectSuiteTestEntrypoint(42), false);
+    assert.equal(isDirectSuiteTestEntrypoint('not-an-argv'), false);
+  });
+
+  it('TAP-free JSON transport: dynamic import of this module does not emit TAP from describe registration', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const probe = `
+import { pathToFileURL } from 'node:url';
+process.argv = [process.execPath, '/tmp/fake-owner-launcher.mjs', ${JSON.stringify(selfPath)}];
+const mod = await import(pathToFileURL(${JSON.stringify(selfPath)}).href);
+if (!mod || typeof mod.isDirectSuiteTestEntrypoint !== 'function') {
+  console.log(JSON.stringify({ ok: false, reason: 'EXPORT_MISSING' }));
+  process.exit(2);
+}
+const hit = mod.isDirectSuiteTestEntrypoint(process.argv);
+console.log(JSON.stringify({
+  ok: hit === false,
+  entrypointHit: hit,
+  hasAggregate: typeof mod.aggregateFencingLiveSqlResults === 'function',
+  tapVersionEmitted: false,
+}));
+`;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', probe], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '' },
+      timeout: 20000,
+    });
+    const stdout = String(r.stdout || '');
+    const stderr = String(r.stderr || '');
+    assert.equal(r.status, 0, `probe_status=${r.status} stderr=${stderr.slice(0, 400)}`);
+    assert.equal(stdout.includes('TAP version'), false, 'TAP_LEAK_IN_DYNAMIC_IMPORT');
+    assert.equal(stderr.includes('TAP version'), false, 'TAP_LEAK_IN_DYNAMIC_IMPORT_STDERR');
+    const line = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+    const parsed = JSON.parse(line);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.entrypointHit, false);
+    assert.equal(parsed.hasAggregate, true);
+  });
+});
+
 
 (__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 cp2DbFencingDurability (Tier-3 gated)', () => {
   it('reports Tier-3 closed and refuses silent skip-as-pass', async () => {
