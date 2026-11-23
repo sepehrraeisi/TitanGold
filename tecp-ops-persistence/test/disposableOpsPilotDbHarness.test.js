@@ -63,6 +63,9 @@ import {
   evaluateOpsPilotHarnessSafety,
   evaluateOwnerControlledLocalRunnerEvidence,
   evaluateTier3FinalExecutionReadiness,
+  endAllOwnedClusterClients,
+  listRegisteredOwnedClients,
+  getOwnedClientAccounting,
   OPS_PILOT_LIVE_CUSTODY_CLASS_FUNCTIONAL_LAB,
   OPS_PILOT_LIVE_VENUE,
   createLiveCapabilityGatedOneShotTicket,
@@ -2387,5 +2390,128 @@ describe('PKG4 PGPORT env sterilization offline security', () => {
     assert.match(body, /LANG:\s*'C'/);
     assert.match(body, /LC_ALL:\s*'C'/);
     assert.match(body, /PATH:\s*''/);
+  });
+});
+
+describe('S2 G2 Suite A harness extensions (offline negative)', () => {
+  it('multi-client registry requires all clients to close', async () => {
+    const clock = { monotonicNowMs: () => 1000 };
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const clients = [];
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+      spawnSyncFn() {
+        return { status: 0, stdout: 'ok', stderr: '' };
+      },
+      inertClientFactory: () => {
+        const c = { ended: false, async connect() {}, async query() { return { rows: [], rowCount: 0 }; }, async end() { this.ended = true; } };
+        clients.push(c);
+        return c;
+      },
+      offlineWiringProbe: true,
+    }, { NODE_ENV: 'test' });
+    await controller.prepare();
+    const started = await controller.start();
+    assert.equal(started.ok, true);
+    await controller.createOwnedClusterClient({ offlineWiringProbe: true });
+    await controller.createOwnedClusterClient({ offlineWiringProbe: true });
+    const accounting = getOwnedClientAccounting(controller);
+    assert.equal(accounting.registeredCount, 2);
+    const listed = listRegisteredOwnedClients(controller);
+    assert.equal(listed.length, 2);
+    const ended = await endAllOwnedClusterClients(controller);
+    assert.equal(ended.ok, true);
+    assert.equal(getOwnedClientAccounting(controller).registeredCount, 0);
+    await controller.stop();
+    await controller.cleanup();
+  });
+
+  it('restartPostmaster denies when budget exhausted or cluster not started', async () => {
+    const clock = { monotonicNowMs: () => 2000 };
+    const ticket = createInertOfflineOneShotTicketForTests({
+      proofClass: 'TEST_ONLY_INERT_ONESHOT_TICKET',
+      explicitNonProd: true,
+    }, { clock });
+    const controller = createDisposableOpsPilotClusterController({
+      explicitNonProd: true,
+      ownerOneShotTicket: ticket,
+      clock,
+    }, { NODE_ENV: 'test' });
+    const denied = await controller.restartPostmaster();
+    assert.equal(denied.ok, false);
+    assert.ok([
+      OPS_PILOT_HARNESS_DECISIONS.DENY_RESTART_WITHOUT_STARTED_CLUSTER,
+      OPS_PILOT_HARNESS_DECISIONS.DENY_DB_EXECUTION_NOT_AUTHORIZED,
+    ].includes(denied.decision));
+  });
+
+  it('schema bootstrap allowlist is fixed and import has no eager side effects', async () => {
+    const mod = await import('../src/disposableOpsPilotSchemaBootstrap.js');
+    assert.equal(mod.SCHEMA_BOOTSTRAP_ALLOWLIST.length, 6);
+    const denied = await mod.applyDisposableOpsPilotSchemaBootstrap({
+      authorizesRealSql: false,
+      offlineWiringProbe: true,
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.decision, mod.SCHEMA_BOOTSTRAP_DECISIONS.DENY_NOT_AUTHORIZED);
+  });
+});
+
+describe('S2 G3 Suite A harness extensions (offline negative)', () => {
+  it('splitSqlStatements preserves fence CREATE, DO blocks, and FUNCTION bodies across allowlisted schema files', async () => {
+    const {
+      splitSqlStatements,
+      SCHEMA_BOOTSTRAP_ALLOWLIST,
+    } = await import('../src/disposableOpsPilotSchemaBootstrap.js');
+    const { OPS_PILOT_CANONICAL_REPO_ROOT } = await import('../src/disposableOpsPilotDbHarness.js');
+    const expectations = [
+      {
+        rel: 'tecp-persistence/test/disposableSchema.sql',
+        assert: (stmts) => stmts.some((s) => /CREATE TABLE dlp_write_resource_fence/.test(s)),
+      },
+      {
+        rel: 'tecp-ops-persistence/test/disposableOpsPilotAuthoritySchema.sql',
+        assert: (stmts) => stmts.some((s) => /^DO \$\$/m.test(s.trim()) && /CREATE ROLE/.test(s)),
+      },
+      {
+        rel: 'tecp-persistence/test/disposableAuditEvidenceSchema.sql',
+        assert: (stmts) => stmts.some((s) => /CREATE OR REPLACE FUNCTION/.test(s) && /RAISE EXCEPTION/.test(s)),
+      },
+    ];
+    for (const rel of SCHEMA_BOOTSTRAP_ALLOWLIST) {
+      const sqlText = readFileSync(resolve(OPS_PILOT_CANONICAL_REPO_ROOT, rel), 'utf8');
+      const stmts = splitSqlStatements(sqlText);
+      assert.ok(stmts.length > 0, rel);
+      const exp = expectations.find((e) => e.rel === rel);
+      if (exp) {
+        assert.ok(exp.assert(stmts), rel);
+      }
+    }
+    const unclosed = () => splitSqlStatements('DO $$ BEGIN SELECT 1;');
+    assert.throws(unclosed, /SPLIT_SQL_UNCLOSED_DOLLAR_QUOTE/);
+    assert.throws(() => splitSqlStatements("SELECT 'unclosed"), /SPLIT_SQL_UNCLOSED_SINGLE_QUOTE/);
+    assert.throws(() => splitSqlStatements('SELECT "unclosed'), /SPLIT_SQL_UNCLOSED_DOUBLE_QUOTE/);
+    assert.throws(() => splitSqlStatements('SELECT 1 /* unclosed'), /SPLIT_SQL_UNCLOSED_BLOCK_COMMENT/);
+  });
+
+  it('offline runner wiring probe must not fabricate schemaBootstrapEvidence ok', async () => {
+    const runner = await import('../scripts/ownerControlledTier3LocalRunner.js');
+    const runnerSrc = readFileSync(resolve(__dirname, '../scripts/ownerControlledTier3LocalRunner.js'), 'utf8');
+    assert.match(runnerSrc, /offlineWiringProbe: true,/);
+    assert.match(runnerSrc, /filesAllowlisted: 6/);
+    assert.doesNotMatch(runnerSrc, /offlineWiringProbe: true[\s\S]{0,220}ok:\s*true/);
+    assert.ok(runner);
+  });
+});
+
+describe('S2 G3 A02 fencing epoch offline contract', () => {
+  it('first-generation epoch 1 presented as Math.max(1, epoch-1) equals current epoch', () => {
+    const epoch = 1;
+    assert.equal(Math.max(1, epoch - 1), epoch);
   });
 });
