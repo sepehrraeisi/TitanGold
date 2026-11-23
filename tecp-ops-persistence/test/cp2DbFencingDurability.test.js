@@ -20,28 +20,42 @@ import { describe, it } from 'node:test';
  * Direct `node --test cp2DbFencingDurability.test.js` still registers normally.
  */
 /**
- * True only for genuine direct Node test entry of THIS file.
- * Rejects: dynamic import by launcher, secondary suite-path argv, basename-only collisions.
+ * True only when THIS module is the real Node entrypoint script.
+ * - Accepts: `node <thisfile>` and primary `node --test <thisfile>` (argv[1] === '--test').
+ * - Rejects: launcher at argv[1], secondary `--test`/`--suite` forwarding, basename-only matches.
  * Fail-closed on any resolution/input error.
  */
 export function isDirectSuiteTestEntrypoint(argv = process.argv) {
   try {
     const self = resolve(fileURLToPath(import.meta.url));
     if (!Array.isArray(argv) || argv.length < 2) return false;
-    const entries = argv.map((a) => String(a));
-    const testFlagIdx = entries.findIndex((a) => a === '--test');
-    const candidates = testFlagIdx >= 1
-      ? entries.slice(testFlagIdx + 1).filter((a) => a && !a.startsWith('-'))
-      : [entries[1]].filter((a) => a && !a.startsWith('-'));
-    if (candidates.length === 0) return false;
-    return candidates.some((a) => {
+    const entry = String(argv[1] ?? '');
+    if (!entry) return false;
+
+    // Genuine direct script: node <thisfile>
+    if (!entry.startsWith('-')) {
       try {
-        // Exact resolved path only — never basename-equality (G5 transport false-positive).
-        return resolve(a) === self;
+        return resolve(entry) === self;
       } catch {
         return false;
       }
-    });
+    }
+
+    // Genuine primary node test runner flag only: node --test <thisfile>
+    // Do NOT scan later argv for --test/--suite (Owner-launcher false-positive).
+    if (entry === '--test') {
+      const target = argv[2];
+      if (target == null) return false;
+      const t = String(target);
+      if (!t || t.startsWith('-')) return false;
+      try {
+        return resolve(t) === self;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -1240,21 +1254,21 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
   const selfPath = resolve(fileURLToPath(import.meta.url));
   const selfBase = basename(selfPath);
 
-  it('direct node --test argv with exact resolved path registers', () => {
+  it('real child-process node --test execution still registers tests', () => {
     assert.equal(
       isDirectSuiteTestEntrypoint([process.execPath, '--test', selfPath]),
       true,
     );
   });
 
-  it('direct node path argv (no --test) with exact resolved path registers', () => {
+  it('direct-script invocation with the exact module path registers', () => {
     assert.equal(
       isDirectSuiteTestEntrypoint([process.execPath, selfPath]),
       true,
     );
   });
 
-  it('dynamic-import launcher argv with secondary suite path does not register', () => {
+  it('dynamic import from Owner-launcher-shaped process does not register', () => {
     const launcher = resolve('/home/titanlab/.tecp-ops-pilot/live-launch/run-live-suite.mjs');
     assert.equal(
       isDirectSuiteTestEntrypoint([process.execPath, launcher, selfPath]),
@@ -1262,11 +1276,27 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     );
   });
 
-  it('basename-only collision against unrelated path does not register', () => {
+  it('secondary --suite <Suite A path> is rejected as entrypoint', () => {
+    const launcher = resolve('/tmp/fake-owner-launcher.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, '--suite', selfPath]),
+      false,
+    );
+  });
+
+  it('secondary --test <Suite A path> is rejected as entrypoint', () => {
+    const launcher = resolve('/tmp/fake-owner-launcher.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, '--test', selfPath]),
+      false,
+    );
+  });
+
+  it('unrelated file with matching basename is rejected', () => {
     const decoy = resolve('/tmp', selfBase);
     assert.notEqual(decoy, selfPath);
     assert.equal(
-      isDirectSuiteTestEntrypoint([process.execPath, '/tmp/unrelated-launcher.mjs', decoy]),
+      isDirectSuiteTestEntrypoint([process.execPath, decoy]),
       false,
     );
     assert.equal(
@@ -1275,33 +1305,32 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
     );
   });
 
-  it('incorrect entrypoint context fails closed', () => {
+  it('missing, malformed and incorrect entrypoint contexts fail closed', () => {
     assert.equal(isDirectSuiteTestEntrypoint([]), false);
     assert.equal(isDirectSuiteTestEntrypoint([process.execPath]), false);
     assert.equal(isDirectSuiteTestEntrypoint([process.execPath, '--test']), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath, '--test', '--other']), false);
     assert.equal(isDirectSuiteTestEntrypoint(null), false);
-    // undefined uses default process.argv (genuine direct-run semantics); non-array garbage fails closed.
     assert.equal(isDirectSuiteTestEntrypoint(42), false);
     assert.equal(isDirectSuiteTestEntrypoint('not-an-argv'), false);
   });
 
-  it('TAP-free JSON transport: dynamic import of this module does not emit TAP from describe registration', async () => {
+  it('dynamic import generates no unexpected TAP and JSON-only transport remains parseable', async () => {
     const { spawnSync } = await import('node:child_process');
     const probe = `
 import { pathToFileURL } from 'node:url';
-process.argv = [process.execPath, '/tmp/fake-owner-launcher.mjs', ${JSON.stringify(selfPath)}];
+process.argv = [process.execPath, '/tmp/fake-owner-launcher.mjs', '--test', ${JSON.stringify(selfPath)}];
 const mod = await import(pathToFileURL(${JSON.stringify(selfPath)}).href);
-if (!mod || typeof mod.isDirectSuiteTestEntrypoint !== 'function') {
-  console.log(JSON.stringify({ ok: false, reason: 'EXPORT_MISSING' }));
-  process.exit(2);
-}
 const hit = mod.isDirectSuiteTestEntrypoint(process.argv);
-console.log(JSON.stringify({
+const payload = {
   ok: hit === false,
   entrypointHit: hit,
   hasAggregate: typeof mod.aggregateFencingLiveSqlResults === 'function',
-  tapVersionEmitted: false,
-}));
+  caseCount: Array.isArray(mod.FENCING_LIVE_CASE_SPECS) ? mod.FENCING_LIVE_CASE_SPECS.length : -1,
+  cp2DbAuthorized: mod.CP2_DB_AUTHORIZED === false,
+  postgresExecutionAuthorized: mod.POSTGRES_EXECUTION_AUTHORIZED === false,
+};
+console.log(JSON.stringify(payload));
 `;
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', probe], {
       encoding: 'utf8',
@@ -1311,16 +1340,46 @@ console.log(JSON.stringify({
     const stdout = String(r.stdout || '');
     const stderr = String(r.stderr || '');
     assert.equal(r.status, 0, `probe_status=${r.status} stderr=${stderr.slice(0, 400)}`);
-    assert.equal(stdout.includes('TAP version'), false, 'TAP_LEAK_IN_DYNAMIC_IMPORT');
-    assert.equal(stderr.includes('TAP version'), false, 'TAP_LEAK_IN_DYNAMIC_IMPORT_STDERR');
+    assert.equal(stdout.includes('TAP version'), false, 'TAP_LEAK_STDOUT');
+    assert.equal(stderr.includes('TAP version'), false, 'TAP_LEAK_STDERR');
     const line = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
     const parsed = JSON.parse(line);
     assert.equal(parsed.ok, true);
     assert.equal(parsed.entrypointHit, false);
     assert.equal(parsed.hasAggregate, true);
+    assert.equal(parsed.caseCount, 10);
+    assert.equal(parsed.cp2DbAuthorized, true);
+    assert.equal(parsed.postgresExecutionAuthorized, true);
+  });
+
+  it('existing Suite A exports and strict ten-case aggregation remain unchanged', () => {
+    assert.equal(typeof aggregateFencingLiveSqlResults, 'function');
+    assert.equal(Array.isArray(FENCING_LIVE_CASE_SPECS), true);
+    assert.equal(FENCING_LIVE_CASE_SPECS.length, 10);
+    const ids = FENCING_LIVE_CASE_SPECS.map((c) => c.caseId);
+    for (const id of ['A01','A02','A03','A04','A05','A06','A07','A08','A09','A10']) {
+      assert.ok(ids.includes(id), `missing_${id}`);
+    }
+    const incomplete = aggregateFencingLiveSqlResults(
+      FENCING_LIVE_CASE_SPECS.map((c) => ({
+        caseId: c.caseId,
+        executed: false,
+        sqlBacked: false,
+        passed: false,
+        evidence: null,
+      })),
+    );
+    assert.equal(incomplete.ok, false);
+    assert.equal(incomplete.allPassed, false);
+  });
+
+  it('default-DENY and TEST_ONLY security boundaries remain intact', () => {
+    assert.equal(CP2_DB_AUTHORIZED, false);
+    assert.equal(POSTGRES_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
   });
 });
-
 
 (__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 cp2DbFencingDurability (Tier-3 gated)', () => {
   it('reports Tier-3 closed and refuses silent skip-as-pass', async () => {
