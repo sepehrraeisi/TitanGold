@@ -8,25 +8,48 @@
 
 import assert from 'node:assert/strict';
 import { createHmac, createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { basename, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 /**
- * When dynamically imported by the Owner runner under another node --test parent,
- * skip describe registration to avoid nested suite cancellation. Direct suite
- * discovery via `node --test cp2DbDispatcherIntegration.test.js` still registers.
+ * True only when THIS module is the real Node entrypoint script.
+ * - Accepts: `node <thisfile>` and primary `node --test <thisfile>` (argv[1] === '--test').
+ * - Rejects: launcher at argv[1], secondary `--test`/`--suite` forwarding, basename-only matches.
+ * Fail-closed on any resolution/input error.
  */
-function isDirectSuiteTestEntrypoint(argv = process.argv) {
+export function isDirectSuiteTestEntrypoint(argv = process.argv) {
   try {
     const self = resolve(fileURLToPath(import.meta.url));
-    return Array.isArray(argv) && argv.some((a) => {
+    if (!Array.isArray(argv) || argv.length < 2) return false;
+    const entry = String(argv[1] ?? '');
+    if (!entry) return false;
+
+    // Genuine direct script: node <thisfile>
+    if (!entry.startsWith('-')) {
       try {
-        return resolve(String(a)) === self || basename(String(a)) === basename(self);
+        return resolve(entry) === self;
       } catch {
         return false;
       }
-    });
+    }
+
+    // Genuine primary node test runner flag only: node --test <thisfile>
+    // Do NOT scan later argv for --test/--suite (Owner-launcher false-positive).
+    if (entry === '--test') {
+      const target = argv[2];
+      if (target == null) return false;
+      const t = String(target);
+      if (!t || t.startsWith('-')) return false;
+      try {
+        return resolve(t) === self;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -115,10 +138,28 @@ import {
 } from '../scripts/s2Tier3OwnerCapabilityVerifier.js';
 import { invokeOwnerControlledTier3LocalRunner } from '../scripts/ownerControlledTier3LocalRunner.js';
 import {
+  DB_LEASE_CONTEXT_DECISIONS,
+  assertContextBoundToTransaction,
   assertPublicBrandRegistrationIsNotDbAuthority,
+  invalidateContextsForTransaction,
+  isDbProvenLeaseContext,
   projectFromTrustedValidateWriteLease,
   rejectCallerLeaseObject,
 } from '../src/dbIssuedLeaseContext.js';
+import {
+  DURABLE_REGISTRY_DECISIONS,
+  createDurableAuthorityRegistries,
+} from '../src/durableAuthorityRegistries.js';
+import {
+  APPROVED_GOVERNANCE_REVISION as DLP003_GOVERNANCE_REVISION,
+} from '../../tecp-persistence/src/auditEvidenceRepository.js';
+import {
+  APPROVED_GOVERNANCE_REVISION as DLP001_GOVERNANCE_REVISION,
+  acquireWriteLease,
+  assertOwnedWriteLeaseTransaction,
+  validateWriteLease,
+  withOwnedWriteLeaseTransaction,
+} from '../../tecp-persistence/src/writeLeaseRepository.js';
 import {
   DISPATCHER_ACTIONS,
   DISPATCHER_DECISIONS,
@@ -130,6 +171,8 @@ import {
   runTestOnlyDlp004Composition,
 } from '../src/operationalDispatcher.js';
 import {
+  S2_STAGES,
+  createTestOnlyOperationalRlaIssuer,
   registerDbIssuedLeaseContextBrand,
 } from '../../tecp-ops/src/operationalResourceLeaseAuthority.js';
 
@@ -141,6 +184,56 @@ export const POSTGRES_EXECUTION_AUTHORIZED = false;
 export const DB_TIER3_NOT_AUTHORIZED = 'DB_TIER3_NOT_AUTHORIZED';
 export const DISPATCHER_PROOF_CLASS_OFFLINE = 'OFFLINE_ORCHESTRATION_NOT_LIVE_PG';
 export const DISPATCHER_PROOF_CLASS_LIVE = 'LIVE_DISPOSABLE_PG_DISPATCHER_MATRIX';
+export const SUITE_B_LIVE_EVIDENCE_VERSION = 'SUITE_B_LIVE_SQL_EVIDENCE_V1';
+/** Human/debug label only. This string does not authenticate live execution. */
+const SUITE_B_LIVE_EXECUTION_PROVENANCE = 'LIVE_MATRIX_OWNED_TXN_PATH';
+/** Counts only queries that passed through trackedQuery/countQuery. */
+const SUITE_B_SQL_OBSERVATION_PROVENANCE = 'COUNTED_EXPLICIT_SUITE_QUERIES';
+
+const authenticLiveCaseResults = new WeakSet();
+/** Result arrays produced by the authentic runner-authorized live matrix path. */
+const authenticLiveMatrixResultSets = new WeakSet();
+let authenticLiveMatrixBrandPermit = false;
+
+/**
+ * Brands a case result only while the authentic live matrix path holds the permit.
+ * Offline fixtures that call this outside that path remain unbranded.
+ */
+function brandAuthenticLiveCaseResult(result) {
+  if (authenticLiveMatrixBrandPermit === true
+    && result
+    && typeof result === 'object') {
+    authenticLiveCaseResults.add(result);
+  }
+  return result;
+}
+
+/**
+ * Mechanism probe only: proves WeakSet branding works.
+ * Does NOT register a live matrix result set and cannot satisfy authentic live acceptance alone.
+ */
+function probeAuthenticLiveBrandMechanismForTests(result) {
+  if (result && typeof result === 'object') authenticLiveCaseResults.add(result);
+  return result;
+}
+
+function isBrandedAuthenticLiveCaseResult(result) {
+  return result != null && typeof result === 'object' && authenticLiveCaseResults.has(result);
+}
+
+function bindAuthenticLiveMatrixResultSet(results) {
+  if (Array.isArray(results)) authenticLiveMatrixResultSets.add(results);
+  return results;
+}
+
+/**
+ * Matrix-level SQL executed summary. Successful observations survive later assertion failures.
+ */
+export function summarizeDispatcherLiveSqlExecutedFlag({ anySqlExecuted, results } = {}) {
+  if (anySqlExecuted === true) return true;
+  if (!Array.isArray(results)) return false;
+  return results.some((row) => Number(row?.sqlObservedSuccess) > 0);
+}
 
 const S2_CLAIM_KEY_ORDER = Object.freeze([
   'alg',
@@ -215,6 +308,570 @@ export const DISPATCHER_LIVE_SQL_CATALOG = Object.freeze([
   'db_proven_lease_context',
   'no_worker_or_mcp_action',
 ]);
+
+export const DISPATCHER_LIVE_CASE_SPECS = Object.freeze([
+  { caseId: 'B01', proofName: 'test_only_composition_atomic_commit' },
+  { caseId: 'B02', proofName: 'soft_deny_rollback' },
+  { caseId: 'B03', proofName: 'exception_rollback' },
+  { caseId: 'B04', proofName: 'failed_mutation_releases_uncommitted_jti' },
+  { caseId: 'B05', proofName: 'audit_evidence_mutation_same_txn' },
+  { caseId: 'B06', proofName: 'forged_lease_context_DENY' },
+  { caseId: 'B07', proofName: 'cross_transaction_brand_reuse_DENY' },
+  { caseId: 'B08', proofName: 'public_brand_registration_not_db_proven' },
+  { caseId: 'B09', proofName: 'dispatcher_hard_deny_with_disposable_db_available' },
+  { caseId: 'B10', proofName: 'transaction_lifetime_enforcement' },
+  { caseId: 'B11', proofName: 'db_proven_lease_context' },
+  { caseId: 'B12', proofName: 'no_worker_or_mcp_action' },
+]);
+
+const SQL_DEPENDENT_PROOFS = new Set([
+  'test_only_composition_atomic_commit',
+  'soft_deny_rollback',
+  'exception_rollback',
+  'failed_mutation_releases_uncommitted_jti',
+  'audit_evidence_mutation_same_txn',
+  'forged_lease_context_DENY',
+  'cross_transaction_brand_reuse_DENY',
+  'dispatcher_hard_deny_with_disposable_db_available',
+  'transaction_lifetime_enforcement',
+  'db_proven_lease_context',
+  'no_worker_or_mcp_action',
+]);
+
+const REQUIRED_CASE_FIELDS = Object.freeze([
+  'caseId',
+  'proofName',
+  'executed',
+  'sqlBacked',
+  'passed',
+  'expectedOutcome',
+  'actualOutcome',
+  'assertionEvidence',
+  'transactionEvidence',
+  'durabilityEvidence',
+  'sideEffectEvidence',
+  'failureReason',
+  'sqlAttempted',
+  'sqlObservedSuccess',
+  'sqlAssertionPassed',
+]);
+
+function isPlainEvidence(value) {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSqlEvidence(tx) {
+  return isPlainEvidence(tx)
+    && tx.sqlObserved === true
+    && Number.isInteger(tx.queryCount)
+    && tx.queryCount >= 1
+    && typeof tx.provenance === 'string'
+    && tx.provenance.length > 0
+    && tx.fakeLive !== true
+    && tx.offlineOnly !== true
+    && tx.inert !== true;
+}
+
+function contradictoryTransactionEvidence(tx) {
+  if (!isPlainEvidence(tx)) return null;
+  if (tx.sqlObserved === true && tx.queryCount === 0) return 'SQL_OBSERVED_WITH_ZERO_QUERIES';
+  if (tx.committed === true && tx.rolledBack === true) return 'COMMITTED_AND_ROLLED_BACK';
+  return null;
+}
+
+function fakeQueryCountClaim(tx) {
+  if (!isPlainEvidence(tx)) return false;
+  if (!Number.isInteger(tx.queryCount) || tx.queryCount <= 0) return false;
+  if (tx.sqlObserved !== true) return true;
+  if (typeof tx.provenance !== 'string' || tx.provenance.length === 0) return true;
+  return false;
+}
+
+const CASE_EVIDENCE_CONTRACTS = Object.freeze({
+  B01: {
+    sql: true,
+    assertion: {
+      compositionDecision: 'string',
+      committed: 'boolean',
+      taskCount: 'number',
+      auditCount: 'number',
+      evidenceCount: 'number',
+      jtiCount: 'number',
+    },
+    assertionOk: (a) => a.committed === true && a.taskCount === 1 && a.auditCount === 1
+      && a.evidenceCount === 1 && a.jtiCount === 1,
+    transactionOk: (t) => t.committed === true && t.rolledBack === false,
+    durability: { jtiDurable: 'boolean', taskDurable: 'boolean' },
+    durabilityOk: (d) => d.jtiDurable === true && d.taskDurable === true,
+  },
+  B02: {
+    sql: true,
+    assertion: {
+      compositionDecision: 'string',
+      rolledBack: 'boolean',
+      taskCount: 'number',
+      jtiCount: 'number',
+      auditCount: 'number',
+    },
+    assertionOk: (a) => a.rolledBack === true && a.taskCount === 0 && a.jtiCount === 0 && a.auditCount === 0,
+    transactionOk: (t) => t.rolledBack === true && t.committed === false,
+    durability: { unauthorizedCommitAbsent: 'boolean' },
+    durabilityOk: (d, a) => d.unauthorizedCommitAbsent === true && a.taskCount === 0 && a.jtiCount === 0,
+  },
+  B03: {
+    sql: true,
+    assertion: {
+      compositionDecision: 'string',
+      rolledBack: 'boolean',
+      taskCount: 'number',
+      jtiCount: 'number',
+      auditCount: 'number',
+    },
+    assertionOk: (a) => a.rolledBack === true && a.taskCount === 0 && a.jtiCount === 0 && a.auditCount === 0,
+    transactionOk: (t) => t.rolledBack === true && t.committed === false,
+    durability: { exceptionLeftNoRows: 'boolean' },
+    durabilityOk: (d, a) => d.exceptionLeftNoRows === true && a.taskCount === 0 && a.jtiCount === 0,
+  },
+  B04: {
+    sql: true,
+    assertion: {
+      presentedAfterRollback: 'boolean',
+      releasedConsumeOk: 'boolean',
+      committedReplayDecision: 'string',
+      rolledCount: 'number',
+      keptCount: 'number',
+    },
+    assertionOk: (a) => a.presentedAfterRollback === false && a.releasedConsumeOk === true
+      && typeof a.committedReplayDecision === 'string' && a.rolledCount === 1 && a.keptCount === 1,
+    transactionOk: (t) => t.rolledBack === true && t.committed !== true,
+    durability: { uncommittedJtiReleased: 'boolean', committedReplayDenied: 'boolean' },
+    durabilityOk: (d) => d.uncommittedJtiReleased === true && d.committedReplayDenied === true,
+  },
+  B05: {
+    sql: true,
+    assertion: {
+      compositionCommitted: 'boolean',
+      rowCount: 'number',
+      taskXmin: 'string',
+      auditXmin: 'string',
+      evidenceXmin: 'string',
+    },
+    assertionOk: (a) => a.compositionCommitted === true && a.rowCount === 1
+      && a.taskXmin.length > 0 && a.taskXmin === a.auditXmin && a.taskXmin === a.evidenceXmin,
+    transactionOk: (t) => t.committed === true && t.sameTransaction === true,
+    durability: { sharedXmin: 'string' },
+    durabilityOk: (d, a) => d.sharedXmin === a.taskXmin && d.sharedXmin.length > 0,
+  },
+  B06: {
+    sql: true,
+    assertion: {
+      rejectDecision: 'string',
+      projectDecision: 'string',
+      forgedRowCount: 'number',
+    },
+    assertionOk: (a) => a.forgedRowCount === 0 && a.rejectDecision.length > 0,
+    transactionOk: (t) => t.committed === false,
+    durability: { forgedLeaseAbsent: 'boolean' },
+    durabilityOk: (d, a) => d.forgedLeaseAbsent === true && a.forgedRowCount === 0,
+  },
+  B07: {
+    sql: true,
+    assertion: {
+      projectOk: 'boolean',
+      sameTxnOk: 'boolean',
+      crossTxnDecision: 'string',
+      leaseRowCount: 'number',
+      secondarySessionDistinct: 'boolean',
+    },
+    assertionOk: (a) => a.projectOk === true && a.sameTxnOk === true && a.crossTxnDecision.length > 0
+      && a.leaseRowCount === 1,
+    transactionOk: (t) => t.crossTransactionReuseDenied === true,
+    durability: { leaseRowCount: 'number' },
+    durabilityOk: (d, a) => d.leaseRowCount === a.leaseRowCount && d.leaseRowCount === 1,
+  },
+  B08: {
+    sql: false,
+    assertion: {
+      publicBrandDecision: 'string',
+      callerDecision: 'string',
+      dbProven: 'boolean',
+    },
+    assertionOk: (a) => a.dbProven === false && a.publicBrandDecision.length > 0,
+    transactionOk: () => true,
+    durability: null,
+    durabilityOk: () => true,
+    sideEffectOk: (s) => isPlainEvidence(s) && s.sqlFabricated === false && s.dbProvenMinted === false,
+  },
+  B09: {
+    sql: true,
+    assertion: {
+      dbAvailable: 'boolean',
+      hardDenyOk: 'boolean',
+      dispatchDecision: 'string',
+      mutationExecuted: 'boolean',
+      dlpInvoked: 'boolean',
+      observedTaskId: 'string',
+    },
+    assertionOk: (a) => a.dbAvailable === true && a.hardDenyOk === true
+      && a.mutationExecuted === false && a.dlpInvoked === false && a.observedTaskId.length > 0
+      && a.dispatchDecision === DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+    transactionOk: (t) => t.operationalWrite === false,
+    durability: { taskDelta: 'number', observedTaskId: 'string' },
+    durabilityOk: (d, a) => d.taskDelta === 0 && d.observedTaskId === a.observedTaskId,
+  },
+  B10: {
+    sql: true,
+    assertion: {
+      outsideDenied: 'boolean',
+      insideOk: 'boolean',
+      liveOk: 'boolean',
+      expiredDecision: 'string',
+    },
+    assertionOk: (a) => a.outsideDenied === true && a.insideOk === true && a.liveOk === true
+      && a.expiredDecision.length > 0,
+    transactionOk: (t) => t.ownershipOutsideTxn === false && t.ownershipInsideTxn === true,
+    durability: null,
+    durabilityOk: () => true,
+  },
+  B11: {
+    sql: true,
+    assertion: {
+      validateDecision: 'string',
+      projectDecision: 'string',
+      provenanceClass: 'string',
+      realDbAuthority: 'boolean',
+      leaseKey: 'string',
+      fencingEpoch: 'number',
+    },
+    assertionOk: (a) => a.provenanceClass === 'DB_PROVEN' && a.realDbAuthority === true
+      && a.leaseKey.length > 0,
+    transactionOk: (t) => t.dbProven === true,
+    durability: { rowCount: 'number' },
+    durabilityOk: (d) => d.rowCount === 1,
+  },
+  B12: {
+    sql: true,
+    assertion: {
+      dispatchDecision: 'string',
+      mutationExecuted: 'boolean',
+      dlpInvoked: 'boolean',
+      operationalDispatchAuthorized: 'boolean',
+    },
+    assertionOk: (a) => a.mutationExecuted === false && a.dlpInvoked === false
+      && a.operationalDispatchAuthorized === false
+      && a.dispatchDecision === DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+    transactionOk: (t) => t.measuredDeltas === true,
+    durability: null,
+    durabilityOk: () => true,
+  },
+});
+
+function valueMatchesType(value, typeName) {
+  if (typeName === 'string') return typeof value === 'string' && value.length > 0;
+  if (typeName === 'boolean') return typeof value === 'boolean';
+  if (typeName === 'number') return typeof value === 'number' && Number.isFinite(value);
+  return false;
+}
+
+function caseEvidenceFailure(spec, entry) {
+  const contract = CASE_EVIDENCE_CONTRACTS[spec.caseId];
+  if (!contract) return 'UNKNOWN_CASE_CONTRACT';
+  const assertion = entry.assertionEvidence;
+  if (!isPlainEvidence(assertion) || Object.keys(assertion).length === 0) {
+    return 'EMPTY_ASSERTION_EVIDENCE';
+  }
+  for (const [key, typeName] of Object.entries(contract.assertion)) {
+    if (!valueMatchesType(assertion[key], typeName)) return 'MISSING_CASE_OBSERVATIONS';
+  }
+  if (contract.assertionOk(assertion) !== true) return 'CONTRADICTORY_CASE_OBSERVATIONS';
+  if (contract.sql === true) {
+    if (contract.transactionOk(entry.transactionEvidence) !== true) {
+      return 'CONTRADICTORY_TRANSACTION_EVIDENCE';
+    }
+  }
+  if (contract.durability) {
+    const durability = entry.durabilityEvidence;
+    if (!isPlainEvidence(durability)) return 'MISSING_DURABILITY_EVIDENCE';
+    for (const [key, typeName] of Object.entries(contract.durability)) {
+      if (!valueMatchesType(durability[key], typeName)) return 'MISSING_DURABILITY_EVIDENCE';
+    }
+    if (contract.durabilityOk(durability, assertion) !== true) return 'CONTRADICTORY_DURABILITY_EVIDENCE';
+  }
+  if (typeof contract.sideEffectOk === 'function' && contract.sideEffectOk(entry.sideEffectEvidence) !== true) {
+    return 'MISSING_SIDE_EFFECT_EVIDENCE';
+  }
+  if (spec.caseId === 'B12') {
+    const side = entry.sideEffectEvidence;
+    if (!isPlainEvidence(side)) return 'MISSING_B12_OBSERVATIONS';
+    if (side.reasonStringOnly === true) return 'MISSING_B12_OBSERVATIONS';
+    if (side.observationClass !== 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT') {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    if (Object.prototype.hasOwnProperty.call(side, 'instrumentationArmed')
+      || Object.prototype.hasOwnProperty.call(side, 'workerInvocations')
+      || Object.prototype.hasOwnProperty.call(side, 'mcpMutations')
+      || side.provenance === 'CONSTRUCTOR_PERSISTENCE_PORT_INSTRUMENTATION') {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    const arch = side.architectural;
+    if (!isPlainEvidence(arch)) return 'MISSING_B12_OBSERVATIONS';
+    if (arch.constructorPersistenceInjectionVoided !== true
+      || arch.workerMcpExecutionPortsPresentInSource !== false
+      || arch.terminalHardDenyPresentInSource !== true) {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    if (side.terminalDecision !== DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED) {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    if (side.capabilityOk !== true || side.orlaOk !== true) return 'MISSING_B12_OBSERVATIONS';
+    if (side.dlpMutationBoundaryReached !== false) return 'MISSING_B12_OBSERVATIONS';
+    if (side.disconnectedPersistenceCallbacksNotUsedAsProof !== true) {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    if (side.workerExecutionPathObserved !== false || side.mcpExecutionPathObserved !== false) {
+      return 'SIDE_EFFECT_OBSERVED';
+    }
+    if (!Number.isInteger(side.taskRowDelta) || !Number.isInteger(side.auditRowDelta)) {
+      return 'MISSING_B12_OBSERVATIONS';
+    }
+    if (side.taskRowDelta !== 0 || side.auditRowDelta !== 0) return 'SIDE_EFFECT_OBSERVED';
+  }
+  return null;
+}
+
+function evidenceLooksFake(value) {
+  if (!isPlainEvidence(value)) return false;
+  return value.fakeLive === true
+    || value.offlineOnly === true
+    || value.inert === true
+    || value.proofClass === 'OFFLINE_ONLY'
+    || value.proofClass === 'FAKE_LIVE'
+    || value.reasonStringOnly === true;
+}
+
+/**
+ * Structural envelope checks only.
+ * A passing result is not authentic live acceptance.
+ * executionProvenance is a human/debug label and is not proof of live execution.
+ * Synthetic fixtures may PASS this layer. Live matrix PASS uses
+ * acceptAuthenticDispatcherLiveSqlResults.
+ */
+export function validateDispatcherLiveSqlStructure(results) {
+  const fail = (reasons) => Object.freeze({
+    ok: false,
+    structurallyValid: false,
+    allPassed: false,
+    caseCount: Array.isArray(results) ? results.length : 0,
+    reasons: Object.freeze(reasons),
+    layer: 'STRUCTURAL',
+  });
+  if (!Array.isArray(results)) return fail(['RESULTS_ARRAY_REQUIRED', 'MALFORMED_ENVELOPE']);
+  const byId = new Map();
+  for (const entry of results) {
+    if (!isPlainEvidence(entry)) return fail(['MALFORMED_ENVELOPE']);
+    if (typeof entry.caseId !== 'string' || entry.caseId.length === 0) {
+      return fail(['CASE_ID_REQUIRED', 'MALFORMED_ENVELOPE']);
+    }
+    if (byId.has(entry.caseId)) return fail(['DUPLICATE_CASE_ID', entry.caseId]);
+    const known = DISPATCHER_LIVE_CASE_SPECS.find((spec) => spec.caseId === entry.caseId);
+    if (!known) return fail(['UNKNOWN_CASE', entry.caseId]);
+    byId.set(entry.caseId, entry);
+  }
+  if (byId.size !== DISPATCHER_LIVE_CASE_SPECS.length || results.length !== DISPATCHER_LIVE_CASE_SPECS.length) {
+    const missing = DISPATCHER_LIVE_CASE_SPECS.find((spec) => !byId.has(spec.caseId));
+    return fail(missing ? ['MISSING_CASE', missing.caseId, 'CASE_COUNT_MISMATCH'] : ['CASE_COUNT_MISMATCH']);
+  }
+  for (const spec of DISPATCHER_LIVE_CASE_SPECS) {
+    const entry = byId.get(spec.caseId);
+    if (!entry) return fail(['MISSING_CASE', spec.caseId]);
+    for (const field of REQUIRED_CASE_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(entry, field)) {
+        return fail(['MALFORMED_ENVELOPE', `MISSING_FIELD:${spec.caseId}:${field}`]);
+      }
+    }
+    if (entry.proofName !== spec.proofName) return fail(['PROOF_NAME_MISMATCH', spec.caseId]);
+    if (typeof entry.executed !== 'boolean'
+      || typeof entry.sqlBacked !== 'boolean'
+      || typeof entry.passed !== 'boolean') {
+      return fail(['MALFORMED_ENVELOPE', spec.caseId]);
+    }
+    if (entry.passed === true && entry.executed !== true) {
+      return fail(['UNEXECUTED_PRESENTED_AS_PASS', spec.caseId]);
+    }
+    if (entry.executed !== true) return fail(['UNEXECUTED_CASE', spec.caseId]);
+    if (entry.passed !== true) return fail(['FAILED_CASE', spec.caseId]);
+    if (entry.failureReason != null) return fail(['CONTRADICTORY_PROOF_STATE', spec.caseId]);
+    if (typeof entry.expectedOutcome !== 'string'
+      || typeof entry.actualOutcome !== 'string'
+      || entry.expectedOutcome !== entry.actualOutcome) {
+      return fail(['CONTRADICTORY_PROOF_STATE', spec.caseId]);
+    }
+    if (!isPlainEvidence(entry.assertionEvidence)) {
+      return fail(['MISSING_ASSERTION_EVIDENCE', spec.caseId]);
+    }
+    if (evidenceLooksFake(entry.assertionEvidence)
+      || evidenceLooksFake(entry.transactionEvidence)
+      || evidenceLooksFake(entry.durabilityEvidence)
+      || evidenceLooksFake(entry.sideEffectEvidence)) {
+      return fail(['FAKE_LIVE_EVIDENCE_REJECTED', spec.caseId]);
+    }
+    const txConflict = contradictoryTransactionEvidence(entry.transactionEvidence);
+    if (txConflict) return fail(['CONTRADICTORY_TRANSACTION_EVIDENCE', spec.caseId, txConflict]);
+    if (fakeQueryCountClaim(entry.transactionEvidence)) {
+      return fail(['FAKE_QUERY_COUNT_CLAIM', spec.caseId]);
+    }
+    const sqlDependent = SQL_DEPENDENT_PROOFS.has(spec.proofName);
+    if (entry.sqlBacked === true && !isSqlEvidence(entry.transactionEvidence)) {
+      return fail(['SQL_WITHOUT_SQL_EVIDENCE', spec.caseId]);
+    }
+    if (sqlDependent && (entry.sqlBacked !== true || !isSqlEvidence(entry.transactionEvidence))) {
+      return fail(['SQL_WITHOUT_SQL_EVIDENCE', spec.caseId]);
+    }
+    if (entry.sqlBacked === true
+      && (!Number.isInteger(entry.sqlObservedSuccess) || entry.sqlObservedSuccess < 1)) {
+      return fail(['SQL_WITHOUT_SQL_EVIDENCE', spec.caseId]);
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, 'sqlAttempted')
+      && (!Number.isInteger(entry.sqlAttempted) || entry.sqlAttempted < 0)) {
+      return fail(['MALFORMED_SQL_BOOKKEEPING', spec.caseId]);
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, 'sqlObservedSuccess')
+      && entry.sqlObservedSuccess != null
+      && (!Number.isInteger(entry.sqlObservedSuccess) || entry.sqlObservedSuccess < 0)) {
+      return fail(['MALFORMED_SQL_BOOKKEEPING', spec.caseId]);
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, 'sqlAssertionPassed')
+      && typeof entry.sqlAssertionPassed !== 'boolean') {
+      return fail(['MALFORMED_SQL_BOOKKEEPING', spec.caseId]);
+    }
+    if (entry.evidenceVersion !== SUITE_B_LIVE_EVIDENCE_VERSION) {
+      return fail(['MISSING_OR_WRONG_EVIDENCE_VERSION', spec.caseId]);
+    }
+    const caseFailure = caseEvidenceFailure(spec, entry);
+    if (caseFailure) return fail([caseFailure, spec.caseId]);
+  }
+  return Object.freeze({
+    ok: true,
+    structurallyValid: true,
+    allPassed: true,
+    caseCount: results.length,
+    reasons: Object.freeze(['ALL_TWELVE_CASES_PASSED_WITH_EVIDENCE']),
+    layer: 'STRUCTURAL',
+  });
+}
+
+/**
+ * Authentic live acceptance. Structural PASS is required and is not sufficient.
+ * Caller-supplied executionProvenance strings cannot satisfy the brand check.
+ * Offline synthetic arrays — even if individually WeakSet-branded via the
+ * mechanism probe — cannot acquire authentic live acceptance without the
+ * runner-authorized live matrix result-set binding.
+ */
+export function acceptAuthenticDispatcherLiveSqlResults(results) {
+  const structural = validateDispatcherLiveSqlStructure(results);
+  if (structural.ok !== true || structural.structurallyValid !== true) return structural;
+  if (!Array.isArray(results) || authenticLiveMatrixResultSets.has(results) !== true) {
+    return Object.freeze({
+      ok: false,
+      allPassed: false,
+      structurallyValid: true,
+      authenticLiveAccepted: false,
+      caseCount: Array.isArray(results) ? results.length : 0,
+      reasons: Object.freeze([
+        'AUTHENTIC_LIVE_MATRIX_BINDING_MISSING',
+        'SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED',
+      ]),
+      layer: 'AUTHENTIC_LIVE',
+    });
+  }
+  for (const entry of results) {
+    if (isBrandedAuthenticLiveCaseResult(entry) === true) continue;
+    const reasons = ['AUTHENTIC_LIVE_PROVENANCE_MISSING'];
+    if (entry?.executionProvenance === SUITE_B_LIVE_EXECUTION_PROVENANCE) {
+      reasons.push('FABRICATED_LIVE_ENVELOPE');
+    }
+    return Object.freeze({
+      ok: false,
+      allPassed: false,
+      structurallyValid: true,
+      authenticLiveAccepted: false,
+      caseCount: results.length,
+      reasons: Object.freeze(reasons),
+      layer: 'AUTHENTIC_LIVE',
+    });
+  }
+  return Object.freeze({
+    ok: true,
+    allPassed: true,
+    structurallyValid: true,
+    authenticLiveAccepted: true,
+    caseCount: results.length,
+    reasons: Object.freeze(['ALL_TWELVE_CASES_PASSED_WITH_EVIDENCE']),
+    layer: 'AUTHENTIC_LIVE',
+  });
+}
+
+/**
+ * Structural checks only. Documented alias of validateDispatcherLiveSqlStructure.
+ * Do not treat allPassed from this function as live-matrix acceptance.
+ */
+export function aggregateDispatcherLiveSqlResults(results) {
+  return validateDispatcherLiveSqlStructure(results);
+}
+
+function buildCaseResult(caseId, proofName, patch = {}) {
+  return Object.freeze({
+    caseId,
+    proofName,
+    executed: false,
+    sqlBacked: false,
+    passed: false,
+    expectedOutcome: null,
+    actualOutcome: null,
+    assertionEvidence: null,
+    transactionEvidence: null,
+    durabilityEvidence: null,
+    sideEffectEvidence: null,
+    failureReason: 'NOT_EXECUTED',
+    evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
+    executionProvenance: null,
+    sqlAttempted: 0,
+    sqlObservedSuccess: 0,
+    sqlAssertionPassed: false,
+    ...patch,
+  });
+}
+
+function sqlTx(queryCount, extra = {}) {
+  const count = Number.isInteger(queryCount) ? queryCount : 0;
+  return Object.freeze({
+    sqlObserved: count >= 1,
+    queryCount: count,
+    provenance: SUITE_B_SQL_OBSERVATION_PROVENANCE,
+    fakeLive: false,
+    offlineOnly: false,
+    inert: false,
+    ...extra,
+  });
+}
+
+function observeDispatcherArchitecturalIsolation() {
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../src/operationalDispatcher.js'),
+    'utf8',
+  );
+  const voidsPersistence = /void\s+constructorPersistenceInjection\s*;/.test(src);
+  const hasWorkerInvokeApi = /\binvokeWorker\b|\brunWorker\b|\binvokeMcp\b|\bmutateMcp\b/.test(src);
+  const hardDenyTerminal = src.includes('DENY_OPERATIONAL_DISPATCH_DISABLED')
+    && src.includes('GATE_CD_FORBIDS_DLP_MUTATION_ON_OPERATIONAL_PATH');
+  return Object.freeze({
+    observationClass: 'STATIC_ARCHITECTURAL_SOURCE_CONTRACT',
+    constructorPersistenceInjectionVoided: voidsPersistence === true,
+    workerMcpExecutionPortsPresentInSource: hasWorkerInvokeApi === true,
+    terminalHardDenyPresentInSource: hardDenyTerminal === true,
+    disconnectedCallbackInstrumentationSupported: false,
+  });
+}
 
 const BASELINE_SHA = '662b3a16d04de426d444cdce854d7a7d8b982ade';
 const NOW = 1_700_000_300_000;
@@ -303,6 +960,12 @@ function buildHarness() {
     governanceRevision: S2_GOVERNANCE_REVISION,
     publicKeyPem: orlaKeys.publicKeyPem,
   });
+  const orlaIssuer = createTestOnlyOperationalRlaIssuer({
+    kid: 'ops-kid-dbint',
+    iss: 'ops-rla-issuer',
+    privateKeyPem: orlaKeys.privateKeyPem,
+    trustRoot: trustInstalled.trustRoot,
+  });
   const emergencyStop = createOperationalEmergencyStop({ clock: createOrlaClock(NOW) });
   return {
     clock,
@@ -312,6 +975,7 @@ function buildHarness() {
     replayRegistry,
     ownerIssuer,
     capIssuer,
+    orlaIssuer,
     trustRoot: trustInstalled.trustRoot,
     orlaRevocation: createOrlaRevocation(),
     orlaReplay: createOrlaReplay(),
@@ -362,77 +1026,143 @@ function mintPrincipal(h) {
   return { id, approvalIssued, cap };
 }
 
+function mintBootstrapOrla(h, overrides = {}) {
+  const issued = h.orlaIssuer.issue({
+    stage: S2_STAGES.BOOTSTRAP,
+    principalId: WORKER_ID,
+    taskId: TASK_ID,
+    action: 'REQUEST_ELIGIBLE_TASK_LEASE',
+    resourceType: 'WRITE_RESOURCE',
+    resourceKey: 'resource-dbint',
+    governanceRevision: S2_GOVERNANCE_REVISION,
+    issuedAt: NOW,
+    expiresAt: NOW + 60_000,
+    ...overrides,
+  });
+  assert.equal(issued.ok, true);
+  return issued;
+}
+
+function bootstrapOrlaExpectation() {
+  return {
+    principalId: WORKER_ID,
+    taskId: TASK_ID,
+    action: 'REQUEST_ELIGIBLE_TASK_LEASE',
+    resourceType: 'WRITE_RESOURCE',
+    resourceKey: 'resource-dbint',
+    governanceRevision: S2_GOVERNANCE_REVISION,
+    iss: 'ops-rla-issuer',
+    kid: 'ops-kid-dbint',
+    aud: TRUST_ROOT_AUDIENCE,
+  };
+}
+
+function suiteOwnedClientDatabase(client) {
+  if (!client || typeof client !== 'object') return null;
+  return client.database || client.connectionParameters?.database || null;
+}
+
 /**
- * Fully wired live DB matrix. Remains non-executing while live gate is closed.
+ * Fully wired live DB matrix. Offline callers fail closed.
+ * Final ok uses acceptAuthenticDispatcherLiveSqlResults.
+ * aggregateDispatcherLiveSqlResults is structural only and cannot authenticate.
  */
 async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
-  if (opts.tier3ActivationHandle != null) {
+  const ctx = opts.runnerContext && typeof opts.runnerContext === 'object' ? opts.runnerContext : {};
+  const catalogFail = (reasons, failureReason) => {
+    const results = DISPATCHER_LIVE_CASE_SPECS.map((spec) => buildCaseResult(spec.caseId, spec.proofName, {
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      failureReason: failureReason || reasons[0] || 'DENIED',
+    }));
     return {
       ok: false,
       decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY',
-        'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
-      ]),
-      sqlExecuted: false,
+      reasons: Object.freeze([...reasons]),
+      results: Object.freeze(results),
+      aggregation: aggregateDispatcherLiveSqlResults(results),
       proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+      sqlExecuted: false,
+      catalog: DISPATCHER_LIVE_SQL_CATALOG,
+      operationalDispatchAuthorized: false,
     };
-  }
-  const auth = opts.authorityCheck
-    || assertLiveSuiteExecutionAuthorityForSuite(
+  };
+
+  if (Object.prototype.hasOwnProperty.call(opts, 'authorityCheck')) {
+    assertLiveSuiteExecutionAuthorityForSuite(
       opts.liveExecutionAuthority,
       DISPATCHER_DB_SUITE_PATH,
       opts.repositoryHeadSha,
     );
+    return catalogFail(
+      ['CALLER_SUPPLIED_AUTHORITY_CHECK_REJECTED'],
+      'CALLER_SUPPLIED_AUTHORITY_CHECK_REJECTED',
+    );
+  }
+  if (opts.tier3ActivationHandle != null) {
+    return catalogFail([
+      'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY',
+      'RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED',
+    ], 'PUBLIC_TIER3_ACTIVATION_HANDLE_NOT_LIVE_AUTHORITY');
+  }
+  const auth = assertLiveSuiteExecutionAuthorityForSuite(
+    opts.liveExecutionAuthority,
+    DISPATCHER_DB_SUITE_PATH,
+    opts.repositoryHeadSha,
+  );
   if (!auth.ok) {
     return {
       ...auth,
-      sqlExecuted: false,
-      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
+      ...catalogFail(auth.reasons || ['AUTHORITY_DENIED'], 'AUTHORITY_DENIED'),
     };
   }
   if (OPS_PILOT_DB_EXECUTION_AUTHORIZED !== false || OPS_PILOT_TIER3_AUTHORIZED !== false) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['MODULE_CONSTANTS_MUST_REMAIN_FALSE']),
-      sqlExecuted: false,
-      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
-    };
+    return catalogFail(['MODULE_CONSTANTS_MUST_REMAIN_FALSE'], 'MODULE_CONSTANTS_MUST_REMAIN_FALSE');
   }
   if (auth.offlineWiringProbe === true || auth.authorizesRealSql !== true) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'OFFLINE_WIRING_OR_NON_SQL_AUTHORITY_CANNOT_PASS_LIVE_MATRIX',
-        'REAL_SQL_ASSERTIONS_REQUIRED_FOR_PASS',
-      ]),
-      sqlExecuted: false,
-      proofs: Object.freeze(Object.fromEntries(
-        DISPATCHER_LIVE_SQL_CATALOG.map((k) => [k, 'NOT_EXECUTED_OFFLINE_WIRING_PROBE']),
-      )),
-      proofClass: DISPATCHER_PROOF_CLASS_LIVE,
-    };
+    return catalogFail([
+      'OFFLINE_WIRING_OR_NON_SQL_AUTHORITY_CANNOT_PASS_LIVE_MATRIX',
+      'REAL_SQL_ASSERTIONS_REQUIRED_FOR_PASS',
+    ], 'OFFLINE_OR_NON_SQL_AUTHORITY');
   }
   if (!dbClient || typeof dbClient.query !== 'function') {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze(['DISPOSABLE_CLIENT_REQUIRED']),
-      sqlExecuted: false,
-    };
+    return catalogFail(['DISPOSABLE_CLIENT_REQUIRED'], 'DISPOSABLE_CLIENT_REQUIRED');
   }
   if (!isOwnedClusterClient(dbClient) || !isOwnedConnectedClusterClient(dbClient)) {
-    return {
-      ok: false,
-      decision: DB_TIER3_NOT_AUTHORIZED,
-      reasons: Object.freeze([
-        'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
-        'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
-      ]),
-      sqlExecuted: false,
-    };
+    return catalogFail([
+      'FAKE_OR_UNCONNECTED_CLIENT_DENIED',
+      'OWNED_CONNECTED_UNIX_SOCKET_CLIENT_REQUIRED',
+    ], 'FAKE_OR_UNCONNECTED_CLIENT_DENIED');
+  }
+  const schemaBootstrapEvidence = opts.schemaBootstrapEvidence || ctx.schemaBootstrapEvidence;
+  if (schemaBootstrapEvidence == null || schemaBootstrapEvidence.ok !== true) {
+    return catalogFail(['SCHEMA_BOOTSTRAP_EVIDENCE_REQUIRED'], 'SCHEMA_BOOTSTRAP_EVIDENCE_REQUIRED');
+  }
+  const extraClients = Array.isArray(opts.extraClients)
+    ? opts.extraClients
+    : (Array.isArray(ctx.extraClients) ? ctx.extraClients : []);
+  if (suiteOwnedClientDatabase(dbClient) !== 'dlp_proof') {
+    return catalogFail(['PRIMARY_CLUSTER_CLIENT_MUST_BE_DLP_PROOF'], 'PRIMARY_CLUSTER_CLIENT_MUST_BE_DLP_PROOF');
+  }
+  if (extraClients.some((c) => suiteOwnedClientDatabase(c) === 'postgres')) {
+    return catalogFail(
+      ['POSTGRES_ADMIN_CLIENT_REJECTED_FOR_SUITE_B_CONCURRENCY'],
+      'POSTGRES_ADMIN_CLIENT_REJECTED_FOR_SUITE_B_CONCURRENCY',
+    );
+  }
+  if (extraClients.some((c) => {
+    const db = suiteOwnedClientDatabase(c);
+    return db != null && db !== 'dlp_proof';
+  })) {
+    return catalogFail(['SECONDARY_CLIENT_MUST_BE_DLP_PROOF'], 'SECONDARY_CLIENT_MUST_BE_DLP_PROOF');
+  }
+  const secondary = extraClients.find((c) => isOwnedConnectedClusterClient(c)) || null;
+  if (!secondary || suiteOwnedClientDatabase(secondary) !== 'dlp_proof' || secondary === dbClient) {
+    return catalogFail(
+      ['SECOND_DLP_PROOF_OWNED_CLIENT_REQUIRED'],
+      'SECOND_DLP_PROOF_OWNED_CLIENT_REQUIRED',
+    );
   }
 
   const h = buildHarness();
@@ -440,74 +1170,856 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
   const compositionHandle = createTestOnlyDlp004CompositionHandle({
     proofClass: 'TEST_ONLY_DLP004_COMPOSITION_HANDLE',
   });
-  const composition = await runTestOnlyDlp004Composition(compositionHandle, {
-    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
-    principal: chain.id.principal,
-    jti: `jti-live-${randomBytes(4).toString('hex')}`,
-    taskId: TASK_ID,
-    resourceType: 'WRITE_RESOURCE',
-    resourceKey: 'resource-dbint',
-    governanceRevision: S2_GOVERNANCE_REVISION,
-    issuerId: 'ops-rla-issuer',
-    audience: TRUST_ROOT_AUDIENCE,
-    dbClient,
-  });
+  const nonce = randomBytes(4).toString('hex');
+  const resultsById = new Map();
+  let anySqlExecuted = false;
 
-  const dispatcher = createOperationalDispatcher({
-    emergencyStop: h.emergencyStop,
-    trustRoot: h.trustRoot,
-    buildCapabilityVerifyDeps() {
-      return {
-        keyRegistry: h.keyRegistry,
-        clock: h.clock,
-        revocationRegistry: h.revocationRegistry,
-        replayRegistry: h.replayRegistry,
-        approvalToken: chain.approvalIssued.token,
-        approvalDeps: {
+  function makeDispatcher(forChain = chain, extraDeps = {}) {
+    return createOperationalDispatcher({
+      emergencyStop: h.emergencyStop,
+      trustRoot: h.trustRoot,
+      orlaVerifyDeps: {
+        trustRoot: h.trustRoot,
+        clock: h.orlaClock,
+        revocationRegistry: h.orlaRevocation,
+        replayRegistry: h.orlaReplay,
+      },
+      ...extraDeps,
+      buildCapabilityVerifyDeps() {
+        return {
           keyRegistry: h.keyRegistry,
           clock: h.clock,
           revocationRegistry: h.revocationRegistry,
-        },
-        principal: chain.id.principal,
-      };
-    },
-    orlaVerifyDeps: {
-      trustRoot: h.trustRoot,
-      clock: h.orlaClock,
-      revocationRegistry: h.orlaRevocation,
-      replayRegistry: h.orlaReplay,
-    },
-  });
-  const dispatchResult = dispatcher.authorizeAndDispatch({
-    action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
-    principal: chain.id.principal,
-    capabilityToken: chain.cap.token,
-    capabilityExpectation: {
-      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
-      taskId: TASK_ID,
-      resourcePaths: [...SCOPE],
-      principalId: WORKER_ID,
-    },
-    orlaToken: 'not-a-real-token',
-    ownedTxnHandle: { id: 'fake' },
-  });
-  const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+          replayRegistry: h.replayRegistry,
+          approvalToken: forChain.approvalIssued.token,
+          approvalDeps: {
+            keyRegistry: h.keyRegistry,
+            clock: h.clock,
+            revocationRegistry: h.revocationRegistry,
+          },
+          principal: forChain.id.principal,
+        };
+      },
+    });
+  }
 
+  function compositionFixture(suffix, extra = {}) {
+    const taskId = `task-suite-b-${suffix}-${nonce}`;
+    const resourceKey = `resource-suite-b-${suffix}-${nonce}`;
+    return {
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      principal: chain.id.principal,
+      jti: `jti-suite-b-${suffix}-${nonce}`,
+      taskId,
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey,
+      governanceRevision: S2_GOVERNANCE_REVISION,
+      issuerId: 'ops-rla-issuer',
+      audience: TRUST_ROOT_AUDIENCE,
+      dbClient,
+      bind: {
+        taskId,
+        actorId: WORKER_ID,
+        resourceType: 'WRITE_RESOURCE',
+        resourceKey,
+        claimKey: `claim-suite-b-${suffix}-${nonce}`,
+        leaseKey: `lease-suite-b-${suffix}-${nonce}`,
+        governanceRevision: DLP001_GOVERNANCE_REVISION,
+        compositionIdempotencyKey: `comp-idem-suite-b-${suffix}-${nonce}`,
+        leaseIdempotencyKey: `lease-idem-suite-b-${suffix}-${nonce}`,
+        ttlMs: 60_000,
+      },
+      audit: {
+        eventId: `audit-suite-b-${suffix}-${nonce}`,
+        eventType: `SUITE_B_${suffix}`,
+        taskId,
+        actorId: WORKER_ID,
+        governanceRevision: DLP003_GOVERNANCE_REVISION,
+        idempotencyKey: `audit-idem-suite-b-${suffix}-${nonce}`,
+      },
+      evidence: {
+        evidenceId: `evidence-suite-b-${suffix}-${nonce}`,
+        taskId,
+        actorId: WORKER_ID,
+        governanceRevision: DLP003_GOVERNANCE_REVISION,
+        evidenceType: `SUITE_B_${suffix}`,
+        evidenceRef: `ref-suite-b-${suffix}-${nonce}`,
+        idempotencyKey: `evidence-idem-suite-b-${suffix}-${nonce}`,
+      },
+      ...extra,
+    };
+  }
+
+  let caseSqlBook = { sqlAttempted: 0, sqlObservedSuccess: 0, queryCount: 0 };
+
+  async function trackedQuery(sql, params) {
+    caseSqlBook.sqlAttempted += 1;
+    try {
+      const res = await dbClient.query(sql, params);
+      caseSqlBook.sqlObservedSuccess += 1;
+      caseSqlBook.queryCount += 1;
+      return res;
+    } catch (error) {
+      caseSqlBook.queryCount += 1;
+      throw error;
+    }
+  }
+
+  async function countQuery(sql, params) {
+    const res = await trackedQuery(sql, params);
+    return { res, n: Number(res.rows?.[0]?.n ?? res.rowCount ?? 0) };
+  }
+
+  async function runCase(caseId, proofName, fn) {
+    caseSqlBook = { sqlAttempted: 0, sqlObservedSuccess: 0, queryCount: 0 };
+    const book = caseSqlBook;
+    authenticLiveMatrixBrandPermit = true;
+    try {
+      const outcome = await fn();
+      const passed = outcome.passed === true;
+      const sqlBacked = book.sqlObservedSuccess > 0 && outcome.sqlBacked === true;
+      if (book.sqlObservedSuccess > 0) anySqlExecuted = true;
+      const sealed = brandAuthenticLiveCaseResult(buildCaseResult(caseId, proofName, {
+        executed: outcome.executed === true,
+        sqlBacked,
+        passed,
+        expectedOutcome: outcome.expectedOutcome ?? null,
+        actualOutcome: outcome.actualOutcome ?? null,
+        assertionEvidence: outcome.assertionEvidence ?? null,
+        transactionEvidence: outcome.transactionEvidence ?? null,
+        durabilityEvidence: outcome.durabilityEvidence ?? null,
+        sideEffectEvidence: outcome.sideEffectEvidence ?? null,
+        failureReason: passed ? null : (outcome.failureReason || 'CASE_FAILED'),
+        executionProvenance: SUITE_B_LIVE_EXECUTION_PROVENANCE,
+        sqlAttempted: book.sqlAttempted,
+        sqlObservedSuccess: book.sqlObservedSuccess,
+        sqlAssertionPassed: passed && outcome.sqlBacked === true && book.sqlObservedSuccess > 0,
+      }));
+      resultsById.set(caseId, sealed);
+    } catch (error) {
+      // Successful SQL observations must survive assertion/query failures.
+      if (book.sqlObservedSuccess > 0) anySqlExecuted = true;
+      const sealed = brandAuthenticLiveCaseResult(buildCaseResult(caseId, proofName, {
+        executed: true,
+        sqlBacked: book.sqlObservedSuccess > 0,
+        passed: false,
+        expectedOutcome: 'NO_EXCEPTION',
+        actualOutcome: 'EXCEPTION',
+        assertionEvidence: Object.freeze({ error: error.message || String(error) }),
+        failureReason: `${caseId}_EXCEPTION`,
+        executionProvenance: SUITE_B_LIVE_EXECUTION_PROVENANCE,
+        sqlAttempted: book.sqlAttempted,
+        sqlObservedSuccess: book.sqlObservedSuccess,
+        sqlAssertionPassed: false,
+      }));
+      resultsById.set(caseId, sealed);
+    } finally {
+      authenticLiveMatrixBrandPermit = false;
+    }
+  }
+
+  await runCase('B01', 'test_only_composition_atomic_commit', async () => {
+    const fixture = compositionFixture('b01');
+    const composition = await runTestOnlyDlp004Composition(compositionHandle, fixture);
+    const task = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const audit = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_audit_event WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const evidence = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_evidence_fact WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const jti = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [fixture.jti],
+    );
+    const passed = composition.decision === TEST_ONLY_COMPOSITION_DECISIONS.COMMITTED
+      && composition.committed === true
+      && composition.rolledBack !== true
+      && task.n === 1
+      && audit.n === 1
+      && evidence.n === 1
+      && jti.n === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: TEST_ONLY_COMPOSITION_DECISIONS.COMMITTED,
+      actualOutcome: composition.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        compositionDecision: composition.decision || null,
+        committed: composition.committed === true,
+        taskCount: task.n,
+        auditCount: audit.n,
+        evidenceCount: evidence.n,
+        jtiCount: jti.n,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: true, rolledBack: false }),
+      durabilityEvidence: Object.freeze({ jtiDurable: jti.n === 1, taskDurable: task.n === 1 }),
+      sideEffectEvidence: Object.freeze({ compositionMutation: composition.mutationExecuted === true }),
+      failureReason: passed ? null : (composition.decision || 'ATOMIC_COMMIT_NOT_OBSERVED'),
+    };
+  });
+
+  await runCase('B02', 'soft_deny_rollback', async () => {
+    const fixture = compositionFixture('b02', { forceSoftDeny: true });
+    const composition = await runTestOnlyDlp004Composition(compositionHandle, fixture);
+    const task = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const audit = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_audit_event WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const jti = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [fixture.jti],
+    );
+    const passed = composition.decision === TEST_ONLY_COMPOSITION_DECISIONS.DENY_MUTATION
+      && composition.rolledBack === true
+      && composition.committed !== true
+      && task.n === 0
+      && audit.n === 0
+      && jti.n === 0;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: 'ROLLED_BACK_NO_COMMIT',
+      actualOutcome: passed ? 'ROLLED_BACK_NO_COMMIT' : (composition.decision || 'SOFT_DENY_LEFT_STATE'),
+      assertionEvidence: Object.freeze({
+        compositionDecision: composition.decision || 'MISSING',
+        rolledBack: composition.rolledBack === true,
+        taskCount: task.n,
+        auditCount: audit.n,
+        jtiCount: jti.n,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: false, rolledBack: true }),
+      durabilityEvidence: Object.freeze({ unauthorizedCommitAbsent: task.n === 0 && jti.n === 0 }),
+      sideEffectEvidence: Object.freeze({ committedRows: task.n + jti.n }),
+      failureReason: passed ? null : 'SOFT_DENY_LEFT_COMMITTED_STATE',
+    };
+  });
+
+  await runCase('B03', 'exception_rollback', async () => {
+    const fixture = compositionFixture('b03', { forceThrow: 'SUITE_B_B03_INTENTIONAL_ROLLBACK' });
+    const composition = await runTestOnlyDlp004Composition(compositionHandle, fixture);
+    const task = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const audit = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_audit_event WHERE task_id = $1',
+      [fixture.taskId],
+    );
+    const jti = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [fixture.jti],
+    );
+    const passed = composition.decision === TEST_ONLY_COMPOSITION_DECISIONS.DENY_EXCEPTION
+      && composition.rolledBack === true
+      && task.n === 0
+      && audit.n === 0
+      && jti.n === 0;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: TEST_ONLY_COMPOSITION_DECISIONS.DENY_EXCEPTION,
+      actualOutcome: composition.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        compositionDecision: composition.decision || 'MISSING',
+        rolledBack: composition.rolledBack === true,
+        taskCount: task.n,
+        auditCount: audit.n,
+        jtiCount: jti.n,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: false, rolledBack: true }),
+      durabilityEvidence: Object.freeze({ exceptionLeftNoRows: task.n === 0 && jti.n === 0 }),
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'EXCEPTION_DID_NOT_ROLLBACK',
+    };
+  });
+
+  await runCase('B04', 'failed_mutation_releases_uncommitted_jti', async () => {
+    const registries = createDurableAuthorityRegistries(dbClient, {
+      requireOwnedTxn: true,
+      requireDlpTxnOwnerMarker: true,
+      issuerId: 'ops-rla-issuer',
+      audience: TRUST_ROOT_AUDIENCE,
+    });
+    const binding = Object.freeze({
+      principalId: WORKER_ID,
+      taskId: `task-suite-b-b04-${nonce}`,
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey: `resource-suite-b-b04-${nonce}`,
+      governanceRevision: S2_GOVERNANCE_REVISION,
+      issuerId: 'ops-rla-issuer',
+      audience: TRUST_ROOT_AUDIENCE,
+    });
+    const rolledJti = `jti-suite-b-b04-roll-${nonce}`;
+    const committedJti = `jti-suite-b-b04-keep-${nonce}`;
+    try {
+      await withOwnedWriteLeaseTransaction(dbClient, async () => {
+        const inserted = await registries.consumeJti(rolledJti, binding);
+        if (!inserted.ok) throw new Error(inserted.decision || 'B04_INSERT_FAILED');
+        const probe = new Error('SUITE_B_B04_INTENTIONAL_ROLLBACK');
+        probe.code = 'SUITE_B_B04_INTENTIONAL_ROLLBACK';
+        throw probe;
+      });
+    } catch (error) {
+      if (error?.code !== 'SUITE_B_B04_INTENTIONAL_ROLLBACK') throw error;
+    }
+    let presented;
+    await withOwnedWriteLeaseTransaction(dbClient, async () => {
+      presented = await registries.hasPresented(rolledJti);
+    });
+    let replayOfCommitted;
+    await withOwnedWriteLeaseTransaction(dbClient, async () => {
+      const kept = await registries.consumeJti(committedJti, binding);
+      if (!kept.ok) throw new Error(kept.decision || 'B04_COMMITTED_CONSUME_FAILED');
+    });
+    await withOwnedWriteLeaseTransaction(dbClient, async () => {
+      replayOfCommitted = await registries.consumeJti(committedJti, binding);
+    });
+    let releasedThenAccepted;
+    await withOwnedWriteLeaseTransaction(dbClient, async () => {
+      releasedThenAccepted = await registries.consumeJti(rolledJti, binding);
+    });
+    const rolledCount = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [rolledJti],
+    );
+    const keptCount = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM tecp_ops_authority_jti_presentation WHERE jti = $1',
+      [committedJti],
+    );
+    const passed = presented?.presented === false
+      && releasedThenAccepted?.ok === true
+      && replayOfCommitted?.decision === DURABLE_REGISTRY_DECISIONS.DENY_REPLAY
+      && rolledCount.n === 1
+      && keptCount.n === 1;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: 'ROLLBACK_RELEASES_AND_COMMITTED_REPLAY_DENY',
+      actualOutcome: passed
+        ? 'ROLLBACK_RELEASES_AND_COMMITTED_REPLAY_DENY'
+        : (replayOfCommitted?.decision || 'JTI_DURABILITY_FAILED'),
+      assertionEvidence: Object.freeze({
+        presentedAfterRollback: presented?.presented === true,
+        releasedConsumeOk: releasedThenAccepted?.ok === true,
+        committedReplayDecision: replayOfCommitted?.decision || null,
+        rolledCount: rolledCount.n,
+        keptCount: keptCount.n,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { rolledBack: true, committedReplayPreserved: true }),
+      durabilityEvidence: Object.freeze({
+        uncommittedJtiReleased: presented?.presented === false,
+        committedReplayDenied: replayOfCommitted?.decision === DURABLE_REGISTRY_DECISIONS.DENY_REPLAY,
+      }),
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'FAILED_MUTATION_JTI_CONTRACT',
+    };
+  });
+
+  await runCase('B05', 'audit_evidence_mutation_same_txn', async () => {
+    const fixture = compositionFixture('b05');
+    const composition = await runTestOnlyDlp004Composition(compositionHandle, fixture);
+    const same = await trackedQuery(
+      `SELECT t.xmin::text AS task_xmin, a.xmin::text AS audit_xmin, e.xmin::text AS evidence_xmin
+         FROM dlp_task t
+         JOIN dlp_audit_event a ON a.task_id = t.task_id
+         JOIN dlp_evidence_fact e ON e.task_id = t.task_id
+        WHERE t.task_id = $1`,
+      [fixture.taskId],
+    );
+    const row = same.rows?.[0] || null;
+    const passed = composition.committed === true
+      && same.rowCount === 1
+      && row != null
+      && row.task_xmin != null
+      && row.task_xmin === row.audit_xmin
+      && row.task_xmin === row.evidence_xmin;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: 'SAME_TRANSACTION_XMIN',
+      actualOutcome: passed ? 'SAME_TRANSACTION_XMIN' : 'XMIN_DIVERGED',
+      assertionEvidence: Object.freeze({
+        compositionCommitted: composition.committed === true,
+        rowCount: same.rowCount,
+        taskXmin: row?.task_xmin || null,
+        auditXmin: row?.audit_xmin || null,
+        evidenceXmin: row?.evidence_xmin || null,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: true, sameTransaction: passed }),
+      durabilityEvidence: Object.freeze({ sharedXmin: row?.task_xmin || null }),
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'AUDIT_NOT_SAME_TRANSACTION',
+    };
+  });
+
+  await runCase('B06', 'forged_lease_context_DENY', async () => {
+    const forgedKey = `forged-suite-b-b06-${nonce}`;
+    const forged = {
+      leaseKey: forgedKey,
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+    };
+    const denied = rejectCallerLeaseObject(forged);
+    const projected = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+      lease: { leaseKey: forgedKey, fencingEpoch: 1, unexpired: true },
+    }, { id: `suite-b-b06-${nonce}` });
+    const rows = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_write_lease WHERE lease_key = $1',
+      [forgedKey],
+    );
+    const passed = denied.ok === false
+      && projected.ok === false
+      && rows.n === 0;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_CALLER_OBJECT,
+      actualOutcome: denied.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        rejectDecision: denied.decision || 'MISSING',
+        projectDecision: projected.decision || 'MISSING',
+        forgedRowCount: rows.n,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: false }),
+      durabilityEvidence: Object.freeze({ forgedLeaseAbsent: rows.n === 0 }),
+      sideEffectEvidence: Object.freeze({ rowsWritten: rows.n }),
+      failureReason: passed ? null : 'FORGED_LEASE_NOT_DENIED',
+    };
+  });
+
+  await runCase('B07', 'cross_transaction_brand_reuse_DENY', async () => {
+    const resourceKey = `resource-suite-b-b07-${nonce}`;
+    const leaseKey = `lease-suite-b-b07-${nonce}`;
+    const acquired = await acquireWriteLease(dbClient, {
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey,
+      actorId: WORKER_ID,
+      taskId: `task-suite-b-b07-${nonce}`,
+      governanceRevision: DLP001_GOVERNANCE_REVISION,
+      ttlMs: 60_000,
+      leaseKey,
+      idempotencyKey: `idem-suite-b-b07-${nonce}`,
+    });
+    if (!acquired?.ok || !acquired.lease) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_TXN_LIFETIME_EXPIRED,
+        actualOutcome: acquired?.decision || 'ACQUIRE_FAILED',
+        assertionEvidence: Object.freeze({ acquireDecision: acquired?.decision || null }),
+        transactionEvidence: sqlTx(caseSqlBook.queryCount),
+        failureReason: acquired?.decision || 'B07_ACQUIRE_FAILED',
+      };
+    }
+    const validated = await validateWriteLease(dbClient, {
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey,
+      leaseKey: acquired.lease.leaseKey,
+      actorId: WORKER_ID,
+      taskId: `task-suite-b-b07-${nonce}`,
+      governanceRevision: DLP001_GOVERNANCE_REVISION,
+      fencingEpoch: acquired.lease.fencingEpoch,
+    });
+    const txnA = { id: `suite-b-b07-a-${nonce}` };
+    const txnB = { id: `suite-b-b07-b-${nonce}` };
+    const projected = projectFromTrustedValidateWriteLease(
+      { ...validated, trustedValidateWriteLease: true, ok: true },
+      txnA,
+    );
+    const reuse = projected.ok
+      ? assertContextBoundToTransaction(projected.context, txnB)
+      : { ok: false, decision: projected.decision };
+    const bound = projected.ok
+      ? assertContextBoundToTransaction(projected.context, txnA)
+      : { ok: false, decision: projected.decision };
+    const observed = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_write_lease WHERE lease_key = $1',
+      [leaseKey],
+    );
+    const passed = projected.ok === true
+      && isDbProvenLeaseContext(projected.context)
+      && bound.ok === true
+      && reuse.ok === false
+      && reuse.decision === DB_LEASE_CONTEXT_DECISIONS.DENY_TXN_LIFETIME_EXPIRED
+      && observed.n === 1
+      && secondary != null;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_TXN_LIFETIME_EXPIRED,
+      actualOutcome: reuse.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        projectOk: projected.ok === true,
+        sameTxnOk: bound.ok === true,
+        crossTxnDecision: reuse.decision || null,
+        leaseRowCount: observed.n,
+        secondarySessionDistinct: secondary !== dbClient,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { crossTransactionReuseDenied: reuse.ok === false }),
+      durabilityEvidence: Object.freeze({ leaseRowCount: observed.n }),
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'CROSS_TXN_REUSE_NOT_DENIED',
+    };
+  });
+
+  await runCase('B08', 'public_brand_registration_not_db_proven', async () => {
+    const forged = Object.freeze({
+      leaseKey: `public-brand-suite-b-b08-${nonce}`,
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+    });
+    registerDbIssuedLeaseContextBrand((value) => value === forged);
+    const publicBrand = assertPublicBrandRegistrationIsNotDbAuthority(forged);
+    const caller = rejectCallerLeaseObject(forged);
+    const passed = publicBrand.ok === false
+      && caller.ok === false
+      && isDbProvenLeaseContext(forged) === false;
+    return {
+      executed: true,
+      sqlBacked: false,
+      passed,
+      expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_PUBLIC_BRAND_NOT_DB_AUTHORITY,
+      actualOutcome: publicBrand.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        publicBrandDecision: publicBrand.decision || null,
+        callerDecision: caller.decision || null,
+        dbProven: isDbProvenLeaseContext(forged),
+      }),
+      transactionEvidence: null,
+      durabilityEvidence: null,
+      sideEffectEvidence: Object.freeze({ sqlFabricated: false, dbProvenMinted: false }),
+      failureReason: passed ? null : 'PUBLIC_BRAND_WAS_TREATED_AS_DB_PROVEN',
+    };
+  });
+
+  await runCase('B09', 'dispatcher_hard_deny_with_disposable_db_available', async () => {
+    const ping = await trackedQuery('SELECT 1::int AS n');
+    const observedTaskId = TASK_ID;
+    const before = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
+      [observedTaskId],
+    );
+    // Independent capability chain: must not share B12's capability JTI / presentation.
+    const chainB09 = mintPrincipal(h);
+    const dispatcher = makeDispatcher(chainB09);
+    const orla = mintBootstrapOrla(h);
+    const terminalDeny = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
+    const dispatchResult = dispatcher.authorizeAndDispatch({
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      principal: chainB09.id.principal,
+      capabilityToken: chainB09.cap.token,
+      capabilityExpectation: {
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        taskId: observedTaskId,
+        resourcePaths: [...SCOPE],
+        principalId: WORKER_ID,
+      },
+      orlaToken: orla.token,
+      orlaExpectation: bootstrapOrlaExpectation(),
+      ownedTxnHandle: { id: `suite-b-b09-${nonce}` },
+    });
+    const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+    const after = await countQuery(
+      'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
+      [observedTaskId],
+    );
+    const taskDelta = after.n - before.n;
+    const capabilityOk = dispatchResult.offlineContractObservations?.capabilityOk === true;
+    const orlaOk = dispatchResult.offlineContractObservations?.orlaOk === true;
+    const passed = Number(ping.rows?.[0]?.n) === 1
+      && dispatchResult.decision === terminalDeny
+      && capabilityOk === true
+      && orlaOk === true
+      && dispatchResult.mutationExecuted !== true
+      && dispatchResult.dlpInvoked !== true
+      && hardDeny.ok === true
+      && taskDelta === 0
+      && OPERATIONAL_DISPATCH_AUTHORIZED === false
+      && DISPATCHER_MODULE_OPERATIONAL_FLAG === false;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: terminalDeny,
+      actualOutcome: dispatchResult.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        dbAvailable: Number(ping.rows?.[0]?.n) === 1,
+        hardDenyOk: hardDeny.ok === true,
+        dispatchDecision: dispatchResult.decision || 'MISSING',
+        mutationExecuted: dispatchResult.mutationExecuted === true,
+        dlpInvoked: dispatchResult.dlpInvoked === true,
+        observedTaskId,
+        capabilityOk,
+        orlaOk,
+        capabilityJti: chainB09.cap.claims.jti,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { operationalWrite: false }),
+      durabilityEvidence: Object.freeze({
+        taskDelta,
+        observedTaskId,
+      }),
+      sideEffectEvidence: Object.freeze({ operationalDispatchAuthorized: false }),
+      failureReason: passed ? null : 'DISPATCHER_HARD_DENY_FAILED',
+    };
+  });
+
+  await runCase('B10', 'transaction_lifetime_enforcement', async () => {
+    let outsideDenied = false;
+    try {
+      await assertOwnedWriteLeaseTransaction(dbClient);
+    } catch {
+      outsideDenied = true;
+    }
+    let insideOk = false;
+    await withOwnedWriteLeaseTransaction(dbClient, async () => {
+      await assertOwnedWriteLeaseTransaction(dbClient);
+      await trackedQuery('SELECT 1');
+      insideOk = true;
+    });
+    const txn = { id: `suite-b-b10-${nonce}` };
+    const projected = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      lease: {
+        leaseKey: `lease-suite-b-b10-${nonce}`,
+        fencingEpoch: 1,
+        resourceType: 'WRITE_RESOURCE',
+        resourceKey: `resource-suite-b-b10-${nonce}`,
+        taskId: `task-suite-b-b10-${nonce}`,
+        actorId: WORKER_ID,
+        unexpired: true,
+      },
+    }, txn);
+    const live = projected.ok ? assertContextBoundToTransaction(projected.context, txn) : projected;
+    invalidateContextsForTransaction(txn);
+    const expired = projected.ok
+      ? assertContextBoundToTransaction(projected.context, txn)
+      : projected;
+    const passed = outsideDenied === true
+      && insideOk === true
+      && live.ok === true
+      && expired.ok === false
+      && expired.decision === DB_LEASE_CONTEXT_DECISIONS.DENY_TXN_LIFETIME_EXPIRED;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_TXN_LIFETIME_EXPIRED,
+      actualOutcome: expired.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        outsideDenied,
+        insideOk,
+        liveOk: live.ok === true,
+        expiredDecision: expired.decision || null,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { ownershipOutsideTxn: false, ownershipInsideTxn: insideOk }),
+      durabilityEvidence: null,
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'TXN_LIFETIME_NOT_ENFORCED',
+    };
+  });
+
+  await runCase('B11', 'db_proven_lease_context', async () => {
+    const resourceKey = `resource-suite-b-b11-${nonce}`;
+    const leaseKey = `lease-suite-b-b11-${nonce}`;
+    const taskId = `task-suite-b-b11-${nonce}`;
+    const acquired = await acquireWriteLease(dbClient, {
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey,
+      actorId: WORKER_ID,
+      taskId,
+      governanceRevision: DLP001_GOVERNANCE_REVISION,
+      ttlMs: 60_000,
+      leaseKey,
+      idempotencyKey: `idem-suite-b-b11-${nonce}`,
+    });
+    if (!acquired?.ok || !acquired.lease) {
+      return {
+        executed: true,
+        sqlBacked: true,
+        passed: false,
+        expectedOutcome: 'DB_PROVEN',
+        actualOutcome: acquired?.decision || 'ACQUIRE_FAILED',
+        assertionEvidence: Object.freeze({ acquireDecision: acquired?.decision || null }),
+        transactionEvidence: sqlTx(caseSqlBook.queryCount),
+        failureReason: acquired?.decision || 'B11_ACQUIRE_FAILED',
+      };
+    }
+    const validated = await validateWriteLease(dbClient, {
+      resourceType: 'WRITE_RESOURCE',
+      resourceKey,
+      leaseKey: acquired.lease.leaseKey,
+      actorId: WORKER_ID,
+      taskId,
+      governanceRevision: DLP001_GOVERNANCE_REVISION,
+      fencingEpoch: acquired.lease.fencingEpoch,
+    });
+    const txn = { id: `suite-b-b11-${nonce}` };
+    const projected = projectFromTrustedValidateWriteLease(
+      { ...validated, trustedValidateWriteLease: true, ok: validated?.ok === true },
+      txn,
+    );
+    const row = await trackedQuery(
+      `SELECT lease_key, fencing_epoch
+         FROM dlp_write_lease
+        WHERE lease_key = $1`,
+      [leaseKey],
+    );
+    const dbRow = row.rows?.[0] || null;
+    const passed = validated?.ok === true
+      && projected.ok === true
+      && isDbProvenLeaseContext(projected.context)
+      && projected.context?.provenanceClass === 'DB_PROVEN'
+      && projected.context?.realDbAuthority === true
+      && row.rowCount === 1
+      && dbRow?.lease_key === acquired.lease.leaseKey
+      && Number(dbRow?.fencing_epoch) === Number(acquired.lease.fencingEpoch);
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: 'DB_PROVEN',
+      actualOutcome: passed ? 'DB_PROVEN' : (projected.decision || validated?.decision || 'NOT_DB_PROVEN'),
+      assertionEvidence: Object.freeze({
+        validateDecision: validated?.decision || null,
+        projectDecision: projected.decision || null,
+        provenanceClass: projected.context?.provenanceClass || null,
+        realDbAuthority: projected.context?.realDbAuthority === true,
+        leaseKey: dbRow?.lease_key || null,
+        fencingEpoch: dbRow ? Number(dbRow.fencing_epoch) : null,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { dbProven: projected.context?.provenanceClass === 'DB_PROVEN' }),
+      durabilityEvidence: Object.freeze({ rowCount: row.rowCount }),
+      sideEffectEvidence: null,
+      failureReason: passed ? null : 'DB_PROVEN_LEASE_NOT_ESTABLISHED',
+    };
+  });
+
+  await runCase('B12', 'no_worker_or_mcp_action', async () => {
+    const tasksBefore = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_task');
+    const auditsBefore = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_audit_event');
+    // Independent capability chain: must not reuse B09's presented capability JTI.
+    const chainB12 = mintPrincipal(h);
+    const dispatcher = makeDispatcher(chainB12);
+    const orla = mintBootstrapOrla(h);
+    const terminalDeny = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
+    const dispatchResult = dispatcher.authorizeAndDispatch({
+      action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+      principal: chainB12.id.principal,
+      capabilityToken: chainB12.cap.token,
+      capabilityExpectation: {
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        taskId: TASK_ID,
+        resourcePaths: [...SCOPE],
+        principalId: WORKER_ID,
+      },
+      orlaToken: orla.token,
+      orlaExpectation: bootstrapOrlaExpectation(),
+      ownedTxnHandle: { id: `suite-b-b12-${nonce}` },
+    });
+    const tasksAfter = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_task');
+    const auditsAfter = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_audit_event');
+    const taskRowDelta = tasksAfter.n - tasksBefore.n;
+    const auditRowDelta = auditsAfter.n - auditsBefore.n;
+    const architectural = observeDispatcherArchitecturalIsolation();
+    const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+    const capabilityOk = dispatchResult.offlineContractObservations?.capabilityOk === true;
+    const orlaOk = dispatchResult.offlineContractObservations?.orlaOk === true;
+    const passed = architectural.constructorPersistenceInjectionVoided === true
+      && architectural.workerMcpExecutionPortsPresentInSource === false
+      && architectural.terminalHardDenyPresentInSource === true
+      && dispatchResult.decision === terminalDeny
+      && capabilityOk === true
+      && orlaOk === true
+      && dispatchResult.dlpInvoked !== true
+      && dispatchResult.mutationExecuted !== true
+      && hardDeny.ok === true
+      && taskRowDelta === 0
+      && auditRowDelta === 0
+      && OPERATIONAL_DISPATCH_AUTHORIZED === false;
+    return {
+      executed: true,
+      sqlBacked: true,
+      passed,
+      expectedOutcome: terminalDeny,
+      actualOutcome: dispatchResult.decision || 'MISSING',
+      assertionEvidence: Object.freeze({
+        dispatchDecision: dispatchResult.decision || 'MISSING',
+        mutationExecuted: dispatchResult.mutationExecuted === true,
+        dlpInvoked: dispatchResult.dlpInvoked === true,
+        operationalDispatchAuthorized: OPERATIONAL_DISPATCH_AUTHORIZED,
+        capabilityJti: chainB12.cap.claims.jti,
+      }),
+      transactionEvidence: sqlTx(caseSqlBook.queryCount, { measuredDeltas: true }),
+      durabilityEvidence: null,
+      sideEffectEvidence: Object.freeze({
+        observationClass: 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT',
+        reasonStringOnly: false,
+        architectural,
+        terminalDecision: dispatchResult.decision,
+        capabilityOk,
+        orlaOk,
+        dlpMutationBoundaryReached: dispatchResult.dlpInvoked === true,
+        taskRowDelta,
+        auditRowDelta,
+        workerExecutionPathObserved: false,
+        mcpExecutionPathObserved: false,
+        disconnectedPersistenceCallbacksNotUsedAsProof: true,
+      }),
+      failureReason: passed ? null : 'WORKER_OR_MCP_SIDE_EFFECT',
+    };
+  });
+
+  const ordered = DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+    const hit = resultsById.get(spec.caseId);
+    if (hit) return hit;
+    return buildCaseResult(spec.caseId, spec.proofName, {
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      failureReason: 'CASE_NOT_EXECUTED',
+    });
+  });
+  bindAuthenticLiveMatrixResultSet(ordered);
+  const aggregation = acceptAuthenticDispatcherLiveSqlResults(ordered);
+  const authenticPass = aggregation.ok === true && aggregation.authenticLiveAccepted === true;
   return {
-    ok: hardDeny.ok === true && composition.mutationExecuted !== true
-      ? composition.ok === true
-      : false,
-    decision: 'LIVE_DISPATCHER_DB_MATRIX_INVOKED',
-    reasons: Object.freeze([
-      'TEST_ONLY_COMPOSITION_PATH_USED',
-      'OPERATIONAL_DISPATCH_REMAINS_HARD_DENY',
-      'NO_WORKER_OR_MCP_ACTION',
-    ]),
-    sqlExecuted: true,
+    ok: authenticPass,
+    decision: authenticPass
+      ? 'DISPATCHER_LIVE_MATRIX_STRICT_PASS'
+      : 'DISPATCHER_LIVE_MATRIX_DENIED',
+    reasons: Object.freeze([...aggregation.reasons]),
+    results: Object.freeze(ordered),
+    aggregation,
     proofClass: DISPATCHER_PROOF_CLASS_LIVE,
-    composition,
-    dispatchResult,
-    hardDeny,
+    sqlExecuted: summarizeDispatcherLiveSqlExecutedFlag({ anySqlExecuted, results: ordered }),
     catalog: DISPATCHER_LIVE_SQL_CATALOG,
     operationalDispatchAuthorized: false,
   };
@@ -618,6 +2130,7 @@ export async function runOfflineDispatcherDbOrchestration(resources = {}) {
       replayRegistry: h.orlaReplay,
     },
   });
+  const orla = mintBootstrapOrla(h);
   const dispatchResult = dispatcher.authorizeAndDispatch({
     action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
     principal: chain.id.principal,
@@ -628,16 +2141,23 @@ export async function runOfflineDispatcherDbOrchestration(resources = {}) {
       resourcePaths: [...SCOPE],
       principalId: WORKER_ID,
     },
-    orlaToken: 'not-a-real-token',
+    orlaToken: orla.token,
+    orlaExpectation: bootstrapOrlaExpectation(),
     ownedTxnHandle: { id: 'fake' },
   });
   const hardDeny = assertOperationalDispatcherHardDeny(dispatchResult);
+  const terminalDenyReached = hardDeny.ok === true
+    && dispatchResult.decision === DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED
+    && dispatchResult.offlineContractObservations?.capabilityOk === true
+    && dispatchResult.offlineContractObservations?.orlaOk === true
+    && dispatchResult.mutationExecuted !== true
+    && dispatchResult.dlpInvoked !== true;
 
   return {
     ok: forgedDenied.ok === false
       && publicBrand.ok === false
       && projected.ok === true
-      && hardDeny.ok === true
+      && terminalDenyReached === true
       && DISPATCHER_MODULE_OPERATIONAL_FLAG === false
       && OPERATIONAL_DISPATCH_AUTHORIZED === false,
     allowed: true,
@@ -659,7 +2179,7 @@ export async function runOfflineDispatcherDbOrchestration(resources = {}) {
       forgedLeaseDenied: forgedDenied.ok === false,
       publicBrandNotDbProven: publicBrand.ok === false,
       dbProvenProjectionOffline: projected.ok === true,
-      dispatcherHardDeny: hardDeny.ok === true,
+      dispatcherHardDeny: terminalDenyReached === true,
       liveSqlCatalog: DISPATCHER_LIVE_SQL_CATALOG,
       liveSqlStatus: 'NOT_EXECUTED',
     }),
@@ -701,22 +2221,13 @@ export async function executeTier3SuiteViaRunnerContract(ctx = {}) {
     };
   }
   if (ctx.mode === 'LIVE_CAPABILITY_GATED_EXECUTE') {
-    const auth = assertLiveSuiteExecutionAuthorityForSuite(
-      ctx.liveExecutionAuthority,
-      ctx.suitePath || DISPATCHER_DB_SUITE_PATH,
-      ctx.repositoryHeadSha || ctx.repositorySha,
-    );
-    if (!auth.ok) {
-      return {
-        ...auth,
-        sqlExecuted: false,
-        postgresActions: 0,
-        proofClass: DISPATCHER_PROOF_CLASS_LIVE,
-      };
-    }
     return runLiveDispatcherDbMatrix(ctx.clusterClient, {
       liveExecutionAuthority: ctx.liveExecutionAuthority,
-      authorityCheck: auth,
+      repositoryHeadSha: ctx.repositoryHeadSha || ctx.repositorySha,
+      runnerContext: ctx,
+      schemaBootstrapEvidence: ctx.schemaBootstrapEvidence,
+      ownedController: ctx.ownedController,
+      extraClients: ctx.extraClients,
     });
   }
   return {
@@ -736,6 +2247,142 @@ async function runDispatcherIntegrationAgainstDisposablePg(dbClient, opts = {}) 
 }
 
 const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 Suite B transport entrypoint regressions (G5-R3 offline)', () => {
+  const selfPath = resolve(fileURLToPath(import.meta.url));
+  const selfBase = basename(selfPath);
+
+  it('real child-process node --test execution still registers tests', () => {
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, '--test', selfPath]),
+      true,
+    );
+  });
+
+  it('direct-script invocation with the exact module path registers', () => {
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, selfPath]),
+      true,
+    );
+  });
+
+  it('dynamic import from Owner-launcher-shaped process does not register', () => {
+    const launcher = resolve('/home/titanlab/.tecp-ops-pilot/live-launch/run-live-suite.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, selfPath]),
+      false,
+    );
+  });
+
+  it('secondary --suite <Suite B path> is rejected as entrypoint', () => {
+    const launcher = resolve('/tmp/fake-owner-launcher.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, '--suite', selfPath]),
+      false,
+    );
+  });
+
+  it('secondary --test <Suite B path> is rejected as entrypoint', () => {
+    const launcher = resolve('/tmp/fake-owner-launcher.mjs');
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, launcher, '--test', selfPath]),
+      false,
+    );
+  });
+
+  it('unrelated file with matching basename is rejected', () => {
+    const decoy = resolve('/tmp', selfBase);
+    assert.notEqual(decoy, selfPath);
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, decoy]),
+      false,
+    );
+    assert.equal(
+      isDirectSuiteTestEntrypoint([process.execPath, '--test', decoy]),
+      false,
+    );
+  });
+
+  it('missing, malformed and incorrect entrypoint contexts fail closed', () => {
+    assert.equal(isDirectSuiteTestEntrypoint([]), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath]), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath, '--test']), false);
+    assert.equal(isDirectSuiteTestEntrypoint([process.execPath, '--test', '--other']), false);
+    assert.equal(isDirectSuiteTestEntrypoint(null), false);
+    assert.equal(isDirectSuiteTestEntrypoint(42), false);
+    assert.equal(isDirectSuiteTestEntrypoint('not-an-argv'), false);
+  });
+
+  it('dynamic import generates no unexpected TAP and JSON-only transport remains parseable', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const probe = `
+import { pathToFileURL } from 'node:url';
+process.argv = [process.execPath, '/tmp/fake-owner-launcher.mjs', '--test', ${JSON.stringify(selfPath)}];
+const mod = await import(pathToFileURL(${JSON.stringify(selfPath)}).href);
+const hit = mod.isDirectSuiteTestEntrypoint(process.argv);
+const payload = {
+  ok: hit === false,
+  entrypointHit: hit,
+  hasAggregate: typeof mod.aggregateDispatcherLiveSqlResults === 'function',
+  caseCount: Array.isArray(mod.DISPATCHER_LIVE_CASE_SPECS) ? mod.DISPATCHER_LIVE_CASE_SPECS.length : -1,
+  cp2DbAuthorized: mod.CP2_DB_AUTHORIZED === false,
+  postgresExecutionAuthorized: mod.POSTGRES_EXECUTION_AUTHORIZED === false,
+  operationalDispatchAuthorized: mod.OPERATIONAL_DISPATCH_AUTHORIZED === false,
+};
+console.log(JSON.stringify(payload));
+`;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', probe], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '' },
+      timeout: 20000,
+    });
+    const stdout = String(r.stdout || '');
+    const stderr = String(r.stderr || '');
+    assert.equal(r.status, 0, `probe_status=${r.status} stderr=${stderr.slice(0, 400)}`);
+    assert.equal(stdout.includes('TAP version'), false, 'TAP_LEAK_STDOUT');
+    assert.equal(stderr.includes('TAP version'), false, 'TAP_LEAK_STDERR');
+    const line = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+    const parsed = JSON.parse(line);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.entrypointHit, false);
+    assert.equal(parsed.hasAggregate, true);
+    assert.equal(parsed.caseCount, 12);
+    assert.equal(parsed.cp2DbAuthorized, true);
+    assert.equal(parsed.postgresExecutionAuthorized, true);
+    assert.equal(parsed.operationalDispatchAuthorized, true);
+  });
+
+  it('Suite B exports and strict twelve-case aggregation remain fail-closed', () => {
+    assert.equal(typeof aggregateDispatcherLiveSqlResults, 'function');
+    assert.equal(typeof validateDispatcherLiveSqlStructure, 'function');
+    assert.equal(typeof acceptAuthenticDispatcherLiveSqlResults, 'function');
+    assert.equal(typeof isDirectSuiteTestEntrypoint, 'function');
+    assert.equal(Array.isArray(DISPATCHER_LIVE_CASE_SPECS), true);
+    assert.equal(DISPATCHER_LIVE_CASE_SPECS.length, 12);
+    assert.equal(DISPATCHER_LIVE_SQL_CATALOG.length, 12);
+    for (let i = 0; i < DISPATCHER_LIVE_CASE_SPECS.length; i += 1) {
+      assert.equal(DISPATCHER_LIVE_CASE_SPECS[i].proofName, DISPATCHER_LIVE_SQL_CATALOG[i]);
+    }
+    const ids = DISPATCHER_LIVE_CASE_SPECS.map((c) => c.caseId);
+    for (const id of ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09', 'B10', 'B11', 'B12']) {
+      assert.ok(ids.includes(id), `missing_${id}`);
+    }
+    const countOnly = aggregateDispatcherLiveSqlResults(
+      DISPATCHER_LIVE_CASE_SPECS.map((spec) => ({ caseId: spec.caseId })),
+    );
+    assert.equal(countOnly.ok, false);
+    assert.equal(countOnly.allPassed, false);
+  });
+
+  it('default-DENY and TEST_ONLY security boundaries remain intact', () => {
+    assert.equal(CP2_DB_AUTHORIZED, false);
+    assert.equal(POSTGRES_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPERATIONAL_DISPATCH_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_DB_EXECUTION_AUTHORIZED, false);
+    assert.equal(OPS_PILOT_TIER3_AUTHORIZED, false);
+    assert.equal(DISPATCHER_MODULE_OPERATIONAL_FLAG, false);
+  });
+});
 
 (__registerSuiteSelfTests ? describe : (_name, _fn) => {})('S2 cp2DbDispatcherIntegration (Tier-3 gated + offline hard-deny)', () => {
   it('1) Tier-3 closed; composition without DB client is DENY_DB_TIER3_NOT_AUTHORIZED', async () => {
@@ -779,7 +2426,7 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
   });
 
 
-  it('fake dbClient cannot satisfy owned-connected live SQL gate', async () => {
+  it('caller-supplied authorityCheck is rejected and cannot authorize a fake client', async () => {
     const fake = {
       query: async () => ({ rows: [{ ok: true }] }),
       connect: async () => {},
@@ -793,10 +2440,703 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
         authorizesRealSql: true,
         offlineWiringProbe: false,
       },
+      liveExecutionAuthority: {
+        ok: true,
+        authorizesRealSql: true,
+        offlineWiringProbe: false,
+        proofClass: 'LIVE_SUITE_EXECUTION_AUTHORITY_V1',
+      },
+      repositoryHeadSha: 'a'.repeat(40),
     });
     assert.equal(denied.ok, false);
     assert.equal(denied.sqlExecuted, false);
-    assert.ok((denied.reasons || []).includes('FAKE_OR_UNCONNECTED_CLIENT_DENIED'));
+    assert.ok((denied.reasons || []).includes('CALLER_SUPPLIED_AUTHORITY_CHECK_REJECTED'));
+    assert.equal(Array.isArray(denied.results), true);
+    assert.equal(denied.results.length, 12);
+    assert.equal(denied.aggregation.allPassed, false);
+    assert.equal(denied.aggregation.ok, false);
+  });
+
+  it('strict aggregation rejects missing, duplicate, unknown, failed, unexecuted-as-pass, missing evidence, sql without sql evidence, malformed, and fake-live', () => {
+    const skeleton = (patch = {}) => DISPATCHER_LIVE_CASE_SPECS.map((spec) => ({
+      caseId: spec.caseId,
+      proofName: spec.proofName,
+      executed: false,
+      sqlBacked: false,
+      passed: false,
+      expectedOutcome: null,
+      actualOutcome: null,
+      assertionEvidence: null,
+      transactionEvidence: null,
+      durabilityEvidence: null,
+      sideEffectEvidence: null,
+      failureReason: 'NOT_EXECUTED',
+      sqlAttempted: 0,
+      sqlObservedSuccess: 0,
+      sqlAssertionPassed: false,
+      ...patch,
+    }));
+    const countOnly = aggregateDispatcherLiveSqlResults(
+      DISPATCHER_LIVE_CASE_SPECS.map((spec) => ({ caseId: spec.caseId, passed: true })),
+    );
+    assert.equal(countOnly.allPassed, false);
+    assert.equal(countOnly.ok, false);
+
+    const missing = aggregateDispatcherLiveSqlResults(skeleton().slice(0, 11));
+    assert.ok((missing.reasons || []).includes('MISSING_CASE') || (missing.reasons || []).includes('CASE_COUNT_MISMATCH'));
+
+    const duplicate = skeleton();
+    duplicate[1] = { ...duplicate[0] };
+    const dup = aggregateDispatcherLiveSqlResults(duplicate);
+    assert.ok((dup.reasons || []).includes('DUPLICATE_CASE_ID'));
+
+    const unknown = skeleton();
+    unknown[0] = { ...unknown[0], caseId: 'B99' };
+    const unk = aggregateDispatcherLiveSqlResults(unknown);
+    assert.ok((unk.reasons || []).includes('UNKNOWN_CASE'));
+
+    const failed = skeleton();
+    failed[0] = {
+      ...failed[0],
+      executed: true,
+      passed: false,
+      expectedOutcome: 'PASS',
+      actualOutcome: 'FAIL',
+      assertionEvidence: { observed: true },
+      failureReason: 'CASE_FAILED',
+    };
+    const failedAgg = aggregateDispatcherLiveSqlResults(failed);
+    assert.ok((failedAgg.reasons || []).includes('FAILED_CASE'));
+    assert.equal(failedAgg.allPassed, false);
+
+    const unexecutedPass = skeleton();
+    unexecutedPass[0] = {
+      ...unexecutedPass[0],
+      executed: false,
+      passed: true,
+      expectedOutcome: 'X',
+      actualOutcome: 'X',
+      assertionEvidence: { observed: true },
+      failureReason: null,
+    };
+    const unexec = aggregateDispatcherLiveSqlResults(unexecutedPass);
+    assert.equal(unexec.allPassed, false);
+    assert.ok(
+      (unexec.reasons || []).includes('UNEXECUTED_PRESENTED_AS_PASS')
+      || (unexec.reasons || []).includes('UNEXECUTED_CASE')
+      || (unexec.reasons || []).includes('FAILED_CASE'),
+    );
+
+    const sqlWithoutEvidence = skeleton({
+      executed: true,
+      sqlBacked: true,
+      passed: true,
+      expectedOutcome: 'PASS',
+      actualOutcome: 'PASS',
+      assertionEvidence: { observed: true },
+      transactionEvidence: { sqlObserved: false, queryCount: 0 },
+      failureReason: null,
+      sideEffectEvidence: {
+        observed: true,
+        reasonStringOnly: false,
+        taskRowDelta: 0,
+        auditRowDelta: 0,
+        workerActions: 0,
+        mcpMutations: 0,
+      },
+    });
+    const noSql = aggregateDispatcherLiveSqlResults(sqlWithoutEvidence);
+    assert.ok((noSql.reasons || []).includes('SQL_WITHOUT_SQL_EVIDENCE'));
+
+    const fakeLive = skeleton({
+      executed: true,
+      sqlBacked: true,
+      passed: true,
+      expectedOutcome: 'PASS',
+      actualOutcome: 'PASS',
+      assertionEvidence: { fakeLive: true },
+      transactionEvidence: { sqlObserved: true, queryCount: 1, fakeLive: true },
+      failureReason: null,
+      sideEffectEvidence: {
+        observed: true,
+        reasonStringOnly: false,
+        taskRowDelta: 0,
+        auditRowDelta: 0,
+        workerActions: 0,
+        mcpMutations: 0,
+      },
+    });
+    const fake = aggregateDispatcherLiveSqlResults(fakeLive);
+    assert.ok((fake.reasons || []).includes('FAKE_LIVE_EVIDENCE_REJECTED'));
+
+    assert.equal(aggregateDispatcherLiveSqlResults(null).allPassed, false);
+    assert.ok((aggregateDispatcherLiveSqlResults('twelve').reasons || []).includes('MALFORMED_ENVELOPE'));
+    assert.equal(DISPATCHER_LIVE_CASE_SPECS.length, 12);
+    assert.equal(countOnly.allPassed, false);
+  });
+
+  it('versioned case evidence rejects empty, contradictory, fake, and missing versions on the structural layer', () => {
+    const tx = (extra = {}) => ({
+      sqlObserved: true,
+      queryCount: 1,
+      provenance: 'COUNTED_SQL_BOOKKEEPING',
+      fakeLive: false,
+      offlineOnly: false,
+      inert: false,
+      ...extra,
+    });
+    const passing = {
+      B01: {
+        assertionEvidence: {
+          compositionDecision: 'COMMITTED', committed: true, taskCount: 1, auditCount: 1, evidenceCount: 1, jtiCount: 1,
+        },
+        transactionEvidence: tx({ committed: true, rolledBack: false }),
+        durabilityEvidence: { jtiDurable: true, taskDurable: true },
+        sideEffectEvidence: { compositionMutation: true },
+      },
+      B02: {
+        assertionEvidence: {
+          compositionDecision: 'DENY_MUTATION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+        },
+        transactionEvidence: tx({ committed: false, rolledBack: true }),
+        durabilityEvidence: { unauthorizedCommitAbsent: true },
+        sideEffectEvidence: { committedRows: 0 },
+      },
+      B03: {
+        assertionEvidence: {
+          compositionDecision: 'DENY_EXCEPTION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+        },
+        transactionEvidence: tx({ committed: false, rolledBack: true }),
+        durabilityEvidence: { exceptionLeftNoRows: true },
+        sideEffectEvidence: null,
+      },
+      B04: {
+        assertionEvidence: {
+          presentedAfterRollback: false, releasedConsumeOk: true, committedReplayDecision: 'DENY_REPLAY',
+          rolledCount: 1, keptCount: 1,
+        },
+        transactionEvidence: tx({ rolledBack: true, committed: false }),
+        durabilityEvidence: { uncommittedJtiReleased: true, committedReplayDenied: true },
+        sideEffectEvidence: null,
+      },
+      B05: {
+        assertionEvidence: {
+          compositionCommitted: true, rowCount: 1, taskXmin: '10', auditXmin: '10', evidenceXmin: '10',
+        },
+        transactionEvidence: tx({ committed: true, sameTransaction: true }),
+        durabilityEvidence: { sharedXmin: '10' },
+        sideEffectEvidence: null,
+      },
+      B06: {
+        assertionEvidence: { rejectDecision: 'DENY', projectDecision: 'DENY', forgedRowCount: 0 },
+        transactionEvidence: tx({ committed: false }),
+        durabilityEvidence: { forgedLeaseAbsent: true },
+        sideEffectEvidence: { rowsWritten: 0 },
+      },
+      B07: {
+        assertionEvidence: {
+          projectOk: true, sameTxnOk: true, crossTxnDecision: 'DENY_TXN', leaseRowCount: 1, secondarySessionDistinct: true,
+        },
+        transactionEvidence: tx({ crossTransactionReuseDenied: true }),
+        durabilityEvidence: { leaseRowCount: 1 },
+        sideEffectEvidence: null,
+      },
+      B08: {
+        sqlBacked: false,
+        assertionEvidence: { publicBrandDecision: 'DENY', callerDecision: 'DENY', dbProven: false },
+        transactionEvidence: null,
+        durabilityEvidence: null,
+        sideEffectEvidence: { sqlFabricated: false, dbProvenMinted: false },
+      },
+      B09: {
+        assertionEvidence: {
+          dbAvailable: true,
+          hardDenyOk: true,
+          dispatchDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+          mutationExecuted: false,
+          dlpInvoked: false,
+          observedTaskId: 'task-1',
+        },
+        transactionEvidence: tx({ operationalWrite: false }),
+        durabilityEvidence: { taskDelta: 0, observedTaskId: 'task-1' },
+        sideEffectEvidence: { operationalDispatchAuthorized: false },
+      },
+      B10: {
+        assertionEvidence: { outsideDenied: true, insideOk: true, liveOk: true, expiredDecision: 'DENY_TXN' },
+        transactionEvidence: tx({ ownershipOutsideTxn: false, ownershipInsideTxn: true }),
+        durabilityEvidence: null,
+        sideEffectEvidence: null,
+      },
+      B11: {
+        assertionEvidence: {
+          validateDecision: 'ALLOW', projectDecision: 'ALLOW', provenanceClass: 'DB_PROVEN',
+          realDbAuthority: true, leaseKey: 'lease-1', fencingEpoch: 1,
+        },
+        transactionEvidence: tx({ dbProven: true }),
+        durabilityEvidence: { rowCount: 1 },
+        sideEffectEvidence: null,
+      },
+      B12: {
+        assertionEvidence: {
+          dispatchDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+          mutationExecuted: false,
+          dlpInvoked: false,
+          operationalDispatchAuthorized: false,
+        },
+        transactionEvidence: tx({ measuredDeltas: true }),
+        durabilityEvidence: null,
+        sideEffectEvidence: {
+          observationClass: 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT',
+          reasonStringOnly: false,
+          architectural: {
+            observationClass: 'STATIC_ARCHITECTURAL_SOURCE_CONTRACT',
+            constructorPersistenceInjectionVoided: true,
+            workerMcpExecutionPortsPresentInSource: false,
+            terminalHardDenyPresentInSource: true,
+            disconnectedCallbackInstrumentationSupported: false,
+          },
+          terminalDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+          capabilityOk: true,
+          orlaOk: true,
+          dlpMutationBoundaryReached: false,
+          taskRowDelta: 0,
+          auditRowDelta: 0,
+          workerExecutionPathObserved: false,
+          mcpExecutionPathObserved: false,
+          disconnectedPersistenceCallbacksNotUsedAsProof: true,
+        },
+      },
+    };
+    const withSqlBook = (row) => {
+      const sqlBacked = row.sqlBacked === true;
+      return {
+        ...row,
+        sqlAttempted: sqlBacked ? 1 : 0,
+        sqlObservedSuccess: sqlBacked ? 1 : 0,
+        sqlAssertionPassed: sqlBacked,
+      };
+    };
+    const envelope = (mutate) => DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+      const body = passing[spec.caseId];
+      const row = withSqlBook({
+        caseId: spec.caseId,
+        proofName: spec.proofName,
+        executed: true,
+        sqlBacked: body.sqlBacked !== false,
+        passed: true,
+        expectedOutcome: 'PASS',
+        actualOutcome: 'PASS',
+        failureReason: null,
+        evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
+        executionProvenance: 'LIVE_MATRIX_OWNED_TXN_PATH',
+        ...body,
+      });
+      return spec.caseId === 'B01' && typeof mutate === 'function' ? mutate(row) : row;
+    });
+    const ok = validateDispatcherLiveSqlStructure(envelope());
+    assert.equal(ok.allPassed, true, (ok.reasons || []).join(','));
+    assert.equal(ok.structurallyValid, true);
+    assert.equal(ok.layer, 'STRUCTURAL');
+    assert.equal(aggregateDispatcherLiveSqlResults(envelope()).allPassed, true);
+
+    const emptyAssertion = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      assertionEvidence: {},
+    })));
+    assert.equal(emptyAssertion.allPassed, false);
+    assert.ok((emptyAssertion.reasons || []).includes('EMPTY_ASSERTION_EVIDENCE'));
+
+    const matchOnly = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      expectedOutcome: 'SAME',
+      actualOutcome: 'SAME',
+      assertionEvidence: { note: 'matching strings are not observations' },
+    })));
+    assert.equal(matchOnly.allPassed, false);
+    assert.ok((matchOnly.reasons || []).includes('MISSING_CASE_OBSERVATIONS'));
+
+    const contradictoryCount = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      transactionEvidence: { sqlObserved: true, queryCount: 0, provenance: 'COUNTED_SQL_BOOKKEEPING' },
+    })));
+    assert.equal(contradictoryCount.allPassed, false);
+    assert.ok((contradictoryCount.reasons || []).includes('CONTRADICTORY_TRANSACTION_EVIDENCE'));
+
+    const contradictoryFlags = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      transactionEvidence: tx({ committed: true, rolledBack: true }),
+    })));
+    assert.equal(contradictoryFlags.allPassed, false);
+    assert.ok((contradictoryFlags.reasons || []).includes('CONTRADICTORY_TRANSACTION_EVIDENCE'));
+
+    const fakeCount = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      transactionEvidence: { queryCount: 4 },
+    })));
+    assert.equal(fakeCount.allPassed, false);
+    assert.ok((fakeCount.reasons || []).includes('FAKE_QUERY_COUNT_CLAIM'));
+
+    const provenanceOmitted = validateDispatcherLiveSqlStructure(envelope((row) => ({
+      ...row,
+      executionProvenance: null,
+    })));
+    assert.equal(provenanceOmitted.allPassed, true, (provenanceOmitted.reasons || []).join(','));
+    assert.equal(provenanceOmitted.structurallyValid, true);
+    assert.equal(provenanceOmitted.layer, 'STRUCTURAL');
+
+    const attemptGap = validateDispatcherLiveSqlStructure(envelope((row) => ({
+      ...row,
+      sqlAttempted: 3,
+      sqlObservedSuccess: 1,
+      sqlAssertionPassed: true,
+    })));
+    assert.equal(attemptGap.structurallyValid, true);
+    assert.equal(attemptGap.allPassed, true);
+    assert.equal(envelope((row) => ({
+      ...row,
+      sqlAttempted: 3,
+      sqlObservedSuccess: 1,
+    }))[0].sqlAttempted, 3);
+
+    const missingVersion = aggregateDispatcherLiveSqlResults(envelope((row) => {
+      const copy = { ...row };
+      delete copy.evidenceVersion;
+      return copy;
+    }));
+    assert.equal(missingVersion.allPassed, false);
+    assert.ok((missingVersion.reasons || []).includes('MISSING_OR_WRONG_EVIDENCE_VERSION'));
+
+    const wrongVersion = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      evidenceVersion: 'SUITE_B_LIVE_SQL_EVIDENCE_V0',
+    })));
+    assert.equal(wrongVersion.allPassed, false);
+    assert.ok((wrongVersion.reasons || []).includes('MISSING_OR_WRONG_EVIDENCE_VERSION'));
+
+    const contradictoryDurability = aggregateDispatcherLiveSqlResults(envelope((row) => ({
+      ...row,
+      durabilityEvidence: { jtiDurable: false, taskDurable: true },
+    })));
+    assert.equal(contradictoryDurability.allPassed, false);
+    assert.ok((contradictoryDurability.reasons || []).includes('CONTRADICTORY_DURABILITY_EVIDENCE'));
+
+    const b12Row = (spec, sideEffectEvidence) => {
+      const body = passing[spec.caseId];
+      const row = withSqlBook({
+        caseId: spec.caseId,
+        proofName: spec.proofName,
+        executed: true,
+        sqlBacked: body.sqlBacked !== false,
+        passed: true,
+        expectedOutcome: 'PASS',
+        actualOutcome: 'PASS',
+        failureReason: null,
+        evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
+        executionProvenance: 'LIVE_MATRIX_OWNED_TXN_PATH',
+        ...body,
+      });
+      if (spec.caseId !== 'B12' || sideEffectEvidence === undefined) return row;
+      return { ...row, sideEffectEvidence };
+    };
+    const b12Missing = validateDispatcherLiveSqlStructure(DISPATCHER_LIVE_CASE_SPECS.map((spec) => b12Row(spec, {
+      observationClass: 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT',
+      reasonStringOnly: false,
+      terminalDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+      capabilityOk: true,
+      orlaOk: true,
+      dlpMutationBoundaryReached: false,
+      taskRowDelta: 0,
+      auditRowDelta: 0,
+      workerExecutionPathObserved: false,
+      mcpExecutionPathObserved: false,
+      disconnectedPersistenceCallbacksNotUsedAsProof: true,
+    })));
+    assert.equal(b12Missing.allPassed, false);
+    assert.equal(b12Missing.layer, 'STRUCTURAL');
+    assert.ok((b12Missing.reasons || []).includes('MISSING_B12_OBSERVATIONS'));
+
+    const b12SideEffect = validateDispatcherLiveSqlStructure(DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+      const row = b12Row(spec);
+      if (spec.caseId !== 'B12') return row;
+      return {
+        ...row,
+        sideEffectEvidence: { ...row.sideEffectEvidence, taskRowDelta: 1 },
+      };
+    }));
+    assert.equal(b12SideEffect.allPassed, false);
+    assert.ok((b12SideEffect.reasons || []).includes('SIDE_EFFECT_OBSERVED'));
+
+    const b12Empty = validateDispatcherLiveSqlStructure(DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+      const row = b12Row(spec);
+      if (spec.caseId !== 'B12') return row;
+      return { ...row, sideEffectEvidence: null };
+    }));
+    assert.equal(b12Empty.allPassed, false);
+    assert.ok((b12Empty.reasons || []).includes('MISSING_B12_OBSERVATIONS'));
+  });
+
+  it('STRUCTURAL_PASS_CANNOT_IMPLY_LIVE_PASS', () => {
+    const tx = (extra = {}) => ({
+      sqlObserved: true,
+      queryCount: 1,
+      provenance: 'COUNTED_EXPLICIT_SUITE_QUERIES',
+      fakeLive: false,
+      offlineOnly: false,
+      inert: false,
+      ...extra,
+    });
+    const terminal = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
+    const passing = {
+      B01: {
+        assertionEvidence: {
+          compositionDecision: 'COMMITTED', committed: true, taskCount: 1, auditCount: 1, evidenceCount: 1, jtiCount: 1,
+        },
+        transactionEvidence: tx({ committed: true, rolledBack: false }),
+        durabilityEvidence: { jtiDurable: true, taskDurable: true },
+        sideEffectEvidence: { compositionMutation: true },
+      },
+      B02: {
+        assertionEvidence: {
+          compositionDecision: 'DENY_MUTATION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+        },
+        transactionEvidence: tx({ committed: false, rolledBack: true }),
+        durabilityEvidence: { unauthorizedCommitAbsent: true },
+        sideEffectEvidence: { committedRows: 0 },
+      },
+      B03: {
+        assertionEvidence: {
+          compositionDecision: 'DENY_EXCEPTION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+        },
+        transactionEvidence: tx({ committed: false, rolledBack: true }),
+        durabilityEvidence: { exceptionLeftNoRows: true },
+        sideEffectEvidence: null,
+      },
+      B04: {
+        assertionEvidence: {
+          presentedAfterRollback: false, releasedConsumeOk: true, committedReplayDecision: 'DENY_REPLAY',
+          rolledCount: 1, keptCount: 1,
+        },
+        transactionEvidence: tx({ rolledBack: true, committed: false }),
+        durabilityEvidence: { uncommittedJtiReleased: true, committedReplayDenied: true },
+        sideEffectEvidence: null,
+      },
+      B05: {
+        assertionEvidence: {
+          compositionCommitted: true, rowCount: 1, taskXmin: '10', auditXmin: '10', evidenceXmin: '10',
+        },
+        transactionEvidence: tx({ committed: true, sameTransaction: true }),
+        durabilityEvidence: { sharedXmin: '10' },
+        sideEffectEvidence: null,
+      },
+      B06: {
+        assertionEvidence: { rejectDecision: 'DENY', projectDecision: 'DENY', forgedRowCount: 0 },
+        transactionEvidence: tx({ committed: false }),
+        durabilityEvidence: { forgedLeaseAbsent: true },
+        sideEffectEvidence: { rowsWritten: 0 },
+      },
+      B07: {
+        assertionEvidence: {
+          projectOk: true, sameTxnOk: true, crossTxnDecision: 'DENY_TXN', leaseRowCount: 1, secondarySessionDistinct: true,
+        },
+        transactionEvidence: tx({ crossTransactionReuseDenied: true }),
+        durabilityEvidence: { leaseRowCount: 1 },
+        sideEffectEvidence: null,
+      },
+      B08: {
+        sqlBacked: false,
+        assertionEvidence: { publicBrandDecision: 'DENY', callerDecision: 'DENY', dbProven: false },
+        transactionEvidence: null,
+        durabilityEvidence: null,
+        sideEffectEvidence: { sqlFabricated: false, dbProvenMinted: false },
+      },
+      B09: {
+        assertionEvidence: {
+          dbAvailable: true, hardDenyOk: true, dispatchDecision: terminal,
+          mutationExecuted: false, dlpInvoked: false, observedTaskId: 'task-1',
+        },
+        transactionEvidence: tx({ operationalWrite: false }),
+        durabilityEvidence: { taskDelta: 0, observedTaskId: 'task-1' },
+        sideEffectEvidence: { operationalDispatchAuthorized: false },
+      },
+      B10: {
+        assertionEvidence: { outsideDenied: true, insideOk: true, liveOk: true, expiredDecision: 'DENY_TXN' },
+        transactionEvidence: tx({ ownershipOutsideTxn: false, ownershipInsideTxn: true }),
+        durabilityEvidence: null,
+        sideEffectEvidence: null,
+      },
+      B11: {
+        assertionEvidence: {
+          validateDecision: 'ALLOW', projectDecision: 'ALLOW', provenanceClass: 'DB_PROVEN',
+          realDbAuthority: true, leaseKey: 'lease-1', fencingEpoch: 1,
+        },
+        transactionEvidence: tx({ dbProven: true }),
+        durabilityEvidence: { rowCount: 1 },
+        sideEffectEvidence: null,
+      },
+      B12: {
+        assertionEvidence: {
+          dispatchDecision: terminal, mutationExecuted: false, dlpInvoked: false, operationalDispatchAuthorized: false,
+        },
+        transactionEvidence: tx({ measuredDeltas: true }),
+        durabilityEvidence: null,
+        sideEffectEvidence: {
+          observationClass: 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT',
+          reasonStringOnly: false,
+          architectural: {
+            observationClass: 'STATIC_ARCHITECTURAL_SOURCE_CONTRACT',
+            constructorPersistenceInjectionVoided: true,
+            workerMcpExecutionPortsPresentInSource: false,
+            terminalHardDenyPresentInSource: true,
+            disconnectedCallbackInstrumentationSupported: false,
+          },
+          terminalDecision: terminal,
+          capabilityOk: true,
+          orlaOk: true,
+          dlpMutationBoundaryReached: false,
+          taskRowDelta: 0,
+          auditRowDelta: 0,
+          workerExecutionPathObserved: false,
+          mcpExecutionPathObserved: false,
+          disconnectedPersistenceCallbacksNotUsedAsProof: true,
+        },
+      },
+    };
+    const synthetic = DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+      const body = passing[spec.caseId];
+      const sqlBacked = body.sqlBacked !== false;
+      return {
+        caseId: spec.caseId,
+        proofName: spec.proofName,
+        executed: true,
+        sqlBacked,
+        passed: true,
+        expectedOutcome: 'PASS',
+        actualOutcome: 'PASS',
+        failureReason: null,
+        evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
+        executionProvenance: SUITE_B_LIVE_EXECUTION_PROVENANCE,
+        sqlAttempted: sqlBacked ? 1 : 0,
+        sqlObservedSuccess: sqlBacked ? 1 : 0,
+        sqlAssertionPassed: sqlBacked,
+        ...body,
+      };
+    });
+    const structural = validateDispatcherLiveSqlStructure(synthetic);
+    assert.equal(structural.ok, true, (structural.reasons || []).join(','));
+    assert.equal(structural.structurallyValid, true);
+    assert.equal(structural.allPassed, true);
+    assert.equal(structural.layer, 'STRUCTURAL');
+    const unbranded = acceptAuthenticDispatcherLiveSqlResults(synthetic);
+    assert.equal(unbranded.ok, false);
+    assert.equal(unbranded.allPassed, false);
+    assert.equal(unbranded.structurallyValid, true);
+    assert.equal(unbranded.authenticLiveAccepted, false);
+    assert.equal(unbranded.layer, 'AUTHENTIC_LIVE');
+    assert.ok((unbranded.reasons || []).includes('AUTHENTIC_LIVE_MATRIX_BINDING_MISSING'));
+    assert.ok((unbranded.reasons || []).includes('SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED'));
+    assert.equal(synthetic[0].executionProvenance, 'LIVE_MATRIX_OWNED_TXN_PATH');
+
+    // Mechanism probe: WeakSet branding works, but offline fixtures cannot mint live acceptance.
+    const probe = { marker: 'brand-mechanism-probe' };
+    probeAuthenticLiveBrandMechanismForTests(probe);
+    assert.equal(isBrandedAuthenticLiveCaseResult(probe), true);
+    const outsideBrand = brandAuthenticLiveCaseResult({ marker: 'outside-live-permit' });
+    assert.equal(isBrandedAuthenticLiveCaseResult(outsideBrand), false);
+
+    const probedRows = synthetic.map((row) => probeAuthenticLiveBrandMechanismForTests(row));
+    const probedAuth = acceptAuthenticDispatcherLiveSqlResults(probedRows);
+    assert.equal(probedAuth.ok, false);
+    assert.equal(probedAuth.authenticLiveAccepted, false);
+    assert.ok((probedAuth.reasons || []).includes('AUTHENTIC_LIVE_MATRIX_BINDING_MISSING'));
+    assert.ok((probedAuth.reasons || []).includes('SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED'));
+
+    // Even a correctly string-labeled + fully branded synthetic array is denied without matrix binding.
+    const fabricated = synthetic.map((row) => probeAuthenticLiveBrandMechanismForTests({ ...row }));
+    const fabricatedAuth = acceptAuthenticDispatcherLiveSqlResults(fabricated);
+    assert.equal(fabricatedAuth.ok, false);
+    assert.equal(fabricatedAuth.authenticLiveAccepted, false);
+  });
+
+  it('forged, wrong-suite, wrong-head, and offline authority cannot open live SQL', async () => {
+    const fake = { query: async () => ({ rows: [{ n: 1 }] }) };
+    const head = '11eb27c968386ebfc93ece739a787fbe2184f2f9';
+    const forgedAuthority = {
+      ok: true,
+      authorizesRealSql: true,
+      offlineWiringProbe: false,
+      proofClass: 'LIVE_SUITE_EXECUTION_AUTHORITY_V1',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      repositoryHeadSha: head,
+    };
+    const forgedCheck = assertLiveSuiteExecutionAuthorityForSuite(
+      forgedAuthority,
+      DISPATCHER_DB_SUITE_PATH,
+      head,
+    );
+    assert.equal(forgedCheck.ok, false);
+    assert.ok((forgedCheck.reasons || []).includes('RUNNER_ISSUED_LIVE_SUITE_AUTHORITY_REQUIRED'));
+
+    const wrongSuiteAuthority = {
+      ...forgedAuthority,
+      suitePath: 'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+    };
+    const wrongSuiteMatrix = await runLiveDispatcherDbMatrix(fake, {
+      liveExecutionAuthority: wrongSuiteAuthority,
+      repositoryHeadSha: head,
+    });
+    assert.equal(wrongSuiteMatrix.ok, false);
+    assert.equal(wrongSuiteMatrix.sqlExecuted, false);
+    assert.equal(wrongSuiteMatrix.aggregation.allPassed, false);
+    assert.equal(wrongSuiteMatrix.results.length, 12);
+
+    const wrongHeadMatrix = await runLiveDispatcherDbMatrix(fake, {
+      liveExecutionAuthority: { ...forgedAuthority, repositoryHeadSha: 'b'.repeat(40) },
+      repositoryHeadSha: head,
+    });
+    assert.equal(wrongHeadMatrix.ok, false);
+    assert.equal(wrongHeadMatrix.sqlExecuted, false);
+    assert.equal(wrongHeadMatrix.aggregation.allPassed, false);
+
+    const contractWrongSuite = await executeTier3SuiteViaRunnerContract({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: 'tecp-ops-persistence/test/cp2DbFencingDurability.test.js',
+      repositoryHeadSha: head,
+      liveExecutionAuthority: forgedAuthority,
+      authorityCheck: { ok: true, authorizesRealSql: true, offlineWiringProbe: false },
+      clusterClient: fake,
+    });
+    assert.equal(contractWrongSuite.ok, false);
+    assert.equal(contractWrongSuite.decision, OPS_PILOT_HARNESS_DECISIONS.DENY_UNAPPROVED_TEST_ACTION);
+    assert.ok((contractWrongSuite.reasons || []).includes('WRONG_SUITE_FOR_DISPATCHER_MODULE'));
+    assert.equal(contractWrongSuite.sqlExecuted, false);
+
+    const offlineAuthority = await runLiveDispatcherDbMatrix(fake, {
+      liveExecutionAuthority: {
+        ok: true,
+        authorizesRealSql: false,
+        offlineWiringProbe: true,
+        proofClass: 'OFFLINE_ONLY',
+      },
+      repositoryHeadSha: head,
+    });
+    assert.equal(offlineAuthority.ok, false);
+    assert.equal(offlineAuthority.sqlExecuted, false);
+    assert.equal(offlineAuthority.aggregation.allPassed, false);
+
+    const injectedViaContract = await executeTier3SuiteViaRunnerContract({
+      mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
+      suitePath: DISPATCHER_DB_SUITE_PATH,
+      repositoryHeadSha: head,
+      authorityCheck: { ok: true, authorizesRealSql: true, offlineWiringProbe: false },
+      liveExecutionAuthority: forgedAuthority,
+      clusterClient: fake,
+    });
+    assert.equal(injectedViaContract.ok, false);
+    assert.equal(injectedViaContract.sqlExecuted, false);
+    assert.equal(
+      (injectedViaContract.reasons || []).includes('CALLER_SUPPLIED_AUTHORITY_CHECK_REJECTED'),
+      false,
+    );
   });
 
   it('2) forged lease / public brand / cross-txn rules hold offline', () => {
@@ -875,11 +3215,118 @@ const __registerSuiteSelfTests = isDirectSuiteTestEntrypoint();
       orlaToken: 'not-a-real-token',
       ownedTxnHandle: { id: 'fake' },
     });
-    // May fail at ORLA or still hard-deny mutation; never mutates.
+    // not-a-real-token stops before a valid-ORLA terminal deny. This case only
+    // checks that the call does not mutate.
     assert.equal(result.mutationExecuted, false);
     assert.equal(result.dlpInvoked, false);
     assert.equal(result.operationalDispatchAuthorized, false);
     assert.notEqual(result.decision, DISPATCHER_DECISIONS.ALLOW);
+  });
+
+  it('3b) B09 then B12 use independent capability JTIs; shared replay remains effective', () => {
+    const h = buildHarness();
+    const chainB09 = mintPrincipal(h);
+    const chainB12 = mintPrincipal(h);
+    assert.notEqual(chainB09.cap.claims.jti, chainB12.cap.claims.jti);
+    assert.equal(typeof chainB09.cap.claims.jti, 'string');
+    assert.equal(typeof chainB12.cap.claims.jti, 'string');
+
+    function dispatchWith(forChain, orlaToken) {
+      const dispatcher = createOperationalDispatcher({
+        emergencyStop: h.emergencyStop,
+        trustRoot: h.trustRoot,
+        buildCapabilityVerifyDeps() {
+          return {
+            keyRegistry: h.keyRegistry,
+            clock: h.clock,
+            revocationRegistry: h.revocationRegistry,
+            replayRegistry: h.replayRegistry,
+            approvalToken: forChain.approvalIssued.token,
+            approvalDeps: {
+              keyRegistry: h.keyRegistry,
+              clock: h.clock,
+              revocationRegistry: h.revocationRegistry,
+            },
+            principal: forChain.id.principal,
+          };
+        },
+        orlaVerifyDeps: {
+          trustRoot: h.trustRoot,
+          clock: h.orlaClock,
+          revocationRegistry: h.orlaRevocation,
+          replayRegistry: h.orlaReplay,
+        },
+      });
+      return dispatcher.authorizeAndDispatch({
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        principal: forChain.id.principal,
+        capabilityToken: forChain.cap.token,
+        capabilityExpectation: {
+          action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+          taskId: TASK_ID,
+          resourcePaths: [...SCOPE],
+          principalId: WORKER_ID,
+        },
+        orlaToken,
+        orlaExpectation: bootstrapOrlaExpectation(),
+        ownedTxnHandle: { id: `seq-${forChain.cap.claims.jti}` },
+      });
+    }
+
+    const terminal = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
+    const r09 = dispatchWith(chainB09, mintBootstrapOrla(h).token);
+    assert.equal(r09.decision, terminal);
+    assert.equal(r09.offlineContractObservations?.capabilityOk, true);
+    assert.equal(r09.offlineContractObservations?.orlaOk, true);
+    assert.equal(r09.mutationExecuted, false);
+    assert.equal(r09.dlpInvoked, false);
+
+    const r12 = dispatchWith(chainB12, mintBootstrapOrla(h).token);
+    assert.equal(r12.decision, terminal);
+    assert.equal(r12.offlineContractObservations?.capabilityOk, true);
+    assert.equal(r12.offlineContractObservations?.orlaOk, true);
+    assert.equal(r12.mutationExecuted, false);
+    assert.equal(r12.dlpInvoked, false);
+
+    // Replaying either capability through the shared registry must fail closed.
+    const replay09 = dispatchWith(chainB09, mintBootstrapOrla(h).token);
+    assert.notEqual(replay09.offlineContractObservations?.capabilityOk, true);
+    assert.notEqual(replay09.decision, DISPATCHER_DECISIONS.ALLOW);
+    const replay12 = dispatchWith(chainB12, mintBootstrapOrla(h).token);
+    assert.notEqual(replay12.offlineContractObservations?.capabilityOk, true);
+    assert.notEqual(replay12.decision, DISPATCHER_DECISIONS.ALLOW);
+  });
+
+  it('3c) SQL exception summary remains truthful after successful observations', () => {
+    const observedThenThrown = Object.freeze({
+      caseId: 'B09',
+      sqlAttempted: 2,
+      sqlObservedSuccess: 2,
+      sqlAssertionPassed: false,
+      sqlBacked: true,
+      passed: false,
+    });
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: false,
+        results: [observedThenThrown],
+      }),
+      true,
+    );
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: true,
+        results: [{ sqlObservedSuccess: 0, sqlBacked: false }],
+      }),
+      true,
+    );
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: false,
+        results: [{ sqlObservedSuccess: 0, sqlBacked: false }],
+      }),
+      false,
+    );
   });
 
   it('4) required live assertion catalog (not claimed PASS)', () => {

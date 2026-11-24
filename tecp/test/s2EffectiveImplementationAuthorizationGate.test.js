@@ -57,6 +57,89 @@ const CURRENT_GOVERNANCE_REVISION = PARSED_RULE02.authority.governanceRevision;
 const CURRENT_AUTHORIZED_FILE_SCOPE = Object.freeze([
   ...PARSED_RULE02.governanceFacts.authorizedFileScope,
 ]);
+/**
+ * Durable contract fixtures. Independent of live Suite B governance.
+ * MANUAL_ACTIVE_GOVERNANCE_REPIN_REQUIRED = NO.
+ */
+const FIXTURE_YES = 'YES / EXACT_SLICE_ONLY / EFFECTIVE_AFTER_THIS_GOVERNANCE_PR_MERGES';
+const FIXTURE_SLICE_ID = 'TECP-OPS-PILOT-001-CONTROLLED-ONE-TO-FIVE-CURSOR';
+const ONE_PATH_REVISION = 'OPS_PILOT_001_S2_FIXTURE_CONTRACT_ONE_PATH_20261124';
+const ONE_PATH_SCOPE = Object.freeze([
+  'tecp/test/s2EffectiveImplementationAuthorizationGate.test.js',
+]);
+const MULTI_PATH_REVISION = 'OPS_PILOT_001_S2_FIXTURE_CONTRACT_MULTI_PATH_20261124';
+const MULTI_PATH_SCOPE = Object.freeze([
+  'tecp-ops-persistence/scripts/ownerControlledTier3LocalRunner.js',
+  'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+  'tecp/test/s2EffectiveImplementationAuthorizationGate.test.js',
+  'tecp/test/s2OwnerImplementationInstruction.test.js',
+]);
+
+function buildDeterministicRule02Fixture({
+  governanceRevision,
+  authorizedFileScope,
+  sliceId = FIXTURE_SLICE_ID,
+}) {
+  const scope = [...authorizedFileScope].sort();
+  const scopeS = scope.join(' | ');
+  return `## Canonical Project Progress Snapshot
+**PROJECT_PROGRESS = 4/10**
+**CURRENT_STAGE = ARTEMIS_CORE_STAGE_11_PAPER_SIMULATED_FULL_CHAIN_READINESS**
+**CURRENT_STAGE_PROGRESS = 11/15**
+**NEXT_GATE = STAGE11_GOVERNANCE_DISCOVERY**
+**PROGRESS_BLOCKER = NONE**
+**TECP_AUTHORIZED_SLICE = ${sliceId}**
+**TECP_IMPLEMENTATION_AUTHORIZED = NO / UNTIL_THIS_GOVERNANCE_PR_MERGES**
+**AUTHORIZED_SLICE = NONE / NO_ACTIVE_IMPLEMENTATION_AUTHORIZATION**
+
+### Active Work Package — ${sliceId}
+**SLICE_ID = ${sliceId}**
+**OFFICIAL_NAME = ${sliceId}**
+**TECP_AUTHORIZED_SLICE = ${sliceId}**
+**RISK_TIER = Tier 3**
+**AUTHORITY_CLASS = ENGINEERING_CONTROL_PLANE**
+**GOVERNANCE_REVISION = ${governanceRevision}**
+**AUTHORIZED_FILE_SCOPE = ${scopeS}**
+PROTECTED_PATHS = .cursor/rules/** | backend/**
+**STOP_CONDITIONS = RAW_RULE02_PARSE | DB | NETWORK | DEPLOY | PRODUCTION_MUTATION**
+**IMPLEMENTATION_START_CONDITIONS = THIS_GOVERNANCE_PR_MERGED**
+**COMPLETION_GATE = FIXTURE_COMPLETE**
+**COMPLETION_GATE_STATUS = NOT_REACHED**
+**LIFECYCLE_PRECEDENCE_RULE = CLOSED_FROZEN_VERIFIED_CONSUMES_PRIOR_IMPLEMENTATION_AUTHORIZATION**
+**TECP005_PRIOR_IMPLEMENTATION_AUTHORIZATION = CONSUMED / NON-ACTIVE**
+**PRIOR_SLICE = TECP-005-RULE02-PARSER**
+**TECP_005_STATUS = CLOSED / FROZEN / VERIFIED**
+**IMPLEMENTATION_AUTHORIZED = ${FIXTURE_YES}**
+**TECP005_IMPLEMENTATION_AUTHORIZED = ${FIXTURE_YES}**
+
+## Next Owner gate
+**TECP_NEXT_GATE = ${sliceId}**
+`;
+}
+
+function sha256Utf8(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function materializeRule02Fixture(governanceRevision, authorizedFileScope) {
+  const scope = Object.freeze([...authorizedFileScope].sort());
+  const text = buildDeterministicRule02Fixture({
+    governanceRevision,
+    authorizedFileScope: scope,
+  });
+  const digest = sha256Utf8(text);
+  const parsed = parseRule02(text);
+  return Object.freeze({
+    text,
+    digest,
+    revision: governanceRevision,
+    scope,
+    parsed,
+  });
+}
+
+const ONE_PATH_FIXTURE = materializeRule02Fixture(ONE_PATH_REVISION, ONE_PATH_SCOPE);
+const MULTI_PATH_FIXTURE = materializeRule02Fixture(MULTI_PATH_REVISION, MULTI_PATH_SCOPE);
 /** Documentation / historical four-path Adapter constants retained for negative coverage. */
 const HISTORICAL_FOUR_PATH_ADAPTER_SCOPE = Object.freeze([...S2_GATE_AUTHORIZED_FILE_SCOPE]);
 const HISTORICAL_EFF_AUTH_GOVERNANCE_REVISION = S2_GATE_GOVERNANCE_REVISION;
@@ -197,42 +280,186 @@ function issueCurrentInstruction(harnessBundle, overrides = {}) {
   });
 }
 
-test('POS-G01 TEST_ONLY harness + instruction + validator ALLOW (NON_OPERATIONAL fixture)', () => {
-  // Digest independently from Rule02 bytes (not Gate decision echo; not initdb-era pin).
-  const independentDigest = createHash('sha256').update(RULE02_TEXT, 'utf8').digest('hex');
-  assert.equal(RULE02_DIGEST, independentDigest);
-  assert.equal(independentDigest, 'c00acfa205e957196af8e93a55ecfcf30f8721d6a1d3719d16e0e90540f735d0');
-  // Current revision/scope from independently parsed Rule02; pin current governance era.
-  assert.equal(CURRENT_GOVERNANCE_REVISION, PARSED_RULE02.authority.governanceRevision);
-  assert.equal(CURRENT_GOVERNANCE_REVISION, 'OPS_PILOT_001_S2_GATE_TEST_DEBT_SINGLE_PATH_GOVERNANCE_20261121');
-  assert.deepEqual(
-    [...CURRENT_AUTHORIZED_FILE_SCOPE],
-    [...PARSED_RULE02.governanceFacts.authorizedFileScope],
-  );
-  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
-  // Documentation four-path constants remain historical and must not equal current scope.
-  assert.equal(
-    JSON.stringify([...CURRENT_AUTHORIZED_FILE_SCOPE].sort())
-      === JSON.stringify([...HISTORICAL_FOUR_PATH_ADAPTER_SCOPE].sort()),
-    false,
-  );
-  const harness = makeHarness();
-  const issued = issueCurrentInstruction(harness, { jti: 'posg01jti0001' });
-  assert.equal(issued.ok, true);
-  assert.equal(issued.testOnly, true);
-  const result = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
-    ownerInstructionEncoded: issued.instruction.encoded,
-  }));
+function fixtureRecord(kind) {
+  if (kind === 'ONE_PATH') return ONE_PATH_FIXTURE;
+  if (kind === 'MULTI_PATH') return MULTI_PATH_FIXTURE;
+  throw new Error(`UNKNOWN_FIXTURE_KIND:${kind}`);
+}
+
+function fixtureHarness(kind) {
+  const fx = fixtureRecord(kind);
+  const harness = makeHarness({
+    rule02Text: fx.text,
+    rule02DigestSha256: fx.digest,
+  });
+  return {
+    harness,
+    scope: [...fx.scope],
+    revision: fx.revision,
+    digest: fx.digest,
+    text: fx.text,
+    parsed: fx.parsed,
+  };
+}
+
+function issueFixtureInstruction(bundle, overrides = {}) {
+  return issueS2OwnerInstructionFromTestHarness(bundle.harness, {
+    authorizedFileScope: [...bundle.scope],
+    governanceRevision: bundle.revision,
+    rule02DigestSha256: bundle.digest,
+    ...overrides,
+  });
+}
+
+function fixtureBaseInput(bundle, overrides = {}) {
+  return baseInput(bundle.harness, {
+    governanceRevision: bundle.revision,
+    authorizedFileScope: [...bundle.scope],
+    requestedPaths: [...bundle.scope],
+    expectedRule02DigestSha256: bundle.digest,
+    ...overrides,
+  });
+}
+
+function assertTestOnlyAllow(result) {
   assert.equal(result.ok, true);
   assert.equal(result.decision, GD.ALLOW);
   assert.equal(result.operational, false);
+  assert.equal(result.standingAuthority, false);
   assert.equal(result.fullS2EffectiveAuthorization, false);
   assert.equal(result.authorization.testOnly, true);
-  assert.equal(result.authorization.standingAuthority, false);
-  // Gate decision must not be the source of expected digest/scope facts.
-  assert.notEqual(result.authorization?.rule02DigestSha256, undefined);
-  assert.equal(result.authorization.rule02DigestSha256, independentDigest);
+  assert.notEqual(result.authenticMutationAuthority, true);
   assertNoSecrets(result);
+}
+
+function assertFixtureBytesBound(bundle) {
+  const independentDigest = sha256Utf8(bundle.text);
+  assert.equal(bundle.digest, independentDigest);
+  assert.equal(sha256Utf8(bundle.text), independentDigest);
+  const parsed = parseRule02(bundle.text);
+  assert.equal(parsed.authority.governanceRevision, bundle.revision);
+  assert.deepEqual([...parsed.governanceFacts.authorizedFileScope], [...bundle.scope]);
+  assert.equal(parsed.authority.activeWorkPackage.sliceId, S2_GATE_SLICE_ID);
+  assert.equal(parsed.tecp.TECP_AUTHORIZED_SLICE, S2_GATE_SLICE_ID);
+  const allowed = validateGovernance(parsed, {
+    sliceId: S2_GATE_SLICE_ID,
+    authorityClass: parsed.governanceFacts.authorityClass,
+    riskTier: parsed.governanceFacts.riskTier,
+    requestedPaths: [...bundle.scope],
+    operationClass: 'IMPLEMENT',
+    requiresDeploy: false,
+    requiresProductionMutation: false,
+  });
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.decision, 'ALLOW');
+}
+
+function assertDurableGateContract(kind) {
+  const bundle = fixtureHarness(kind);
+  assertFixtureBytesBound(bundle);
+  const other = kind === 'ONE_PATH' ? MULTI_PATH_FIXTURE : ONE_PATH_FIXTURE;
+  assert.notEqual(bundle.revision, other.revision);
+  assert.notEqual(bundle.digest, other.digest);
+  assert.notEqual(bundle.scope.length, other.scope.length);
+
+  const issued = issueFixtureInstruction(bundle, { jti: `pos${kind}allow01`.slice(0, 20) });
+  assert.equal(issued.ok, true);
+  assert.equal(issued.testOnly, true);
+  const allow = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+  }));
+  assertTestOnlyAllow(allow);
+  assert.equal(allow.authorization.rule02DigestSha256, bundle.digest);
+  assert.equal(allow.authorization.governanceRevision, bundle.revision);
+  assert.deepEqual([...allow.authorization.authorizedFileScope].sort(), [...bundle.scope].sort());
+
+  const wrongDigest = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    expectedRule02DigestSha256: 'a'.repeat(64),
+  }));
+  assertDeny(wrongDigest, GD.DENY_WRONG_RULE02_BLOB_OR_DIGEST);
+  assert.notEqual(wrongDigest.decision, GD.ALLOW);
+
+  const alteredText = `${bundle.text}\n`;
+  const alteredDigest = sha256Utf8(alteredText);
+  assert.notEqual(alteredDigest, bundle.digest);
+  const alteredHarness = makeHarness({
+    rule02Text: alteredText,
+    rule02DigestSha256: alteredDigest,
+  });
+  const alteredIssued = issueS2OwnerInstructionFromTestHarness(alteredHarness, {
+    jti: `pos${kind}altb01`.slice(0, 20),
+    authorizedFileScope: [...bundle.scope],
+    governanceRevision: bundle.revision,
+    rule02DigestSha256: alteredDigest,
+  });
+  assert.equal(alteredIssued.ok, true);
+  const alteredBytes = evaluateS2EffectiveImplementationAuthorization(baseInput(alteredHarness, {
+    ownerInstructionEncoded: alteredIssued.instruction.encoded,
+    governanceRevision: bundle.revision,
+    authorizedFileScope: [...bundle.scope],
+    requestedPaths: [...bundle.scope],
+    expectedRule02DigestSha256: bundle.digest,
+  }));
+  assertDeny(alteredBytes, GD.DENY_WRONG_RULE02_BLOB_OR_DIGEST);
+
+  const wrongRevision = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    governanceRevision: 'OPS_PILOT_001_S2_FIXTURE_CONTRACT_WRONG_REVISION',
+  }));
+  assertDeny(wrongRevision, GD.DENY_WRONG_GOVERNANCE_REVISION);
+
+  const wrongRepo = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    repositoryId: 'other/repo',
+  }));
+  assertDeny(wrongRepo, GD.DENY_WRONG_REPOSITORY_OR_SLICE);
+
+  const wrongSha = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    expectedCanonicalSha: '0'.repeat(40),
+  }));
+  assertDeny(wrongSha, GD.DENY_WRONG_CANONICAL_SHA);
+
+  const alteredScope = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    authorizedFileScope: [...bundle.scope, 'tecp/src/extra.js'],
+    requestedPaths: [...bundle.scope, 'tecp/src/extra.js'],
+  }));
+  assertDeny(alteredScope, GD.DENY_WRONG_SCOPE_OR_OPERATION);
+
+  const extraPath = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    requestedPaths: [...bundle.scope, 'tecp/src/extra.js'],
+  }));
+  assertDeny(extraPath, GD.DENY_PROTECTED_OR_EXTRA_PATH);
+  assert.equal(
+    (extraPath.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+    true,
+  );
+
+  const missingInstruction = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+    ownerInstructionEncoded: '',
+  }));
+  assertDeny(missingInstruction, GD.DENY_MISSING_OWNER_INSTRUCTION);
+  assertDeny(
+    evaluateS2EffectiveImplementationAuthorization(undefined),
+    GD.DENY_MISSING_INPUT,
+  );
+}
+
+test('POS-G01 durable MULTI_PATH fixture contract (NON_OPERATIONAL)', () => {
+  assert.deepEqual([...MULTI_PATH_FIXTURE.scope], [...MULTI_PATH_SCOPE].sort());
+  assert.equal(MULTI_PATH_FIXTURE.revision, MULTI_PATH_REVISION);
+  assertDurableGateContract('MULTI_PATH');
+});
+
+test('POS-G01b durable ONE_PATH fixture contract (second governance configuration)', () => {
+  assert.deepEqual([...ONE_PATH_FIXTURE.scope], [...ONE_PATH_SCOPE]);
+  assert.equal(ONE_PATH_FIXTURE.revision, ONE_PATH_REVISION);
+  assert.notEqual(ONE_PATH_FIXTURE.revision, MULTI_PATH_FIXTURE.revision);
+  assert.notEqual(ONE_PATH_FIXTURE.digest, MULTI_PATH_FIXTURE.digest);
+  assertDurableGateContract('ONE_PATH');
 });
 
 test('POS-G02 merge provenance inspect against live worktree Git objects', () => {
@@ -256,69 +483,78 @@ test('POS-G02 merge provenance inspect against live worktree Git objects', () =>
   assert.equal(inspected.tipSha, expected.canonicalSha);
 });
 
-test('POS-G03 canonical Validator ALLOW for exact current authorized paths', () => {
+test('POS-G-CANONICAL live tip facts are independent of durable fixture constants', () => {
+  const worktreeDigest = sha256Utf8(RULE02_TEXT);
+  assert.equal(RULE02_DIGEST, worktreeDigest);
   const parsed = parseRule02(RULE02_TEXT);
-  // Expected facts from independently parsed Rule02 (not Gate returned scope).
+  assert.equal(typeof parsed.authority.governanceRevision, 'string');
+  assert.ok(parsed.authority.governanceRevision.length > 0);
+  assert.ok(Array.isArray(parsed.governanceFacts.authorizedFileScope));
+  assert.ok(parsed.governanceFacts.authorizedFileScope.length > 0);
   assert.equal(parsed.authority.governanceRevision, CURRENT_GOVERNANCE_REVISION);
-  assert.equal(parsed.authority.governanceRevision, 'OPS_PILOT_001_S2_GATE_TEST_DEBT_SINGLE_PATH_GOVERNANCE_20261121');
-  assert.deepEqual([...parsed.governanceFacts.authorizedFileScope], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
-  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
-  const v = validateGovernance(parsed, {
-    sliceId: S2_GATE_SLICE_ID,
-    authorityClass: parsed.governanceFacts.authorityClass,
-    riskTier: parsed.governanceFacts.riskTier,
-    requestedPaths: [...CURRENT_AUTHORIZED_FILE_SCOPE],
-    operationClass: 'IMPLEMENT',
-    requiresDeploy: false,
-    requiresProductionMutation: false,
-  });
-  assert.equal(v.allowed, true);
-  // Completed initdb paths rejected under current one-path governance.
-  const initdb = validateGovernance(parsed, {
-    sliceId: S2_GATE_SLICE_ID,
-    authorityClass: parsed.governanceFacts.authorityClass,
-    riskTier: parsed.governanceFacts.riskTier,
-    requestedPaths: [
-      'tecp-ops-persistence/src/disposableOpsPilotDbHarness.js',
-      'tecp-ops-persistence/test/disposableOpsPilotDbHarness.test.js',
-    ],
-    operationClass: 'IMPLEMENT',
-    requiresDeploy: false,
-    requiresProductionMutation: false,
-  });
-  assert.equal(initdb.allowed, false);
-  // Former Adapter paths rejected (historical four-path is not current authority).
-  const stale = validateGovernance(parsed, {
-    sliceId: S2_GATE_SLICE_ID,
-    authorityClass: parsed.governanceFacts.authorityClass,
-    riskTier: parsed.governanceFacts.riskTier,
-    requestedPaths: [...HISTORICAL_FOUR_PATH_ADAPTER_SCOPE],
-    operationClass: 'IMPLEMENT',
-    requiresDeploy: false,
-    requiresProductionMutation: false,
-  });
-  assert.equal(stale.allowed, false);
-  const adapterSrc = validateGovernance(parsed, {
-    sliceId: S2_GATE_SLICE_ID,
-    authorityClass: parsed.governanceFacts.authorityClass,
-    riskTier: parsed.governanceFacts.riskTier,
-    requestedPaths: ['tecp/src/s2EffectiveImplementationAuthorizationGate.js'],
-    operationClass: 'IMPLEMENT',
-    requiresDeploy: false,
-    requiresProductionMutation: false,
-  });
-  assert.equal(adapterSrc.allowed, false);
-  // Extra path rejected.
-  const extra = validateGovernance(parsed, {
-    sliceId: S2_GATE_SLICE_ID,
-    authorityClass: parsed.governanceFacts.authorityClass,
-    riskTier: parsed.governanceFacts.riskTier,
-    requestedPaths: [...CURRENT_AUTHORIZED_FILE_SCOPE, 'tecp/src/extra.js'],
-    operationClass: 'IMPLEMENT',
-    requiresDeploy: false,
-    requiresProductionMutation: false,
-  });
-  assert.equal(extra.allowed, false);
+  const live = deriveLiveTipProvenanceBindings(REPO_ROOT);
+  assert.equal(live.rule02DigestSha256, worktreeDigest);
+  assert.notEqual(live.rule02DigestSha256, ONE_PATH_FIXTURE.digest);
+  assert.notEqual(live.rule02DigestSha256, MULTI_PATH_FIXTURE.digest);
+  assert.notEqual(parsed.authority.governanceRevision, ONE_PATH_REVISION);
+  assert.notEqual(parsed.authority.governanceRevision, MULTI_PATH_REVISION);
+});
+
+test('POS-G03 fixture-bound Validator and Gate path matrix', () => {
+  for (const kind of ['ONE_PATH', 'MULTI_PATH']) {
+    const bundle = fixtureHarness(kind);
+    const parsed = bundle.parsed;
+    assert.equal(parsed.authority.governanceRevision, bundle.revision);
+    assert.deepEqual([...parsed.governanceFacts.authorizedFileScope], [...bundle.scope]);
+    const requestBase = {
+      sliceId: S2_GATE_SLICE_ID,
+      authorityClass: parsed.governanceFacts.authorityClass,
+      riskTier: parsed.governanceFacts.riskTier,
+      operationClass: 'IMPLEMENT',
+      requiresDeploy: false,
+      requiresProductionMutation: false,
+    };
+    const exact = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: [...bundle.scope],
+    });
+    assert.equal(exact.allowed, true);
+    const extra = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: [...bundle.scope, 'tecp/src/extra.js'],
+    });
+    assert.equal(extra.allowed, false);
+    const protectedPath = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: ['.cursor/rules/titangold-current-active-work.mdc'],
+    });
+    assert.equal(protectedPath.allowed, false);
+    const initdb = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: [
+        'tecp-ops-persistence/src/disposableOpsPilotDbHarness.js',
+        'tecp-ops-persistence/test/disposableOpsPilotDbHarness.test.js',
+      ],
+    });
+    assert.equal(initdb.allowed, false);
+    const stale = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: [...HISTORICAL_FOUR_PATH_ADAPTER_SCOPE],
+    });
+    assert.equal(stale.allowed, false);
+    const adapterSrc = validateGovernance(parsed, {
+      ...requestBase,
+      requestedPaths: ['tecp/src/s2EffectiveImplementationAuthorizationGate.js'],
+    });
+    assert.equal(adapterSrc.allowed, false);
+    const issued = issueFixtureInstruction(bundle, { jti: `posg03${kind}rev1`.slice(0, 20) });
+    assert.equal(issued.ok, true);
+    const wrongRevision = evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+      ownerInstructionEncoded: issued.instruction.encoded,
+      governanceRevision: 'OPS_PILOT_001_S2_FIXTURE_CONTRACT_WRONG_REVISION',
+    }));
+    assertDeny(wrongRevision, GD.DENY_WRONG_GOVERNANCE_REVISION);
+  }
 });
 
 test('NEG-G01 missing Owner trust DENYs on production path', () => {
@@ -461,26 +697,64 @@ test('NEG-G13 unauthorized protected path DENYs', () => {
   })), GD.DENY_WRONG_SCOPE_OR_OPERATION);
 });
 
-test('NEG-G14 missing authorized path DENYs', () => {
-  // One-file active scope: slice(0,1) equals the full authorized set and is not a missing-path case.
-  // Empty requestedPaths is a correctly formed evaluation input that omits the required path and
-  // fail-closes with REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET (DENY_PROTECTED_OR_EXTRA_PATH).
-  assert.equal(CURRENT_AUTHORIZED_FILE_SCOPE.length, 1);
-  const harness = makeHarness();
-  const issued = issueCurrentInstruction(harness);
-  const result = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
-    ownerInstructionEncoded: issued.instruction.encoded,
-    requestedPaths: [],
-  }));
-  assertDeny(result, GD.DENY_PROTECTED_OR_EXTRA_PATH);
-  assert.equal(result.ok, false);
-  assert.equal(result.standingAuthority, false);
-  assert.equal(result.operational, false);
-  assert.equal(result.authenticMutationAuthority === true, false);
-  assert.equal(
-    (result.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
-    true,
+test('NEG-G14 cardinality-independent exact-set binding across one-path and multi-path fixtures', () => {
+  function assertExactSetReason(result) {
+    assertDeny(result, GD.DENY_PROTECTED_OR_EXTRA_PATH);
+    assert.equal(
+      (result.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+      true,
+    );
+    assert.notEqual(result.authenticMutationAuthority, true);
+  }
+
+  function evaluateKind(kind, requestedPaths, jti) {
+    const bundle = fixtureHarness(kind);
+    const issued = issueFixtureInstruction(bundle, { jti });
+    assert.equal(issued.ok, true);
+    return {
+      bundle,
+      result: evaluateS2EffectiveImplementationAuthorization(fixtureBaseInput(bundle, {
+        ownerInstructionEncoded: issued.instruction.encoded,
+        requestedPaths,
+      })),
+    };
+  }
+
+  const oneEmpty = evaluateKind('ONE_PATH', [], 'g14oneempty0001');
+  assert.equal(oneEmpty.bundle.scope.length, 1);
+  assertExactSetReason(oneEmpty.result);
+
+  const oneExact = evaluateKind('ONE_PATH', [...ONE_PATH_FIXTURE.scope], 'g14oneexact0001');
+  assertTestOnlyAllow(oneExact.result);
+
+  const multiEmpty = evaluateKind('MULTI_PATH', [], 'g14multiempty01');
+  assert.ok(multiEmpty.bundle.scope.length >= 2);
+  assertExactSetReason(multiEmpty.result);
+
+  const multiSubset = evaluateKind(
+    'MULTI_PATH',
+    MULTI_PATH_FIXTURE.scope.slice(0, -1),
+    'g14multisub0001',
   );
+  assert.ok(multiSubset.bundle.scope.length > MULTI_PATH_FIXTURE.scope.slice(0, -1).length);
+  assertExactSetReason(multiSubset.result);
+
+  const multiExact = evaluateKind('MULTI_PATH', [...MULTI_PATH_FIXTURE.scope], 'g14multiexact01');
+  assertTestOnlyAllow(multiExact.result);
+
+  const extra = evaluateKind(
+    'MULTI_PATH',
+    [...MULTI_PATH_FIXTURE.scope, 'tecp/src/extra.js'],
+    'g14multiextra001',
+  );
+  assertExactSetReason(extra.result);
+
+  const protectedPath = evaluateKind(
+    'ONE_PATH',
+    ['.cursor/rules/titangold-current-active-work.mdc'],
+    'g14oneprot00001',
+  );
+  assertExactSetReason(protectedPath.result);
 });
 
 test('NEG-G15 DLP011 / live Tier-3 substitution rejected', () => {
