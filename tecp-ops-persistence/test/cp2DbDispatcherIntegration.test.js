@@ -191,12 +191,48 @@ const SUITE_B_LIVE_EXECUTION_PROVENANCE = 'LIVE_MATRIX_OWNED_TXN_PATH';
 const SUITE_B_SQL_OBSERVATION_PROVENANCE = 'COUNTED_EXPLICIT_SUITE_QUERIES';
 
 const authenticLiveCaseResults = new WeakSet();
+/** Result arrays produced by the authentic runner-authorized live matrix path. */
+const authenticLiveMatrixResultSets = new WeakSet();
+let authenticLiveMatrixBrandPermit = false;
+
+/**
+ * Brands a case result only while the authentic live matrix path holds the permit.
+ * Offline fixtures that call this outside that path remain unbranded.
+ */
 function brandAuthenticLiveCaseResult(result) {
+  if (authenticLiveMatrixBrandPermit === true
+    && result
+    && typeof result === 'object') {
+    authenticLiveCaseResults.add(result);
+  }
+  return result;
+}
+
+/**
+ * Mechanism probe only: proves WeakSet branding works.
+ * Does NOT register a live matrix result set and cannot satisfy authentic live acceptance alone.
+ */
+function probeAuthenticLiveBrandMechanismForTests(result) {
   if (result && typeof result === 'object') authenticLiveCaseResults.add(result);
   return result;
 }
+
 function isBrandedAuthenticLiveCaseResult(result) {
   return result != null && typeof result === 'object' && authenticLiveCaseResults.has(result);
+}
+
+function bindAuthenticLiveMatrixResultSet(results) {
+  if (Array.isArray(results)) authenticLiveMatrixResultSets.add(results);
+  return results;
+}
+
+/**
+ * Matrix-level SQL executed summary. Successful observations survive later assertion failures.
+ */
+export function summarizeDispatcherLiveSqlExecutedFlag({ anySqlExecuted, results } = {}) {
+  if (anySqlExecuted === true) return true;
+  if (!Array.isArray(results)) return false;
+  return results.some((row) => Number(row?.sqlObservedSuccess) > 0);
 }
 
 const S2_CLAIM_KEY_ORDER = Object.freeze([
@@ -727,10 +763,27 @@ export function validateDispatcherLiveSqlStructure(results) {
 /**
  * Authentic live acceptance. Structural PASS is required and is not sufficient.
  * Caller-supplied executionProvenance strings cannot satisfy the brand check.
+ * Offline synthetic arrays — even if individually WeakSet-branded via the
+ * mechanism probe — cannot acquire authentic live acceptance without the
+ * runner-authorized live matrix result-set binding.
  */
 export function acceptAuthenticDispatcherLiveSqlResults(results) {
   const structural = validateDispatcherLiveSqlStructure(results);
   if (structural.ok !== true || structural.structurallyValid !== true) return structural;
+  if (!Array.isArray(results) || authenticLiveMatrixResultSets.has(results) !== true) {
+    return Object.freeze({
+      ok: false,
+      allPassed: false,
+      structurallyValid: true,
+      authenticLiveAccepted: false,
+      caseCount: Array.isArray(results) ? results.length : 0,
+      reasons: Object.freeze([
+        'AUTHENTIC_LIVE_MATRIX_BINDING_MISSING',
+        'SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED',
+      ]),
+      layer: 'AUTHENTIC_LIVE',
+    });
+  }
   for (const entry of results) {
     if (isBrandedAuthenticLiveCaseResult(entry) === true) continue;
     const reasons = ['AUTHENTIC_LIVE_PROVENANCE_MISSING'];
@@ -1121,7 +1174,7 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
   const resultsById = new Map();
   let anySqlExecuted = false;
 
-  function makeDispatcher(extraDeps = {}) {
+  function makeDispatcher(forChain = chain, extraDeps = {}) {
     return createOperationalDispatcher({
       emergencyStop: h.emergencyStop,
       trustRoot: h.trustRoot,
@@ -1138,13 +1191,13 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
           clock: h.clock,
           revocationRegistry: h.revocationRegistry,
           replayRegistry: h.replayRegistry,
-          approvalToken: chain.approvalIssued.token,
+          approvalToken: forChain.approvalIssued.token,
           approvalDeps: {
             keyRegistry: h.keyRegistry,
             clock: h.clock,
             revocationRegistry: h.revocationRegistry,
           },
-          principal: chain.id.principal,
+          principal: forChain.id.principal,
         };
       },
     });
@@ -1220,11 +1273,12 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
   async function runCase(caseId, proofName, fn) {
     caseSqlBook = { sqlAttempted: 0, sqlObservedSuccess: 0, queryCount: 0 };
     const book = caseSqlBook;
+    authenticLiveMatrixBrandPermit = true;
     try {
       const outcome = await fn();
       const passed = outcome.passed === true;
       const sqlBacked = book.sqlObservedSuccess > 0 && outcome.sqlBacked === true;
-      if (sqlBacked) anySqlExecuted = true;
+      if (book.sqlObservedSuccess > 0) anySqlExecuted = true;
       const sealed = brandAuthenticLiveCaseResult(buildCaseResult(caseId, proofName, {
         executed: outcome.executed === true,
         sqlBacked,
@@ -1243,6 +1297,8 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       }));
       resultsById.set(caseId, sealed);
     } catch (error) {
+      // Successful SQL observations must survive assertion/query failures.
+      if (book.sqlObservedSuccess > 0) anySqlExecuted = true;
       const sealed = brandAuthenticLiveCaseResult(buildCaseResult(caseId, proofName, {
         executed: true,
         sqlBacked: book.sqlObservedSuccess > 0,
@@ -1257,6 +1313,8 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
         sqlAssertionPassed: false,
       }));
       resultsById.set(caseId, sealed);
+    } finally {
+      authenticLiveMatrixBrandPermit = false;
     }
   }
 
@@ -1668,13 +1726,15 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       'SELECT COUNT(*)::int AS n FROM dlp_task WHERE task_id = $1',
       [observedTaskId],
     );
-    const dispatcher = makeDispatcher();
+    // Independent capability chain: must not share B12's capability JTI / presentation.
+    const chainB09 = mintPrincipal(h);
+    const dispatcher = makeDispatcher(chainB09);
     const orla = mintBootstrapOrla(h);
     const terminalDeny = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
     const dispatchResult = dispatcher.authorizeAndDispatch({
       action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
-      principal: chain.id.principal,
-      capabilityToken: chain.cap.token,
+      principal: chainB09.id.principal,
+      capabilityToken: chainB09.cap.token,
       capabilityExpectation: {
         action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
         taskId: observedTaskId,
@@ -1718,6 +1778,7 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
         observedTaskId,
         capabilityOk,
         orlaOk,
+        capabilityJti: chainB09.cap.claims.jti,
       }),
       transactionEvidence: sqlTx(caseSqlBook.queryCount, { operationalWrite: false }),
       durabilityEvidence: Object.freeze({
@@ -1864,13 +1925,15 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
   await runCase('B12', 'no_worker_or_mcp_action', async () => {
     const tasksBefore = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_task');
     const auditsBefore = await countQuery('SELECT COUNT(*)::int AS n FROM dlp_audit_event');
-    const dispatcher = makeDispatcher();
+    // Independent capability chain: must not reuse B09's presented capability JTI.
+    const chainB12 = mintPrincipal(h);
+    const dispatcher = makeDispatcher(chainB12);
     const orla = mintBootstrapOrla(h);
     const terminalDeny = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
     const dispatchResult = dispatcher.authorizeAndDispatch({
       action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
-      principal: chain.id.principal,
-      capabilityToken: chain.cap.token,
+      principal: chainB12.id.principal,
+      capabilityToken: chainB12.cap.token,
       capabilityExpectation: {
         action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
         taskId: TASK_ID,
@@ -1912,6 +1975,7 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
         mutationExecuted: dispatchResult.mutationExecuted === true,
         dlpInvoked: dispatchResult.dlpInvoked === true,
         operationalDispatchAuthorized: OPERATIONAL_DISPATCH_AUTHORIZED,
+        capabilityJti: chainB12.cap.claims.jti,
       }),
       transactionEvidence: sqlTx(caseSqlBook.queryCount, { measuredDeltas: true }),
       durabilityEvidence: null,
@@ -1943,6 +2007,7 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       failureReason: 'CASE_NOT_EXECUTED',
     });
   });
+  bindAuthenticLiveMatrixResultSet(ordered);
   const aggregation = acceptAuthenticDispatcherLiveSqlResults(ordered);
   const authenticPass = aggregation.ok === true && aggregation.authenticLiveAccepted === true;
   return {
@@ -1954,7 +2019,7 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
     results: Object.freeze(ordered),
     aggregation,
     proofClass: DISPATCHER_PROOF_CLASS_LIVE,
-    sqlExecuted: anySqlExecuted === true && ordered.some((row) => row.sqlBacked === true),
+    sqlExecuted: summarizeDispatcherLiveSqlExecutedFlag({ anySqlExecuted, results: ordered }),
     catalog: DISPATCHER_LIVE_SQL_CATALOG,
     operationalDispatchAuthorized: false,
   };
@@ -2967,22 +3032,29 @@ console.log(JSON.stringify(payload));
     assert.equal(unbranded.structurallyValid, true);
     assert.equal(unbranded.authenticLiveAccepted, false);
     assert.equal(unbranded.layer, 'AUTHENTIC_LIVE');
-    assert.ok((unbranded.reasons || []).includes('AUTHENTIC_LIVE_PROVENANCE_MISSING'));
-    assert.ok((unbranded.reasons || []).includes('FABRICATED_LIVE_ENVELOPE'));
+    assert.ok((unbranded.reasons || []).includes('AUTHENTIC_LIVE_MATRIX_BINDING_MISSING'));
+    assert.ok((unbranded.reasons || []).includes('SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED'));
     assert.equal(synthetic[0].executionProvenance, 'LIVE_MATRIX_OWNED_TXN_PATH');
-    const partial = synthetic.map((row, index) => (index < 2 ? brandAuthenticLiveCaseResult(row) : row));
-    const partialAuth = acceptAuthenticDispatcherLiveSqlResults(partial);
-    assert.equal(partialAuth.ok, false);
-    assert.equal(partialAuth.authenticLiveAccepted, false);
-    assert.ok(
-      (partialAuth.reasons || []).includes('AUTHENTIC_LIVE_PROVENANCE_MISSING')
-      || (partialAuth.reasons || []).includes('FABRICATED_LIVE_ENVELOPE'),
-    );
-    const branded = synthetic.map((row) => brandAuthenticLiveCaseResult(row));
-    const accepted = acceptAuthenticDispatcherLiveSqlResults(branded);
-    assert.equal(accepted.ok, true);
-    assert.equal(accepted.authenticLiveAccepted, true);
-    assert.equal(accepted.layer, 'AUTHENTIC_LIVE');
+
+    // Mechanism probe: WeakSet branding works, but offline fixtures cannot mint live acceptance.
+    const probe = { marker: 'brand-mechanism-probe' };
+    probeAuthenticLiveBrandMechanismForTests(probe);
+    assert.equal(isBrandedAuthenticLiveCaseResult(probe), true);
+    const outsideBrand = brandAuthenticLiveCaseResult({ marker: 'outside-live-permit' });
+    assert.equal(isBrandedAuthenticLiveCaseResult(outsideBrand), false);
+
+    const probedRows = synthetic.map((row) => probeAuthenticLiveBrandMechanismForTests(row));
+    const probedAuth = acceptAuthenticDispatcherLiveSqlResults(probedRows);
+    assert.equal(probedAuth.ok, false);
+    assert.equal(probedAuth.authenticLiveAccepted, false);
+    assert.ok((probedAuth.reasons || []).includes('AUTHENTIC_LIVE_MATRIX_BINDING_MISSING'));
+    assert.ok((probedAuth.reasons || []).includes('SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED'));
+
+    // Even a correctly string-labeled + fully branded synthetic array is denied without matrix binding.
+    const fabricated = synthetic.map((row) => probeAuthenticLiveBrandMechanismForTests({ ...row }));
+    const fabricatedAuth = acceptAuthenticDispatcherLiveSqlResults(fabricated);
+    assert.equal(fabricatedAuth.ok, false);
+    assert.equal(fabricatedAuth.authenticLiveAccepted, false);
   });
 
   it('forged, wrong-suite, wrong-head, and offline authority cannot open live SQL', async () => {
@@ -3149,6 +3221,112 @@ console.log(JSON.stringify(payload));
     assert.equal(result.dlpInvoked, false);
     assert.equal(result.operationalDispatchAuthorized, false);
     assert.notEqual(result.decision, DISPATCHER_DECISIONS.ALLOW);
+  });
+
+  it('3b) B09 then B12 use independent capability JTIs; shared replay remains effective', () => {
+    const h = buildHarness();
+    const chainB09 = mintPrincipal(h);
+    const chainB12 = mintPrincipal(h);
+    assert.notEqual(chainB09.cap.claims.jti, chainB12.cap.claims.jti);
+    assert.equal(typeof chainB09.cap.claims.jti, 'string');
+    assert.equal(typeof chainB12.cap.claims.jti, 'string');
+
+    function dispatchWith(forChain, orlaToken) {
+      const dispatcher = createOperationalDispatcher({
+        emergencyStop: h.emergencyStop,
+        trustRoot: h.trustRoot,
+        buildCapabilityVerifyDeps() {
+          return {
+            keyRegistry: h.keyRegistry,
+            clock: h.clock,
+            revocationRegistry: h.revocationRegistry,
+            replayRegistry: h.replayRegistry,
+            approvalToken: forChain.approvalIssued.token,
+            approvalDeps: {
+              keyRegistry: h.keyRegistry,
+              clock: h.clock,
+              revocationRegistry: h.revocationRegistry,
+            },
+            principal: forChain.id.principal,
+          };
+        },
+        orlaVerifyDeps: {
+          trustRoot: h.trustRoot,
+          clock: h.orlaClock,
+          revocationRegistry: h.orlaRevocation,
+          replayRegistry: h.orlaReplay,
+        },
+      });
+      return dispatcher.authorizeAndDispatch({
+        action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+        principal: forChain.id.principal,
+        capabilityToken: forChain.cap.token,
+        capabilityExpectation: {
+          action: DISPATCHER_ACTIONS.BIND_TASK_CLAIM_LEASE_WITH_AUDIT,
+          taskId: TASK_ID,
+          resourcePaths: [...SCOPE],
+          principalId: WORKER_ID,
+        },
+        orlaToken,
+        orlaExpectation: bootstrapOrlaExpectation(),
+        ownedTxnHandle: { id: `seq-${forChain.cap.claims.jti}` },
+      });
+    }
+
+    const terminal = DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED;
+    const r09 = dispatchWith(chainB09, mintBootstrapOrla(h).token);
+    assert.equal(r09.decision, terminal);
+    assert.equal(r09.offlineContractObservations?.capabilityOk, true);
+    assert.equal(r09.offlineContractObservations?.orlaOk, true);
+    assert.equal(r09.mutationExecuted, false);
+    assert.equal(r09.dlpInvoked, false);
+
+    const r12 = dispatchWith(chainB12, mintBootstrapOrla(h).token);
+    assert.equal(r12.decision, terminal);
+    assert.equal(r12.offlineContractObservations?.capabilityOk, true);
+    assert.equal(r12.offlineContractObservations?.orlaOk, true);
+    assert.equal(r12.mutationExecuted, false);
+    assert.equal(r12.dlpInvoked, false);
+
+    // Replaying either capability through the shared registry must fail closed.
+    const replay09 = dispatchWith(chainB09, mintBootstrapOrla(h).token);
+    assert.notEqual(replay09.offlineContractObservations?.capabilityOk, true);
+    assert.notEqual(replay09.decision, DISPATCHER_DECISIONS.ALLOW);
+    const replay12 = dispatchWith(chainB12, mintBootstrapOrla(h).token);
+    assert.notEqual(replay12.offlineContractObservations?.capabilityOk, true);
+    assert.notEqual(replay12.decision, DISPATCHER_DECISIONS.ALLOW);
+  });
+
+  it('3c) SQL exception summary remains truthful after successful observations', () => {
+    const observedThenThrown = Object.freeze({
+      caseId: 'B09',
+      sqlAttempted: 2,
+      sqlObservedSuccess: 2,
+      sqlAssertionPassed: false,
+      sqlBacked: true,
+      passed: false,
+    });
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: false,
+        results: [observedThenThrown],
+      }),
+      true,
+    );
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: true,
+        results: [{ sqlObservedSuccess: 0, sqlBacked: false }],
+      }),
+      true,
+    );
+    assert.equal(
+      summarizeDispatcherLiveSqlExecutedFlag({
+        anySqlExecuted: false,
+        results: [{ sqlObservedSuccess: 0, sqlBacked: false }],
+      }),
+      false,
+    );
   });
 
   it('4) required live assertion catalog (not claimed PASS)', () => {
