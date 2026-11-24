@@ -5,6 +5,9 @@
 
 import assert from 'node:assert/strict';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { canonicalJson } from '../src/workerCapabilityToken.js';
@@ -164,9 +167,25 @@ test('POS-03 bounded expiry + fresh JTI accepted', () => {
 });
 
 test('NEG-01 missing Owner trust DENYs', () => {
-  const installed = createOwnerInstalledS2ImplTrustDeps({});
-  assert.equal(installed.ok, false);
-  assert.equal(installed.decision, D.DENY_OWNER_TRUST_MISSING);
+  // Isolate homedir the same way NEG-G01 isolates HOME. Node homedir() reads
+  // HOME on POSIX and USERPROFILE on Windows; both point at an empty temp
+  // directory so the installed laboratory trust is not consulted or modified.
+  const prevHome = process.env.HOME;
+  const prevUserProfile = process.env.USERPROFILE;
+  const iso = join(tmpdir(), `s2-owner-notrust-${process.pid}`);
+  mkdirSync(iso, { recursive: true });
+  process.env.HOME = iso;
+  process.env.USERPROFILE = iso;
+  try {
+    const installed = createOwnerInstalledS2ImplTrustDeps({});
+    assert.equal(installed.ok, false);
+    assert.equal(installed.decision, D.DENY_OWNER_TRUST_MISSING);
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    if (prevUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = prevUserProfile;
+  }
 });
 
 test('NEG-02 caller-injected trust options rejected', () => {

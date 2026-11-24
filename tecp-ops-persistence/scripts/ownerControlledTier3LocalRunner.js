@@ -917,7 +917,10 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     let schemaBootstrapEvidence = null;
     let dlpProofClient = null;
     let dlpProofSecondaryClient = null;
-    const isSuiteA = suiteCheck.suitePath === 'tecp-ops-persistence/test/cp2DbFencingDurability.test.js';
+    const isDisposableDbLiveSuite = suiteCheck.suitePath === OPS_PILOT_APPROVED_TEST_ACTIONS[0]
+      || suiteCheck.suitePath === OPS_PILOT_APPROVED_TEST_ACTIONS[1]
+      || suiteCheck.suitePath === 'tecp-ops-persistence/test/cp2DbFencingDurability.test.js'
+      || suiteCheck.suitePath === 'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js';
     const authorityResult = createLiveSuiteExecutionAuthority({
       proofClass: LIVE_SUITE_EXECUTION_AUTHORITY_PROOF_CLASS,
       ownedController: controller,
@@ -945,13 +948,13 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
-    if (isSuiteA && authorityResult.ok && deps.offlineWiringProbe === true) {
+    if (isDisposableDbLiveSuite && authorityResult.ok && deps.offlineWiringProbe === true) {
       schemaBootstrapEvidence = Object.freeze({
         offlineWiringProbe: true,
         inert: true,
         filesAllowlisted: 6,
       });
-    } else if (isSuiteA && authorityResult.ok) {
+    } else if (isDisposableDbLiveSuite && authorityResult.ok) {
       const preamble = await applyDisposableOpsPilotSchemaBootstrap({
         clusterClient: clientResult.client,
         liveExecutionAuthority: authorityResult.authority,
@@ -1068,7 +1071,7 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
           mode: 'LIVE_CAPABILITY_GATED_EXECUTE',
           ownedController: controller,
           clusterClient: dlpProofClient || clientResult.client,
-          extraClients: isSuiteA && dlpProofSecondaryClient
+          extraClients: isDisposableDbLiveSuite && dlpProofSecondaryClient
             ? Object.freeze([dlpProofSecondaryClient])
             : [],
           liveExecutionAuthority: authorityResult.authority,

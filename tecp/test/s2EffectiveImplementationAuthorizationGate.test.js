@@ -57,6 +57,18 @@ const CURRENT_GOVERNANCE_REVISION = PARSED_RULE02.authority.governanceRevision;
 const CURRENT_AUTHORIZED_FILE_SCOPE = Object.freeze([
   ...PARSED_RULE02.governanceFacts.authorizedFileScope,
 ]);
+/**
+ * Independently established expected facts. These literals are not derived from
+ * RULE02_TEXT; the tests below require the loaded bytes to match them.
+ */
+const EXPECTED_RULE02_DIGEST_SHA256 = 'bc967b056b7029c3a2abd74c90ba02ed84a7e834967d89327d7936c8118aad9f';
+const EXPECTED_GOVERNANCE_REVISION = 'OPS_PILOT_001_S2_SUITE_B_CONSOLIDATED_OFFLINE_REMEDIATION_GOVERNANCE_20261124';
+const EXPECTED_AUTHORIZED_FILE_SCOPE = Object.freeze([
+  'tecp-ops-persistence/scripts/ownerControlledTier3LocalRunner.js',
+  'tecp-ops-persistence/test/cp2DbDispatcherIntegration.test.js',
+  'tecp/test/s2EffectiveImplementationAuthorizationGate.test.js',
+  'tecp/test/s2OwnerImplementationInstruction.test.js',
+]);
 /** Documentation / historical four-path Adapter constants retained for negative coverage. */
 const HISTORICAL_FOUR_PATH_ADAPTER_SCOPE = Object.freeze([...S2_GATE_AUTHORIZED_FILE_SCOPE]);
 const HISTORICAL_EFF_AUTH_GOVERNANCE_REVISION = S2_GATE_GOVERNANCE_REVISION;
@@ -198,19 +210,26 @@ function issueCurrentInstruction(harnessBundle, overrides = {}) {
 }
 
 test('POS-G01 TEST_ONLY harness + instruction + validator ALLOW (NON_OPERATIONAL fixture)', () => {
-  // Digest independently from Rule02 bytes (not Gate decision echo; not initdb-era pin).
+  // Digest independently from Rule02 bytes (not Gate decision echo; not a self-pin).
   const independentDigest = createHash('sha256').update(RULE02_TEXT, 'utf8').digest('hex');
   assert.equal(RULE02_DIGEST, independentDigest);
-  assert.equal(independentDigest, 'c00acfa205e957196af8e93a55ecfcf30f8721d6a1d3719d16e0e90540f735d0');
-  // Current revision/scope from independently parsed Rule02; pin current governance era.
+  assert.equal(independentDigest, EXPECTED_RULE02_DIGEST_SHA256);
+  const alteredText = RULE02_TEXT.endsWith('\n')
+    ? `${RULE02_TEXT.slice(0, -1)} `
+    : `${RULE02_TEXT}\n`;
+  const alteredDigest = createHash('sha256').update(alteredText, 'utf8').digest('hex');
+  assert.notEqual(alteredDigest, EXPECTED_RULE02_DIGEST_SHA256);
+  assert.notEqual(alteredDigest, independentDigest);
+  // Current revision/scope from independently parsed Rule02, bound to established constants.
   assert.equal(CURRENT_GOVERNANCE_REVISION, PARSED_RULE02.authority.governanceRevision);
-  assert.equal(CURRENT_GOVERNANCE_REVISION, 'OPS_PILOT_001_S2_GATE_TEST_DEBT_SINGLE_PATH_GOVERNANCE_20261121');
+  assert.equal(CURRENT_GOVERNANCE_REVISION, EXPECTED_GOVERNANCE_REVISION);
   assert.deepEqual(
-    [...CURRENT_AUTHORIZED_FILE_SCOPE],
-    [...PARSED_RULE02.governanceFacts.authorizedFileScope],
+    [...CURRENT_AUTHORIZED_FILE_SCOPE].sort(),
+    [...PARSED_RULE02.governanceFacts.authorizedFileScope].sort(),
   );
-  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
-  // Documentation four-path constants remain historical and must not equal current scope.
+  assert.deepEqual([...EXPECTED_AUTHORIZED_FILE_SCOPE], [...EXPECTED_AUTHORIZED_FILE_SCOPE].sort());
+  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE].sort(), [...EXPECTED_AUTHORIZED_FILE_SCOPE]);
+  // Historical adapter scope remains documentation-only and is not current authority.
   assert.equal(
     JSON.stringify([...CURRENT_AUTHORIZED_FILE_SCOPE].sort())
       === JSON.stringify([...HISTORICAL_FOUR_PATH_ADAPTER_SCOPE].sort()),
@@ -258,11 +277,14 @@ test('POS-G02 merge provenance inspect against live worktree Git objects', () =>
 
 test('POS-G03 canonical Validator ALLOW for exact current authorized paths', () => {
   const parsed = parseRule02(RULE02_TEXT);
-  // Expected facts from independently parsed Rule02 (not Gate returned scope).
+  // Expected facts from independently parsed Rule02, bound to established constants.
   assert.equal(parsed.authority.governanceRevision, CURRENT_GOVERNANCE_REVISION);
-  assert.equal(parsed.authority.governanceRevision, 'OPS_PILOT_001_S2_GATE_TEST_DEBT_SINGLE_PATH_GOVERNANCE_20261121');
-  assert.deepEqual([...parsed.governanceFacts.authorizedFileScope], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
-  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE], ['tecp/test/s2EffectiveImplementationAuthorizationGate.test.js']);
+  assert.equal(parsed.authority.governanceRevision, EXPECTED_GOVERNANCE_REVISION);
+  assert.deepEqual(
+    [...parsed.governanceFacts.authorizedFileScope].sort(),
+    [...EXPECTED_AUTHORIZED_FILE_SCOPE],
+  );
+  assert.deepEqual([...CURRENT_AUTHORIZED_FILE_SCOPE].sort(), [...EXPECTED_AUTHORIZED_FILE_SCOPE]);
   const v = validateGovernance(parsed, {
     sliceId: S2_GATE_SLICE_ID,
     authorityClass: parsed.governanceFacts.authorityClass,
@@ -273,7 +295,7 @@ test('POS-G03 canonical Validator ALLOW for exact current authorized paths', () 
     requiresProductionMutation: false,
   });
   assert.equal(v.allowed, true);
-  // Completed initdb paths rejected under current one-path governance.
+  // Completed initdb paths remain outside the current authorized scope.
   const initdb = validateGovernance(parsed, {
     sliceId: S2_GATE_SLICE_ID,
     authorityClass: parsed.governanceFacts.authorityClass,
@@ -319,6 +341,17 @@ test('POS-G03 canonical Validator ALLOW for exact current authorized paths', () 
     requiresProductionMutation: false,
   });
   assert.equal(extra.allowed, false);
+  // Wrong governance revision is rejected by the effective authorization boundary.
+  const harness = makeHarness();
+  const issued = issueCurrentInstruction(harness, { jti: 'posg03rev0001' });
+  assert.equal(issued.ok, true);
+  const wrongRevision = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: issued.instruction.encoded,
+    governanceRevision: 'OPS_PILOT_001_S2_GATE_TEST_DEBT_SINGLE_PATH_GOVERNANCE_20261121',
+  }));
+  assert.equal(wrongRevision.ok, false);
+  assert.equal(wrongRevision.decision, GD.DENY_WRONG_GOVERNANCE_REVISION);
+  assert.notEqual(wrongRevision.decision, GD.ALLOW);
 });
 
 test('NEG-G01 missing Owner trust DENYs on production path', () => {
@@ -462,23 +495,52 @@ test('NEG-G13 unauthorized protected path DENYs', () => {
 });
 
 test('NEG-G14 missing authorized path DENYs', () => {
-  // One-file active scope: slice(0,1) equals the full authorized set and is not a missing-path case.
-  // Empty requestedPaths is a correctly formed evaluation input that omits the required path and
-  // fail-closes with REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET (DENY_PROTECTED_OR_EXTRA_PATH).
-  assert.equal(CURRENT_AUTHORIZED_FILE_SCOPE.length, 1);
+  const full = [...CURRENT_AUTHORIZED_FILE_SCOPE];
+  assert.ok(full.length >= 2);
+  const subset = full.slice(0, -1);
+  assert.ok(subset.length > 0 && subset.length < full.length);
   const harness = makeHarness();
   const issued = issueCurrentInstruction(harness);
-  const result = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
-    ownerInstructionEncoded: issued.instruction.encoded,
+  assert.equal(issued.ok, true);
+  const encoded = issued.instruction.encoded;
+
+  const empty = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: encoded,
     requestedPaths: [],
   }));
-  assertDeny(result, GD.DENY_PROTECTED_OR_EXTRA_PATH);
-  assert.equal(result.ok, false);
-  assert.equal(result.standingAuthority, false);
-  assert.equal(result.operational, false);
-  assert.equal(result.authenticMutationAuthority === true, false);
+  assertDeny(empty, GD.DENY_PROTECTED_OR_EXTRA_PATH);
   assert.equal(
-    (result.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+    (empty.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+    true,
+  );
+
+  const properSubset = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: encoded,
+    requestedPaths: subset,
+  }));
+  assertDeny(properSubset, GD.DENY_PROTECTED_OR_EXTRA_PATH);
+  assert.equal(
+    (properSubset.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+    true,
+  );
+
+  const extra = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: encoded,
+    requestedPaths: [...full, 'tecp/src/extra.js'],
+  }));
+  assertDeny(extra, GD.DENY_PROTECTED_OR_EXTRA_PATH);
+  assert.equal(
+    (extra.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
+    true,
+  );
+
+  const protectedPath = evaluateS2EffectiveImplementationAuthorization(baseInput(harness, {
+    ownerInstructionEncoded: encoded,
+    requestedPaths: ['.cursor/rules/titangold-current-active-work.mdc'],
+  }));
+  assertDeny(protectedPath, GD.DENY_PROTECTED_OR_EXTRA_PATH);
+  assert.equal(
+    (protectedPath.reasons || []).includes('REQUESTED_PATHS_MUST_EQUAL_EFFECTIVE_AUTHORIZED_SET'),
     true,
   );
 });
