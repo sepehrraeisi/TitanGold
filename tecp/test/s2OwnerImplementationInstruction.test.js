@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -168,12 +168,11 @@ test('POS-03 bounded expiry + fresh JTI accepted', () => {
 
 test('NEG-01 missing Owner trust DENYs', () => {
   // Isolate homedir the same way NEG-G01 isolates HOME. Node homedir() reads
-  // HOME on POSIX and USERPROFILE on Windows; both point at an empty temp
+  // HOME on POSIX and USERPROFILE on Windows; both point at a fresh temp
   // directory so the installed laboratory trust is not consulted or modified.
   const prevHome = process.env.HOME;
   const prevUserProfile = process.env.USERPROFILE;
-  const iso = join(tmpdir(), `s2-owner-notrust-${process.pid}`);
-  mkdirSync(iso, { recursive: true });
+  const iso = mkdtempSync(join(tmpdir(), 's2-owner-notrust-'));
   process.env.HOME = iso;
   process.env.USERPROFILE = iso;
   try {
@@ -185,6 +184,7 @@ test('NEG-01 missing Owner trust DENYs', () => {
     else process.env.HOME = prevHome;
     if (prevUserProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = prevUserProfile;
+    rmSync(iso, { recursive: true, force: true });
   }
 });
 
