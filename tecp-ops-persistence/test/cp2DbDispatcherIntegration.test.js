@@ -424,11 +424,16 @@ function deriveB06FailureOutcome(rejectResult, projectResult, forgedRowCount) {
  * Shared B06 proof construction used by the live case path and DB-free offline regression.
  * Observations come from real protected security functions (+ counted SQL row check).
  */
+/**
+ * Shared B06 semantic proof construction.
+ * Does NOT attach live SQL authenticity evidence — callers attach observation
+ * evidence via attachLiveB06SqlObservationEvidence (live path) or
+ * attachOfflineB06SqlObservationEvidence (DB-free fixtures).
+ */
 export function buildB06ProofFromObservations({
   rejectResult,
   projectResult,
   forgedRowCount,
-  queryCount = 1,
 }) {
   const rejectExact = rejectResult?.ok === false
     && rejectResult?.decision === B06_REJECT_DECISION
@@ -460,15 +465,8 @@ export function buildB06ProofFromObservations({
       rejectOk: rejectResult?.ok === false,
       projectOk: projectResult?.ok === false,
     }),
-    transactionEvidence: Object.freeze({
-      sqlObserved: true,
-      queryCount,
-      provenance: 'COUNTED_EXPLICIT_SUITE_QUERIES',
-      fakeLive: false,
-      offlineOnly: false,
-      inert: false,
-      committed: false,
-    }),
+    // Semantic helper never fabricates live SQL transaction evidence.
+    transactionEvidence: null,
     durabilityEvidence: Object.freeze({ forgedLeaseAbsent: forgedRowCount === 0 }),
     sideEffectEvidence: Object.freeze({ rowsWritten: forgedRowCount }),
     failureReason: passed ? null : 'FORGED_LEASE_DUAL_DENIAL_CONTRACT_FAILED',
@@ -477,7 +475,7 @@ export function buildB06ProofFromObservations({
 
 /**
  * Offline-classified SQL observation fixture for B06 proof-construction regression.
- * Clearly not authentic live SQL; authentic acceptance must deny offline fixtures.
+ * Clearly not authentic live SQL; must not be treated as PostgreSQL execution.
  */
 export function buildOfflineB06SqlObservationFixture({ forgedRowCount = 0, queryCount = 1 } = {}) {
   return Object.freeze({
@@ -487,6 +485,41 @@ export function buildOfflineB06SqlObservationFixture({ forgedRowCount = 0, query
     fakeLive: false,
     offlineOnly: true,
     proofClass: 'OFFLINE_ONLY',
+  });
+}
+
+/** Attach runner-authorized live counted SQL observation evidence to a B06 proof. */
+export function attachLiveB06SqlObservationEvidence(proof, { queryCount, committed = false } = {}) {
+  if (proof == null || typeof proof !== 'object') {
+    throw new TypeError('B06_PROOF_REQUIRED');
+  }
+  return Object.freeze({
+    ...proof,
+    transactionEvidence: sqlTx(queryCount, { committed }),
+  });
+}
+
+/** Attach explicitly offline-classified observation evidence (never live SQL). */
+export function attachOfflineB06SqlObservationEvidence(proof, fixture) {
+  if (proof == null || typeof proof !== 'object') {
+    throw new TypeError('B06_PROOF_REQUIRED');
+  }
+  const obs = fixture && typeof fixture === 'object'
+    ? fixture
+    : buildOfflineB06SqlObservationFixture();
+  return Object.freeze({
+    ...proof,
+    transactionEvidence: Object.freeze({
+      sqlObserved: false,
+      queryCount: Number.isInteger(obs.queryCount) ? obs.queryCount : 0,
+      provenance: 'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE',
+      fakeLive: false,
+      offlineOnly: true,
+      inert: false,
+      proofClass: 'OFFLINE_ONLY',
+      committed: false,
+      classification: obs.classification || 'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE',
+    }),
   });
 }
 
@@ -712,6 +745,12 @@ function caseEvidenceFailure(spec, entry) {
   }
   if (typeof contract.sideEffectOk === 'function' && contract.sideEffectOk(entry.sideEffectEvidence) !== true) {
     return 'MISSING_SIDE_EFFECT_EVIDENCE';
+  }
+  if (spec.caseId === 'B06') {
+    if (entry.expectedOutcome !== B06_DUAL_DENY_OUTCOME
+      || entry.actualOutcome !== B06_DUAL_DENY_OUTCOME) {
+      return 'CONTRADICTORY_CASE_OBSERVATIONS';
+    }
   }
   if (spec.caseId === 'B12') {
     const side = entry.sideEffectEvidence;
@@ -1703,16 +1742,15 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       'SELECT COUNT(*)::int AS n FROM dlp_write_lease WHERE lease_key = $1',
       [forgedKey],
     );
-    const proof = buildB06ProofFromObservations({
+    const semantic = buildB06ProofFromObservations({
       rejectResult: denied,
       projectResult: projected,
       forgedRowCount: rows.n,
-      queryCount: caseSqlBook.queryCount,
     });
-    return {
-      ...proof,
-      transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: false }),
-    };
+    return attachLiveB06SqlObservationEvidence(semantic, {
+      queryCount: caseSqlBook.queryCount,
+      committed: false,
+    });
   });
 
   await runCase('B07', 'cross_transaction_brand_reuse_DENY', async () => {
@@ -3847,7 +3885,7 @@ console.log(JSON.stringify(payload));
 
 
 (__registerSuiteSelfTests ? describe : (_name, _fn) => {})('Suite B B06 actual-path dual-denial offline regression', () => {
-  it('correct dual denial produces intended structural PASS envelope', () => {
+  function dualDenyObservations() {
     const forged = {
       leaseKey: 'forged-offline-b06',
       fencingEpoch: 1,
@@ -3864,31 +3902,41 @@ console.log(JSON.stringify(payload));
       source: 'CALLER_OBJECT',
       lease: { leaseKey: 'forged-offline-b06', fencingEpoch: 1, unexpired: true },
     }, { id: 'offline-b06-txn' });
+    return { rejected, projected };
+  }
+
+  it('correct dual denial preserves offline classification without live SQL claims', () => {
+    const { rejected, projected } = dualDenyObservations();
     const sqlFixture = buildOfflineB06SqlObservationFixture({ forgedRowCount: 0, queryCount: 1 });
-    const proof = buildB06ProofFromObservations({
+    const semantic = buildB06ProofFromObservations({
       rejectResult: rejected,
       projectResult: projected,
       forgedRowCount: sqlFixture.forgedRowCount,
-      queryCount: sqlFixture.queryCount,
     });
+    assert.equal(semantic.transactionEvidence, null);
     assert.equal(rejected.decision, B06_REJECT_DECISION);
     assert.ok(rejected.reasons.includes(B06_REJECT_REASON));
     assert.equal(projected.decision, B06_PROJECT_DECISION);
     assert.ok(projected.reasons.includes(B06_PROJECT_REASON));
-    assert.equal(proof.passed, true);
-    assert.equal(proof.expectedOutcome, B06_DUAL_DENY_OUTCOME);
-    assert.equal(proof.actualOutcome, B06_DUAL_DENY_OUTCOME);
-    assert.equal(proof.assertionEvidence.rejectDecision, B06_REJECT_DECISION);
-    assert.equal(proof.assertionEvidence.projectDecision, B06_PROJECT_DECISION);
+    assert.equal(semantic.passed, true);
+    assert.equal(semantic.expectedOutcome, B06_DUAL_DENY_OUTCOME);
+    assert.equal(semantic.actualOutcome, B06_DUAL_DENY_OUTCOME);
 
-    assert.equal(proof.expectedOutcome, proof.actualOutcome);
-    assert.equal(proof.assertionEvidence.forgedRowCount, 0);
-    assert.equal(proof.assertionEvidence.rejectOk, true);
-    assert.equal(proof.assertionEvidence.projectOk, true);
-    assert.equal(proof.durabilityEvidence.forgedLeaseAbsent, true);
+    const offline = attachOfflineB06SqlObservationEvidence(semantic, sqlFixture);
+    assert.equal(offline.transactionEvidence.offlineOnly, true);
+    assert.equal(offline.transactionEvidence.proofClass, 'OFFLINE_ONLY');
+    assert.equal(offline.transactionEvidence.sqlObserved, false);
+    assert.equal(
+      offline.transactionEvidence.provenance,
+      'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE',
+    );
+    assert.notEqual(
+      offline.transactionEvidence.provenance,
+      SUITE_B_SQL_OBSERVATION_PROVENANCE,
+    );
   });
 
-  it('wrong rejectDecision fails closed', () => {
+  it('wrong rejectDecision fails closed on shared semantic helper', () => {
     const goodProject = projectFromTrustedValidateWriteLease({
       ok: true,
       trustedValidateWriteLease: true,
@@ -3907,9 +3955,10 @@ console.log(JSON.stringify(payload));
     });
     assert.equal(proof.passed, false);
     assert.notEqual(proof.actualOutcome, proof.expectedOutcome);
+    assert.equal(proof.transactionEvidence, null);
   });
 
-  it('wrong projectDecision fails closed', () => {
+  it('wrong projectDecision fails closed on shared semantic helper', () => {
     const goodReject = rejectCallerLeaseObject({
       leaseKey: 'x',
       fencingEpoch: 1,
@@ -3930,7 +3979,7 @@ console.log(JSON.stringify(payload));
     assert.equal(proof.passed, false);
   });
 
-  it('swapped decisions fail closed', () => {
+  it('swapped decisions fail closed on shared semantic helper', () => {
     const proof = buildB06ProofFromObservations({
       rejectResult: {
         ok: false,
@@ -3947,7 +3996,7 @@ console.log(JSON.stringify(payload));
     assert.equal(proof.passed, false);
   });
 
-  it('missing denial evidence fails closed', () => {
+  it('missing denial evidence fails closed on shared semantic helper', () => {
     const proof = buildB06ProofFromObservations({
       rejectResult: null,
       projectResult: null,
@@ -3958,7 +4007,7 @@ console.log(JSON.stringify(payload));
     assert.equal(proof.assertionEvidence.projectDecision, 'MISSING');
   });
 
-  it('wrong or missing denial reasons fail closed', () => {
+  it('wrong or missing denial reasons fail closed on shared semantic helper', () => {
     const proof = buildB06ProofFromObservations({
       rejectResult: {
         ok: false,
@@ -3975,22 +4024,8 @@ console.log(JSON.stringify(payload));
     assert.equal(proof.passed, false);
   });
 
-  it('nonzero forged row count fails closed', () => {
-    const rejected = rejectCallerLeaseObject({
-      leaseKey: 'x',
-      fencingEpoch: 1,
-      provenanceClass: 'DB_PROVEN',
-      realDbValidated: true,
-      callerForged: true,
-      source: 'CALLER_OBJECT',
-    });
-    const projected = projectFromTrustedValidateWriteLease({
-      ok: true,
-      trustedValidateWriteLease: true,
-      callerForged: true,
-      source: 'CALLER_OBJECT',
-      lease: { leaseKey: 'x', fencingEpoch: 1, unexpired: true },
-    }, { id: 't2' });
+  it('nonzero forged row count fails closed on shared semantic helper', () => {
+    const { rejected, projected } = dualDenyObservations();
     const proof = buildB06ProofFromObservations({
       rejectResult: rejected,
       projectResult: projected,
@@ -4000,7 +4035,7 @@ console.log(JSON.stringify(payload));
     assert.equal(proof.durabilityEvidence.forgedLeaseAbsent, false);
   });
 
-  it('unexpected ALLOW fails closed', () => {
+  it('unexpected ALLOW fails closed on shared semantic helper', () => {
     const proof = buildB06ProofFromObservations({
       rejectResult: { ok: true, decision: 'ALLOW', reasons: ['ALREADY_BRANDED_NOT_NECESSARILY_DB_PROVEN'] },
       projectResult: { ok: true, decision: 'ALLOW', reasons: ['DB_PROVEN'] },
@@ -4008,83 +4043,437 @@ console.log(JSON.stringify(payload));
     });
     assert.equal(proof.passed, false);
   });
+});
 
-  it('contradictory expected/actual envelope fails structural equality', () => {
-    const proof = buildB06ProofFromObservations({
-      rejectResult: {
-        ok: false,
-        decision: B06_REJECT_DECISION,
-        reasons: [B06_REJECT_REASON],
-      },
-      projectResult: {
-        ok: false,
-        decision: B06_PROJECT_DECISION,
-        reasons: [B06_PROJECT_REASON],
-      },
-      forgedRowCount: 0,
-    });
-    assert.equal(proof.expectedOutcome, proof.actualOutcome);
-    const contradictory = {
-      ...proof,
-      expectedOutcome: B06_DUAL_DENY_OUTCOME,
-      actualOutcome: B06_REJECT_DECISION,
-      passed: true,
-      failureReason: null,
-    };
-    assert.notEqual(contradictory.expectedOutcome, contradictory.actualOutcome);
+/**
+ * TEST_ONLY twelve-case structural matrix builder for B06 validator regressions.
+ * Synthetic fixtures may PASS the structural layer; they never acquire authentic live binding.
+ */
+function buildTestOnlySuiteBStructuralMatrix(mutateB06) {
+  const tx = (extra = {}) => ({
+    sqlObserved: true,
+    queryCount: 1,
+    provenance: 'COUNTED_SQL_BOOKKEEPING',
+    fakeLive: false,
+    offlineOnly: false,
+    inert: false,
+    ...extra,
   });
-
-  it('offline fixture cannot establish authentic live acceptance', () => {
-    const sqlFixture = buildOfflineB06SqlObservationFixture({ forgedRowCount: 0 });
-    assert.equal(sqlFixture.classification, 'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE');
-    assert.equal(sqlFixture.offlineOnly, true);
-    assert.equal(sqlFixture.proofClass, 'OFFLINE_ONLY');
-    const rejected = rejectCallerLeaseObject({
-      leaseKey: 'offline-auth',
+  const { rejected, projected } = (() => {
+    const forged = {
+      leaseKey: 'structural-b06',
       fencingEpoch: 1,
       provenanceClass: 'DB_PROVEN',
       realDbValidated: true,
       callerForged: true,
       source: 'CALLER_OBJECT',
-    });
-    const projected = projectFromTrustedValidateWriteLease({
-      ok: true,
-      trustedValidateWriteLease: true,
-      callerForged: true,
-      source: 'CALLER_OBJECT',
-      lease: { leaseKey: 'offline-auth', fencingEpoch: 1, unexpired: true },
-    }, { id: 'offline-auth-txn' });
-    const proof = buildB06ProofFromObservations({
-      rejectResult: rejected,
-      projectResult: projected,
-      forgedRowCount: sqlFixture.forgedRowCount,
-      queryCount: sqlFixture.queryCount,
-    });
-    // Mark transaction evidence with offline fixture markers so authentic accept denies.
-    const offlineEntry = {
-      caseId: 'B06',
-      proofName: 'forged_lease_context_DENY',
+    };
+    return {
+      rejected: rejectCallerLeaseObject(forged),
+      projected: projectFromTrustedValidateWriteLease({
+        ok: true,
+        trustedValidateWriteLease: true,
+        callerForged: true,
+        source: 'CALLER_OBJECT',
+        lease: { leaseKey: 'structural-b06', fencingEpoch: 1, unexpired: true },
+      }, { id: 'structural-b06-txn' }),
+    };
+  })();
+  const semantic = buildB06ProofFromObservations({
+    rejectResult: rejected,
+    projectResult: projected,
+    forgedRowCount: 0,
+  });
+  // Structural TEST_ONLY fixture uses counted bookkeeping evidence — not offline, not authentic live.
+  const b06Passing = {
+    assertionEvidence: semantic.assertionEvidence,
+    expectedOutcome: semantic.expectedOutcome,
+    actualOutcome: semantic.actualOutcome,
+    transactionEvidence: tx({ committed: false }),
+    durabilityEvidence: semantic.durabilityEvidence,
+    sideEffectEvidence: semantic.sideEffectEvidence,
+    failureReason: null,
+  };
+  const passing = {
+    B01: {
+      assertionEvidence: {
+        compositionDecision: 'COMMITTED', committed: true, taskCount: 1, auditCount: 1, evidenceCount: 1, jtiCount: 1,
+      },
+      transactionEvidence: tx({ committed: true, rolledBack: false }),
+      durabilityEvidence: { jtiDurable: true, taskDurable: true },
+      sideEffectEvidence: { compositionMutation: true },
+    },
+    B02: {
+      assertionEvidence: {
+        compositionDecision: 'DENY_MUTATION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+      },
+      transactionEvidence: tx({ committed: false, rolledBack: true }),
+      durabilityEvidence: { unauthorizedCommitAbsent: true },
+      sideEffectEvidence: { committedRows: 0 },
+    },
+    B03: {
+      assertionEvidence: {
+        compositionDecision: 'DENY_EXCEPTION', rolledBack: true, taskCount: 0, jtiCount: 0, auditCount: 0,
+      },
+      transactionEvidence: tx({ committed: false, rolledBack: true }),
+      durabilityEvidence: { exceptionLeftNoRows: true },
+      sideEffectEvidence: null,
+    },
+    B04: {
+      assertionEvidence: {
+        presentedAfterRollback: false, releasedConsumeOk: true, committedReplayDecision: 'DENY_REPLAY',
+        rolledCount: 1, keptCount: 1,
+      },
+      transactionEvidence: tx({ rolledBack: true, committed: false }),
+      durabilityEvidence: { uncommittedJtiReleased: true, committedReplayDenied: true },
+      sideEffectEvidence: null,
+    },
+    B05: {
+      assertionEvidence: {
+        compositionCommitted: true, rowCount: 1, taskXmin: '10', auditXmin: '10', evidenceXmin: '10',
+      },
+      transactionEvidence: tx({ committed: true, sameTransaction: true }),
+      durabilityEvidence: { sharedXmin: '10' },
+      sideEffectEvidence: null,
+    },
+    B06: b06Passing,
+    B07: {
+      assertionEvidence: {
+        projectOk: true, sameTxnOk: true, crossTxnDecision: 'DENY_TXN', leaseRowCount: 1, secondarySessionDistinct: true,
+      },
+      transactionEvidence: tx({ crossTransactionReuseDenied: true }),
+      durabilityEvidence: { leaseRowCount: 1 },
+      sideEffectEvidence: null,
+    },
+    B08: {
+      sqlBacked: false,
+      assertionEvidence: { publicBrandDecision: 'DENY', callerDecision: 'DENY', dbProven: false },
+      transactionEvidence: null,
+      durabilityEvidence: null,
+      sideEffectEvidence: { sqlFabricated: false, dbProvenMinted: false },
+    },
+    B09: {
+      assertionEvidence: {
+        dbAvailable: true,
+        hardDenyOk: true,
+        dispatchDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+        mutationExecuted: false,
+        dlpInvoked: false,
+        observedTaskId: 'task-1',
+      },
+      transactionEvidence: tx({ operationalWrite: false }),
+      durabilityEvidence: { taskDelta: 0, observedTaskId: 'task-1' },
+      sideEffectEvidence: { operationalDispatchAuthorized: false },
+    },
+    B10: {
+      assertionEvidence: { outsideDenied: true, insideOk: true, liveOk: true, expiredDecision: 'DENY_TXN' },
+      transactionEvidence: tx({ ownershipOutsideTxn: false, ownershipInsideTxn: true }),
+      durabilityEvidence: null,
+      sideEffectEvidence: null,
+    },
+    B11: {
+      assertionEvidence: {
+        validateDecision: 'ALLOW', projectDecision: 'ALLOW', provenanceClass: 'DB_PROVEN',
+        realDbAuthority: true, leaseKey: 'lease-1', fencingEpoch: 1,
+      },
+      transactionEvidence: tx({ dbProven: true }),
+      durabilityEvidence: { rowCount: 1 },
+      sideEffectEvidence: null,
+    },
+    B12: {
+      assertionEvidence: {
+        dispatchDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+        mutationExecuted: false,
+        dlpInvoked: false,
+        operationalDispatchAuthorized: false,
+      },
+      transactionEvidence: tx({ measuredDeltas: true }),
+      durabilityEvidence: null,
+      sideEffectEvidence: {
+        observationClass: 'STATIC_ARCHITECTURAL_PLUS_SQL_SIDE_EFFECT',
+        reasonStringOnly: false,
+        architectural: {
+          observationClass: 'STATIC_ARCHITECTURAL_SOURCE_CONTRACT',
+          constructorPersistenceInjectionVoided: true,
+          workerMcpExecutionPortsPresentInSource: false,
+          terminalHardDenyPresentInSource: true,
+          disconnectedCallbackInstrumentationSupported: false,
+        },
+        terminalDecision: DISPATCHER_DECISIONS.DENY_OPERATIONAL_DISPATCH_DISABLED,
+        capabilityOk: true,
+        orlaOk: true,
+        dlpMutationBoundaryReached: false,
+        taskRowDelta: 0,
+        auditRowDelta: 0,
+        workerExecutionPathObserved: false,
+        mcpExecutionPathObserved: false,
+        disconnectedPersistenceCallbacksNotUsedAsProof: true,
+      },
+    },
+  };
+  const withSqlBook = (row) => {
+    const sqlBacked = row.sqlBacked === true;
+    return {
+      ...row,
+      sqlAttempted: sqlBacked ? 1 : 0,
+      sqlObservedSuccess: sqlBacked ? 1 : 0,
+      sqlAssertionPassed: sqlBacked,
+    };
+  };
+  return DISPATCHER_LIVE_CASE_SPECS.map((spec) => {
+    const body = passing[spec.caseId];
+    let row = withSqlBook({
+      caseId: spec.caseId,
+      proofName: spec.proofName,
       executed: true,
-      sqlBacked: true,
+      sqlBacked: body.sqlBacked !== false,
       passed: true,
-      expectedOutcome: proof.expectedOutcome,
-      actualOutcome: proof.actualOutcome,
-      assertionEvidence: proof.assertionEvidence,
-      transactionEvidence: Object.freeze({
-        ...proof.transactionEvidence,
-        offlineOnly: true,
-        proofClass: 'OFFLINE_ONLY',
-      }),
-      durabilityEvidence: proof.durabilityEvidence,
-      sideEffectEvidence: proof.sideEffectEvidence,
+      expectedOutcome: 'PASS',
+      actualOutcome: 'PASS',
       failureReason: null,
       evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
-      executionProvenance: 'OFFLINE_FIXTURE',
-      sqlAttempted: 1,
-      sqlObservedSuccess: 1,
-      sqlAssertionPassed: true,
-    };
-    const auth = acceptAuthenticDispatcherLiveSqlResults([offlineEntry]);
+      executionProvenance: 'LIVE_MATRIX_OWNED_TXN_PATH',
+      ...body,
+    });
+    if (spec.caseId === 'B06' && typeof mutateB06 === 'function') {
+      row = mutateB06(row);
+    }
+    return row;
+  });
+}
+
+function assertB06StructuralDeny(result, expectedReason) {
+  assert.equal(result.ok, false);
+  assert.equal(result.structurallyValid, false);
+  assert.equal(result.allPassed, false);
+  assert.ok((result.reasons || []).includes(expectedReason), (result.reasons || []).join(','));
+  assert.ok((result.reasons || []).includes('B06'), (result.reasons || []).join(','));
+}
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('Suite B B06 actual structural validator matrix (R2A)', () => {
+  it('complete twelve-case TEST_ONLY structural fixture PASSes validateDispatcherLiveSqlStructure', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix();
+    assert.equal(matrix.length, 12);
+    const ok = validateDispatcherLiveSqlStructure(matrix);
+    assert.equal(ok.ok, true, (ok.reasons || []).join(','));
+    assert.equal(ok.structurallyValid, true);
+    assert.equal(ok.allPassed, true);
+    assert.equal(ok.layer, 'STRUCTURAL');
+  });
+
+  it('wrong rejectDecision is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        rejectDecision: B06_PROJECT_DECISION,
+        rejectOk: true,
+      },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('wrong projectDecision is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        projectDecision: B06_REJECT_DECISION,
+        projectOk: true,
+      },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('swapped decisions are denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        rejectDecision: B06_PROJECT_DECISION,
+        projectDecision: B06_REJECT_DECISION,
+      },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('missing denial evidence is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: { forgedRowCount: 0 },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'MISSING_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('wrong or missing required reason is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        rejectReason: 'WRONG_REASON',
+        projectReason: B06_PROJECT_REASON,
+      },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('nonzero forged row count is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        forgedRowCount: 1,
+      },
+      durabilityEvidence: { forgedLeaseAbsent: false },
+      sideEffectEvidence: { rowsWritten: 1 },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('unexpected ALLOW is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: {
+        ...row.assertionEvidence,
+        rejectDecision: 'ALLOW',
+        projectDecision: 'ALLOW',
+        rejectOk: false,
+        projectOk: false,
+      },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('contradictory durability is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      durabilityEvidence: { forgedLeaseAbsent: false },
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_DURABILITY_EVIDENCE',
+    );
+  });
+
+  it('expected/actual mismatch is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      expectedOutcome: B06_DUAL_DENY_OUTCOME,
+      actualOutcome: B06_REJECT_DECISION,
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_PROOF_STATE',
+    );
+  });
+
+  it('arbitrary matching but semantically incorrect B06 outcomes are denied', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      expectedOutcome: 'ARBITRARY_MATCHING_NOT_DUAL_DENY',
+      actualOutcome: 'ARBITRARY_MATCHING_NOT_DUAL_DENY',
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'CONTRADICTORY_CASE_OBSERVATIONS',
+    );
+  });
+
+  it('missing required SQL observation is denied by actual structural validator', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      transactionEvidence: null,
+      sqlObservedSuccess: 0,
+      sqlAssertionPassed: false,
+    }));
+    assertB06StructuralDeny(
+      validateDispatcherLiveSqlStructure(matrix),
+      'SQL_WITHOUT_SQL_EVIDENCE',
+    );
+  });
+});
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('Suite B authentic acceptance twelve-case provenance (R2A)', () => {
+  it('complete synthetic matrix PASSes structural then DENY authentic for missing live binding', () => {
+    const matrix = buildTestOnlySuiteBStructuralMatrix();
+    assert.equal(matrix.length, 12);
+    const structural = validateDispatcherLiveSqlStructure(matrix);
+    assert.equal(structural.ok, true, (structural.reasons || []).join(','));
+    assert.equal(structural.structurallyValid, true);
+
+    const auth = acceptAuthenticDispatcherLiveSqlResults(matrix);
     assert.equal(auth.ok, false);
+    assert.equal(auth.structurallyValid, true);
+    assert.equal(auth.authenticLiveAccepted, false);
+    assert.equal(auth.layer, 'AUTHENTIC_LIVE');
+    assert.ok((auth.reasons || []).includes('AUTHENTIC_LIVE_MATRIX_BINDING_MISSING'));
+    assert.ok((auth.reasons || []).includes('SYNTHETIC_LIVE_MATRIX_ACCEPTANCE_DENIED'));
+  });
+
+  it('explicitly offline-classified B06 evidence is rejected by live structural checks', () => {
+    const { rejected, projected } = (() => {
+      const forged = {
+        leaseKey: 'offline-auth-b06',
+        fencingEpoch: 1,
+        provenanceClass: 'DB_PROVEN',
+        realDbValidated: true,
+        callerForged: true,
+        source: 'CALLER_OBJECT',
+      };
+      return {
+        rejected: rejectCallerLeaseObject(forged),
+        projected: projectFromTrustedValidateWriteLease({
+          ok: true,
+          trustedValidateWriteLease: true,
+          callerForged: true,
+          source: 'CALLER_OBJECT',
+          lease: { leaseKey: 'offline-auth-b06', fencingEpoch: 1, unexpired: true },
+        }, { id: 'offline-auth-b06-txn' }),
+      };
+    })();
+    const semantic = buildB06ProofFromObservations({
+      rejectResult: rejected,
+      projectResult: projected,
+      forgedRowCount: 0,
+    });
+    const offlineProof = attachOfflineB06SqlObservationEvidence(
+      semantic,
+      buildOfflineB06SqlObservationFixture({ forgedRowCount: 0, queryCount: 1 }),
+    );
+    const matrix = buildTestOnlySuiteBStructuralMatrix((row) => ({
+      ...row,
+      assertionEvidence: offlineProof.assertionEvidence,
+      expectedOutcome: offlineProof.expectedOutcome,
+      actualOutcome: offlineProof.actualOutcome,
+      durabilityEvidence: offlineProof.durabilityEvidence,
+      sideEffectEvidence: offlineProof.sideEffectEvidence,
+      transactionEvidence: offlineProof.transactionEvidence,
+      failureReason: null,
+    }));
+    const structural = validateDispatcherLiveSqlStructure(matrix);
+    assert.equal(structural.ok, false);
+    assert.ok((structural.reasons || []).includes('FAKE_LIVE_EVIDENCE_REJECTED'));
+    assert.ok((structural.reasons || []).includes('B06'));
   });
 });
