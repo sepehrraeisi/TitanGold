@@ -155,6 +155,95 @@ function isValidatedSuccessfulLifecycleResult(result) {
  * Map capability verifier denial to a distinct Runner decision.
  * Replay/storage denials must remain distinguishable from generic verify failure.
  */
+/**
+ * Shared canonical pre-start capability authorization boundary.
+ * Used by the live Runner before any DB controller start.
+ * Returns dbControllerStartPermitted=false on denial; callers must not start PostgreSQL.
+ */
+export function verifyLiveOwnerCapabilityForRunner(capabilityToken, expectation, trustedVerifierDeps) {
+  let capabilityVerified;
+  try {
+    capabilityVerified = verifyS2Tier3OwnerCapabilityArtifact(
+      capabilityToken,
+      expectation,
+      trustedVerifierDeps,
+    );
+  } catch (err) {
+    capabilityVerified = {
+      ok: false,
+      decision: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE,
+      reasons: Object.freeze(['VERIFY_THREW', String(err.message || err)]),
+    };
+  }
+  if (trustedVerifierDeps && trustedVerifierDeps.ok === false
+    && trustedVerifierDeps.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE) {
+    return Object.freeze({
+      ok: false,
+      decision: OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE,
+      capabilityVerified: trustedVerifierDeps,
+      dbControllerStartPermitted: false,
+      startInvocationCount: 0,
+      reasons: Object.freeze([
+        'OWNER_INSTALLED_DEPS_REPLAY_STORAGE_FAILURE',
+        ...(trustedVerifierDeps.reasons || []),
+        'DB_CONTROLLER_START_NOT_REACHED',
+      ]),
+    });
+  }
+  if (!capabilityVerified || capabilityVerified.ok !== true) {
+    const mapped = mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified);
+    return Object.freeze({
+      ok: false,
+      decision: mapped,
+      capabilityVerified,
+      dbControllerStartPermitted: false,
+      startInvocationCount: 0,
+      reasons: Object.freeze([
+        'OWNER_CAPABILITY_VERIFY_FAILED',
+        ...(capabilityVerified?.reasons || []),
+        capabilityVerified?.decision,
+        'DB_CONTROLLER_START_NOT_REACHED',
+      ]),
+    });
+  }
+  return Object.freeze({
+    ok: true,
+    decision: null,
+    capabilityVerified,
+    dbControllerStartPermitted: true,
+    startInvocationCount: 0,
+    reasons: Object.freeze([]),
+  });
+}
+
+export function enforceLiveCapabilityPreStartGate(authResult, startDbController) {
+  if (!authResult || authResult.ok !== true || authResult.dbControllerStartPermitted !== true) {
+    return Object.freeze({
+      ...authResult,
+      started: false,
+      startInvocationCount: 0,
+      prepareInvocationCount: 0,
+    });
+  }
+  if (typeof startDbController !== 'function') {
+    return Object.freeze({
+      ok: false,
+      started: false,
+      startInvocationCount: 0,
+      prepareInvocationCount: 0,
+      decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST,
+      reasons: Object.freeze(['START_CALLBACK_REQUIRED_WHEN_PERMITTED']),
+    });
+  }
+  startDbController();
+  return Object.freeze({
+    ...authResult,
+    started: true,
+    startInvocationCount: 1,
+    prepareInvocationCount: 0,
+  });
+}
+
 export function mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified = {}) {
   const decision = capabilityVerified?.decision;
   if (decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY) {
@@ -203,26 +292,34 @@ export function classifyOwnerRunnerOutcome({
   }
 
   let decision;
+  let primaryFailure;
   if (!clientOk) {
     decision = OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED;
+    primaryFailure = 'CLIENT_CLOSE_FAILED';
   } else if (!stopOk && !cleanupOk && !suiteSucceeded) {
     decision = OWNER_RUNNER_DECISIONS.DENY_MULTI_FAILURE;
+    primaryFailure = 'STOP_FAILED';
   } else if (!stopOk && !cleanupOk) {
     decision = OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED;
+    primaryFailure = 'STOP_FAILED';
   } else if (!stopOk) {
     decision = OWNER_RUNNER_DECISIONS.DENY_STOP_FAILED;
+    primaryFailure = 'STOP_FAILED';
   } else if (!cleanupOk) {
     decision = OWNER_RUNNER_DECISIONS.DENY_CLEANUP_FAILED;
+    primaryFailure = 'CLEANUP_FAILED';
   } else if (!suiteSucceeded) {
     decision = OWNER_RUNNER_DECISIONS.DENY_SUITE_ACCEPTANCE_FAILED;
+    primaryFailure = 'SUITE_ACCEPTANCE_FAILED';
   } else {
     decision = OWNER_RUNNER_DECISIONS.DENY_DEFAULT;
+    primaryFailure = 'UNKNOWN';
   }
 
   return Object.freeze({
     ok: false,
     decision,
-    primaryFailure: failureCauses[0] || 'UNKNOWN',
+    primaryFailure,
     failureCauses: Object.freeze(failureCauses),
     suiteOk: suiteSucceeded,
     stopValidated: stopOk,
@@ -653,8 +750,11 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       }
       const installed = createOwnerInstalledFixedTrustVerifierDeps({});
       if (installed && installed.ok === false) {
+        const storageFail = installed.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE;
         return {
-          ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
+          ...deny(storageFail
+            ? OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE
+            : OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
             'OWNER_TRUST_REGISTRY_MISSING',
           ]),
           evidence: evidenceEnvelope({ failure: installed }),
@@ -675,8 +775,11 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       if (trustedVerifierDeps == null) {
         const installed = createOwnerInstalledFixedTrustVerifierDeps({});
         if (installed && installed.ok === false) {
+          const storageFail = installed.decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE;
           return {
-            ...deny(OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
+            ...deny(storageFail
+              ? OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE
+              : OWNER_RUNNER_DECISIONS.DENY_VERIFIER_TRUST_MISSING, installed.reasons || [
               'OWNER_TRUST_REGISTRY_MISSING',
             ]),
             evidence: evidenceEnvelope({ failure: installed }),
@@ -757,28 +860,34 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       };
     }
 
-    capabilityVerified = verifyS2Tier3OwnerCapabilityArtifact(capabilityToken, {
-      suitePath: suiteCheck.suitePath,
-      purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
-      venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
-      pinnedMainSha: headSha,
-      forbidOfflinePinAsLiveSha: true,
-    }, trustedVerifierDeps);
-
-    if (!capabilityVerified || capabilityVerified.ok !== true) {
-      const mapped = mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified);
+    const preStartAuth = verifyLiveOwnerCapabilityForRunner(
+      capabilityToken,
+      {
+        suitePath: suiteCheck.suitePath,
+        purpose: S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
+        venue: S2_OWNER_CAPABILITY_VENUE_SIMIN,
+        pinnedMainSha: headSha,
+        forbidOfflinePinAsLiveSha: true,
+      },
+      trustedVerifierDeps,
+    );
+    capabilityVerified = preStartAuth.capabilityVerified;
+    if (!preStartAuth.ok || preStartAuth.dbControllerStartPermitted !== true) {
       return {
-        ...deny(mapped, [
-          'OWNER_CAPABILITY_VERIFY_FAILED',
-          ...(capabilityVerified?.reasons || []),
-          capabilityVerified?.decision,
-          'DB_CONTROLLER_START_NOT_REACHED',
+        ...deny(preStartAuth.decision, [
+          ...(preStartAuth.reasons || []),
         ]),
         capabilityVerified,
+        classification: Object.freeze({
+          decision: preStartAuth.decision,
+          dbControllerStartPermitted: false,
+          startInvocationCount: 0,
+        }),
         evidence: evidenceEnvelope({
-          authorization: Object.freeze({ structural, capabilityVerified }),
-          failure: capabilityVerified,
+          authorization: Object.freeze({ structural, capabilityVerified, preStartAuth }),
+          failure: capabilityVerified || preStartAuth,
           dbControllerStarted: false,
+          startInvocationCount: 0,
         }),
       };
     }

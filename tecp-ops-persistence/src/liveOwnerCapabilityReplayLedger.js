@@ -30,7 +30,7 @@ import {
   rmSync,
   writeSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
+import { userInfo } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 
 import { OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR } from './disposableOpsPilotDbHarness.js';
@@ -84,11 +84,48 @@ export function canonicalizeLiveOwnerCapabilityJtiIdentity(jti) {
   return createHash('sha256').update(material, 'utf8').digest('hex');
 }
 
+export function resolveTrustedOwnerOsHome() {
+  // Use OS identity (getpwuid), not process.env.HOME / os.homedir().
+  let info;
+  try {
+    info = userInfo();
+  } catch (err) {
+    return Object.freeze({
+      ok: false,
+      reasons: Object.freeze(['USERINFO_UNAVAILABLE', String(err.message || err)]),
+    });
+  }
+  if (!info || typeof info.homedir !== 'string' || info.homedir.length === 0) {
+    return Object.freeze({
+      ok: false,
+      reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']),
+    });
+  }
+  if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
+    return Object.freeze({
+      ok: false,
+      reasons: Object.freeze([
+        'TRUSTED_UID_MISMATCH',
+        `USERINFO_UID=${info.uid}`,
+        `PROCESS_UID=${process.getuid()}`,
+      ]),
+    });
+  }
+  return Object.freeze({
+    ok: true,
+    home: info.homedir,
+    uid: info.uid,
+  });
+}
+
 export function resolveCanonicalLiveOwnerCapabilityReplayLedgerPath(home = undefined) {
   // Caller-supplied home is ignored for genuine-live authority.
   void home;
-  const trustedHome = homedir();
-  const trustDir = join(trustedHome, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
+  const resolved = resolveTrustedOwnerOsHome();
+  if (!resolved.ok) {
+    throw new Error(`TRUSTED_OWNER_HOME_UNAVAILABLE:${(resolved.reasons || []).join(',')}`);
+  }
+  const trustDir = join(resolved.home, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
   return join(trustDir, LIVE_OWNER_JTI_LEDGER_DIRNAME);
 }
 
@@ -97,6 +134,15 @@ export function brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(rootPath) {
     throw new TypeError('TEST_ONLY_LEDGER_ROOT_REQUIRED');
   }
   const abs = resolve(rootPath);
+  let canonical;
+  try {
+    canonical = resolve(resolveCanonicalLiveOwnerCapabilityReplayLedgerPath());
+  } catch {
+    canonical = null;
+  }
+  if (canonical && (abs === canonical || abs.startsWith(canonical + sep))) {
+    throw new Error('TEST_ONLY_CANONICAL_LEDGER_ACCESS_DENIED');
+  }
   const branded = {
     proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_PROOF_CLASS,
     __testOnlyLiveOwnerLedgerRoot: true,
@@ -199,8 +245,18 @@ function claimPathForIdentity(ledgerRoot, identityHex) {
 }
 
 function writeClaimPayload(fd, payloadObject) {
-  const body = `${JSON.stringify(payloadObject)}\n`;
-  writeSync(fd, body, 0, 'utf8');
+  const body = Buffer.from(`${JSON.stringify(payloadObject)}\n`, 'utf8');
+  let offset = 0;
+  while (offset < body.length) {
+    const written = writeSync(fd, body, offset, body.length - offset);
+    if (!Number.isInteger(written) || written <= 0) {
+      throw new Error(`SHORT_OR_FAILED_WRITE offset=${offset} written=${written} total=${body.length}`);
+    }
+    offset += written;
+  }
+  if (offset !== body.length) {
+    throw new Error(`INCOMPLETE_WRITE expected=${body.length} got=${offset}`);
+  }
 }
 
 function fsyncFd(fd) {
@@ -255,6 +311,16 @@ export function consumeLiveOwnerCapabilityJti(jti, metadata = {}, options = {}) 
     ]);
   }
 
+  if (options.writeHook != null || options.syncHook != null) {
+    // Genuine-live path must never accept injected fault hooks.
+    // TEST_ONLY may inject only when a branded test ledger root is present.
+    if (options.testOnlyLedgerRoot == null) {
+      return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+        'GENUINE_LIVE_TEST_HOOK_INJECTION_DENIED',
+      ]);
+    }
+  }
+
   let ledgerRoot;
   let testOnly = false;
   if (options.testOnlyLedgerRoot != null) {
@@ -266,7 +332,14 @@ export function consumeLiveOwnerCapabilityJti(jti, metadata = {}, options = {}) 
     ledgerRoot = options.testOnlyLedgerRoot.rootPath;
     testOnly = true;
   } else {
-    ledgerRoot = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    try {
+      ledgerRoot = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    } catch (err) {
+      return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+        'TRUSTED_OWNER_HOME_UNAVAILABLE',
+        String(err.message || err),
+      ]);
+    }
   }
 
   // Genuine-live: never auto-create missing ledger (Owner provisioning required).
@@ -295,6 +368,32 @@ export function consumeLiveOwnerCapabilityJti(jti, metadata = {}, options = {}) 
       LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID,
       symlinkPathCheck.reasons,
     );
+  }
+
+  // Validate trusted ancestors (ownership + no symlink) up to home/trust parent.
+  const ancestorCheck = assertNoSymlinkPathComponents(dirname(ledgerRoot));
+  if (!ancestorCheck.ok) {
+    return outcome(
+      LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID,
+      [...ancestorCheck.reasons, 'TRUSTED_ANCESTOR_VALIDATION_FAILED'],
+    );
+  }
+  if (!testOnly) {
+    try {
+      const trustParent = dirname(ledgerRoot);
+      const parentStat = lstatSync(trustParent);
+      if (typeof process.getuid === 'function' && parentStat.uid !== process.getuid()) {
+        return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+          'TRUSTED_ANCESTOR_UNEXPECTED_OWNERSHIP',
+          `UID=${parentStat.uid}`,
+        ]);
+      }
+    } catch (err) {
+      return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+        'TRUSTED_ANCESTOR_LSTAT_FAILED',
+        String(err.message || err),
+      ]);
+    }
   }
 
   const dirCheck = assertSafeDirectory(ledgerRoot, { createIfMissing: false });
@@ -353,11 +452,15 @@ export function consumeLiveOwnerCapabilityJti(jti, metadata = {}, options = {}) 
   }
 
   let fd;
-  const noFollow = Number(fsConstants.O_NOFOLLOW || 0);
+  if (!Number.isInteger(fsConstants.O_NOFOLLOW) || fsConstants.O_NOFOLLOW === 0) {
+    return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+      'O_NOFOLLOW_REQUIRED_BUT_UNAVAILABLE',
+    ], { identity });
+  }
   try {
     fd = openSync(
       claimPath,
-      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
+      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
       EXPECTED_FILE_MODE,
     );
   } catch (err) {
@@ -473,7 +576,14 @@ export function inspectLiveOwnerCapabilityJtiClaim(jti, options = {}) {
     ledgerRoot = options.testOnlyLedgerRoot.rootPath;
     testOnly = true;
   } else {
-    ledgerRoot = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    try {
+      ledgerRoot = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    } catch (err) {
+      return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
+        'TRUSTED_OWNER_HOME_UNAVAILABLE',
+        String(err.message || err),
+      ]);
+    }
   }
   const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
   const claimPath = claimPathForIdentity(ledgerRoot, identity);
@@ -491,6 +601,13 @@ export function inspectLiveOwnerCapabilityJtiClaim(jti, options = {}) {
     });
   }
   const safe = assertSafeRegularFile(claimPath);
+  if (!safe.ok) {
+    return outcome(
+      LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID,
+      [...safe.reasons, 'UNSAFE_INSPECTION_DENIED_BEFORE_READ'],
+      { present: true, identity, safeFile: false },
+    );
+  }
   let raw = null;
   try {
     raw = readFileSync(claimPath, 'utf8');
@@ -498,7 +615,7 @@ export function inspectLiveOwnerCapabilityJtiClaim(jti, options = {}) {
     return outcome(LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID, [
       'CLAIM_READ_FAILED',
       String(err.message || err),
-    ], { present: true, identity });
+    ], { present: true, identity, safeFile: true });
   }
   let parsed = null;
   try {
@@ -507,12 +624,13 @@ export function inspectLiveOwnerCapabilityJtiClaim(jti, options = {}) {
     parsed = null;
   }
   return Object.freeze({
-    ok: safe.ok,
+    ok: true,
     present: true,
     identity,
-    safeFile: safe.ok,
-    reasons: safe.ok ? Object.freeze([]) : Object.freeze([...safe.reasons]),
+    safeFile: true,
+    reasons: Object.freeze([]),
     parsed,
+    malformed: parsed == null,
     claimPath: testOnly ? claimPath : undefined,
   });
 }
@@ -533,7 +651,22 @@ export function __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(brandedRoot) {
   if (!isTestOnlyLiveOwnerCapabilityReplayLedgerRoot(brandedRoot)) {
     throw new TypeError('BRANDED_ROOT_REQUIRED');
   }
-  rmSync(brandedRoot.rootPath, { recursive: true, force: true });
+  const target = resolve(brandedRoot.rootPath);
+  let canonical;
+  try {
+    canonical = resolve(resolveCanonicalLiveOwnerCapabilityReplayLedgerPath());
+  } catch {
+    canonical = null;
+  }
+  if (canonical && (target === canonical || target.startsWith(canonical + sep))) {
+    throw new Error('TEST_ONLY_CANONICAL_LEDGER_ACCESS_DENIED');
+  }
+  // Refuse deleting outside isolated temp workspaces.
+  const tmp = resolve('/tmp');
+  if (!(target.startsWith(tmp + sep) || target.includes(`${sep}tecp-live-owner-ledger-`))) {
+    throw new Error('TEST_ONLY_CLEANUP_SCOPE_DENIED');
+  }
+  rmSync(target, { recursive: true, force: true });
 }
 
 export function createDurableLiveOwnerReplayRegistry(options = {}) {
