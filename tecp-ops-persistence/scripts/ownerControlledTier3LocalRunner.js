@@ -57,6 +57,7 @@ import {
 import {
   S2_OWNER_CAPABILITY_PURPOSE_SIMIN,
   S2_OWNER_CAPABILITY_VENUE_SIMIN,
+  S2_TIER3_OWNER_CAPABILITY_DECISIONS,
   createOwnerInstalledFixedTrustVerifierDeps,
   evaluateVerifiedCapabilityLiveSpawnEligibility,
   getVerifierIssuedCapabilityTrustClass,
@@ -84,6 +85,12 @@ export const OWNER_RUNNER_DECISIONS = Object.freeze({
   DENY_ONESHOT_REPLAY: 'DENY_ONESHOT_REPLAY',
   DENY_INVALID_REQUEST: 'DENY_INVALID_REQUEST',
   DENY_STOP_OR_CLEANUP_FAILED: 'DENY_STOP_OR_CLEANUP_FAILED',
+  DENY_STOP_FAILED: 'DENY_STOP_FAILED',
+  DENY_CLEANUP_FAILED: 'DENY_CLEANUP_FAILED',
+  DENY_SUITE_ACCEPTANCE_FAILED: 'DENY_SUITE_ACCEPTANCE_FAILED',
+  DENY_CAPABILITY_REPLAY: 'DENY_CAPABILITY_REPLAY',
+  DENY_CAPABILITY_REPLAY_STORAGE: 'DENY_CAPABILITY_REPLAY_STORAGE',
+  DENY_MULTI_FAILURE: 'DENY_MULTI_FAILURE',
   DENY_CLIENT_CLOSE_FAILED: 'DENY_CLIENT_CLOSE_FAILED',
   DENY_VERIFIER_TRUST_MISSING: 'DENY_VERIFIER_TRUST_MISSING',
   DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF: 'DENY_CALLER_CUSTODY_BOOLEAN_NOT_PROOF',
@@ -143,6 +150,88 @@ function isValidatedSuccessfulLifecycleResult(result) {
  * Live overall PASS requires verified owned-client disconnect evidence.
  * Failed/thrown/missing/unverified closes cannot yield LIVE_S2_PASS.
  */
+
+/**
+ * Map capability verifier denial to a distinct Runner decision.
+ * Replay/storage denials must remain distinguishable from generic verify failure.
+ */
+export function mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified = {}) {
+  const decision = capabilityVerified?.decision;
+  if (decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY) {
+    return OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY;
+  }
+  if (decision === S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE) {
+    return OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE;
+  }
+  return OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE;
+}
+
+/**
+ * Deterministic Runner outcome classification.
+ * Preserves all material failure causes; selects a primary decision.
+ */
+export function classifyOwnerRunnerOutcome({
+  suiteOk = false,
+  stopValidated = false,
+  cleanupValidated = false,
+  clientEndValidated = true,
+  suiteDecision = null,
+  successDecision = OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION,
+} = {}) {
+  const suiteSucceeded = suiteOk === true;
+  const stopOk = stopValidated === true;
+  const cleanupOk = cleanupValidated === true;
+  const clientOk = clientEndValidated === true;
+  const failureCauses = [];
+  if (!suiteSucceeded) failureCauses.push('SUITE_ACCEPTANCE_FAILED');
+  if (!stopOk) failureCauses.push('STOP_FAILED');
+  if (!cleanupOk) failureCauses.push('CLEANUP_FAILED');
+  if (!clientOk) failureCauses.push('CLIENT_CLOSE_FAILED');
+
+  const overallOk = suiteSucceeded && stopOk && cleanupOk && clientOk;
+  if (overallOk) {
+    return Object.freeze({
+      ok: true,
+      decision: successDecision,
+      primaryFailure: null,
+      failureCauses: Object.freeze([]),
+      suiteOk: true,
+      stopValidated: true,
+      cleanupValidated: true,
+      clientEndValidated: true,
+    });
+  }
+
+  let decision;
+  if (!clientOk) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED;
+  } else if (!stopOk && !cleanupOk && !suiteSucceeded) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_MULTI_FAILURE;
+  } else if (!stopOk && !cleanupOk) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED;
+  } else if (!stopOk) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_STOP_FAILED;
+  } else if (!cleanupOk) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_CLEANUP_FAILED;
+  } else if (!suiteSucceeded) {
+    decision = OWNER_RUNNER_DECISIONS.DENY_SUITE_ACCEPTANCE_FAILED;
+  } else {
+    decision = OWNER_RUNNER_DECISIONS.DENY_DEFAULT;
+  }
+
+  return Object.freeze({
+    ok: false,
+    decision,
+    primaryFailure: failureCauses[0] || 'UNKNOWN',
+    failureCauses: Object.freeze(failureCauses),
+    suiteOk: suiteSucceeded,
+    stopValidated: stopOk,
+    cleanupValidated: cleanupOk,
+    clientEndValidated: clientOk,
+    suiteDecision: suiteDecision || null,
+  });
+}
+
 export function evaluateLiveExecuteClosureGate({
   suiteOk,
   stopValidated,
@@ -677,16 +766,19 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     }, trustedVerifierDeps);
 
     if (!capabilityVerified || capabilityVerified.ok !== true) {
+      const mapped = mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified);
       return {
-        ...deny(OWNER_RUNNER_DECISIONS.DENY_OWNER_INVOCATION_NOT_INDEPENDENTLY_VERIFIABLE, [
+        ...deny(mapped, [
           'OWNER_CAPABILITY_VERIFY_FAILED',
           ...(capabilityVerified?.reasons || []),
           capabilityVerified?.decision,
+          'DB_CONTROLLER_START_NOT_REACHED',
         ]),
         capabilityVerified,
         evidence: evidenceEnvelope({
           authorization: Object.freeze({ structural, capabilityVerified }),
           failure: capabilityVerified,
+          dbControllerStarted: false,
         }),
       };
     }
@@ -1121,23 +1213,27 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
       clientEndResult,
       allClientsEndResult,
     });
-    const overallOk = closureGate.overallOk === true;
-    let decision;
-    if (overallOk) {
-      decision = OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION;
-    } else if (closureGate.clientEndValidated !== true) {
-      decision = OWNER_RUNNER_DECISIONS.DENY_CLIENT_CLOSE_FAILED;
-    } else {
-      decision = OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED;
-    }
+    const classified = classifyOwnerRunnerOutcome({
+      suiteOk: closureGate.suiteOk,
+      stopValidated: closureGate.stopValidated,
+      cleanupValidated: closureGate.cleanupValidated,
+      clientEndValidated: closureGate.clientEndValidated,
+      suiteDecision: suiteResult?.decision || null,
+      successDecision: OWNER_RUNNER_DECISIONS.ALLOW_LIVE_CAPABILITY_AUTHORIZATION,
+    });
+    const overallOk = classified.ok === true;
+    const decision = classified.decision;
     return Object.freeze({
       ok: overallOk,
       allowed: overallOk,
       decision,
+      classification: classified,
+      closureGate,
       reasons: Object.freeze([
         'LIVE_CAPABILITY_GATED_EXECUTE',
         'MODULE_CONSTS_REMAIN_FALSE',
         'OHSA_NOT_PROVEN',
+        ...(classified.failureCauses || []),
         ...(closureGate.clientEndValidated !== true ? ['VERIFIED_OWNED_CLIENT_CLOSE_REQUIRED'] : []),
         ...(suiteResult?.reasons || []),
       ]),
@@ -1342,7 +1438,14 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
     return Object.freeze({
       ok: false,
       allowed: false,
-      decision: OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED,
+      decision: OWNER_RUNNER_DECISIONS.DENY_STOP_FAILED,
+      classification: classifyOwnerRunnerOutcome({
+        suiteOk: suiteResult?.ok === true,
+        stopValidated: false,
+        cleanupValidated: isValidatedSuccessfulLifecycleResult(cleaned),
+        suiteDecision: suiteResult?.decision || null,
+        successDecision: OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION,
+      }),
       reasons: Object.freeze([
         'STOP_FAILURE_OR_MALFORMED_CANNOT_PASS',
         'SUITE_SUCCESS_REQUIRES_VALIDATED_STOP_AND_CLEANUP',
@@ -1380,20 +1483,24 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
   }
 
   const cleanupValidated = isValidatedSuccessfulLifecycleResult(cleaned);
-  const suiteSucceeded = suiteResult?.ok === true;
-  const overallOk = suiteSucceeded && stopValidated && cleanupValidated;
+  const classified = classifyOwnerRunnerOutcome({
+    suiteOk: suiteResult?.ok === true,
+    stopValidated,
+    cleanupValidated,
+    suiteDecision: suiteResult?.decision || null,
+    successDecision: OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION,
+  });
+  const overallOk = classified.ok === true;
 
   return Object.freeze({
     ok: overallOk,
     allowed: overallOk,
-    decision: overallOk
-      ? OWNER_RUNNER_DECISIONS.ALLOW_OFFLINE_SUITE_ORCHESTRATION
-      : (!cleanupValidated
-        ? OWNER_RUNNER_DECISIONS.DENY_STOP_OR_CLEANUP_FAILED
-        : (suiteResult?.decision || OWNER_RUNNER_DECISIONS.DENY_DEFAULT)),
+    decision: classified.decision,
+    classification: classified,
     reasons: Object.freeze([
       'OFFLINE_INERT_ORCHESTRATION_ONLY',
       'NOT_LIVE_POSTGRES_DURABILITY_PROOF',
+      ...(classified.failureCauses || []),
       ...(!cleanupValidated ? ['CLEANUP_FAILURE_OR_MALFORMED_CANNOT_PASS'] : []),
       ...(cleanupError ? ['CLEANUP_THREW'] : []),
       ...(suiteResult?.reasons || []),
