@@ -7,9 +7,14 @@
 
 import { createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync as readFsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { userInfo } from 'node:os';
 import { basename, join as pathJoin, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+  createDurableLiveOwnerReplayRegistry,
+  LIVE_OWNER_JTI_CLAIM_OUTCOMES,
+} from '../src/liveOwnerCapabilityReplayLedger.js';
 
 import {
   OPS_PILOT_APPROVED_TEST_ACTIONS,
@@ -54,6 +59,7 @@ export const S2_TIER3_OWNER_CAPABILITY_DECISIONS = Object.freeze({
   DENY_NBF_VIOLATION: 'DENY_NBF_VIOLATION',
   DENY_EXCESSIVE_TTL: 'DENY_EXCESSIVE_TTL',
   DENY_REPLAY: 'DENY_REPLAY',
+  DENY_REPLAY_STORAGE: 'DENY_REPLAY_STORAGE',
   DENY_REVOKED: 'DENY_REVOKED',
   DENY_REVOCATION_UNAVAILABLE: 'DENY_REVOCATION_UNAVAILABLE',
   DENY_WORKER_SUPPLIED_TRUST_ANCHOR: 'DENY_WORKER_SUPPLIED_TRUST_ANCHOR',
@@ -107,6 +113,8 @@ let __testRevocationAvailable = true;
 const testOnlyVerifierDepsLatch = new WeakSet();
 /** Brands Owner-installed fixed-path trust deps. Not request-supplied. */
 const ownerInstalledTrustDepsLatch = new WeakSet();
+/** Module-private authoritative bindings for Owner-installed deps (not caller-mutable). */
+const ownerInstalledAuthoritativeBindings = new WeakMap();
 /**
  * Module-private provenance for crypto-verified capability result objects.
  * Only successful verifyS2Tier3OwnerCapabilityArtifact may add entries.
@@ -266,6 +274,10 @@ function resolveKeyRegistry(deps = {}) {
   if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
+  const authoritative = ownerInstalledAuthoritativeBindings.get(deps);
+  if (authoritative) {
+    return authoritative.keyRegistry;
+  }
   if (deps.keyRegistry && typeof deps.keyRegistry.get === 'function') {
     return deps.keyRegistry;
   }
@@ -293,6 +305,10 @@ function resolveRevocation(deps = {}) {
   if (!isTrustedVerifierDeps(deps)) {
     return null;
   }
+  const authoritative = ownerInstalledAuthoritativeBindings.get(deps);
+  if (authoritative) {
+    return authoritative.revocationRegistry;
+  }
   if (deps.revocationRegistry) {
     return deps.revocationRegistry;
   }
@@ -308,6 +324,14 @@ function resolveRevocation(deps = {}) {
 
 function resolveReplay(deps = {}) {
   if (!isTrustedVerifierDeps(deps)) {
+    return null;
+  }
+  const authoritative = ownerInstalledAuthoritativeBindings.get(deps);
+  if (authoritative) {
+    return authoritative.replayRegistry;
+  }
+  if (isOwnerInstalledTrustVerifierDeps(deps) && !authoritative) {
+    // Brand without authoritative binding is insufficient.
     return null;
   }
   if (deps.replayRegistry) {
@@ -487,13 +511,29 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
   }
 
   const replay = resolveReplay(deps);
-  if (!replay || typeof replay.has !== 'function') {
+  const ownerInstalled = isOwnerInstalledTrustVerifierDeps(deps);
+  const hasAtomicConsume = replay && typeof replay.consumeAtomic === 'function';
+  if (!replay) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_DEFAULT_FAIL_CLOSED, [
       'REPLAY_REGISTRY_REQUIRED',
     ]);
   }
-  if (replay.has(claims.jti)) {
-    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY, [`JTI:${claims.jti}`]);
+  if (ownerInstalled && !hasAtomicConsume) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE, [
+      'OWNER_INSTALLED_REQUIRES_DURABLE_ATOMIC_CONSUME',
+      'NO_PROCESS_LOCAL_REPLAY_FALLBACK',
+    ]);
+  }
+  // Process-local/TEST_ONLY has/record path: early replay deny is non-consuming.
+  if (!hasAtomicConsume) {
+    if (typeof replay.has !== 'function') {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_DEFAULT_FAIL_CLOSED, [
+        'REPLAY_REGISTRY_HAS_REQUIRED',
+      ]);
+    }
+    if (replay.has(claims.jti)) {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY, [`JTI:${claims.jti}`]);
+    }
   }
 
   let publicKey;
@@ -516,7 +556,45 @@ export function verifyS2Tier3OwnerCapabilityArtifact(token, expectation = {}, de
     ]);
   }
 
-  if (replay && typeof replay.record === 'function') {
+  // Durable atomic consume only after authentic signature + required claims.
+  if (hasAtomicConsume) {
+    let claim;
+    try {
+      claim = replay.consumeAtomic(claims.jti, {
+        suitePath: claims.suitePath,
+        repositoryId: claims.repositoryId,
+        pinnedMainSha: claims.pinnedMainSha,
+        kid: claims.kid,
+        purpose: claims.purpose,
+      });
+    } catch (err) {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE, [
+        `JTI:${claims.jti}`,
+        'DURABLE_ATOMIC_CLAIM_THREW',
+        String(err.message || err),
+      ]);
+    }
+    if (!claim || typeof claim !== 'object') {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE, [
+        `JTI:${claims.jti}`,
+        'DURABLE_ATOMIC_CLAIM_MALFORMED_RESULT',
+      ]);
+    }
+    if (claim.outcome === LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY, [
+        `JTI:${claims.jti}`,
+        'DURABLE_ATOMIC_CLAIM_ALREADY_CONSUMED',
+        ...(claim.reasons || []),
+      ]);
+    }
+    if (!claim.ok || claim.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY) {
+      return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE, [
+        `JTI:${claims.jti}`,
+        'DURABLE_ATOMIC_CLAIM_STORAGE_FAILURE',
+        ...(claim.reasons || []),
+      ]);
+    }
+  } else if (typeof replay.record === 'function') {
     replay.record(claims.jti);
   }
 
@@ -603,17 +681,44 @@ export function evaluateVerifiedCapabilityLiveSpawnEligibility(verified = {}, co
   });
 }
 
-export function resolveOwnerInstalledFixedTrustRegistryPath(home = undefined) {
-  // Caller-supplied home is ignored for trust resolution authority. Always use OS homedir().
-  if (home != null && home !== homedir()) {
-    // Non-authoritative path preview only — createOwnerInstalled rejects overrides before latch.
+function resolveTrustedOwnerOsHomeForVerifier() {
+  let info;
+  try {
+    info = userInfo();
+  } catch (err) {
+    return { ok: false, reasons: ['USERINFO_UNAVAILABLE', String(err.message || err)] };
   }
-  const trustedHome = homedir();
-  const dir = pathJoin(trustedHome, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
+  if (!info || typeof info.homedir !== 'string' || info.homedir.length === 0) {
+    return { ok: false, reasons: ['TRUSTED_HOMEDIR_UNAVAILABLE'] };
+  }
+  if (typeof process.getuid === 'function' && info.uid !== process.getuid()) {
+    return {
+      ok: false,
+      reasons: ['TRUSTED_UID_MISMATCH', `USERINFO_UID=${info.uid}`, `PROCESS_UID=${process.getuid()}`],
+    };
+  }
+  return { ok: true, home: info.homedir, uid: info.uid };
+}
+
+export function resolveOwnerInstalledFixedTrustRegistryPath(home = undefined) {
+  // Caller-supplied home is ignored for trust resolution authority.
+  void home;
+  const resolved = resolveTrustedOwnerOsHomeForVerifier();
+  if (!resolved.ok) {
+    // Preserve prior throw-free path API for callers that only preview; createOwnerInstalled fails closed.
+    return Object.freeze({
+      dir: null,
+      pubkeyPath: null,
+      kidPath: null,
+      unavailableReasons: Object.freeze([...(resolved.reasons || [])]),
+    });
+  }
+  const dir = pathJoin(resolved.home, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR);
   return Object.freeze({
     dir,
     pubkeyPath: pathJoin(dir, OPS_PILOT_OWNER_TRUST_PUBKEY_FILENAME),
     kidPath: pathJoin(dir, OPS_PILOT_OWNER_TRUST_KID_FILENAME),
+    uid: resolved.uid,
   });
 }
 
@@ -634,6 +739,10 @@ export function createOwnerInstalledFixedTrustVerifierDeps(options = {}) {
     'kidPath',
     'dir',
     'trustRegistryPaths',
+    'replayRegistry',
+    'ledgerRoot',
+    'ledgerPath',
+    'testOnlyLedgerRoot',
   ];
   for (const key of forbiddenOverrides) {
     if (options[key] != null) {
@@ -643,8 +752,14 @@ export function createOwnerInstalledFixedTrustVerifierDeps(options = {}) {
       ]);
     }
   }
-  // Runtime trust directory is always the Owner-local homedir registry — never request-driven.
+  // Runtime trust directory is always the Owner-local OS-identity registry — never request-driven.
   const paths = resolveOwnerInstalledFixedTrustRegistryPath();
+  if (!paths.dir || !paths.pubkeyPath || !paths.kidPath) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
+      'TRUSTED_OWNER_HOME_UNAVAILABLE',
+      ...(paths.unavailableReasons || []),
+    ]);
+  }
   if (!existsSync(paths.pubkeyPath) || !existsSync(paths.kidPath)) {
     return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_OWNER_TRUST_REGISTRY_MISSING, [
       'OWNER_INSTALLED_PUBKEY_OR_KID_MISSING',
@@ -676,31 +791,46 @@ export function createOwnerInstalledFixedTrustVerifierDeps(options = {}) {
       'PRIVATE_KEY_MATERIAL_FORBIDDEN_IN_TRUST_REGISTRY',
     ], { paths });
   }
-  const keyRegistry = {
+  const revoked = new Set();
+  let durableReplay;
+  try {
+    durableReplay = createDurableLiveOwnerReplayRegistry({});
+  } catch (err) {
+    return deny(S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE, [
+      'DURABLE_REPLAY_REGISTRY_CONSTRUCT_FAILED',
+      String(err.message || err),
+    ], { paths });
+  }
+  const frozenKeyRegistry = Object.freeze({
     get(queryKid) {
       return queryKid === kid ? pubkeyPem : null;
     },
-  };
-  const replay = new Set();
-  const revoked = new Set();
-  const deps = {
+  });
+  const frozenRevocation = Object.freeze({
+    isRevoked(jti) {
+      return { ok: true, revoked: revoked.has(jti) };
+    },
+  });
+  const bindings = Object.freeze({
+    keyRegistry: frozenKeyRegistry,
+    revocationRegistry: frozenRevocation,
+    replayRegistry: durableReplay,
+    trustRegistryPaths: paths,
+    installedKid: kid,
+  });
+  const deps = Object.freeze({
     proofClass: S2_OWNER_INSTALLED_TRUST_DEPS_PROOF_CLASS,
     __ownerInstalledTrust: true,
     nowMs: options.nowMs,
-    clock: options.clock || { nowMs: () => Date.now() },
-    keyRegistry,
-    revocationRegistry: {
-      isRevoked(jti) {
-        return { ok: true, revoked: revoked.has(jti) };
-      },
-    },
-    replayRegistry: {
-      has(jti) { return replay.has(jti); },
-      record(jti) { replay.add(jti); },
-    },
+    clock: options.clock || Object.freeze({ nowMs: () => Date.now() }),
+    keyRegistry: frozenKeyRegistry,
+    revocationRegistry: frozenRevocation,
+    replayRegistry: durableReplay,
     trustRegistryPaths: paths,
     installedKid: kid,
-  };
+    durableLiveOwnerReplay: true,
+  });
+  ownerInstalledAuthoritativeBindings.set(deps, bindings);
   ownerInstalledTrustDepsLatch.add(deps);
   return deps;
 }
