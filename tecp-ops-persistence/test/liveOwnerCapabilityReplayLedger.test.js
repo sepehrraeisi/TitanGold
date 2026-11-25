@@ -4,7 +4,7 @@
  * No genuine Owner trust mutation. No live ledger provisioning. No SQL/PostgreSQL.
  */
 import assert from 'node:assert/strict';
-import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
@@ -13,8 +13,10 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
   writeSync,
@@ -31,6 +33,10 @@ import {
   __testOnlyPrepareIsolatedLiveOwnerLedgerRoot,
   __testOnlyRemoveIsolatedLiveOwnerLedgerRoot,
   brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot,
+  evaluateTestOnlyProtectedStoragePolicy,
+  LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME,
+  LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER,
+  LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX,
   canonicalizeLiveOwnerCapabilityJtiIdentity,
   consumeLiveOwnerCapabilityJti,
   createDurableLiveOwnerReplayRegistry,
@@ -1307,12 +1313,12 @@ test('F06 C/D: unrelated temp directory and fake workspace-name rejection', () =
   mkdirSync(unrelated, { mode: 0o700 });
   assert.throws(
     () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(unrelated),
-    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING/,
+    /TEST_ONLY_PROTECTED_PATH_DENIED|TEST_WORKSPACE_PREFIX_MISMATCH|TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING/,
   );
   const fakeName = join(tmpdir(), 'tecp-owned-lol-fake-not-created');
   assert.throws(
     () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(fakeName),
-    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING|ENOENT|lstat/i,
+    /TEST_ONLY_PROTECTED_PATH_DENIED|TEST_WORKSPACE_PREFIX_MISMATCH|TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING|ENOENT|lstat/i,
   );
   // Access brand cannot cleanup even if forged shape points at unrelated temp
   assert.throws(
@@ -1454,3 +1460,262 @@ test('OWNER_INSTALLED binding mutation: report limitation when local trust missi
   assert.throws(() => { deps.replayRegistry = { consumeAtomic() { return null; } }; });
   assert.equal(deps.replayRegistry, originalReplay);
 });
+
+
+// ---------------------------------------------------------------------------
+// R5E — narrow persistent TEST_ONLY namespace + creation/rebrand consistency
+// ---------------------------------------------------------------------------
+
+function persistentNamespacePath() {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  return join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+}
+
+function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+test('R5E-A/B/C/D/E persistent workspace create, independent rebrand, replay denial, marker stable', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  assert.match(branded.workspacePath, new RegExp(`${LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME}`));
+  const markerPath = join(branded.workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+  const markerBefore = sha256File(markerPath);
+  const jti = 'jti-r5e-persist-replay-0001';
+  const first = consumeLiveOwnerCapabilityJti(jti, {}, { testOnlyLedgerRoot: branded });
+  assert.equal(first.ok, true);
+  assert.equal(first.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY);
+
+  const childScript = join(tmpdir(), `r5e-rebrand-${process.pid}.mjs`);
+  writeFileSync(childScript, `
+import assert from 'node:assert/strict';
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+assert.equal(branded.accessOnly, true);
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) {
+  console.error(JSON.stringify(r));
+  process.exit(2);
+}
+console.log('R5E_CHILD_REPLAY_DENY_OK');
+`);
+  const ran = spawnSync(process.execPath, [childScript], { encoding: 'utf8' });
+  assert.equal(ran.status, 0, ran.stderr || ran.stdout);
+  assert.match(ran.stdout, /R5E_CHILD_REPLAY_DENY_OK/);
+  assert.equal(sha256File(markerPath), markerBefore);
+  const claimFiles = [];
+  const walk = (dir) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (ent.name.endsWith('.claim')) claimFiles.push(p);
+    }
+  };
+  walk(branded.rootPath);
+  assert.equal(claimFiles.length, 1);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(childScript, { force: true }); } catch { /* ignore */ }
+});
+
+test('R5E-F arbitrary Owner-home path denied for brand', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const arbitrary = join(home.home, 'arbitrary-r5e-not-namespace', 'ledger');
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(arbitrary),
+    /TEST_ONLY_PROTECTED_PATH_DENIED|PROTECTED_OWNER_STORAGE/,
+  );
+});
+
+test('R5E-G matching prefix + forged provenance outside namespace denied', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const forgedWs = mkdtempSync(join(home.home, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}forged-`));
+  try {
+    chmodSync(forgedWs, 0o700);
+    const marker = join(forgedWs, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+    writeFileSync(marker, `${JSON.stringify({
+      version: 1,
+      kind: 'TEST_ONLY_LIVE_OWNER_LEDGER_WORKSPACE_V1',
+      workspaceId: '0'.repeat(32),
+      ledgerDirName: 'ledger',
+    })}\n`, { mode: 0o600 });
+    const ledger = join(forgedWs, 'ledger');
+    mkdirSync(ledger, { mode: 0o700 });
+    chmodSync(ledger, 0o700);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(ledger),
+      /TEST_ONLY_PROTECTED_PATH_DENIED|PROTECTED_OWNER_STORAGE/,
+    );
+  } finally {
+    rmSync(forgedWs, { recursive: true, force: true });
+  }
+});
+
+test('R5E-H/I canonical trust and ledger paths denied; protected ancestors denied', () => {
+  const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(canonical), /PROTECTED|DENIED/);
+  const home = resolveTrustedOwnerOsHome();
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(home.home), /PROTECTED|DENIED/);
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(join(home.home, '.tecp-ops-pilot')),
+    /PROTECTED|DENIED/,
+  );
+});
+
+test('R5E-J symlink alias denied for brand', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const aliasParent = mkdtempSync(join(tmpdir(), 'r5e-symlink-'));
+  const alias = join(aliasParent, 'alias-ledger');
+  try {
+    symlinkSync(branded.rootPath, alias);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(alias),
+      /SYMLINK|PROTECTED|DENIED|PROVENANCE/,
+    );
+  } finally {
+    try { rmSync(aliasParent, { recursive: true, force: true }); } catch { /* ignore */ }
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-K missing or malformed provenance denied', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const marker = join(branded.workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+  const original = readFileSync(marker);
+  try {
+    rmSync(marker);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /PROVENANCE/,
+    );
+    writeFileSync(marker, '{not-json\n', { mode: 0o600 });
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /PROVENANCE/,
+    );
+  } finally {
+    writeFileSync(marker, original, { mode: 0o600 });
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-L unsafe namespace permissions denied', () => {
+  const ns = persistentNamespacePath();
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const prevMode = statSync(ns).mode & 0o777;
+  try {
+    chmodSync(ns, 0o755);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /UNSAFE_PERMISSIONS|PROTECTED|DENIED|NAMESPACE/,
+    );
+  } finally {
+    chmodSync(ns, prevMode);
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-N access-only rebrand cannot cleanup', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const childScript = join(tmpdir(), `r5e-cleanup-${process.pid}.mjs`);
+  writeFileSync(childScript, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, __testOnlyRemoveIsolatedLiveOwnerLedgerRoot } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+try {
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  console.log('CLEANUP_UNEXPECTED_OK');
+  process.exit(3);
+} catch (err) {
+  if (!String(err.message || err).includes('TEST_ONLY_CLEANUP_AUTHORITY_REQUIRED')) {
+    console.error(String(err && err.stack || err));
+    process.exit(4);
+  }
+  console.log('R5E_CLEANUP_DENIED_OK');
+}
+`);
+  const ran = spawnSync(process.execPath, [childScript], { encoding: 'utf8' });
+  assert.equal(ran.status, 0, ran.stderr || ran.stdout);
+  assert.match(ran.stdout, /R5E_CLEANUP_DENIED_OK/);
+  assert.equal(existsSync(branded.workspacePath), true);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(childScript, { force: true }); } catch { /* ignore */ }
+});
+
+test('R5E-O/P creation/rebrand shared policy; prohibited TMPDIR creation denied before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r5e-evil-tmpdir-'));
+  const previous = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = evil;
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(),
+      /TMPDIR_UNDER_OWNER_HOME_OUTSIDE_PERSISTENT_NAMESPACE|CREATE_DENIED/,
+    );
+    const kids = readdirSync(evil).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    rmSync(evil, { recursive: true, force: true });
+  }
+});
+
+test('R5E-Q missing trusted-home resolution fails closed (policy branch)', () => {
+  const denied = evaluateTestOnlyProtectedStoragePolicy(
+    join('/home/someone', LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME, 'tecp-owned-lol-x', 'ledger'),
+    { ok: false, reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']) },
+    { forCleanup: false },
+  );
+  assert.equal(denied.ok, false);
+  assert.ok(denied.reasons.includes('TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED'));
+});
+
+test('R5E-R ordinary temp workspaces remain compatible; genuine-live path unchanged', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  assert.equal(
+    branded.workspacePath.includes(`${LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME}`),
+    false,
+  );
+  const rebranded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath);
+  assert.equal(rebranded.accessOnly, true);
+  const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+  assert.match(canonical, /live-owner-jti-ledger-v1$/);
+  assert.ok(canonical.includes('.tecp-ops-pilot'));
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+test('R5E claimant-exit then later independent persistent rebrand replay denial', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const jti = 'jti-r5e-claimant-exit-0001';
+  const claimant = join(tmpdir(), `r5e-claimant-${process.pid}.mjs`);
+  const later = join(tmpdir(), `r5e-later-${process.pid}.mjs`);
+  writeFileSync(claimant, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (!r.ok || r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY) {
+  console.error(JSON.stringify(r));
+  process.exit(2);
+}
+console.log('CLAIMANT_OK');
+`);
+  const claimRan = spawnSync(process.execPath, [claimant], { encoding: 'utf8' });
+  assert.equal(claimRan.status, 0, claimRan.stderr || claimRan.stdout);
+  writeFileSync(later, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) {
+  console.error(JSON.stringify(r));
+  process.exit(3);
+}
+console.log('LATER_DENY_OK');
+`);
+  const laterRan = spawnSync(process.execPath, [later], { encoding: 'utf8' });
+  assert.equal(laterRan.status, 0, laterRan.stderr || laterRan.stdout);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(claimant, { force: true }); rmSync(later, { force: true }); } catch { /* ignore */ }
+});
+

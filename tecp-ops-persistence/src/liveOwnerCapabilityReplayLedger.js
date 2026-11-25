@@ -47,6 +47,8 @@ export const LIVE_OWNER_JTI_LEDGER_TEST_ONLY_CLEANUP_PROOF_CLASS =
 export const LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER =
   '.tecp-test-only-live-owner-ledger-workspace-v1';
 export const LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX = 'tecp-owned-lol-';
+/** Narrow persistent TEST_ONLY namespace under trusted OS home (not entire home). */
+export const LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME = 'tecp-r5b-host-persist-base';
 
 export const LIVE_OWNER_JTI_CLAIM_OUTCOMES = Object.freeze({
   CLAIM_CONSUMED_SUCCESSFULLY: 'CLAIM_CONSUMED_SUCCESSFULLY',
@@ -151,7 +153,12 @@ function pathIsWithin(absPath, root) {
  * Missing home must fail closed for destructive cleanup and for branding of
  * potentially protected paths — it must never disable protection.
  */
-function assertPathOutsideProtectedOwnerStorage(absPath, { forCleanup = false } = {}) {
+/**
+ * Pure protected-storage policy evaluator.
+ * Production callers always supply resolveTrustedOwnerOsHome() — never a caller HOME override.
+ * Synthetic homeResolution is permitted only for DB-free regression of fail-closed branches.
+ */
+export function evaluateTestOnlyProtectedStoragePolicy(absPath, homeResolution, { forCleanup = false } = {}) {
   const target = resolve(absPath);
   const reasons = [];
   // Always-on string defenses (do not require home resolution).
@@ -166,38 +173,178 @@ function assertPathOutsideProtectedOwnerStorage(absPath, { forCleanup = false } 
     reasons.push('PROTECTED_LIVE_OWNER_LEDGER_PATH_SEGMENT');
   }
 
-  const home = resolveTrustedOwnerOsHome();
-  if (!home.ok) {
-    if (forCleanup || reasons.length > 0) {
-      return {
-        ok: false,
-        reasons: Object.freeze([
-          'TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED',
-          ...(home.reasons || []),
-          ...reasons,
-        ]),
-      };
-    }
-    // Access branding of clearly non-protected owned test workspaces may proceed
-    // only when no protected-path markers were observed.
-    return { ok: true, homeUnavailable: true };
+  const home = homeResolution;
+  if (!home || home.ok !== true) {
+    return {
+      ok: false,
+      reasons: Object.freeze([
+        'TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED',
+        ...((home && home.reasons) || ['TRUSTED_HOME_UNAVAILABLE']),
+        ...reasons,
+      ]),
+    };
   }
 
   const trustDir = resolve(join(home.home, OPS_PILOT_OWNER_TRUST_REGISTRY_RELATIVE_DIR));
   const ledgerDir = resolve(join(trustDir, LIVE_OWNER_JTI_LEDGER_DIRNAME));
   const ownerHome = resolve(home.home);
-  const protectedRoots = [trustDir, ledgerDir, ownerHome, resolve(join(ownerHome, '.tecp-ops-pilot'))];
-  for (const pro of protectedRoots) {
+  const opsPilot = resolve(join(ownerHome, '.tecp-ops-pilot'));
+  const persistentNs = resolve(join(ownerHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+
+  // Hard-protected locations — never exempt via persistent TEST_ONLY namespace.
+  const hardProtected = [trustDir, ledgerDir, opsPilot];
+  for (const pro of hardProtected) {
     if (pathIsWithin(target, pro) || pathIsWithin(pro, target)) {
-      // Cleanup of an ancestor of trust/ledger would destroy protected storage.
       reasons.push('PROTECTED_OWNER_STORAGE_OR_ANCESTOR', `AT=${pro}`);
     }
   }
-  if (reasons.length > 0) {
-    return { ok: false, reasons: Object.freeze(reasons) };
+
+  const inPersistentNs = pathIsWithin(target, persistentNs)
+    && target !== persistentNs; // namespace root itself is not a workspace
+  // Entire Owner home remains protected except validated children of the narrow namespace.
+  if ((pathIsWithin(target, ownerHome) || pathIsWithin(ownerHome, target)) && !inPersistentNs) {
+    reasons.push('PROTECTED_OWNER_STORAGE_OR_ANCESTOR', `AT=${ownerHome}`);
   }
-  return { ok: true, homeUnavailable: false, trustDir, ledgerDir, ownerHome };
+
+  if (reasons.length > 0) {
+    return {
+      ok: false,
+      reasons: Object.freeze(reasons),
+      persistentNamespace: persistentNs,
+      inPersistentNamespace: inPersistentNs,
+      trustDir,
+      ledgerDir,
+      ownerHome,
+    };
+  }
+  return {
+    ok: true,
+    homeUnavailable: false,
+    trustDir,
+    ledgerDir,
+    ownerHome,
+    persistentNamespace: persistentNs,
+    inPersistentNamespace: inPersistentNs,
+    forCleanup: forCleanup === true,
+  };
 }
+
+function assertPathOutsideProtectedOwnerStorage(absPath, { forCleanup = false } = {}) {
+  return evaluateTestOnlyProtectedStoragePolicy(
+    absPath,
+    resolveTrustedOwnerOsHome(),
+    { forCleanup },
+  );
+}
+
+function validatePersistentTestOnlyNamespaceDirectory(namespaceAbs, home) {
+  const ns = resolve(namespaceAbs);
+  const expected = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+  if (ns !== expected) {
+    return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_NAMESPACE_PATH_MISMATCH']) };
+  }
+  const symlinkCheck = assertNoSymlinkPathComponents(ns);
+  if (!symlinkCheck.ok) {
+    return { ok: false, reasons: Object.freeze(symlinkCheck.reasons) };
+  }
+  let lst;
+  try {
+    lst = lstatSync(ns);
+  } catch (err) {
+    return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_NAMESPACE_MISSING', String(err.message || err)]) };
+  }
+  if (lst.isSymbolicLink() || !lst.isDirectory()) {
+    return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_NAMESPACE_UNSAFE_TYPE']) };
+  }
+  if (typeof process.getuid === 'function' && lst.uid !== process.getuid()) {
+    return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_NAMESPACE_UNEXPECTED_OWNERSHIP', `UID=${lst.uid}`]) };
+  }
+  if (home.uid != null && lst.uid !== home.uid) {
+    return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_NAMESPACE_UID_MISMATCH']) };
+  }
+  if (modeOf(lst) !== EXPECTED_DIR_MODE) {
+    return {
+      ok: false,
+      reasons: Object.freeze([
+        'PERSISTENT_TEST_NAMESPACE_UNSAFE_PERMISSIONS',
+        `MODE=${modeOf(lst).toString(8)}`,
+      ]),
+    };
+  }
+  return { ok: true, namespacePath: ns };
+}
+
+function assertEligibleTestOnlyWorkspaceLedgerLocation(ledgerRootAbs) {
+  const abs = resolve(ledgerRootAbs);
+  const protectedCheck = assertPathOutsideProtectedOwnerStorage(abs, { forCleanup: false });
+  if (!protectedCheck.ok) {
+    return protectedCheck;
+  }
+  const home = resolveTrustedOwnerOsHome();
+  if (!home.ok) {
+    return {
+      ok: false,
+      reasons: Object.freeze([
+        'TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED',
+        ...(home.reasons || []),
+      ]),
+    };
+  }
+  const workspacePath = dirname(abs);
+  const baseName = workspacePath.split(sep).filter(Boolean).pop() || '';
+  if (!baseName.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX)) {
+    return { ok: false, reasons: Object.freeze(['TEST_WORKSPACE_PREFIX_MISMATCH']) };
+  }
+  if (protectedCheck.inPersistentNamespace) {
+    const nsCheck = validatePersistentTestOnlyNamespaceDirectory(
+      protectedCheck.persistentNamespace,
+      home,
+    );
+    if (!nsCheck.ok) {
+      return nsCheck;
+    }
+    // Workspace must be a direct child of the persistent namespace.
+    if (dirname(workspacePath) !== protectedCheck.persistentNamespace) {
+      return { ok: false, reasons: Object.freeze(['PERSISTENT_TEST_WORKSPACE_NOT_DIRECT_CHILD']) };
+    }
+  } else if (pathIsWithin(abs, home.home)) {
+    // Should be unreachable after protected policy, but fail closed.
+    return { ok: false, reasons: Object.freeze(['ARBITRARY_OWNER_HOME_TEST_WORKSPACE_DENIED']) };
+  }
+  const symlinkCheck = assertNoSymlinkPathComponents(abs);
+  if (!symlinkCheck.ok) {
+    return { ok: false, reasons: Object.freeze(symlinkCheck.reasons) };
+  }
+  return {
+    ok: true,
+    workspacePath,
+    inPersistentNamespace: protectedCheck.inPersistentNamespace === true,
+    persistentNamespace: protectedCheck.persistentNamespace,
+    ownerHome: home.home,
+  };
+}
+
+function ensurePersistentTestOnlyNamespace(home) {
+  if (!home || home.ok !== true) {
+    throw new Error(`TRUSTED_HOME_UNAVAILABLE:${((home && home.reasons) || []).join(',')}`);
+  }
+  const ns = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+  if (!existsSync(ns)) {
+    mkdirSync(ns, { recursive: false, mode: EXPECTED_DIR_MODE });
+    chmodSync(ns, EXPECTED_DIR_MODE);
+    try {
+      fsyncPathDirectory(dirname(ns));
+    } catch {
+      // best-effort parent sync; namespace mode/ownership still enforced below
+    }
+  }
+  const validated = validatePersistentTestOnlyNamespaceDirectory(ns, home);
+  if (!validated.ok) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_INVALID:${(validated.reasons || []).join(',')}`);
+  }
+  return ns;
+}
+
 
 function readOwnedWorkspaceProvenance(ledgerRootAbs) {
   const abs = resolve(ledgerRootAbs);
@@ -279,9 +426,9 @@ export function brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(rootPath) {
     throw new TypeError('TEST_ONLY_LEDGER_ROOT_REQUIRED');
   }
   const abs = resolve(rootPath);
-  const protectedCheck = assertPathOutsideProtectedOwnerStorage(abs, { forCleanup: false });
-  if (!protectedCheck.ok) {
-    throw new Error(`TEST_ONLY_PROTECTED_PATH_DENIED:${(protectedCheck.reasons || []).join(',')}`);
+  const locationCheck = assertEligibleTestOnlyWorkspaceLedgerLocation(abs);
+  if (!locationCheck.ok) {
+    throw new Error(`TEST_ONLY_PROTECTED_PATH_DENIED:${(locationCheck.reasons || []).join(',')}`);
   }
   const provenance = readOwnedWorkspaceProvenance(abs);
   if (!provenance.ok) {
@@ -937,12 +1084,58 @@ export function inspectLiveOwnerCapabilityJtiClaim(jti, options = {}) {
 
 /**
  * TEST_ONLY helper: create an owned isolated workspace with durable provenance.
- * Caller-selected base paths are ignored for creation authority — storage is always
- * allocated under a dedicated owned prefix in the process temp directory.
+ * Caller-selected absolute base paths are ignored for creation authority.
+ *
+ * Ordinary mode allocates under the process temp directory when that location is
+ * outside the trusted Owner home. If TMPDIR redirects into the Owner home outside
+ * the narrow persistent TEST_ONLY namespace, creation fails closed before mutation.
+ *
+ * Pass `{ persistent: true }` to allocate under
+ * `<trusted-os-home>/tecp-r5b-host-persist-base/` (shared by creation and rebrand).
  */
-export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(baseTempDir = undefined) {
-  void baseTempDir; // intentionally ignored — prevents acquiring cleanup via caller paths
-  const workspacePath = mkdtempSync(join(tmpdir(), LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined) {
+  const opts = isPlainObject(options) ? options : {};
+  // Legacy non-object argument (historical baseTempDir) remains ignored.
+  if (!isPlainObject(options) && options !== undefined) {
+    void options;
+  }
+  const home = resolveTrustedOwnerOsHome();
+  const wantPersistent = opts.persistent === true;
+  let parentDir;
+  if (wantPersistent) {
+    parentDir = ensurePersistentTestOnlyNamespace(home);
+  } else {
+    const tempBase = resolve(tmpdir());
+    if (home.ok && pathIsWithin(tempBase, home.home)) {
+      const ns = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+      if (pathIsWithin(tempBase, ns) || tempBase === ns) {
+        // TMPDIR already inside the narrow persistent namespace — allow after validation.
+        parentDir = ensurePersistentTestOnlyNamespace(home);
+      } else {
+        throw new Error(
+          'TEST_ONLY_TMPDIR_UNDER_OWNER_HOME_OUTSIDE_PERSISTENT_NAMESPACE:'
+          + `TMPDIR=${tempBase}`,
+        );
+      }
+    } else {
+      parentDir = tempBase;
+    }
+  }
+  // Deny before mutation if the chosen parent would fail protected-storage policy
+  // for a prospective child workspace path.
+  const prospective = join(parentDir, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
+  const precheck = evaluateTestOnlyProtectedStoragePolicy(
+    join(prospective, 'ledger'),
+    home.ok ? home : { ok: false, reasons: (home && home.reasons) || ['TRUSTED_HOME_UNAVAILABLE'] },
+    { forCleanup: false },
+  );
+  if (!precheck.ok && wantPersistent) {
+    throw new Error(`TEST_ONLY_PERSISTENT_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
+  }
+  if (!precheck.ok && home.ok && pathIsWithin(parentDir, home.home)) {
+    throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
+  }
+  const workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
   chmodSync(workspacePath, EXPECTED_DIR_MODE);
   const workspaceId = randomBytes(16).toString('hex');
   const markerPath = join(workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
@@ -965,6 +1158,14 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(baseTempDir = undef
   mkdirSync(ledgerRoot, { recursive: false, mode: EXPECTED_DIR_MODE });
   chmodSync(ledgerRoot, EXPECTED_DIR_MODE);
   fsyncPathDirectory(workspacePath);
+
+  const eligibility = assertEligibleTestOnlyWorkspaceLedgerLocation(resolve(ledgerRoot));
+  if (!eligibility.ok) {
+    // Fail closed: remove the just-created workspace using direct rm only for this
+    // same-process creation failure (cleanup authority not yet published).
+    try { rmSync(workspacePath, { recursive: true, force: false }); } catch { /* ignore */ }
+    throw new Error(`TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`);
+  }
 
   const accessBrand = {
     proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_PROOF_CLASS,
