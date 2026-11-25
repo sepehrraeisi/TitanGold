@@ -187,6 +187,14 @@ export const DISPATCHER_PROOF_CLASS_LIVE = 'LIVE_DISPOSABLE_PG_DISPATCHER_MATRIX
 export const SUITE_B_LIVE_EVIDENCE_VERSION = 'SUITE_B_LIVE_SQL_EVIDENCE_V1';
 /** Human/debug label only. This string does not authenticate live execution. */
 const SUITE_B_LIVE_EXECUTION_PROVENANCE = 'LIVE_MATRIX_OWNED_TXN_PATH';
+
+/** Semantic dual-denial outcome for forged caller lease proof (B06). */
+export const B06_DUAL_DENY_OUTCOME =
+  'FORGED_LEASE_DUAL_DENY_PUBLIC_BRAND_AND_CALLER_OBJECT';
+const B06_REJECT_DECISION = DB_LEASE_CONTEXT_DECISIONS.DENY_PUBLIC_BRAND_NOT_DB_AUTHORITY;
+const B06_REJECT_REASON = 'CALLER_CLAIMED_DB_PROVEN_WITHOUT_MODULE_BRAND';
+const B06_PROJECT_DECISION = DB_LEASE_CONTEXT_DECISIONS.DENY_CALLER_OBJECT;
+const B06_PROJECT_REASON = 'CALLER_FORGED_VALIDATION';
 /** Counts only queries that passed through trackedQuery/countQuery. */
 const SUITE_B_SQL_OBSERVATION_PROVENANCE = 'COUNTED_EXPLICIT_SUITE_QUERIES';
 
@@ -387,6 +395,101 @@ function fakeQueryCountClaim(tx) {
   return false;
 }
 
+
+function reasonsInclude(result, reason) {
+  return Array.isArray(result?.reasons) && result.reasons.includes(reason);
+}
+
+function firstReason(result) {
+  if (!Array.isArray(result?.reasons) || result.reasons.length === 0) return 'MISSING';
+  return result.reasons[0];
+}
+
+function deriveB06FailureOutcome(rejectResult, projectResult, forgedRowCount) {
+  if (rejectResult?.ok !== false) return 'REJECT_UNEXPECTED_ALLOW_OR_MISSING';
+  if (projectResult?.ok !== false) return 'PROJECT_UNEXPECTED_ALLOW_OR_MISSING';
+  if (rejectResult?.decision !== B06_REJECT_DECISION) {
+    return `REJECT_DECISION_${rejectResult?.decision || 'MISSING'}`;
+  }
+  if (projectResult?.decision !== B06_PROJECT_DECISION) {
+    return `PROJECT_DECISION_${projectResult?.decision || 'MISSING'}`;
+  }
+  if (!reasonsInclude(rejectResult, B06_REJECT_REASON)) return 'REJECT_REASON_MISMATCH';
+  if (!reasonsInclude(projectResult, B06_PROJECT_REASON)) return 'PROJECT_REASON_MISMATCH';
+  if (forgedRowCount !== 0) return `FORGED_ROW_COUNT_${forgedRowCount}`;
+  return 'B06_OBSERVATION_INCOMPLETE';
+}
+
+/**
+ * Shared B06 proof construction used by the live case path and DB-free offline regression.
+ * Observations come from real protected security functions (+ counted SQL row check).
+ */
+export function buildB06ProofFromObservations({
+  rejectResult,
+  projectResult,
+  forgedRowCount,
+  queryCount = 1,
+}) {
+  const rejectExact = rejectResult?.ok === false
+    && rejectResult?.decision === B06_REJECT_DECISION
+    && reasonsInclude(rejectResult, B06_REJECT_REASON);
+  const projectExact = projectResult?.ok === false
+    && projectResult?.decision === B06_PROJECT_DECISION
+    && reasonsInclude(projectResult, B06_PROJECT_REASON);
+  const durabilityExact = forgedRowCount === 0;
+  const passed = rejectExact && projectExact && durabilityExact;
+  const actualOutcome = passed
+    ? B06_DUAL_DENY_OUTCOME
+    : deriveB06FailureOutcome(rejectResult, projectResult, forgedRowCount);
+  return Object.freeze({
+    executed: true,
+    sqlBacked: true,
+    passed,
+    expectedOutcome: B06_DUAL_DENY_OUTCOME,
+    actualOutcome,
+    assertionEvidence: Object.freeze({
+      rejectDecision: rejectResult?.decision || 'MISSING',
+      projectDecision: projectResult?.decision || 'MISSING',
+      rejectReason: reasonsInclude(rejectResult, B06_REJECT_REASON)
+        ? B06_REJECT_REASON
+        : firstReason(rejectResult),
+      projectReason: reasonsInclude(projectResult, B06_PROJECT_REASON)
+        ? B06_PROJECT_REASON
+        : firstReason(projectResult),
+      forgedRowCount,
+      rejectOk: rejectResult?.ok === false,
+      projectOk: projectResult?.ok === false,
+    }),
+    transactionEvidence: Object.freeze({
+      sqlObserved: true,
+      queryCount,
+      provenance: 'COUNTED_EXPLICIT_SUITE_QUERIES',
+      fakeLive: false,
+      offlineOnly: false,
+      inert: false,
+      committed: false,
+    }),
+    durabilityEvidence: Object.freeze({ forgedLeaseAbsent: forgedRowCount === 0 }),
+    sideEffectEvidence: Object.freeze({ rowsWritten: forgedRowCount }),
+    failureReason: passed ? null : 'FORGED_LEASE_DUAL_DENIAL_CONTRACT_FAILED',
+  });
+}
+
+/**
+ * Offline-classified SQL observation fixture for B06 proof-construction regression.
+ * Clearly not authentic live SQL; authentic acceptance must deny offline fixtures.
+ */
+export function buildOfflineB06SqlObservationFixture({ forgedRowCount = 0, queryCount = 1 } = {}) {
+  return Object.freeze({
+    forgedRowCount,
+    queryCount,
+    classification: 'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE',
+    fakeLive: false,
+    offlineOnly: true,
+    proofClass: 'OFFLINE_ONLY',
+  });
+}
+
 const CASE_EVIDENCE_CONTRACTS = Object.freeze({
   B01: {
     sql: true,
@@ -467,9 +570,19 @@ const CASE_EVIDENCE_CONTRACTS = Object.freeze({
     assertion: {
       rejectDecision: 'string',
       projectDecision: 'string',
+      rejectReason: 'string',
+      projectReason: 'string',
       forgedRowCount: 'number',
+      rejectOk: 'boolean',
+      projectOk: 'boolean',
     },
-    assertionOk: (a) => a.forgedRowCount === 0 && a.rejectDecision.length > 0,
+    assertionOk: (a) => a.forgedRowCount === 0
+      && a.rejectOk === true
+      && a.projectOk === true
+      && a.rejectDecision === B06_REJECT_DECISION
+      && a.projectDecision === B06_PROJECT_DECISION
+      && a.rejectReason === B06_REJECT_REASON
+      && a.projectReason === B06_PROJECT_REASON,
     transactionOk: (t) => t.committed === false,
     durability: { forgedLeaseAbsent: 'boolean' },
     durabilityOk: (d, a) => d.forgedLeaseAbsent === true && a.forgedRowCount === 0,
@@ -1590,24 +1703,15 @@ async function runLiveDispatcherDbMatrix(dbClient, opts = {}) {
       'SELECT COUNT(*)::int AS n FROM dlp_write_lease WHERE lease_key = $1',
       [forgedKey],
     );
-    const passed = denied.ok === false
-      && projected.ok === false
-      && rows.n === 0;
+    const proof = buildB06ProofFromObservations({
+      rejectResult: denied,
+      projectResult: projected,
+      forgedRowCount: rows.n,
+      queryCount: caseSqlBook.queryCount,
+    });
     return {
-      executed: true,
-      sqlBacked: true,
-      passed,
-      expectedOutcome: DB_LEASE_CONTEXT_DECISIONS.DENY_CALLER_OBJECT,
-      actualOutcome: denied.decision || 'MISSING',
-      assertionEvidence: Object.freeze({
-        rejectDecision: denied.decision || 'MISSING',
-        projectDecision: projected.decision || 'MISSING',
-        forgedRowCount: rows.n,
-      }),
+      ...proof,
       transactionEvidence: sqlTx(caseSqlBook.queryCount, { committed: false }),
-      durabilityEvidence: Object.freeze({ forgedLeaseAbsent: rows.n === 0 }),
-      sideEffectEvidence: Object.freeze({ rowsWritten: rows.n }),
-      failureReason: passed ? null : 'FORGED_LEASE_NOT_DENIED',
     };
   });
 
@@ -2628,7 +2732,17 @@ console.log(JSON.stringify(payload));
         sideEffectEvidence: null,
       },
       B06: {
-        assertionEvidence: { rejectDecision: 'DENY', projectDecision: 'DENY', forgedRowCount: 0 },
+        assertionEvidence: {
+          rejectDecision: B06_REJECT_DECISION,
+          projectDecision: B06_PROJECT_DECISION,
+          rejectReason: B06_REJECT_REASON,
+          projectReason: B06_PROJECT_REASON,
+          forgedRowCount: 0,
+          rejectOk: true,
+          projectOk: true,
+        },
+        expectedOutcome: B06_DUAL_DENY_OUTCOME,
+        actualOutcome: B06_DUAL_DENY_OUTCOME,
         transactionEvidence: tx({ committed: false }),
         durabilityEvidence: { forgedLeaseAbsent: true },
         sideEffectEvidence: { rowsWritten: 0 },
@@ -2929,7 +3043,17 @@ console.log(JSON.stringify(payload));
         sideEffectEvidence: null,
       },
       B06: {
-        assertionEvidence: { rejectDecision: 'DENY', projectDecision: 'DENY', forgedRowCount: 0 },
+        assertionEvidence: {
+          rejectDecision: B06_REJECT_DECISION,
+          projectDecision: B06_PROJECT_DECISION,
+          rejectReason: B06_REJECT_REASON,
+          projectReason: B06_PROJECT_REASON,
+          forgedRowCount: 0,
+          rejectOk: true,
+          projectOk: true,
+        },
+        expectedOutcome: B06_DUAL_DENY_OUTCOME,
+        actualOutcome: B06_DUAL_DENY_OUTCOME,
         transactionEvidence: tx({ committed: false }),
         durabilityEvidence: { forgedLeaseAbsent: true },
         sideEffectEvidence: { rowsWritten: 0 },
@@ -3719,4 +3843,248 @@ console.log(JSON.stringify(payload));
     assert.equal(OPERATIONAL_DISPATCH_AUTHORIZED, false);
   });
 
+});
+
+
+(__registerSuiteSelfTests ? describe : (_name, _fn) => {})('Suite B B06 actual-path dual-denial offline regression', () => {
+  it('correct dual denial produces intended structural PASS envelope', () => {
+    const forged = {
+      leaseKey: 'forged-offline-b06',
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+    };
+    const rejected = rejectCallerLeaseObject(forged);
+    const projected = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+      lease: { leaseKey: 'forged-offline-b06', fencingEpoch: 1, unexpired: true },
+    }, { id: 'offline-b06-txn' });
+    const sqlFixture = buildOfflineB06SqlObservationFixture({ forgedRowCount: 0, queryCount: 1 });
+    const proof = buildB06ProofFromObservations({
+      rejectResult: rejected,
+      projectResult: projected,
+      forgedRowCount: sqlFixture.forgedRowCount,
+      queryCount: sqlFixture.queryCount,
+    });
+    assert.equal(rejected.decision, B06_REJECT_DECISION);
+    assert.ok(rejected.reasons.includes(B06_REJECT_REASON));
+    assert.equal(projected.decision, B06_PROJECT_DECISION);
+    assert.ok(projected.reasons.includes(B06_PROJECT_REASON));
+    assert.equal(proof.passed, true);
+    assert.equal(proof.expectedOutcome, B06_DUAL_DENY_OUTCOME);
+    assert.equal(proof.actualOutcome, B06_DUAL_DENY_OUTCOME);
+    assert.equal(proof.assertionEvidence.rejectDecision, B06_REJECT_DECISION);
+    assert.equal(proof.assertionEvidence.projectDecision, B06_PROJECT_DECISION);
+
+    assert.equal(proof.expectedOutcome, proof.actualOutcome);
+    assert.equal(proof.assertionEvidence.forgedRowCount, 0);
+    assert.equal(proof.assertionEvidence.rejectOk, true);
+    assert.equal(proof.assertionEvidence.projectOk, true);
+    assert.equal(proof.durabilityEvidence.forgedLeaseAbsent, true);
+  });
+
+  it('wrong rejectDecision fails closed', () => {
+    const goodProject = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+      lease: { leaseKey: 'x', fencingEpoch: 1, unexpired: true },
+    }, { id: 't' });
+    const proof = buildB06ProofFromObservations({
+      rejectResult: {
+        ok: false,
+        decision: DB_LEASE_CONTEXT_DECISIONS.DENY_CALLER_OBJECT,
+        reasons: [B06_REJECT_REASON],
+      },
+      projectResult: goodProject,
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+    assert.notEqual(proof.actualOutcome, proof.expectedOutcome);
+  });
+
+  it('wrong projectDecision fails closed', () => {
+    const goodReject = rejectCallerLeaseObject({
+      leaseKey: 'x',
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+    });
+    const proof = buildB06ProofFromObservations({
+      rejectResult: goodReject,
+      projectResult: {
+        ok: false,
+        decision: DB_LEASE_CONTEXT_DECISIONS.DENY_PUBLIC_BRAND_NOT_DB_AUTHORITY,
+        reasons: [B06_PROJECT_REASON],
+      },
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+  });
+
+  it('swapped decisions fail closed', () => {
+    const proof = buildB06ProofFromObservations({
+      rejectResult: {
+        ok: false,
+        decision: B06_PROJECT_DECISION,
+        reasons: [B06_REJECT_REASON],
+      },
+      projectResult: {
+        ok: false,
+        decision: B06_REJECT_DECISION,
+        reasons: [B06_PROJECT_REASON],
+      },
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+  });
+
+  it('missing denial evidence fails closed', () => {
+    const proof = buildB06ProofFromObservations({
+      rejectResult: null,
+      projectResult: null,
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+    assert.equal(proof.assertionEvidence.rejectDecision, 'MISSING');
+    assert.equal(proof.assertionEvidence.projectDecision, 'MISSING');
+  });
+
+  it('wrong or missing denial reasons fail closed', () => {
+    const proof = buildB06ProofFromObservations({
+      rejectResult: {
+        ok: false,
+        decision: B06_REJECT_DECISION,
+        reasons: ['WRONG_REASON'],
+      },
+      projectResult: {
+        ok: false,
+        decision: B06_PROJECT_DECISION,
+        reasons: [],
+      },
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+  });
+
+  it('nonzero forged row count fails closed', () => {
+    const rejected = rejectCallerLeaseObject({
+      leaseKey: 'x',
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+    });
+    const projected = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+      lease: { leaseKey: 'x', fencingEpoch: 1, unexpired: true },
+    }, { id: 't2' });
+    const proof = buildB06ProofFromObservations({
+      rejectResult: rejected,
+      projectResult: projected,
+      forgedRowCount: 1,
+    });
+    assert.equal(proof.passed, false);
+    assert.equal(proof.durabilityEvidence.forgedLeaseAbsent, false);
+  });
+
+  it('unexpected ALLOW fails closed', () => {
+    const proof = buildB06ProofFromObservations({
+      rejectResult: { ok: true, decision: 'ALLOW', reasons: ['ALREADY_BRANDED_NOT_NECESSARILY_DB_PROVEN'] },
+      projectResult: { ok: true, decision: 'ALLOW', reasons: ['DB_PROVEN'] },
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.passed, false);
+  });
+
+  it('contradictory expected/actual envelope fails structural equality', () => {
+    const proof = buildB06ProofFromObservations({
+      rejectResult: {
+        ok: false,
+        decision: B06_REJECT_DECISION,
+        reasons: [B06_REJECT_REASON],
+      },
+      projectResult: {
+        ok: false,
+        decision: B06_PROJECT_DECISION,
+        reasons: [B06_PROJECT_REASON],
+      },
+      forgedRowCount: 0,
+    });
+    assert.equal(proof.expectedOutcome, proof.actualOutcome);
+    const contradictory = {
+      ...proof,
+      expectedOutcome: B06_DUAL_DENY_OUTCOME,
+      actualOutcome: B06_REJECT_DECISION,
+      passed: true,
+      failureReason: null,
+    };
+    assert.notEqual(contradictory.expectedOutcome, contradictory.actualOutcome);
+  });
+
+  it('offline fixture cannot establish authentic live acceptance', () => {
+    const sqlFixture = buildOfflineB06SqlObservationFixture({ forgedRowCount: 0 });
+    assert.equal(sqlFixture.classification, 'OFFLINE_SQL_OBSERVATION_FIXTURE_NOT_LIVE');
+    assert.equal(sqlFixture.offlineOnly, true);
+    assert.equal(sqlFixture.proofClass, 'OFFLINE_ONLY');
+    const rejected = rejectCallerLeaseObject({
+      leaseKey: 'offline-auth',
+      fencingEpoch: 1,
+      provenanceClass: 'DB_PROVEN',
+      realDbValidated: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+    });
+    const projected = projectFromTrustedValidateWriteLease({
+      ok: true,
+      trustedValidateWriteLease: true,
+      callerForged: true,
+      source: 'CALLER_OBJECT',
+      lease: { leaseKey: 'offline-auth', fencingEpoch: 1, unexpired: true },
+    }, { id: 'offline-auth-txn' });
+    const proof = buildB06ProofFromObservations({
+      rejectResult: rejected,
+      projectResult: projected,
+      forgedRowCount: sqlFixture.forgedRowCount,
+      queryCount: sqlFixture.queryCount,
+    });
+    // Mark transaction evidence with offline fixture markers so authentic accept denies.
+    const offlineEntry = {
+      caseId: 'B06',
+      proofName: 'forged_lease_context_DENY',
+      executed: true,
+      sqlBacked: true,
+      passed: true,
+      expectedOutcome: proof.expectedOutcome,
+      actualOutcome: proof.actualOutcome,
+      assertionEvidence: proof.assertionEvidence,
+      transactionEvidence: Object.freeze({
+        ...proof.transactionEvidence,
+        offlineOnly: true,
+        proofClass: 'OFFLINE_ONLY',
+      }),
+      durabilityEvidence: proof.durabilityEvidence,
+      sideEffectEvidence: proof.sideEffectEvidence,
+      failureReason: null,
+      evidenceVersion: SUITE_B_LIVE_EVIDENCE_VERSION,
+      executionProvenance: 'OFFLINE_FIXTURE',
+      sqlAttempted: 1,
+      sqlObservedSuccess: 1,
+      sqlAssertionPassed: true,
+    };
+    const auth = acceptAuthenticDispatcherLiveSqlResults([offlineEntry]);
+    assert.equal(auth.ok, false);
+  });
 });
