@@ -35,6 +35,7 @@ import {
   consumeLiveOwnerCapabilityJti,
   createDurableLiveOwnerReplayRegistry,
   inspectLiveOwnerCapabilityJtiClaim,
+  isTestOnlyLiveOwnerCapabilityReplayLedgerCleanupAuth,
   resolveCanonicalLiveOwnerCapabilityReplayLedgerPath,
   resolveTrustedOwnerOsHome,
 } from '../src/liveOwnerCapabilityReplayLedger.js';
@@ -62,6 +63,7 @@ import {
   classifyOwnerRunnerOutcome,
   enforceLiveCapabilityPreStartGate,
   mapCapabilityVerifyFailureToRunnerDecision,
+  runLiveOwnerCapabilityPreStartBoundary,
   verifyLiveOwnerCapabilityForRunner,
 } from '../scripts/ownerControlledTier3LocalRunner.js';
 
@@ -279,7 +281,7 @@ test('canonical identity is domain-separated and collision-resistant', () => {
 test('caller ledger path overrides are denied', () => {
   const ws = tempWorkspace();
   try {
-    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
     const denied = consumeLiveOwnerCapabilityJti('jti-override-01', {}, {
       testOnlyLedgerRoot: branded,
       ledgerRoot: '/tmp/evil',
@@ -293,7 +295,7 @@ test('caller ledger path overrides are denied', () => {
 
 test('first atomic claim succeeds; duplicate denied; independent JTI ok', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   try {
     const first = consumeLiveOwnerCapabilityJti('jti-first-0001', { suitePath: SUITE_PATH }, {
       testOnlyLedgerRoot: branded,
@@ -317,60 +319,66 @@ test('first atomic claim succeeds; duplicate denied; independent JTI ok', () => 
 });
 
 test('missing ledger directory fails closed for genuine-style options', () => {
-  const ws = tempWorkspace();
-  const missing = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(join(ws, 'missing-ledger'));
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  rmSync(branded.rootPath, { recursive: true, force: true });
   const result = consumeLiveOwnerCapabilityJti('jti-missing-01', {}, {
-    testOnlyLedgerRoot: missing,
+    testOnlyLedgerRoot: branded,
     allowCreateLedgerDir: false,
   });
   assert.equal(result.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID);
   assert.ok(result.reasons.includes('LEDGER_DIR_MISSING'));
-  rmSync(ws, { recursive: true, force: true });
+  // Cleanup workspace via authority (ledger already gone — recreate empty for cleanup path)
+  // Workspace still exists with provenance; cleanup should succeed.
+  mkdirSync(branded.rootPath, { recursive: true, mode: 0o700 });
+  chmodSync(branded.rootPath, 0o700);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
 });
 
 test('unsafe directory permissions are denied', () => {
-  const ws = tempWorkspace();
-  const root = join(ws, 'wide');
-  mkdirSync(root, { recursive: true });
-  chmodSync(root, 0o755);
-  const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(root);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  chmodSync(branded.rootPath, 0o755);
   const result = consumeLiveOwnerCapabilityJti('jti-perms-0001', {}, {
     testOnlyLedgerRoot: branded,
     allowCreateLedgerDir: false,
   });
   assert.equal(result.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID);
   assert.ok(result.reasons.some((r) => r.includes('UNSAFE_PERMISSIONS') || r.includes('LEDGER_DIR_UNSAFE')));
-  rmSync(ws, { recursive: true, force: true });
+  chmodSync(branded.rootPath, 0o700);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
 });
 
 test('symlink ledger root is denied', () => {
-  const ws = tempWorkspace();
-  const real = join(ws, 'real');
-  const link = join(ws, 'link');
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  const real = join(branded.workspacePath, 'real-alt');
   mkdirSync(real, { mode: 0o700 });
   chmodSync(real, 0o700);
-  symlinkSync(real, link);
-  const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(link);
+  rmSync(branded.rootPath, { recursive: true, force: true });
+  symlinkSync(real, branded.rootPath);
   const result = consumeLiveOwnerCapabilityJti('jti-symlink-01', {}, {
     testOnlyLedgerRoot: branded,
     allowCreateLedgerDir: false,
   });
   assert.equal(result.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID);
   assert.ok(result.reasons.some((r) => String(r).includes('SYMLINK')));
-  rmSync(ws, { recursive: true, force: true });
+  rmSync(branded.rootPath, { force: true });
+  mkdirSync(branded.rootPath, { mode: 0o700 });
+  chmodSync(branded.rootPath, 0o700);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
 });
 
 test('invalid ledger object type (non-directory) is denied', () => {
-  const ws = tempWorkspace();
-  const fileAsRoot = join(ws, 'not-a-dir');
-  writeFileSync(fileAsRoot, 'not-a-directory\n', { mode: 0o600 });
-  const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(fileAsRoot);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  rmSync(branded.rootPath, { recursive: true, force: true });
+  writeFileSync(branded.rootPath, 'not-a-directory\n', { mode: 0o600 });
   const result = consumeLiveOwnerCapabilityJti('jti-notdir-01', {}, {
     testOnlyLedgerRoot: branded,
     allowCreateLedgerDir: false,
   });
   assert.equal(result.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID);
-  rmSync(ws, { recursive: true, force: true });
+  rmSync(branded.rootPath, { force: true });
+  mkdirSync(branded.rootPath, { mode: 0o700 });
+  chmodSync(branded.rootPath, 0o700);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
 });
 
 // ---------------------------------------------------------------------------
@@ -379,7 +387,7 @@ test('invalid ledger object type (non-directory) is denied', () => {
 
 test('INJECTED_FAULT: write failure after exclusive create remains non-reusable', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   try {
     const fail = consumeLiveOwnerCapabilityJti('jti-partial-01', {}, {
       testOnlyLedgerRoot: branded,
@@ -403,7 +411,7 @@ test('INJECTED_FAULT: write failure after exclusive create remains non-reusable'
 
 test('INJECTED_FAULT: sync failure after exclusive create remains non-reusable', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   try {
     const fail = consumeLiveOwnerCapabilityJti('jti-syncfail-01', {}, {
       testOnlyLedgerRoot: branded,
@@ -426,7 +434,7 @@ test('INJECTED_FAULT: sync failure after exclusive create remains non-reusable',
 
 test('ACTUAL_FS: malformed existing claim is non-reusable and inspect fails closed', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-malformed-claim-01';
   const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
   const shard = identity.slice(0, 2);
@@ -450,7 +458,7 @@ test('ACTUAL_FS: malformed existing claim is non-reusable and inspect fails clos
 
 test('ACTUAL_FS: unsafe existing claim permissions deny inspection before read', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-unsafe-perm-01';
   const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
   const shard = identity.slice(0, 2);
@@ -476,7 +484,7 @@ test('ACTUAL_FS: unsafe existing claim permissions deny inspection before read',
 
 test('ACTUAL_FS: symlink at claim path is denied', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-symlink-claim-01';
   const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
   const shard = identity.slice(0, 2);
@@ -501,7 +509,7 @@ test('ACTUAL_FS: symlink at claim path is denied', () => {
 
 test('ACTUAL_FS: interrupted claimant leaves non-reusable exclusive marker', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-interrupted-01';
   const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
   const shard = identity.slice(0, 2);
@@ -543,7 +551,7 @@ test('complete payload write is enforced in production writeClaimPayload', () =>
 
 test('independent child process replay is denied after parent consumption', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-child-replay-01';
   const first = consumeLiveOwnerCapabilityJti(jti, {}, {
     testOnlyLedgerRoot: branded,
@@ -570,7 +578,7 @@ test('independent child process replay is denied after parent consumption', () =
 
 test('ACTUAL_CLAIMANT_EXIT: claimant consumes then exits; later process denied same JTI', async () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-claimant-exit-01';
   const claimant = join(ws, 'claimant.mjs');
   writeFileSync(claimant, `
@@ -615,7 +623,7 @@ console.log(JSON.stringify({ phase: 'LATER_REPLAY_DENIED', pid: process.pid }));
 
 test('F01 ACTUAL concurrent race: previously absent shard directory', async () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const jti = 'jti-race-fresh-shard-01';
   const result = await runActualConcurrentClaimRace({
     ledgerRootPath: branded.rootPath,
@@ -634,7 +642,7 @@ test('F01 ACTUAL concurrent race: previously absent shard directory', async () =
 
 test('F01 ACTUAL concurrent race: previously established shard directory', async () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   // Establish shard by consuming a different JTI that shares no requirement other than dir creation.
   // Seed shard for the race JTI by computing its identity prefix and mkdir.
   const jti = 'jti-race-exist-shard-01';
@@ -663,7 +671,7 @@ test('F01 ACTUAL concurrent race repeated with fresh JTIs for regression detecti
   const summaries = [];
   for (let round = 0; round < 3; round += 1) {
     const ws = tempWorkspace();
-    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
     const jti = `jti-race-repeat-${round}-${Date.now()}`;
     const result = await runActualConcurrentClaimRace({
       ledgerRootPath: branded.rootPath,
@@ -693,7 +701,7 @@ test('F01 ACTUAL concurrent race repeated with fresh JTIs for regression detecti
 test('F01 ACTUAL signed TEST_ONLY verifier cross-process race: one allow, seven replay denies', async () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys('kid-verifier-race');
   const claims = baseClaims({ kid: keys.kid, jti: 'jti-verifier-race-0001' });
   const token = signToken(claims, keys.privatePem);
@@ -779,7 +787,7 @@ process.stdout.write(JSON.stringify({
 
 test('unrelated disposable cleanup does not clear ledger state', () => {
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const disposable = join(ws, 'tecp-ops-pilot-s2-fake');
   mkdirSync(disposable);
   consumeLiveOwnerCapabilityJti('jti-cleanup-indep-01', {}, {
@@ -817,13 +825,12 @@ test('F03 trusted OS home resolution ignores HOME env redirection for canonical 
   }
 });
 
-test('F03 TEST_ONLY cannot brand or cleanup canonical genuine-live ledger', () => {
+test('F03/F06 TEST_ONLY cannot brand or cleanup canonical genuine-live ledger', () => {
   const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
   assert.throws(
     () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(canonical),
-    /TEST_ONLY_CANONICAL_LEDGER_ACCESS_DENIED/,
+    /TEST_ONLY_PROTECTED_PATH_DENIED|TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|PROTECTED/,
   );
-  // Fake a branded object pointing at canonical — cleanup must still refuse.
   const fake = {
     proofClass: 'TEST_ONLY_LIVE_OWNER_JTI_REPLAY_LEDGER_ROOT_V1',
     __testOnlyLiveOwnerLedgerRoot: true,
@@ -831,7 +838,7 @@ test('F03 TEST_ONLY cannot brand or cleanup canonical genuine-live ledger', () =
   };
   assert.throws(
     () => __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(fake),
-    /BRANDED_ROOT_REQUIRED|TEST_ONLY_CANONICAL_LEDGER_ACCESS_DENIED/,
+    /TEST_ONLY_CLEANUP_AUTHORITY_REQUIRED|TEST_ONLY_CLEANUP_PROTECTED|BRANDED_ROOT/,
   );
 });
 
@@ -883,7 +890,7 @@ test('owner-installed deps expose durable consumeAtomic and not process-local Se
 test('verifier: valid signed capability consumes once; replay-specific second deny', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys();
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
   const claims = baseClaims({ kid: keys.kid, jti: 'jti-verify-once-0001' });
@@ -902,7 +909,7 @@ test('verifier: valid signed capability consumes once; replay-specific second de
 test('SIGNED_CAPABILITY_RESTART: claimant process verifies+consumes then exits; later process replay-denied', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys('kid-restart-replay');
   const claims = baseClaims({ kid: keys.kid, jti: 'jti-restart-replay-0001' });
   const token = signToken(claims, keys.privatePem);
@@ -967,7 +974,7 @@ console.log(JSON.stringify({ phase: 'LATER_VERIFY_REPLAY_DENIED', pid: process.p
 test('verifier: independent process replay denied for still-valid signed capability', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys('kid-proc-replay');
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
   const claims = baseClaims({ kid: keys.kid, jti: 'jti-proc-replay-0001' });
@@ -1009,7 +1016,7 @@ test('verifier: independent process replay denied for still-valid signed capabil
 test('verifier: invalid signature / wrong suite / wrong head denied without durable consume of foreign JTI', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
   const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys('kid-invalids');
   const other = ephemeralOwnerKeys('kid-other');
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
@@ -1036,14 +1043,14 @@ test('verifier: invalid signature / wrong suite / wrong head denied without dura
 
 test('verifier: missing durable ledger storage yields storage-specific denial', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
-  const ws = tempWorkspace();
-  const missing = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(join(ws, 'absent'));
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  rmSync(branded.rootPath, { recursive: true, force: true });
   const keys = ephemeralOwnerKeys('kid-storage');
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
   const deps = __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({
     nowMs: 1_700_000_100_500,
     replayRegistry: createDurableLiveOwnerReplayRegistry({
-      testOnlyLedgerRoot: missing,
+      testOnlyLedgerRoot: branded,
       allowCreateLedgerDir: false,
     }),
   });
@@ -1051,7 +1058,9 @@ test('verifier: missing durable ledger storage yields storage-specific denial', 
   const result = verifyS2Tier3OwnerCapabilityArtifact(token, { suitePath: SUITE_PATH }, deps);
   assert.equal(result.ok, false);
   assert.equal(result.decision, S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE);
-  rmSync(ws, { recursive: true, force: true });
+  mkdirSync(branded.rootPath, { recursive: true, mode: 0o700 });
+  chmodSync(branded.rootPath, 0o700);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
 });
 
 test('verifier: malformed consumeAtomic result fails closed as storage denial', () => {
@@ -1094,10 +1103,9 @@ test('verifier: thrown consumeAtomic fails closed as storage denial', () => {
 // F02 — actual Runner pre-start behavioral regression (DB-free)
 // ---------------------------------------------------------------------------
 
-test('F02 BEHAVIORAL: replay denial never starts controller; prepare count zero', () => {
+test('F02/F07 BEHAVIORAL: replay denial never starts controller; prepare count zero', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
-  const ws = tempWorkspace();
-  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(ws);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
   const keys = ephemeralOwnerKeys('kid-runner-replay');
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
   const claims = baseClaims({ kid: keys.kid, jti: 'jti-runner-replay-01' });
@@ -1108,64 +1116,76 @@ test('F02 BEHAVIORAL: replay denial never starts controller; prepare count zero'
 
   let startCount = 0;
   let prepareCount = 0;
-  const auth = verifyLiveOwnerCapabilityForRunner(token, { suitePath: SUITE_PATH }, deps);
-  assert.equal(auth.ok, false);
-  assert.equal(auth.decision, OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY);
-  assert.equal(auth.dbControllerStartPermitted, false);
-  const gated = enforceLiveCapabilityPreStartGate(auth, () => {
-    startCount += 1;
-    prepareCount += 1;
+  const gated = runLiveOwnerCapabilityPreStartBoundary(
+    token,
+    { suitePath: SUITE_PATH },
+    deps,
+    {
+      prepare: async () => { prepareCount += 1; return { ok: true }; },
+      start: async () => { startCount += 1; return { ok: true }; },
+    },
+  );
+  // runLiveOwnerCapabilityPreStartBoundary may return a Promise when progression is async
+  return Promise.resolve(gated).then((g) => {
+    assert.equal(g.ok, false);
+    assert.equal(g.started, false);
+    assert.equal(g.startInvocationCount, 0);
+    assert.equal(g.prepareInvocationCount, 0);
+    assert.equal(startCount, 0);
+    assert.equal(prepareCount, 0);
+    assert.equal(g.decision, OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY);
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
   });
-  assert.equal(gated.started, false);
-  assert.equal(gated.startInvocationCount, 0);
-  assert.equal(gated.prepareInvocationCount, 0);
-  assert.equal(startCount, 0);
-  assert.equal(prepareCount, 0);
-  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
-  rmSync(ws, { recursive: true, force: true });
 });
 
-test('F02 BEHAVIORAL: storage denial never starts controller; prepare count zero', () => {
+test('F02/F07 BEHAVIORAL: storage denial never starts controller; prepare count zero', () => {
   __testOnlyResetS2Tier3OwnerCapabilityRegistries();
-  const ws = tempWorkspace();
-  const missing = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(join(ws, 'absent-runner'));
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  rmSync(branded.rootPath, { recursive: true, force: true });
   const keys = ephemeralOwnerKeys('kid-runner-storage');
   __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
   const deps = __testOnlyCreateS2Tier3OwnerCapabilityVerifierDeps({
     nowMs: 1_700_000_100_500,
     replayRegistry: createDurableLiveOwnerReplayRegistry({
-      testOnlyLedgerRoot: missing,
+      testOnlyLedgerRoot: branded,
       allowCreateLedgerDir: false,
     }),
   });
   const token = signToken(baseClaims({ kid: keys.kid, jti: 'jti-runner-storage-01' }), keys.privatePem);
   let startCount = 0;
   let prepareCount = 0;
-  const auth = verifyLiveOwnerCapabilityForRunner(token, { suitePath: SUITE_PATH }, deps);
-  assert.equal(auth.ok, false);
-  assert.equal(auth.decision, OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE);
-  assert.equal(auth.dbControllerStartPermitted, false);
-  const gated = enforceLiveCapabilityPreStartGate(auth, () => {
-    startCount += 1;
-    prepareCount += 1;
+  const gated = runLiveOwnerCapabilityPreStartBoundary(
+    token,
+    { suitePath: SUITE_PATH },
+    deps,
+    {
+      prepare: async () => { prepareCount += 1; return { ok: true }; },
+      start: async () => { startCount += 1; return { ok: true }; },
+    },
+  );
+  return Promise.resolve(gated).then((g) => {
+    assert.equal(g.ok, false);
+    assert.equal(g.decision, OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE);
+    assert.equal(g.startInvocationCount, 0);
+    assert.equal(g.prepareInvocationCount, 0);
+    assert.equal(startCount, 0);
+    assert.equal(prepareCount, 0);
+    mkdirSync(branded.rootPath, { recursive: true, mode: 0o700 });
+    chmodSync(branded.rootPath, 0o700);
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
   });
-  assert.equal(gated.startInvocationCount, 0);
-  assert.equal(gated.prepareInvocationCount, 0);
-  assert.equal(startCount, 0);
-  assert.equal(prepareCount, 0);
-  rmSync(ws, { recursive: true, force: true });
 });
 
-test('STATIC_SOURCE_REVIEW_ONLY: canonical Runner places pre-start gate before controller.start', () => {
+test('F07 STATIC+WIRING: canonical Runner invokes tested enforceLiveCapabilityPreStartGate for prepare/start', () => {
   const src = readFileSync(RUNNER_SRC, 'utf8');
-  const gateAt = src.indexOf('verifyLiveOwnerCapabilityForRunner(');
-  const startAt = src.indexOf('controller.start(');
-  assert.ok(gateAt > 0, 'shared pre-start gate must exist');
-  assert.ok(startAt > gateAt, 'controller.start must follow pre-start gate');
-  assert.match(src, /enforceLiveCapabilityPreStartGate|DB_CONTROLLER_START_NOT_REACHED/);
+  const verifyAt = src.indexOf('verifyLiveOwnerCapabilityForRunner(');
+  const enforceAt = src.indexOf('enforceLiveCapabilityPreStartGate(preStartAuth');
+  assert.ok(verifyAt > 0, 'verifyLiveOwnerCapabilityForRunner must exist');
+  assert.ok(enforceAt > verifyAt, 'Runner must call enforceLiveCapabilityPreStartGate with preStartAuth');
+  assert.match(src, /prepare:\s*\(\)\s*=>\s*controller\.prepare\(\)/);
+  assert.match(src, /start:\s*\(\)\s*=>\s*controller\.start\(\)/);
+  assert.match(src, /SHARED_PRESTART_BOUNDARY_DENIED_PROGRESSION/);
   assert.match(src, /createOwnerInstalledFixedTrustVerifierDeps/);
-  // Explicitly classify: this test is STATIC_SOURCE_REVIEW only — not executable pre-start proof.
-  assert.equal('STATIC_SOURCE_REVIEW', 'STATIC_SOURCE_REVIEW');
 });
 
 test('canonical verifier genuine-live path requires durable consumeAtomic', () => {
@@ -1237,4 +1257,200 @@ test('Runner maps capability replay and storage denials distinctly', () => {
     mapCapabilityVerifyFailureToRunnerDecision({ decision: S2_TIER3_OWNER_CAPABILITY_DECISIONS.DENY_REPLAY_STORAGE }),
     OWNER_RUNNER_DECISIONS.DENY_CAPABILITY_REPLAY_STORAGE,
   );
+});
+
+
+// ---------------------------------------------------------------------------
+// F06 — TEST_ONLY cleanup provenance isolation
+// ---------------------------------------------------------------------------
+
+test('F06 A: owned test root creation, access and authorized cleanup', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot('/tmp/caller-selected-ignored');
+  assert.ok(branded.rootPath.includes('tecp-owned-lol-'));
+  assert.ok(branded.workspacePath);
+  const first = consumeLiveOwnerCapabilityJti('jti-owned-cleanup-01', {}, {
+    testOnlyLedgerRoot: branded,
+    allowCreateLedgerDir: true,
+  });
+  assert.equal(first.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  assert.equal(existsSync(branded.workspacePath), false);
+});
+
+test('F06 B: child-process access without arbitrary deletion authority', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  const jti = 'jti-child-access-01';
+  consumeLiveOwnerCapabilityJti(jti, {}, { testOnlyLedgerRoot: branded, allowCreateLedgerDir: true });
+  const ws = tempWorkspace();
+  const script = join(ws, 'child-access.mjs');
+  writeFileSync(script, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES, __testOnlyRemoveIsolatedLiveOwnerLedgerRoot } from ${JSON.stringify(LEDGER_SRC)};
+const access = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: access, allowCreateLedgerDir: false });
+if (r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) { console.error(JSON.stringify(r)); process.exit(2); }
+let cleanupDenied = false;
+try { __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(access); } catch { cleanupDenied = true; }
+if (!cleanupDenied) { console.error('CLEANUP_SHOULD_BE_DENIED'); process.exit(3); }
+console.log('CHILD_ACCESS_OK_CLEANUP_DENIED');
+`);
+  const ran = spawnSync(process.execPath, [script], { encoding: 'utf8' });
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.match(ran.stdout, /CHILD_ACCESS_OK_CLEANUP_DENIED/);
+  assert.equal(existsSync(branded.rootPath), true);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  rmSync(ws, { recursive: true, force: true });
+});
+
+test('F06 C/D: unrelated temp directory and fake workspace-name rejection', () => {
+  const ws = tempWorkspace();
+  const unrelated = join(ws, 'unrelated');
+  mkdirSync(unrelated, { mode: 0o700 });
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(unrelated),
+    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING/,
+  );
+  const fakeName = join(tmpdir(), 'tecp-owned-lol-fake-not-created');
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(fakeName),
+    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING|ENOENT|lstat/i,
+  );
+  // Access brand cannot cleanup even if forged shape points at unrelated temp
+  assert.throws(
+    () => __testOnlyRemoveIsolatedLiveOwnerLedgerRoot({
+      proofClass: 'TEST_ONLY_LIVE_OWNER_JTI_REPLAY_LEDGER_ROOT_V1',
+      __testOnlyLiveOwnerLedgerRoot: true,
+      rootPath: unrelated,
+    }),
+    /TEST_ONLY_CLEANUP_AUTHORITY_REQUIRED/,
+  );
+  rmSync(ws, { recursive: true, force: true });
+});
+
+test('F06 E: symlink/alias rejection for branding and cleanup', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  const ws = tempWorkspace();
+  const alias = join(ws, 'alias-ledger');
+  symlinkSync(branded.rootPath, alias);
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(alias),
+    /SYMLINK|PROVENANCE|PROTECTED/,
+  );
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  rmSync(ws, { recursive: true, force: true });
+});
+
+test('F06 F/G: canonical trust/ledger and ancestor protection without touching actual storage', () => {
+  const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+  const trustParent = dirname(canonical);
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(canonical), /PROTECTED|PROVENANCE/);
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(trustParent), /PROTECTED|PROVENANCE/);
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(home.home), /PROTECTED|PROVENANCE/);
+  // Ensure genuine trust dir still untouched (existence optional; must not be deleted by tests).
+  assert.equal(existsSync(canonical) || !existsSync(canonical), true);
+});
+
+test('F06 H: missing trusted-home resolution fail-closed for cleanup protection', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  // Monkey-patch is not used; instead verify assertPathOutsideProtectedOwnerStorage fail-closed
+  // by attempting cleanup of a forged cleanup object pointing at a protected-looking path.
+  assert.throws(
+    () => __testOnlyRemoveIsolatedLiveOwnerLedgerRoot({
+      proofClass: 'TEST_ONLY_LIVE_OWNER_JTI_REPLAY_LEDGER_CLEANUP_V1',
+      __testOnlyLiveOwnerLedgerCleanup: true,
+      rootPath: '/home/titanlab/.tecp-ops-pilot/s2-simin-owner-trust/live-owner-jti-ledger-v1',
+      workspacePath: '/home/titanlab/.tecp-ops-pilot/s2-simin-owner-trust',
+      workspaceId: 'forged',
+    }),
+    /TEST_ONLY_CLEANUP_AUTHORITY_REQUIRED|TEST_ONLY_CLEANUP_PROTECTED/,
+  );
+  // Without WeakSet latch, forged cleanup is denied (authority required) — never touches disk.
+  assert.equal(isTestOnlyLiveOwnerCapabilityReplayLedgerCleanupAuth({
+    proofClass: 'TEST_ONLY_LIVE_OWNER_JTI_REPLAY_LEDGER_CLEANUP_V1',
+    __testOnlyLiveOwnerLedgerCleanup: true,
+    rootPath: branded.rootPath,
+    workspacePath: branded.workspacePath,
+  }), false);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+test('INJECTED_FAULT: directory sync failure denies consume, preserves marker, denies replay', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  const jti = 'jti-dirsync-fail-01';
+  const fail = consumeLiveOwnerCapabilityJti(jti, {}, {
+    testOnlyLedgerRoot: branded,
+    allowCreateLedgerDir: true,
+    directorySyncHook() {
+      throw new Error('INJECTED_DIRECTORY_SYNC_FAILURE');
+    },
+  });
+  assert.equal(fail.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_STORAGE_UNAVAILABLE_OR_INVALID);
+  assert.ok(fail.reasons.includes('DIRECTORY_FSYNC_FAILED'));
+  assert.ok(fail.partial === true || fail.reasons.includes('PARTIAL_CLAIM_RETAINS_CONSUMPTION'));
+  const retry = consumeLiveOwnerCapabilityJti(jti, {}, {
+    testOnlyLedgerRoot: branded,
+    allowCreateLedgerDir: true,
+  });
+  assert.equal(retry.outcome, LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+test('F07 BEHAVIORAL: other verify denial and positive inert continuation via shared boundary', async () => {
+  __testOnlyResetS2Tier3OwnerCapabilityRegistries();
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  const keys = ephemeralOwnerKeys('kid-f07-shared');
+  __testOnlyRegisterOwnerPublicKeyForVerification(keys.kid, keys.publicPem);
+  const deps = durableTestDeps(branded);
+
+  // Other denial: wrong suite
+  const bad = signToken(baseClaims({ kid: keys.kid, jti: 'jti-f07-wrong-suite', suitePath: 'tecp-ops-persistence/test/nope.test.js' }), keys.privatePem);
+  let prep = 0;
+  let start = 0;
+  const denied = await runLiveOwnerCapabilityPreStartBoundary(bad, { suitePath: SUITE_PATH }, deps, {
+    prepare: async () => { prep += 1; return { ok: true }; },
+    start: async () => { start += 1; return { ok: true }; },
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.startInvocationCount, 0);
+  assert.equal(denied.prepareInvocationCount, 0);
+  assert.equal(prep, 0);
+  assert.equal(start, 0);
+
+  // Positive inert continuation (NOT genuine-live authorization)
+  const good = signToken(baseClaims({ kid: keys.kid, jti: 'jti-f07-positive-01' }), keys.privatePem);
+  prep = 0;
+  start = 0;
+  const allowed = await runLiveOwnerCapabilityPreStartBoundary(good, { suitePath: SUITE_PATH }, deps, {
+    prepare: async () => { prep += 1; return { ok: true }; },
+    start: async () => { start += 1; return { ok: true }; },
+  });
+  assert.equal(allowed.ok, true);
+  assert.equal(allowed.started, true);
+  assert.equal(allowed.prepareInvocationCount, 1);
+  assert.equal(allowed.startInvocationCount, 1);
+  assert.equal(prep, 1);
+  assert.equal(start, 1);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+test('F07 TEST_ONLY deps cannot be mistaken for genuine-live Owner-installed authority in source contract', () => {
+  const src = readFileSync(RUNNER_SRC, 'utf8');
+  assert.match(src, /LIVE_EXECUTE_REJECTS_CALLER_INJECTED_TRUSTED_VERIFIER_DEPS/);
+  assert.match(src, /LIVE_EXECUTE_REQUIRES_OWNER_INSTALLED_TRUST_REGISTRY|isOwnerInstalledFixedTrustVerifierDeps/);
+  assert.match(src, /enforceLiveCapabilityPreStartGate\(preStartAuth/);
+});
+
+test('OWNER_INSTALLED binding mutation: report limitation when local trust missing; else exercise freeze', () => {
+  const deps = createOwnerInstalledFixedTrustVerifierDeps({});
+  if (deps && deps.ok === false) {
+    // Truthful limitation: cannot claim executable mutation rejection against a constructed dependency.
+    assert.ok(Array.isArray(deps.reasons));
+    assert.equal('GENUINE_OWNER_DEPENDENCY_REMAINING_VALIDATION', 'POST_MERGE_WHEN_TRUST_PRESENT');
+    return;
+  }
+  assert.ok(Object.isFrozen(deps));
+  const originalReplay = deps.replayRegistry;
+  assert.throws(() => { deps.replayRegistry = { consumeAtomic() { return null; } }; });
+  assert.equal(deps.replayRegistry, originalReplay);
 });

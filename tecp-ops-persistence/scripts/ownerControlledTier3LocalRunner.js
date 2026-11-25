@@ -216,32 +216,120 @@ export function verifyLiveOwnerCapabilityForRunner(capabilityToken, expectation,
   });
 }
 
-export function enforceLiveCapabilityPreStartGate(authResult, startDbController) {
+/**
+ * Shared canonical pre-start progression boundary.
+ * Used by the live Runner and DB-free regressions — one production control-flow.
+ *
+ * progression:
+ * - function: inert/sync continuation (tests); counted as startInvocationCount=1
+ * - { prepare, start }: async prepare then start (canonical Runner EXECUTE path)
+ */
+export function enforceLiveCapabilityPreStartGate(authResult, progression) {
   if (!authResult || authResult.ok !== true || authResult.dbControllerStartPermitted !== true) {
     return Object.freeze({
-      ...authResult,
-      started: false,
-      startInvocationCount: 0,
-      prepareInvocationCount: 0,
-    });
-  }
-  if (typeof startDbController !== 'function') {
-    return Object.freeze({
+      ...(authResult || {}),
       ok: false,
+      progressed: false,
       started: false,
       startInvocationCount: 0,
       prepareInvocationCount: 0,
-      decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST,
-      reasons: Object.freeze(['START_CALLBACK_REQUIRED_WHEN_PERMITTED']),
     });
   }
-  startDbController();
+  if (typeof progression === 'function') {
+    const maybePromise = progression();
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      return maybePromise.then(() => Object.freeze({
+        ...authResult,
+        progressed: true,
+        started: true,
+        startInvocationCount: 1,
+        prepareInvocationCount: 0,
+      }));
+    }
+    return Object.freeze({
+      ...authResult,
+      progressed: true,
+      started: true,
+      startInvocationCount: 1,
+      prepareInvocationCount: 0,
+    });
+  }
+  if (progression && typeof progression === 'object'
+    && typeof progression.prepare === 'function'
+    && typeof progression.start === 'function') {
+    return (async () => {
+      const prepared = await progression.prepare();
+      if (!prepared || prepared.ok !== true) {
+        return Object.freeze({
+          ok: false,
+          progressed: true,
+          started: false,
+          prepareInvocationCount: 1,
+          startInvocationCount: 0,
+          prepared,
+          decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST,
+          capabilityVerified: authResult.capabilityVerified,
+          reasons: Object.freeze([
+            'PREPARE_FAILED_AFTER_PRESTART_PERMIT',
+            ...(prepared?.reasons || []),
+          ]),
+        });
+      }
+      const started = await progression.start();
+      if (!started || started.ok !== true) {
+        return Object.freeze({
+          ok: false,
+          progressed: true,
+          started: false,
+          prepareInvocationCount: 1,
+          startInvocationCount: 1,
+          prepared,
+          startedResult: started,
+          decision: OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED,
+          capabilityVerified: authResult.capabilityVerified,
+          reasons: Object.freeze([
+            'START_FAILED_AFTER_PRESTART_PERMIT',
+            ...(started?.reasons || []),
+          ]),
+        });
+      }
+      return Object.freeze({
+        ok: true,
+        progressed: true,
+        started: true,
+        prepareInvocationCount: 1,
+        startInvocationCount: 1,
+        prepared,
+        startedResult: started,
+        capabilityVerified: authResult.capabilityVerified,
+        dbControllerStartPermitted: true,
+      });
+    })();
+  }
   return Object.freeze({
-    ...authResult,
-    started: true,
-    startInvocationCount: 1,
+    ok: false,
+    progressed: false,
+    started: false,
+    startInvocationCount: 0,
     prepareInvocationCount: 0,
+    decision: OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST,
+    reasons: Object.freeze(['PRESTART_PROGRESSION_CALLBACK_REQUIRED']),
   });
+}
+
+/** Convenience shared boundary: verify then enforce progression. */
+export function runLiveOwnerCapabilityPreStartBoundary(
+  capabilityToken,
+  expectation,
+  trustedVerifierDeps,
+  progression,
+) {
+  const authResult = verifyLiveOwnerCapabilityForRunner(
+    capabilityToken,
+    expectation,
+    trustedVerifierDeps,
+  );
+  return enforceLiveCapabilityPreStartGate(authResult, progression);
 }
 
 export function mapCapabilityVerifyFailureToRunnerDecision(capabilityVerified = {}) {
@@ -1060,24 +1148,37 @@ export async function invokeOwnerControlledTier3LocalRunner(request = {}, deps =
         evidence: evidenceEnvelope({ failure: controller }),
       };
     }
-    const prepared = await controller.prepare();
-    if (!prepared.ok) {
-      await controller.cleanup();
-      return {
-        ...deny(OWNER_RUNNER_DECISIONS.DENY_INVALID_REQUEST, prepared.reasons || ['PREPARE_FAILED']),
-        evidence: evidenceEnvelope({ start: prepared, failure: prepared }),
-        postgresActions: prepared.postgresActions || 0,
-      };
-    }
-    const started = await controller.start();
-    if (!started.ok) {
+    // Shared pre-start progression boundary (same function exercised by DB-free regressions).
+    const preStartGate = await enforceLiveCapabilityPreStartGate(preStartAuth, {
+      prepare: () => controller.prepare(),
+      start: () => controller.start(),
+    });
+    if (!preStartGate.ok || preStartGate.started !== true) {
       const cleaned = await controller.cleanup();
       return {
-        ...deny(OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, started.reasons || ['START_DENIED']),
-        evidence: evidenceEnvelope({ start: started, cleanup: cleaned, failure: started }),
-        postgresActions: started.postgresActions || 0,
+        ...deny(preStartGate.decision || OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED, [
+          ...(preStartGate.reasons || []),
+          'SHARED_PRESTART_BOUNDARY_DENIED_PROGRESSION',
+        ]),
+        capabilityVerified,
+        classification: Object.freeze({
+          decision: preStartGate.decision || OWNER_RUNNER_DECISIONS.DENY_LIVE_DB_GATE_CLOSED,
+          prepareInvocationCount: preStartGate.prepareInvocationCount || 0,
+          startInvocationCount: preStartGate.startInvocationCount || 0,
+        }),
+        evidence: evidenceEnvelope({
+          authorization: Object.freeze({ structural, capabilityVerified, preStartAuth, preStartGate }),
+          start: preStartGate.startedResult || preStartGate.prepared,
+          cleanup: cleaned,
+          failure: preStartGate,
+        }),
+        postgresActions: (preStartGate.startedResult?.postgresActions
+          || preStartGate.prepared?.postgresActions
+          || 0),
       };
     }
+    const prepared = preStartGate.prepared;
+    const started = preStartGate.startedResult;
 
     const clientResult = await controller.createOwnedClusterClient({
       offlineWiringProbe: deps.offlineWiringProbe === true,
