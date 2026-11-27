@@ -10,6 +10,7 @@ import {
   closeSync,
   constants as fsConstants,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -38,6 +39,10 @@ import {
   __testOnlyEvaluateCreationPrecheckForDbFreeRegression,
   __testOnlyArmDirectoryFsyncFailureForDbFreeRegression,
   __testOnlyClearDirectoryFsyncFailureForDbFreeRegression,
+  __testOnlyArmCreationStageFailureForDbFreeRegression,
+  __testOnlyClearCreationStageFailureForDbFreeRegression,
+  __testOnlyArmLstatUidOverrideForDbFreeRegression,
+  __testOnlyClearLstatUidOverrideForDbFreeRegression,
   LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME,
   LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER,
   LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX,
@@ -1886,35 +1891,26 @@ test('R2-F01-C unrelated pre-existing namespace entries preserved on parent sync
   chmodSync(ns, 0o700);
   const keeper = join(ns, 'preexisting-keep-me');
   writeFileSync(keeper, 'keep\n', { mode: 0o600 });
-  // Namespace already exists — ensurePersistent validates and returns without recreate.
-  // Arm parent sync failure path via creating under a fresh home where ns absent:
-  const isoHome2 = mkdtempSync(join(tmpdir(), 'r2-ns-preserve2-'));
-  chmodSync(isoHome2, 0o750);
-  const ns2 = join(isoHome2, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
-  const unrelated = join(isoHome2, 'unrelated-entry.txt');
-  writeFileSync(unrelated, 'x\n', { mode: 0o600 });
-  __testOnlyArmDirectoryFsyncFailureForDbFreeRegression(isoHome2, 'parent');
+  const keeperStat = lstatSync(keeper);
+  // Pre-existing namespace: create must not wipe keeper.
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+    persistent: true,
+    testOnlyTrustedHome: {
+      ok: true,
+      home: isoHome,
+      uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+    },
+  });
   try {
-    assert.throws(
-      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
-        persistent: true,
-        testOnlyTrustedHome: {
-          ok: true,
-          home: isoHome2,
-          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
-        },
-      }),
-      /PARENT_SYNC_FAILED|INJECTED_FSYNC|RESIDUAL/,
-    );
+    assert.equal(existsSync(keeper), true);
+    assert.equal(readFileSync(keeper, 'utf8'), 'keep\n');
+    const after = lstatSync(keeper);
+    assert.equal(after.dev, keeperStat.dev);
+    assert.equal(after.ino, keeperStat.ino);
   } finally {
-    __testOnlyClearDirectoryFsyncFailureForDbFreeRegression();
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(isoHome, { recursive: true, force: true });
   }
-  assert.equal(existsSync(unrelated), true);
-  assert.equal(readFileSync(unrelated, 'utf8'), 'x\n');
-  // First fixture keeper untouched
-  assert.equal(existsSync(keeper), true);
-  rmSync(isoHome, { recursive: true, force: true });
-  rmSync(isoHome2, { recursive: true, force: true });
 });
 
 test('R2-F01-D unsafe provenance marker permissions denied via actual rebrand', () => {
@@ -1975,5 +1971,415 @@ console.log('LATER_DENY_OK');
   assert.equal(laterRan.status, 0, laterRan.stderr || laterRan.stdout);
   __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
   try { rmSync(claimant, { force: true }); rmSync(later, { force: true }); } catch { /* ignore */ }
+});
+
+
+test('R3-F01-A actual entrypoint trusted-home failure denies before mutation', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'r3-home-fail-'));
+  const before = new Set(readdirSync(parent));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: false,
+        reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']),
+      },
+    }),
+    /TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED/,
+  );
+  assert.deepEqual(new Set(readdirSync(parent)), before);
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      testOnlyTrustedHome: {
+        ok: false,
+        reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']),
+      },
+    }),
+    /TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED/,
+  );
+  assert.deepEqual(new Set(readdirSync(parent)), before);
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test('R3-F01-A foreign parent ownership denied before mutation', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-foreign-parent-'));
+  chmodSync(isoHome, 0o750);
+  const before = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 12345;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(isoHome, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_DENIED|UNEXPECTED_OWNERSHIP|UID_MISMATCH|FOREIGN_OWNERSHIP|ANCESTOR/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), before);
+  assert.equal(existsSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A foreign intermediate ancestor denied before mutation', () => {
+  const base = mkdtempSync(join(tmpdir(), 'r3-foreign-anc-'));
+  const isoHome = join(base, 'home');
+  mkdirSync(isoHome, { mode: 0o750 });
+  chmodSync(isoHome, 0o750);
+  const beforeHome = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 22222;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(base, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ANCESTOR_UNEXPECTED_FOREIGN_OWNERSHIP|ANCESTOR_DENIED|FOREIGN_OWNERSHIP/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), beforeHome);
+  assert.equal(existsSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test('R3-F01-A unsafe ancestor under injected home denied before mutation', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-unsafe-anc-'));
+  chmodSync(isoHome, 0o750);
+  const mid = join(isoHome, 'mid');
+  mkdirSync(mid, { mode: 0o775 });
+  chmodSync(mid, 0o775);
+  const before = new Set(readdirSync(mid));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: mid,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /GROUP_OR_WORLD_WRITABLE|PRIVATE_ANCESTOR_WRITABLE|PARENT_DENIED|ANCESTOR_DENIED/,
+  );
+  assert.deepEqual(new Set(readdirSync(mid)), before);
+  assert.equal(existsSync(join(mid, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A symlink parent denied before mutation (persistent)', () => {
+  const real = mkdtempSync(join(tmpdir(), 'r3-sym-real-'));
+  chmodSync(real, 0o750);
+  const aliasParent = mkdtempSync(join(tmpdir(), 'r3-sym-alias-'));
+  const alias = join(aliasParent, 'home-link');
+  symlinkSync(real, alias);
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: alias,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /SYMLINK|CREATE_PARENT|ANCESTOR|DENIED/,
+  );
+  assert.equal(existsSync(join(real, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(aliasParent, { recursive: true, force: true });
+  rmSync(real, { recursive: true, force: true });
+});
+
+test('R3-F01-A protected path denial before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r3-protected-tmpdir-'));
+  const previous = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = evil;
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(),
+      /TMPDIR_UNDER_OWNER_HOME_OUTSIDE_PERSISTENT_NAMESPACE|CREATE_DENIED|PROTECTED/,
+    );
+    const kids = readdirSync(evil).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    rmSync(evil, { recursive: true, force: true });
+  }
+});
+
+test('R3-F01-C same failing namespace unrelated entry preserved', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-same-ns-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  const unrelatedInside = join(ns, 'unrelated-inside.txt');
+  __testOnlyArmCreationStageFailureForDbFreeRegression('private-fsync-pre', ({ ns: nsPath }) => {
+    writeFileSync(join(nsPath, 'unrelated-inside.txt'), 'preserve-me\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:private-fsync-pre');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /NAMESPACE_SYNC_FAILED|NAMESPACE_CREATE_FAILED|INJECTED_CREATION_STAGE|RESIDUAL_NAMESPACE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), true);
+  assert.equal(existsSync(unrelatedInside), true);
+  assert.equal(readFileSync(unrelatedInside, 'utf8'), 'preserve-me\n');
+  assert.deepEqual(readdirSync(ns).sort(), ['unrelated-inside.txt']);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C namespace identity mismatch preserves residual', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-id-mismatch-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('private-fsync-pre', ({ ns: nsPath }) => {
+    rmSync(nsPath, { recursive: true, force: true });
+    mkdirSync(nsPath, { mode: 0o700 });
+    chmodSync(nsPath, 0o700);
+    writeFileSync(join(nsPath, 'replacement-marker.txt'), 'replaced\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:private-fsync-pre');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /RESIDUAL_NAMESPACE_RETAINED|ROLLBACK_IDENTITY_MISMATCH|NAMESPACE_/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), true);
+  assert.equal(readFileSync(join(ns, 'replacement-marker.txt'), 'utf8'), 'replaced\n');
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C marker write failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-marker-write-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'marker-write',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:marker-write',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /marker-write|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C marker fsync failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-marker-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'marker-fsync',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:marker-fsync',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /marker-fsync|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C ledger mkdir failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ledger-mkdir-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'ledger-mkdir',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:ledger-mkdir',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ledger-mkdir|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C workspace fsync failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ws-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'workspace-fsync',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:workspace-fsync',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /workspace-fsync|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C post-workspace-alloc failure rolls back empty workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ws-alloc-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'post-workspace-alloc',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:post-workspace-alloc',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /post-workspace-alloc|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C parent fsync failure identity-bound empty namespace rollback', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-parent-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmDirectoryFsyncFailureForDbFreeRegression(isoHome, 'parent');
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_SYNC_FAILED|INJECTED_FSYNC/,
+    );
+  } finally {
+    __testOnlyClearDirectoryFsyncFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A/B ordinary temp and persistent 0750 creation still succeed', () => {
+  const ordinary = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  assert.equal(ordinary.workspacePath.includes(LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME), false);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(ordinary);
+
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ok0750-'));
+  chmodSync(isoHome, 0o750);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+    persistent: true,
+    testOnlyTrustedHome: {
+      ok: true,
+      home: isoHome,
+      uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+    },
+  });
+  try {
+    assert.equal(statSync(branded.workspacePath).mode & 0o777, 0o700);
+    assert.equal(
+      statSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)).mode & 0o777,
+      0o700,
+    );
+  } finally {
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(isoHome, { recursive: true, force: true });
+  }
 });
 

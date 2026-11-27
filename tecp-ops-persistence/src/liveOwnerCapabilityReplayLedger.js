@@ -386,15 +386,52 @@ function hasStickyBit(modeBits) {
   return (modeBits & 0o1000) !== 0;
 }
 
+let testOnlyLstatUidOverride = null;
+
+/**
+ * TEST_ONLY: fake ownership on one absolute path during policy lstat only.
+ * Cannot authorize genuine-live storage or alter production policy ownership.
+ */
+export function __testOnlyArmLstatUidOverrideForDbFreeRegression(targetAbs, uid) {
+  testOnlyLstatUidOverride = {
+    path: resolve(targetAbs),
+    uid: Number(uid),
+  };
+}
+
+export function __testOnlyClearLstatUidOverrideForDbFreeRegression() {
+  testOnlyLstatUidOverride = null;
+}
+
+function lstatForCreationPolicy(pathAbs) {
+  const abs = resolve(pathAbs);
+  const lst = lstatSync(abs);
+  if (
+    testOnlyLstatUidOverride
+    && resolve(testOnlyLstatUidOverride.path) === abs
+    && Number.isInteger(testOnlyLstatUidOverride.uid)
+  ) {
+    return new Proxy(lst, {
+      get(target, prop, receiver) {
+        if (prop === 'uid') return testOnlyLstatUidOverride.uid;
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  }
+  return lst;
+}
+
 /**
  * Parent dirs for creation: exact owned private when under Owner home;
- * outside home, reject group/world-writable parents lacking sticky bit.
+ * outside home, reject foreign non-root ownership and unsafe writable parents
+ * lacking sticky bit. Preserves root-owned system ancestors / sticky tmpdirs.
  */
 function assertEligibleCreationParentDirectory(parentDir, home) {
   const abs = resolve(parentDir);
   let lst;
   try {
-    lst = lstatSync(abs);
+    lst = lstatForCreationPolicy(abs);
   } catch (err) {
     return { ok: false, reasons: Object.freeze(['CREATE_PARENT_LSTAT_FAILED', String(err.message || err)]) };
   }
@@ -402,8 +439,9 @@ function assertEligibleCreationParentDirectory(parentDir, home) {
     return { ok: false, reasons: Object.freeze(['CREATE_PARENT_UNSAFE_TYPE']) };
   }
   const bits = modeOf(lst);
+  const selfUid = typeof process.getuid === 'function' ? process.getuid() : null;
   if (home && home.ok === true && pathIsWithin(abs, home.home)) {
-    if (typeof process.getuid === 'function' && lst.uid !== process.getuid()) {
+    if (selfUid != null && lst.uid !== selfUid) {
       return { ok: false, reasons: Object.freeze(['CREATE_PARENT_UNEXPECTED_OWNERSHIP', `UID=${lst.uid}`]) };
     }
     if (home.uid != null && lst.uid !== home.uid) {
@@ -415,11 +453,19 @@ function assertEligibleCreationParentDirectory(parentDir, home) {
         reasons: Object.freeze(['CREATE_PARENT_GROUP_OR_WORLD_WRITABLE', `MODE=${bits.toString(8)}`]),
       };
     }
-  } else if (isGroupOrWorldWritable(bits) && !hasStickyBit(lst.mode)) {
-    return {
-      ok: false,
-      reasons: Object.freeze(['CREATE_PARENT_UNSAFE_WRITABLE_WITHOUT_STICKY', `MODE=${bits.toString(8)}`]),
-    };
+  } else {
+    if (selfUid != null && lst.uid !== selfUid && lst.uid !== 0) {
+      return {
+        ok: false,
+        reasons: Object.freeze(['CREATE_PARENT_FOREIGN_OWNERSHIP', `UID=${lst.uid}`]),
+      };
+    }
+    if (isGroupOrWorldWritable(bits) && !hasStickyBit(lst.mode)) {
+      return {
+        ok: false,
+        reasons: Object.freeze(['CREATE_PARENT_UNSAFE_WRITABLE_WITHOUT_STICKY', `MODE=${bits.toString(8)}`]),
+      };
+    }
   }
   return { ok: true, stat: lst, path: abs };
 }
@@ -492,6 +538,35 @@ export function __testOnlyClearDirectoryFsyncFailureForDbFreeRegression() {
   testOnlyDirectoryFsyncTarget = null;
 }
 
+let testOnlyCreationStageHook = null;
+
+/**
+ * TEST_ONLY one-shot creation-stage fault hook.
+ * stage: post-workspace-alloc | marker-write | marker-fsync | ledger-mkdir | workspace-fsync | private-fsync-pre
+ * Cannot grant genuine-live authority.
+ */
+export function __testOnlyArmCreationStageFailureForDbFreeRegression(stage, hookOrMessage) {
+  testOnlyCreationStageHook = {
+    stage: String(stage),
+    run: typeof hookOrMessage === 'function'
+      ? hookOrMessage
+      : () => {
+        throw new Error(String(hookOrMessage || `TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:${stage}`));
+      },
+  };
+}
+
+export function __testOnlyClearCreationStageFailureForDbFreeRegression() {
+  testOnlyCreationStageHook = null;
+}
+
+function maybeInjectCreationStage(stage, ctx) {
+  if (!testOnlyCreationStageHook || testOnlyCreationStageHook.stage !== stage) return;
+  const hook = testOnlyCreationStageHook;
+  testOnlyCreationStageHook = null;
+  hook.run(ctx);
+}
+
 /**
  * Remove only an exact empty directory created by the current operation.
  * Never recursive. Never follows symlinks. Never removes mismatched identity.
@@ -502,7 +577,14 @@ function removeExactCreatedEmptyDirectory(dirPath, expected) {
   try {
     lst = lstatSync(abs);
   } catch (err) {
-    return { ok: false, residual: false, reasons: Object.freeze(['ROLLBACK_LSTAT_FAILED', String(err.message || err)]) };
+    if (err && err.code === 'ENOENT') {
+      return { ok: true, residual: false, reasons: Object.freeze(['ROLLBACK_ALREADY_ABSENT']) };
+    }
+    return {
+      ok: false,
+      residual: true,
+      reasons: Object.freeze(['ROLLBACK_LSTAT_UNKNOWN_STATE', String(err.message || err)]),
+    };
   }
   if (lst.isSymbolicLink()) {
     return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_REFUSES_SYMLINK']) };
@@ -539,8 +621,15 @@ function removeExactCreatedRegularFile(filePath, expected) {
   let lst;
   try {
     lst = lstatSync(abs);
-  } catch {
-    return { ok: true, residual: false }; // already absent
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return { ok: true, residual: false, reasons: Object.freeze(['ROLLBACK_FILE_ALREADY_ABSENT']) };
+    }
+    return {
+      ok: false,
+      residual: true,
+      reasons: Object.freeze(['ROLLBACK_FILE_LSTAT_UNKNOWN_STATE', String(err.message || err)]),
+    };
   }
   if (lst.isSymbolicLink() || !lst.isFile()) {
     return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_FILE_UNSAFE_TYPE']) };
@@ -594,6 +683,15 @@ function ensurePersistentTestOnlyNamespace(home) {
   if (!parentEligible.ok) {
     throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_DENIED:${(parentEligible.reasons || []).join(',')}`);
   }
+  // Complete applicable ancestor validation on existing parents before any mkdir.
+  const ancestorPre = assertTrustedAncestorChain(ns, {
+    testOnly: true,
+    homeOverride: home,
+    existingPrefixOnly: true,
+  });
+  if (!ancestorPre.ok) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_ANCESTOR_DENIED:${(ancestorPre.reasons || []).join(',')}`);
+  }
   const parentPolicy = evaluateTestOnlyProtectedStoragePolicy(
     join(ns, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}ns-probe`, 'ledger'),
     home,
@@ -604,39 +702,43 @@ function ensurePersistentTestOnlyNamespace(home) {
     throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_POLICY_DENIED:${(parentPolicy.reasons || []).join(',')}`);
   }
   if (!existsSync(ns)) {
-    mkdirSync(ns, { recursive: false, mode: EXPECTED_DIR_MODE });
-    chmodSync(ns, EXPECTED_DIR_MODE);
-    let nsStat;
+    let nsStat = null;
+    let createdNs = false;
     try {
+      mkdirSync(ns, { recursive: false, mode: EXPECTED_DIR_MODE });
+      createdNs = true;
       nsStat = lstatSync(ns);
-    } catch (err) {
-      throw new Error(`PERSISTENT_TEST_NAMESPACE_LSTAT_FAILED:${String(err.message || err)}`);
-    }
-    try {
+      chmodSync(ns, EXPECTED_DIR_MODE);
+      const afterChmod = lstatSync(ns);
+      if (afterChmod.dev !== nsStat.dev || afterChmod.ino !== nsStat.ino) {
+        throw new Error('PERSISTENT_TEST_NAMESPACE_IDENTITY_CHANGED_AFTER_CHMOD');
+      }
+      maybeInjectCreationStage('private-fsync-pre', { ns, nsStat, parent, home });
       maybeInjectDirectoryFsyncFailure(ns, 'private');
       fsyncPathDirectory(ns);
-    } catch (err) {
-      const rolled = removeExactCreatedEmptyDirectory(ns, nsStat);
-      if (!rolled.ok) {
-        throw new Error(
-          `PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${String(err.message || err)}`
-          + `|RESIDUAL_NAMESPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
-        );
-      }
-      throw new Error(`PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${String(err.message || err)}`);
-    }
-    try {
       maybeInjectDirectoryFsyncFailure(parent, 'parent');
       fsyncTrustedParentDirectory(parent, home);
     } catch (err) {
-      const rolled = removeExactCreatedEmptyDirectory(ns, nsStat);
-      if (!rolled.ok) {
-        throw new Error(
-          `PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${String(err.message || err)}`
-          + `|RESIDUAL_NAMESPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
-        );
+      if (createdNs) {
+        const rolled = removeExactCreatedEmptyDirectory(ns, nsStat);
+        if (!rolled.ok) {
+          throw new Error(
+            `PERSISTENT_TEST_NAMESPACE_CREATE_FAILED:${String(err.message || err)}`
+            + `|RESIDUAL_NAMESPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
+          );
+        }
       }
-      throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${String(err.message || err)}`);
+      const msg = String(err.message || err);
+      if (msg.includes('NAMESPACE_SYNC_FAILED') || msg.includes('PARENT_SYNC_FAILED') || msg.includes('CREATE_FAILED')) {
+        throw err;
+      }
+      if (msg.includes('INJECTED_FSYNC_FAILURE:private') || msg.includes('INJECTED_CREATION_STAGE_FAILURE') || msg.includes('private-fsync-pre')) {
+        throw new Error(`PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${msg}`);
+      }
+      if (msg.includes('INJECTED_FSYNC_FAILURE:parent') || msg.includes('TRUSTED_PARENT_SYNC')) {
+        throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${msg}`);
+      }
+      throw new Error(`PERSISTENT_TEST_NAMESPACE_CREATE_FAILED:${msg}`);
     }
   }
   const validated = validatePersistentTestOnlyNamespaceDirectory(ns, home);
@@ -995,12 +1097,32 @@ function fsyncPathDirectory(dirPath) {
  * path APIs alone; we combine no-follow opens + fstat identity checks on the
  * storage objects we mutate.
  */
-function assertTrustedAncestorChain(ledgerRoot, { testOnly = false, workspacePath = null } = {}) {
+function assertTrustedAncestorChain(ledgerRoot, {
+  testOnly = false,
+  workspacePath = null,
+  homeOverride = null,
+  existingPrefixOnly = false,
+} = {}) {
   const abs = resolve(ledgerRoot);
   const stopAt = testOnly && isNonEmptyString(workspacePath)
     ? resolve(workspacePath)
     : null;
-  let homeResolved = resolveTrustedOwnerOsHome();
+  let homeResolved;
+  if (homeOverride && homeOverride.ok === true && isNonEmptyString(homeOverride.home)) {
+    homeResolved = {
+      ok: true,
+      home: resolve(homeOverride.home),
+      uid: homeOverride.uid,
+      reasons: homeOverride.reasons,
+    };
+  } else if (homeOverride && homeOverride.ok === false) {
+    homeResolved = {
+      ok: false,
+      reasons: Object.freeze([...(homeOverride.reasons || ['TRUSTED_HOME_UNAVAILABLE'])]),
+    };
+  } else {
+    homeResolved = resolveTrustedOwnerOsHome();
+  }
   if (!testOnly && !homeResolved.ok) {
     return {
       ok: false,
@@ -1014,8 +1136,13 @@ function assertTrustedAncestorChain(ledgerRoot, { testOnly = false, workspacePat
     cur = cur === sep ? `${sep}${part}` : (cur ? join(cur, part) : part);
     let lst;
     try {
-      lst = lstatSync(cur);
+      lst = lstatForCreationPolicy(cur);
     } catch (err) {
+      const code = err && err.code;
+      if (existingPrefixOnly && code === 'ENOENT') {
+        // Validate only ancestors that already exist (pre-mutation creation).
+        break;
+      }
       return { ok: false, reasons: ['ANCESTOR_LSTAT_FAILED', String(err.message || err), `AT=${cur}`] };
     }
     if (lst.isSymbolicLink()) {
@@ -1031,6 +1158,10 @@ function assertTrustedAncestorChain(ledgerRoot, { testOnly = false, workspacePat
     if (withinPrivate) {
       if (uid != null && lst.uid !== uid) {
         return { ok: false, reasons: ['PRIVATE_ANCESTOR_UNEXPECTED_OWNERSHIP', `AT=${cur}`, `UID=${lst.uid}`] };
+      }
+      if (homeResolved.ok && homeResolved.uid != null && lst.uid !== homeResolved.uid
+        && ownerHome && pathIsWithin(cur, ownerHome)) {
+        return { ok: false, reasons: ['PRIVATE_ANCESTOR_UID_MISMATCH', `AT=${cur}`, `UID=${lst.uid}`] };
       }
       const mode = modeOf(lst);
       // Reject group/world writable private ancestors (substitution risk).
@@ -1440,25 +1571,45 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   if (!isPlainObject(options) && options !== undefined) {
     void options;
   }
-  // Optional TEST_ONLY home fixture for isolated permission/parent regressions.
-  // Cannot authorize genuine-live storage; ignored unless plain object with ok===true and home path.
+  // Optional TEST_ONLY home fixture. ok:true supplies an isolated home; ok:false
+  // forces fail-closed trusted-home denial at the actual creation entrypoint.
+  // Cannot authorize genuine-live storage or redefine genuine Owner-home protection.
   const injectedHome = isPlainObject(opts.testOnlyTrustedHome) ? opts.testOnlyTrustedHome : null;
-  const home = (injectedHome && injectedHome.ok === true && isNonEmptyString(injectedHome.home))
-    ? {
+  let home;
+  if (injectedHome) {
+    if (injectedHome.ok === true && isNonEmptyString(injectedHome.home)) {
+      home = {
         ok: true,
         home: resolve(injectedHome.home),
         uid: injectedHome.uid != null
           ? injectedHome.uid
           : (typeof process.getuid === 'function' ? process.getuid() : 0),
-      }
-    : resolveTrustedOwnerOsHome();
+      };
+    } else {
+      home = {
+        ok: false,
+        reasons: Object.freeze([
+          ...(Array.isArray(injectedHome.reasons) ? injectedHome.reasons : []),
+          'TEST_ONLY_TRUSTED_HOME_INJECTED_FAILURE',
+        ]),
+      };
+    }
+  } else {
+    home = resolveTrustedOwnerOsHome();
+  }
   const wantPersistent = opts.persistent === true;
+  if (!home.ok) {
+    throw new Error(
+      `TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED:`
+      + `${(home.reasons || []).join(',')}`,
+    );
+  }
   let parentDir;
   if (wantPersistent) {
     parentDir = ensurePersistentTestOnlyNamespace(home);
   } else {
     const tempBase = resolve(tmpdir());
-    if (home.ok && pathIsWithin(tempBase, home.home)) {
+    if (pathIsWithin(tempBase, home.home)) {
       const ns = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
       if (pathIsWithin(tempBase, ns) || tempBase === ns) {
         // TMPDIR already inside the narrow persistent namespace — allow after validation.
@@ -1478,90 +1629,130 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   if (!parentSymlinks.ok) {
     throw new Error(`TEST_ONLY_CREATE_PARENT_SYMLINK_DENIED:${(parentSymlinks.reasons || []).join(',')}`);
   }
-  const parentEligible = assertEligibleCreationParentDirectory(parentDir, home.ok ? home : { ok: false });
+  const parentEligible = assertEligibleCreationParentDirectory(parentDir, home);
   if (!parentEligible.ok) {
     throw new Error(`TEST_ONLY_CREATE_PARENT_DENIED:${(parentEligible.reasons || []).join(',')}`);
   }
-  const prospective = join(parentDir, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
-  const homeForPolicy = home.ok
-    ? home
-    : { ok: false, reasons: (home && home.reasons) || ['TRUSTED_HOME_UNAVAILABLE'] };
+  const prospectiveWorkspace = join(parentDir, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
+  const prospectiveLedger = join(prospectiveWorkspace, 'ledger');
+  const ancestorPre = assertTrustedAncestorChain(prospectiveLedger, {
+    testOnly: true,
+    homeOverride: home,
+    existingPrefixOnly: true,
+  });
+  if (!ancestorPre.ok) {
+    throw new Error(`TEST_ONLY_CREATE_ANCESTOR_DENIED_BEFORE_MUTATION:${(ancestorPre.reasons || []).join(',')}`);
+  }
   const precheck = evaluateTestOnlyProtectedStoragePolicy(
-    join(prospective, 'ledger'),
-    homeForPolicy,
+    prospectiveLedger,
+    home,
     { forCleanup: false },
   );
   if (!precheck.ok) {
     throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
   }
-  if (!home.ok) {
-    throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED`);
-  }
-  const workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
-  chmodSync(workspacePath, EXPECTED_DIR_MODE);
-  const workspaceStat = lstatSync(workspacePath);
-  const workspaceId = randomBytes(16).toString('hex');
-  const markerPath = join(workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
-  const markerBody = `${JSON.stringify({
-    version: 1,
-    kind: 'TEST_ONLY_LIVE_OWNER_LEDGER_WORKSPACE_V1',
-    workspaceId,
-    ledgerDirName: 'ledger',
-    createdAt: new Date().toISOString(),
-    createdByPid: process.pid,
-  })}\n`;
-  const mfd = openSync(markerPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW, 0o600);
-  try {
-    writeSync(mfd, markerBody);
-    fsyncSync(mfd);
-  } finally {
-    closeSync(mfd);
-  }
-  const markerStat = lstatSync(markerPath);
-  const ledgerRoot = join(workspacePath, 'ledger');
-  mkdirSync(ledgerRoot, { recursive: false, mode: EXPECTED_DIR_MODE });
-  chmodSync(ledgerRoot, EXPECTED_DIR_MODE);
-  const ledgerStat = lstatSync(ledgerRoot);
-  fsyncPathDirectory(workspacePath);
 
-  const eligibility = assertEligibleTestOnlyWorkspaceLedgerLocation(resolve(ledgerRoot));
-  if (!eligibility.ok) {
-    const rolled = rollbackJustCreatedTestWorkspace(workspacePath, {
-      workspaceStat,
-      markerPath,
-      markerStat,
-      ledgerPath: ledgerRoot,
-      ledgerStat,
-    });
-    if (!rolled.ok) {
-      throw new Error(
-        `TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`
-        + `|RESIDUAL_WORKSPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
-      );
-    }
-    throw new Error(`TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`);
-  }
-
-  const accessBrand = {
-    proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_PROOF_CLASS,
-    __testOnlyLiveOwnerLedgerRoot: true,
-    rootPath: resolve(ledgerRoot),
-    workspacePath: resolve(workspacePath),
-    workspaceId,
-    accessOnly: false,
+  let workspacePath = null;
+  const created = {
+    workspaceStat: null,
+    markerPath: null,
+    markerStat: null,
+    ledgerPath: null,
+    ledgerStat: null,
   };
-  testOnlyLedgerRootLatch.add(accessBrand);
-  const cleanupAuth = Object.freeze({
-    proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_CLEANUP_PROOF_CLASS,
-    __testOnlyLiveOwnerLedgerCleanup: true,
-    rootPath: resolve(ledgerRoot),
-    workspacePath: resolve(workspacePath),
-    workspaceId,
-  });
-  testOnlyCleanupLatch.add(cleanupAuth);
-  const frozenAccess = Object.freeze(accessBrand);
-  testOnlyCleanupByAccessBrand.set(frozenAccess, cleanupAuth);
-  return frozenAccess;
+  let workspaceId = null;
+  try {
+    workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    created.workspaceStat = lstatSync(workspacePath);
+    maybeInjectCreationStage('post-workspace-alloc', { workspacePath, created });
+    chmodSync(workspacePath, EXPECTED_DIR_MODE);
+    const afterChmod = lstatSync(workspacePath);
+    if (afterChmod.dev !== created.workspaceStat.dev || afterChmod.ino !== created.workspaceStat.ino) {
+      throw new Error('TEST_ONLY_WORKSPACE_IDENTITY_CHANGED_AFTER_CHMOD');
+    }
+    workspaceId = randomBytes(16).toString('hex');
+    const markerPath = join(workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+    const markerBody = `${JSON.stringify({
+      version: 1,
+      kind: 'TEST_ONLY_LIVE_OWNER_LEDGER_WORKSPACE_V1',
+      workspaceId,
+      ledgerDirName: 'ledger',
+      createdAt: new Date().toISOString(),
+      createdByPid: process.pid,
+    })}\n`;
+    const mfd = openSync(
+      markerPath,
+      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      created.markerPath = markerPath;
+      created.markerStat = fstatSync(mfd);
+      maybeInjectCreationStage('marker-write', { workspacePath, markerPath, created });
+      writeSync(mfd, markerBody);
+      maybeInjectCreationStage('marker-fsync', { workspacePath, markerPath, created });
+      fsyncSync(mfd);
+    } finally {
+      closeSync(mfd);
+    }
+    const markerConfirm = lstatSync(markerPath);
+    if (
+      !created.markerStat
+      || markerConfirm.dev !== created.markerStat.dev
+      || markerConfirm.ino !== created.markerStat.ino
+    ) {
+      throw new Error('TEST_ONLY_MARKER_IDENTITY_MISMATCH_AFTER_WRITE');
+    }
+    const ledgerRoot = join(workspacePath, 'ledger');
+    maybeInjectCreationStage('ledger-mkdir', { workspacePath, ledgerRoot, created });
+    mkdirSync(ledgerRoot, { recursive: false, mode: EXPECTED_DIR_MODE });
+    created.ledgerPath = ledgerRoot;
+    created.ledgerStat = lstatSync(ledgerRoot);
+    chmodSync(ledgerRoot, EXPECTED_DIR_MODE);
+    const ledgerConfirm = lstatSync(ledgerRoot);
+    if (ledgerConfirm.dev !== created.ledgerStat.dev || ledgerConfirm.ino !== created.ledgerStat.ino) {
+      throw new Error('TEST_ONLY_LEDGER_IDENTITY_CHANGED_AFTER_CHMOD');
+    }
+    maybeInjectCreationStage('workspace-fsync', { workspacePath, created });
+    fsyncPathDirectory(workspacePath);
+
+    const eligibility = assertEligibleTestOnlyWorkspaceLedgerLocation(resolve(ledgerRoot));
+    if (!eligibility.ok) {
+      throw new Error(`TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`);
+    }
+
+    const accessBrand = {
+      proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_PROOF_CLASS,
+      __testOnlyLiveOwnerLedgerRoot: true,
+      rootPath: resolve(ledgerRoot),
+      workspacePath: resolve(workspacePath),
+      workspaceId,
+      accessOnly: false,
+    };
+    testOnlyLedgerRootLatch.add(accessBrand);
+    const cleanupAuth = Object.freeze({
+      proofClass: LIVE_OWNER_JTI_LEDGER_TEST_ONLY_CLEANUP_PROOF_CLASS,
+      __testOnlyLiveOwnerLedgerCleanup: true,
+      rootPath: resolve(ledgerRoot),
+      workspacePath: resolve(workspacePath),
+      workspaceId,
+    });
+    testOnlyCleanupLatch.add(cleanupAuth);
+    const frozenAccess = Object.freeze(accessBrand);
+    testOnlyCleanupByAccessBrand.set(frozenAccess, cleanupAuth);
+    return frozenAccess;
+  } catch (err) {
+    const original = String(err.message || err);
+    if (workspacePath && created.workspaceStat) {
+      const rolled = rollbackJustCreatedTestWorkspace(workspacePath, created);
+      if (!rolled.ok) {
+        throw new Error(
+          `${original}|RESIDUAL_WORKSPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
+        );
+      }
+    }
+    throw err instanceof Error ? err : new Error(original);
+  }
 }
 
 /**
