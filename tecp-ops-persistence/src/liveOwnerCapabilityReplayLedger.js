@@ -542,7 +542,7 @@ let testOnlyCreationStageHook = null;
 
 /**
  * TEST_ONLY one-shot creation-stage fault hook.
- * stage: post-workspace-alloc | marker-write | marker-fsync | ledger-mkdir | workspace-fsync | private-fsync-pre
+ * stage: post-workspace-alloc | marker-write | marker-fsync | ledger-mkdir | workspace-fsync | pre-final-eligibility | private-fsync-pre
  * Cannot grant genuine-live authority.
  */
 export function __testOnlyArmCreationStageFailureForDbFreeRegression(stage, hookOrMessage) {
@@ -1715,6 +1715,7 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
     }
     maybeInjectCreationStage('workspace-fsync', { workspacePath, created });
     fsyncPathDirectory(workspacePath);
+    maybeInjectCreationStage('pre-final-eligibility', { workspacePath, ledgerRoot, created });
 
     const eligibility = assertEligibleTestOnlyWorkspaceLedgerLocation(resolve(ledgerRoot));
     if (!eligibility.ok) {

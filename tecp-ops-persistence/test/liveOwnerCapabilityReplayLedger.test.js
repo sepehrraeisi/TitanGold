@@ -2383,3 +2383,33 @@ test('R3-F01-A/B ordinary temp and persistent 0750 creation still succeed', () =
   }
 });
 
+
+test('R3-F01-C final eligibility failure rolls back created workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-final-elig-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('pre-final-eligibility', () => {
+    throw new Error('TEST_ONLY_CREATE_ELIGIBILITY_FAILED:INJECTED_FINAL_ELIGIBILITY');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ELIGIBILITY_FAILED|INJECTED_FINAL_ELIGIBILITY|RESIDUAL_WORKSPACE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
