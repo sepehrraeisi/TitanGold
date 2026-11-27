@@ -403,11 +403,17 @@ export function __testOnlyClearLstatUidOverrideForDbFreeRegression() {
   testOnlyLstatUidOverride = null;
 }
 
-function lstatForCreationPolicy(pathAbs) {
+/**
+ * Policy lstat. TEST_ONLY UID override applies only when allowTestOnlyUidOverride
+ * is explicitly true (TEST_ONLY creation/parent checks). Genuine-live ancestor
+ * validation must pass allowTestOnlyUidOverride=false so hooks cannot weaken it.
+ */
+function lstatForCreationPolicy(pathAbs, { allowTestOnlyUidOverride = false } = {}) {
   const abs = resolve(pathAbs);
   const lst = lstatSync(abs);
   if (
-    testOnlyLstatUidOverride
+    allowTestOnlyUidOverride === true
+    && testOnlyLstatUidOverride
     && resolve(testOnlyLstatUidOverride.path) === abs
     && Number.isInteger(testOnlyLstatUidOverride.uid)
   ) {
@@ -431,7 +437,7 @@ function assertEligibleCreationParentDirectory(parentDir, home) {
   const abs = resolve(parentDir);
   let lst;
   try {
-    lst = lstatForCreationPolicy(abs);
+    lst = lstatForCreationPolicy(abs, { allowTestOnlyUidOverride: true });
   } catch (err) {
     return { ok: false, reasons: Object.freeze(['CREATE_PARENT_LSTAT_FAILED', String(err.message || err)]) };
   }
@@ -542,7 +548,7 @@ let testOnlyCreationStageHook = null;
 
 /**
  * TEST_ONLY one-shot creation-stage fault hook.
- * stage: post-workspace-alloc | marker-write | marker-fsync | ledger-mkdir | workspace-fsync | pre-final-eligibility | private-fsync-pre
+ * stage: post-workspace-alloc | marker-write | marker-fsync | ledger-mkdir | workspace-fsync | pre-final-eligibility | pre-workspace-identity | post-workspace-identity | private-fsync-pre
  * Cannot grant genuine-live authority.
  */
 export function __testOnlyArmCreationStageFailureForDbFreeRegression(stage, hookOrMessage) {
@@ -651,18 +657,35 @@ function removeExactCreatedRegularFile(filePath, expected) {
  */
 function rollbackJustCreatedTestWorkspace(workspacePath, identities) {
   const residuals = [];
+  if (!identities || typeof identities !== 'object') {
+    return {
+      ok: false,
+      residual: true,
+      reasons: Object.freeze(['ROLLBACK_IDENTITY_UNKNOWN', 'IDENTITIES_OBJECT_MISSING']),
+    };
+  }
+  if (!identities.workspaceStat) {
+    // Without proven workspace identity, refuse path-based deletion.
+    return {
+      ok: false,
+      residual: true,
+      reasons: Object.freeze(['ROLLBACK_IDENTITY_UNKNOWN', 'WORKSPACE_STAT_MISSING']),
+    };
+  }
   if (identities.markerPath && identities.markerStat) {
     const r = removeExactCreatedRegularFile(identities.markerPath, identities.markerStat);
     if (!r.ok) residuals.push(...(r.reasons || ['MARKER_RESIDUAL']));
+  } else if (identities.markerPath && !identities.markerStat) {
+    residuals.push('MARKER_IDENTITY_UNKNOWN_PRESERVED');
   }
   if (identities.ledgerPath && identities.ledgerStat) {
     const r = removeExactCreatedEmptyDirectory(identities.ledgerPath, identities.ledgerStat);
     if (!r.ok) residuals.push(...(r.reasons || ['LEDGER_RESIDUAL']));
+  } else if (identities.ledgerPath && !identities.ledgerStat) {
+    residuals.push('LEDGER_IDENTITY_UNKNOWN_PRESERVED');
   }
-  if (identities.workspaceStat) {
-    const r = removeExactCreatedEmptyDirectory(workspacePath, identities.workspaceStat);
-    if (!r.ok) residuals.push(...(r.reasons || ['WORKSPACE_RESIDUAL']));
-  }
+  const r = removeExactCreatedEmptyDirectory(workspacePath, identities.workspaceStat);
+  if (!r.ok) residuals.push(...(r.reasons || ['WORKSPACE_RESIDUAL']));
   if (residuals.length) {
     return { ok: false, residual: true, reasons: Object.freeze(residuals) };
   }
@@ -692,8 +715,15 @@ function ensurePersistentTestOnlyNamespace(home) {
   if (!ancestorPre.ok) {
     throw new Error(`PERSISTENT_TEST_NAMESPACE_ANCESTOR_DENIED:${(ancestorPre.reasons || []).join(',')}`);
   }
+  const nsProbe = join(ns, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}ns-probe`, 'ledger');
+  const genuineNsGuard = assertPathOutsideProtectedOwnerStorage(nsProbe, { forCleanup: false });
+  if (!genuineNsGuard.ok) {
+    throw new Error(
+      `PERSISTENT_TEST_NAMESPACE_GENUINE_HOME_PROTECTION:${(genuineNsGuard.reasons || []).join(',')}`,
+    );
+  }
   const parentPolicy = evaluateTestOnlyProtectedStoragePolicy(
-    join(ns, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}ns-probe`, 'ledger'),
+    nsProbe,
     home,
     { forCleanup: false },
   );
@@ -1136,7 +1166,8 @@ function assertTrustedAncestorChain(ledgerRoot, {
     cur = cur === sep ? `${sep}${part}` : (cur ? join(cur, part) : part);
     let lst;
     try {
-      lst = lstatForCreationPolicy(cur);
+      // Genuine-live (testOnly=false): never honor TEST_ONLY UID override.
+      lst = lstatForCreationPolicy(cur, { allowTestOnlyUidOverride: testOnly === true });
     } catch (err) {
       const code = err && err.code;
       if (existingPrefixOnly && code === 'ENOENT') {
@@ -1643,6 +1674,15 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   if (!ancestorPre.ok) {
     throw new Error(`TEST_ONLY_CREATE_ANCESTOR_DENIED_BEFORE_MUTATION:${(ancestorPre.reasons || []).join(',')}`);
   }
+  // Non-overridable genuine Owner-home / trust protection — fixture homes cannot
+  // redefine or weaken protection of the real Owner home and live trust paths.
+  const genuineGuard = assertPathOutsideProtectedOwnerStorage(prospectiveLedger, { forCleanup: false });
+  if (!genuineGuard.ok) {
+    throw new Error(
+      `TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:GENUINE_OWNER_HOME_PROTECTION:`
+      + `${(genuineGuard.reasons || []).join(',')}`,
+    );
+  }
   const precheck = evaluateTestOnlyProtectedStoragePolicy(
     prospectiveLedger,
     home,
@@ -1662,9 +1702,24 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   };
   let workspaceId = null;
   try {
-    workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
-    created.workspaceStat = lstatSync(workspacePath);
+    try {
+      workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    } catch (allocErr) {
+      throw new Error(`TEST_ONLY_WORKSPACE_ALLOC_FAILED:${String(allocErr.message || allocErr)}`);
+    }
+    // Optional pre-identity fault (e.g. disappear before lstat) — identity still unknown.
+    maybeInjectCreationStage('pre-workspace-identity', { workspacePath, created });
+    try {
+      created.workspaceStat = lstatSync(workspacePath);
+    } catch (idErr) {
+      throw new Error(
+        `TEST_ONLY_WORKSPACE_IDENTITY_CAPTURE_FAILED:${String(idErr.message || idErr)}`
+        + '|RESIDUAL_WORKSPACE_RETAINED:ROLLBACK_IDENTITY_UNKNOWN',
+      );
+    }
+    // After identity is proven, allocation-stage faults can identity-bound roll back.
     maybeInjectCreationStage('post-workspace-alloc', { workspacePath, created });
+    maybeInjectCreationStage('post-workspace-identity', { workspacePath, created });
     chmodSync(workspacePath, EXPECTED_DIR_MODE);
     const afterChmod = lstatSync(workspacePath);
     if (afterChmod.dev !== created.workspaceStat.dev || afterChmod.ino !== created.workspaceStat.ino) {
@@ -1744,6 +1799,9 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
     return frozenAccess;
   } catch (err) {
     const original = String(err.message || err);
+    if (original.includes('RESIDUAL_WORKSPACE_RETAINED:')) {
+      throw err instanceof Error ? err : new Error(original);
+    }
     if (workspacePath && created.workspaceStat) {
       const rolled = rollbackJustCreatedTestWorkspace(workspacePath, created);
       if (!rolled.ok) {
@@ -1751,6 +1809,10 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
           `${original}|RESIDUAL_WORKSPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
         );
       }
+    } else if (workspacePath && !created.workspaceStat) {
+      throw new Error(
+        `${original}|RESIDUAL_WORKSPACE_RETAINED:ROLLBACK_IDENTITY_UNKNOWN`,
+      );
     }
     throw err instanceof Error ? err : new Error(original);
   }

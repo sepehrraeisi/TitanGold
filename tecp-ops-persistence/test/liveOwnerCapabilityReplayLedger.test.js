@@ -2413,3 +2413,170 @@ test('R3-F01-C final eligibility failure rolls back created workspace', () => {
   rmSync(isoHome, { recursive: true, force: true });
 });
 
+
+test('R4-F01 TEST_ONLY UID override cannot weaken genuine-live ancestor validation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 42424;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(home.home, foreignUid);
+  try {
+    // Genuine-live ancestor validation (testOnly=false) must ignore the UID override.
+    // resolveCanonical + protected-policy evaluation must still observe real ownership.
+    const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    assert.match(canonical, /live-owner-jti-ledger-v1$/);
+    const real = lstatSync(home.home);
+    assert.equal(real.uid, process.getuid());
+    const pol = evaluateTestOnlyProtectedStoragePolicy(
+      join(home.home, 'arbitrary-r4-not-ns', 'ledger'),
+      home,
+      { forCleanup: false },
+    );
+    assert.equal(pol.ok, false);
+    assert.ok(pol.reasons.some((r) => String(r).includes('PROTECTED_OWNER_STORAGE')));
+    assert.equal(
+      pol.reasons.some((r) => /FOREIGN|UNEXPECTED_OWNERSHIP/.test(String(r))),
+      false,
+    );
+    // Fixture create while override is armed on genuine home must still succeed
+    // (override target is not the fixture parent).
+    const iso = mkdtempSync(join(tmpdir(), 'r4-uid-live-'));
+    chmodSync(iso, 0o750);
+    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: iso,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    });
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(iso, { recursive: true, force: true });
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+});
+
+test('R4-F01 UID override still applies to TEST_ONLY creation parent checks', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-uid-testonly-'));
+  chmodSync(isoHome, 0o750);
+  const before = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 52525;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(isoHome, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_DENIED|UNEXPECTED_OWNERSHIP|UID_MISMATCH|FOREIGN_OWNERSHIP|ANCESTOR/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), before);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R4-F02 genuine Owner-home protection denies fixture inside Owner home outside ns before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r4-evil-fixture-'));
+  chmodSync(evil, 0o750);
+  const before = new Set(readdirSync(evil));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: evil,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /GENUINE_OWNER_HOME_PROTECTION|PROTECTED_OWNER_STORAGE|CREATE_DENIED_BEFORE_MUTATION/,
+  );
+  assert.deepEqual(new Set(readdirSync(evil)), before);
+  assert.equal(existsSync(join(evil, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(evil, { recursive: true, force: true });
+});
+
+test('R4-F03 workspace identity-capture failure preserves residual and reports unknown identity', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-idcap-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('pre-workspace-identity', ({ workspacePath }) => {
+    // Remove workspace before identity capture so lstat fails with ENOENT.
+    rmSync(workspacePath, { recursive: true, force: true });
+  });
+  let threw = null;
+  try {
+    try {
+      __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      });
+    } catch (err) {
+      threw = String(err.message || err);
+    }
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.ok(threw);
+  assert.match(threw, /IDENTITY_CAPTURE_FAILED|RESIDUAL_WORKSPACE_RETAINED|ROLLBACK_IDENTITY_UNKNOWN/);
+  // Namespace may exist from ensurePersistent; no tecp-owned workspace should remain if capture failed after delete.
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    // If a residual empty name was recreated somehow, still require unknown-identity reporting above.
+    assert.ok(kids.length === 0 || threw.includes('RESIDUAL_WORKSPACE_RETAINED'));
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R4-F04 unknown workspace identity refuses path rollback deletion', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-unknown-rb-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('post-workspace-identity', ({ workspacePath, created }) => {
+    // Clear captured identity after successful capture to force unknown-identity rollback branch
+    // on a subsequent injected failure... instead: plant and fail with cleared stat via hook throw
+    // after zeroing workspaceStat.
+    created.workspaceStat = null;
+    writeFileSync(join(workspacePath, 'residual-keep.txt'), 'keep-unknown\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:post-workspace-identity');
+  });
+  let threw = null;
+  try {
+    try {
+      __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      });
+    } catch (err) {
+      threw = String(err.message || err);
+    }
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.ok(threw);
+  assert.match(threw, /RESIDUAL_WORKSPACE_RETAINED:ROLLBACK_IDENTITY_UNKNOWN/);
+  assert.equal(existsSync(ns), true);
+  const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+  assert.equal(kids.length, 1);
+  const residualFile = join(ns, kids[0], 'residual-keep.txt');
+  assert.equal(existsSync(residualFile), true);
+  assert.equal(readFileSync(residualFile, 'utf8'), 'keep-unknown\n');
+  // Manual cleanup of residual fixture only.
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
