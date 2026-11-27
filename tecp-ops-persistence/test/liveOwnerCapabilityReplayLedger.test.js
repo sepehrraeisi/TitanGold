@@ -4,17 +4,20 @@
  * No genuine Owner trust mutation. No live ledger provisioning. No SQL/PostgreSQL.
  */
 import assert from 'node:assert/strict';
-import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
   constants as fsConstants,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
   writeSync,
@@ -31,6 +34,18 @@ import {
   __testOnlyPrepareIsolatedLiveOwnerLedgerRoot,
   __testOnlyRemoveIsolatedLiveOwnerLedgerRoot,
   brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot,
+  evaluateTestOnlyProtectedStoragePolicy,
+  __testOnlyValidatePersistentNamespaceForDbFreeRegression,
+  __testOnlyEvaluateCreationPrecheckForDbFreeRegression,
+  __testOnlyArmDirectoryFsyncFailureForDbFreeRegression,
+  __testOnlyClearDirectoryFsyncFailureForDbFreeRegression,
+  __testOnlyArmCreationStageFailureForDbFreeRegression,
+  __testOnlyClearCreationStageFailureForDbFreeRegression,
+  __testOnlyArmLstatUidOverrideForDbFreeRegression,
+  __testOnlyClearLstatUidOverrideForDbFreeRegression,
+  LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME,
+  LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER,
+  LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX,
   canonicalizeLiveOwnerCapabilityJtiIdentity,
   consumeLiveOwnerCapabilityJti,
   createDurableLiveOwnerReplayRegistry,
@@ -1307,12 +1322,12 @@ test('F06 C/D: unrelated temp directory and fake workspace-name rejection', () =
   mkdirSync(unrelated, { mode: 0o700 });
   assert.throws(
     () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(unrelated),
-    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING/,
+    /TEST_ONLY_PROTECTED_PATH_DENIED|TEST_WORKSPACE_PREFIX_MISMATCH|TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING/,
   );
   const fakeName = join(tmpdir(), 'tecp-owned-lol-fake-not-created');
   assert.throws(
     () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(fakeName),
-    /TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING|ENOENT|lstat/i,
+    /TEST_ONLY_PROTECTED_PATH_DENIED|TEST_WORKSPACE_PREFIX_MISMATCH|TEST_ONLY_WORKSPACE_PROVENANCE_REQUIRED|TEST_WORKSPACE_PROVENANCE_MISSING|ENOENT|lstat/i,
   );
   // Access brand cannot cleanup even if forged shape points at unrelated temp
   assert.throws(
@@ -1454,3 +1469,1114 @@ test('OWNER_INSTALLED binding mutation: report limitation when local trust missi
   assert.throws(() => { deps.replayRegistry = { consumeAtomic() { return null; } }; });
   assert.equal(deps.replayRegistry, originalReplay);
 });
+
+
+// ---------------------------------------------------------------------------
+// R5E — narrow persistent TEST_ONLY namespace + creation/rebrand consistency
+// ---------------------------------------------------------------------------
+
+function persistentNamespacePath() {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  return join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+}
+
+function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function listClaimFiles(ledgerRoot) {
+  const claimFiles = [];
+  const walk = (dir) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (ent.name.endsWith('.claim')) claimFiles.push(p);
+    }
+  };
+  walk(ledgerRoot);
+  return claimFiles.sort();
+}
+
+function claimPathForJti(ledgerRoot, jti) {
+  const identity = canonicalizeLiveOwnerCapabilityJtiIdentity(jti);
+  assert.ok(identity);
+  return join(ledgerRoot, identity.slice(0, 2), `${identity}.claim`);
+}
+
+test('R5E-A/B/C/D/E/F02 persistent create, claimant-exit, independent rebrand, actual claim digest stable', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  assert.match(branded.workspacePath, new RegExp(`${LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME}`));
+  const markerPath = join(branded.workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+  const provenanceBefore = sha256File(markerPath);
+  const jti = 'jti-r5e-persist-replay-0001';
+  const expectedClaimPath = claimPathForJti(branded.rootPath, jti);
+
+  const claimant = join(tmpdir(), `r5e-r1-claimant-${process.pid}.mjs`);
+  writeFileSync(claimant, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (!r.ok || r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY) {
+  console.error(JSON.stringify(r));
+  process.exit(2);
+}
+console.log('CLAIMANT_PID=' + process.pid);
+console.log('CLAIMANT_OK');
+`);
+  const claimRan = spawnSync(process.execPath, [claimant], { encoding: 'utf8' });
+  assert.equal(claimRan.status, 0, claimRan.stderr || claimRan.stdout);
+  assert.match(claimRan.stdout, /CLAIMANT_OK/);
+  const claimantPidMatch = /CLAIMANT_PID=(\d+)/.exec(claimRan.stdout);
+  assert.ok(claimantPidMatch);
+  const claimantPid = Number(claimantPidMatch[1]);
+  assert.notEqual(claimantPid, process.pid);
+
+  assert.equal(existsSync(expectedClaimPath), true);
+  const claimsBefore = listClaimFiles(branded.rootPath);
+  assert.equal(claimsBefore.length, 1);
+  assert.equal(claimsBefore[0], expectedClaimPath);
+  const claimShaBefore = sha256File(expectedClaimPath);
+  const claimMetaBefore = readFileSync(expectedClaimPath, 'utf8');
+
+  const later = join(tmpdir(), `r5e-r1-later-${process.pid}.mjs`);
+  writeFileSync(later, `
+import assert from 'node:assert/strict';
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+assert.equal(branded.accessOnly, true);
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) {
+  console.error(JSON.stringify(r));
+  process.exit(3);
+}
+console.log('LATER_PID=' + process.pid);
+console.log('LATER_DENY_OK');
+`);
+  const laterRan = spawnSync(process.execPath, [later], { encoding: 'utf8' });
+  assert.equal(laterRan.status, 0, laterRan.stderr || laterRan.stdout);
+  assert.match(laterRan.stdout, /LATER_DENY_OK/);
+  const laterPidMatch = /LATER_PID=(\d+)/.exec(laterRan.stdout);
+  assert.ok(laterPidMatch);
+  const laterPid = Number(laterPidMatch[1]);
+  assert.notEqual(laterPid, process.pid);
+  assert.notEqual(laterPid, claimantPid);
+
+  const claimsAfter = listClaimFiles(branded.rootPath);
+  assert.equal(claimsAfter.length, 1);
+  assert.equal(claimsAfter[0], expectedClaimPath);
+  const claimShaAfter = sha256File(expectedClaimPath);
+  assert.equal(claimShaAfter, claimShaBefore);
+  assert.equal(readFileSync(expectedClaimPath, 'utf8'), claimMetaBefore);
+  assert.equal(sha256File(markerPath), provenanceBefore);
+
+  writeFileSync(join(tmpdir(), 'r5e-r1-claim-digest-evidence.json'), `${JSON.stringify({
+    claimantPid,
+    laterPid,
+    claimPath: expectedClaimPath,
+    claimSha256Before: claimShaBefore,
+    claimSha256After: claimShaAfter,
+    claimRecordCountBefore: claimsBefore.length,
+    claimRecordCountAfter: claimsAfter.length,
+    provenanceSha256: provenanceBefore,
+  }, null, 2)}\n`);
+
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(claimant, { force: true }); rmSync(later, { force: true }); } catch { /* ignore */ }
+});
+
+test('R5E-F arbitrary Owner-home path denied for brand', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const arbitrary = join(home.home, 'arbitrary-r5e-not-namespace', 'ledger');
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(arbitrary),
+    /TEST_ONLY_PROTECTED_PATH_DENIED|PROTECTED_OWNER_STORAGE/,
+  );
+});
+
+test('R5E-G matching prefix + forged provenance outside namespace denied', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const forgedWs = mkdtempSync(join(home.home, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}forged-`));
+  try {
+    chmodSync(forgedWs, 0o700);
+    const marker = join(forgedWs, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+    writeFileSync(marker, `${JSON.stringify({
+      version: 1,
+      kind: 'TEST_ONLY_LIVE_OWNER_LEDGER_WORKSPACE_V1',
+      workspaceId: '0'.repeat(32),
+      ledgerDirName: 'ledger',
+    })}\n`, { mode: 0o600 });
+    const ledger = join(forgedWs, 'ledger');
+    mkdirSync(ledger, { mode: 0o700 });
+    chmodSync(ledger, 0o700);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(ledger),
+      /TEST_ONLY_PROTECTED_PATH_DENIED|PROTECTED_OWNER_STORAGE/,
+    );
+  } finally {
+    rmSync(forgedWs, { recursive: true, force: true });
+  }
+});
+
+test('R5E-H/I canonical trust and ledger paths denied; protected ancestors denied', () => {
+  const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(canonical), /PROTECTED|DENIED/);
+  const home = resolveTrustedOwnerOsHome();
+  assert.throws(() => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(home.home), /PROTECTED|DENIED/);
+  assert.throws(
+    () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(join(home.home, '.tecp-ops-pilot')),
+    /PROTECTED|DENIED/,
+  );
+});
+
+test('R5E-J symlink alias denied for brand', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const aliasParent = mkdtempSync(join(tmpdir(), 'r5e-symlink-'));
+  const alias = join(aliasParent, 'alias-ledger');
+  try {
+    symlinkSync(branded.rootPath, alias);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(alias),
+      /SYMLINK|PROTECTED|DENIED|PROVENANCE/,
+    );
+  } finally {
+    try { rmSync(aliasParent, { recursive: true, force: true }); } catch { /* ignore */ }
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-K missing or malformed provenance denied', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const marker = join(branded.workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+  const original = readFileSync(marker);
+  try {
+    rmSync(marker);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /PROVENANCE/,
+    );
+    writeFileSync(marker, '{not-json\n', { mode: 0o600 });
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /PROVENANCE/,
+    );
+  } finally {
+    writeFileSync(marker, original, { mode: 0o600 });
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-L unsafe namespace permissions denied (isolated fixture home)', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r5e-iso-home-'));
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  mkdirSync(ns, { mode: 0o700 });
+  chmodSync(ns, 0o755); // intentional unsafe mode inside isolated fixture only
+  const homeRes = { ok: true, home: isoHome, uid: typeof process.getuid === 'function' ? process.getuid() : 0 };
+  const denied = __testOnlyValidatePersistentNamespaceForDbFreeRegression(ns, homeRes);
+  assert.equal(denied.ok, false);
+  assert.ok((denied.reasons || []).some((r) => String(r).includes('UNSAFE_PERMISSIONS') || String(r).includes('NAMESPACE')));
+  // Real retained namespace must remain untouched.
+  assert.equal(statSync(persistentNamespacePath()).mode & 0o777, 0o700);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R5E-L2 unsafe persistent workspace/ledger permissions denied (isolated workspace only)', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  try {
+    chmodSync(branded.workspacePath, 0o755);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /UNSAFE_PERMISSIONS|PROTECTED|DENIED|WORKSPACE/,
+    );
+    chmodSync(branded.workspacePath, 0o700);
+    chmodSync(branded.rootPath, 0o755);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /UNSAFE_PERMISSIONS|PROTECTED|DENIED|LEDGER/,
+    );
+  } finally {
+    try { chmodSync(branded.workspacePath, 0o700); } catch { /* ignore */ }
+    try { chmodSync(branded.rootPath, 0o700); } catch { /* ignore */ }
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R5E-N access-only rebrand cannot cleanup', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const childScript = join(tmpdir(), `r5e-cleanup-${process.pid}.mjs`);
+  writeFileSync(childScript, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, __testOnlyRemoveIsolatedLiveOwnerLedgerRoot } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+try {
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  console.log('CLEANUP_UNEXPECTED_OK');
+  process.exit(3);
+} catch (err) {
+  if (!String(err.message || err).includes('TEST_ONLY_CLEANUP_AUTHORITY_REQUIRED')) {
+    console.error(String(err && err.stack || err));
+    process.exit(4);
+  }
+  console.log('R5E_CLEANUP_DENIED_OK');
+}
+`);
+  const ran = spawnSync(process.execPath, [childScript], { encoding: 'utf8' });
+  assert.equal(ran.status, 0, ran.stderr || ran.stdout);
+  assert.match(ran.stdout, /R5E_CLEANUP_DENIED_OK/);
+  assert.equal(existsSync(branded.workspacePath), true);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(childScript, { force: true }); } catch { /* ignore */ }
+});
+
+test('R5E-O/P creation/rebrand shared policy; prohibited TMPDIR creation denied before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r5e-evil-tmpdir-'));
+  const previous = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = evil;
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(),
+      /TMPDIR_UNDER_OWNER_HOME_OUTSIDE_PERSISTENT_NAMESPACE|CREATE_DENIED/,
+    );
+    const kids = readdirSync(evil).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    rmSync(evil, { recursive: true, force: true });
+  }
+});
+
+test('R5E-Q missing trusted-home resolution fails closed (policy branch)', () => {
+  const denied = evaluateTestOnlyProtectedStoragePolicy(
+    join('/home/someone', LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME, 'tecp-owned-lol-x', 'ledger'),
+    { ok: false, reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']) },
+    { forCleanup: false },
+  );
+  assert.equal(denied.ok, false);
+  assert.ok(denied.reasons.includes('TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED'));
+});
+
+test('R5E-Q2 missing trusted-home creation precheck denies before mutation', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'r5e-missing-home-parent-'));
+  const pre = __testOnlyEvaluateCreationPrecheckForDbFreeRegression(
+    parent,
+    { ok: false, reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']) },
+  );
+  assert.equal(pre.ok, false);
+  assert.ok(pre.reasons.includes('TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED'));
+  const kids = readdirSync(parent).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+  assert.equal(kids.length, 0);
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test('R5E-P2 unsafe TMPDIR symlink parent denied before mutation', () => {
+  const real = mkdtempSync(join(tmpdir(), 'r5e-real-tmp-'));
+  const aliasParent = mkdtempSync(join(tmpdir(), 'r5e-alias-parent-'));
+  const alias = join(aliasParent, 'tmp-alias');
+  symlinkSync(real, alias);
+  const previous = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = alias;
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(),
+      /SYMLINK|CREATE_DENIED|CREATE_PARENT/,
+    );
+    const kids = readdirSync(real).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    rmSync(aliasParent, { recursive: true, force: true });
+    rmSync(real, { recursive: true, force: true });
+  }
+});
+
+test('R5E-R ordinary temp workspaces remain compatible; genuine-live path unchanged', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  assert.equal(
+    branded.workspacePath.includes(`${LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME}`),
+    false,
+  );
+  const rebranded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath);
+  assert.equal(rebranded.accessOnly, true);
+  const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+  assert.match(canonical, /live-owner-jti-ledger-v1$/);
+  assert.ok(canonical.includes('.tecp-ops-pilot'));
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+
+test('R2-F01-B absent namespace creation under isolated 0750 home fixture', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r2-home0750-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  assert.equal(existsSync(ns), false);
+  const homeRes = {
+    ok: true,
+    home: isoHome,
+    uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+  };
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+    persistent: true,
+    testOnlyTrustedHome: homeRes,
+  });
+  try {
+    assert.equal(existsSync(ns), true);
+    assert.equal(statSync(ns).mode & 0o777, 0o700);
+    assert.equal(statSync(branded.workspacePath).mode & 0o777, 0o700);
+    assert.match(branded.workspacePath, new RegExp(LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+    // Real retained namespace untouched.
+    assert.equal(statSync(persistentNamespacePath()).mode & 0o777, 0o700);
+  } finally {
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(isoHome, { recursive: true, force: true });
+  }
+});
+
+test('R2-F01-A foreign/group-writable parent denied before mutation', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r2-badparent-'));
+  chmodSync(isoHome, 0o775); // group writable under injected home
+  const before = new Set(readdirSync(isoHome));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: isoHome,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /PARENT_DENIED|GROUP_OR_WORLD_WRITABLE|CREATE_DENIED|POLICY_DENIED/,
+  );
+  const after = readdirSync(isoHome);
+  assert.equal(after.filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX)).length, 0);
+  assert.equal(existsSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  assert.deepEqual(new Set(after), before);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R2-F01-B/C namespace sync failure identity-bound empty rollback', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r2-ns-syncfail-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmDirectoryFsyncFailureForDbFreeRegression(ns, 'private');
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /NAMESPACE_SYNC_FAILED|INJECTED_FSYNC/,
+    );
+  } finally {
+    __testOnlyClearDirectoryFsyncFailureForDbFreeRegression();
+  }
+  // Empty newly created ns should be removed; unrelated entries preserved.
+  assert.equal(existsSync(ns), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R2-F01-C unrelated pre-existing namespace entries preserved on parent sync failure', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r2-ns-preserve-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  mkdirSync(ns, { mode: 0o700 });
+  chmodSync(ns, 0o700);
+  const keeper = join(ns, 'preexisting-keep-me');
+  writeFileSync(keeper, 'keep\n', { mode: 0o600 });
+  const keeperStat = lstatSync(keeper);
+  // Pre-existing namespace: create must not wipe keeper.
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+    persistent: true,
+    testOnlyTrustedHome: {
+      ok: true,
+      home: isoHome,
+      uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+    },
+  });
+  try {
+    assert.equal(existsSync(keeper), true);
+    assert.equal(readFileSync(keeper, 'utf8'), 'keep\n');
+    const after = lstatSync(keeper);
+    assert.equal(after.dev, keeperStat.dev);
+    assert.equal(after.ino, keeperStat.ino);
+  } finally {
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(isoHome, { recursive: true, force: true });
+  }
+});
+
+test('R2-F01-D unsafe provenance marker permissions denied via actual rebrand', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const marker = join(branded.workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
+  const prev = statSync(marker).mode & 0o777;
+  try {
+    chmodSync(marker, 0o644);
+    assert.throws(
+      () => brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath),
+      /PROVENANCE_UNSAFE_PERMISSIONS|PROVENANCE/,
+    );
+  } finally {
+    try { chmodSync(marker, prev); } catch { /* ignore */ }
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  }
+});
+
+test('R2-F01-A ordinary temp creation still compatible after parent validation', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  assert.equal(
+    branded.workspacePath.includes(LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME),
+    false,
+  );
+  const rebranded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(branded.rootPath);
+  assert.equal(rebranded.accessOnly, true);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+});
+
+test('R5E claimant-exit then later independent persistent rebrand replay denial', () => {
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({ persistent: true });
+  const jti = 'jti-r5e-claimant-exit-0001';
+  const claimant = join(tmpdir(), `r5e-claimant-${process.pid}.mjs`);
+  const later = join(tmpdir(), `r5e-later-${process.pid}.mjs`);
+  writeFileSync(claimant, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (!r.ok || r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_CONSUMED_SUCCESSFULLY) {
+  console.error(JSON.stringify(r));
+  process.exit(2);
+}
+console.log('CLAIMANT_OK');
+`);
+  const claimRan = spawnSync(process.execPath, [claimant], { encoding: 'utf8' });
+  assert.equal(claimRan.status, 0, claimRan.stderr || claimRan.stdout);
+  writeFileSync(later, `
+import { brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot, consumeLiveOwnerCapabilityJti, LIVE_OWNER_JTI_CLAIM_OUTCOMES } from ${JSON.stringify(LEDGER_SRC)};
+const branded = brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(${JSON.stringify(branded.rootPath)});
+const r = consumeLiveOwnerCapabilityJti(${JSON.stringify(jti)}, {}, { testOnlyLedgerRoot: branded });
+if (r.outcome !== LIVE_OWNER_JTI_CLAIM_OUTCOMES.CLAIM_ALREADY_CONSUMED) {
+  console.error(JSON.stringify(r));
+  process.exit(3);
+}
+console.log('LATER_DENY_OK');
+`);
+  const laterRan = spawnSync(process.execPath, [later], { encoding: 'utf8' });
+  assert.equal(laterRan.status, 0, laterRan.stderr || laterRan.stdout);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+  try { rmSync(claimant, { force: true }); rmSync(later, { force: true }); } catch { /* ignore */ }
+});
+
+
+test('R3-F01-A actual entrypoint trusted-home failure denies before mutation', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'r3-home-fail-'));
+  const before = new Set(readdirSync(parent));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: false,
+        reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']),
+      },
+    }),
+    /TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED/,
+  );
+  assert.deepEqual(new Set(readdirSync(parent)), before);
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      testOnlyTrustedHome: {
+        ok: false,
+        reasons: Object.freeze(['TRUSTED_HOMEDIR_UNAVAILABLE']),
+      },
+    }),
+    /TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED/,
+  );
+  assert.deepEqual(new Set(readdirSync(parent)), before);
+  rmSync(parent, { recursive: true, force: true });
+});
+
+test('R3-F01-A foreign parent ownership denied before mutation', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-foreign-parent-'));
+  chmodSync(isoHome, 0o750);
+  const before = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 12345;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(isoHome, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_DENIED|UNEXPECTED_OWNERSHIP|UID_MISMATCH|FOREIGN_OWNERSHIP|ANCESTOR/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), before);
+  assert.equal(existsSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A foreign intermediate ancestor denied before mutation', () => {
+  const base = mkdtempSync(join(tmpdir(), 'r3-foreign-anc-'));
+  const isoHome = join(base, 'home');
+  mkdirSync(isoHome, { mode: 0o750 });
+  chmodSync(isoHome, 0o750);
+  const beforeHome = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 22222;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(base, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ANCESTOR_UNEXPECTED_FOREIGN_OWNERSHIP|ANCESTOR_DENIED|FOREIGN_OWNERSHIP/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), beforeHome);
+  assert.equal(existsSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(base, { recursive: true, force: true });
+});
+
+test('R3-F01-A unsafe ancestor under injected home denied before mutation', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-unsafe-anc-'));
+  chmodSync(isoHome, 0o750);
+  const mid = join(isoHome, 'mid');
+  mkdirSync(mid, { mode: 0o775 });
+  chmodSync(mid, 0o775);
+  const before = new Set(readdirSync(mid));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: mid,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /GROUP_OR_WORLD_WRITABLE|PRIVATE_ANCESTOR_WRITABLE|PARENT_DENIED|ANCESTOR_DENIED/,
+  );
+  assert.deepEqual(new Set(readdirSync(mid)), before);
+  assert.equal(existsSync(join(mid, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A symlink parent denied before mutation (persistent)', () => {
+  const real = mkdtempSync(join(tmpdir(), 'r3-sym-real-'));
+  chmodSync(real, 0o750);
+  const aliasParent = mkdtempSync(join(tmpdir(), 'r3-sym-alias-'));
+  const alias = join(aliasParent, 'home-link');
+  symlinkSync(real, alias);
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: alias,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /SYMLINK|CREATE_PARENT|ANCESTOR|DENIED/,
+  );
+  assert.equal(existsSync(join(real, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(aliasParent, { recursive: true, force: true });
+  rmSync(real, { recursive: true, force: true });
+});
+
+test('R3-F01-A protected path denial before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r3-protected-tmpdir-'));
+  const previous = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = evil;
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(),
+      /TMPDIR_UNDER_OWNER_HOME_OUTSIDE_PERSISTENT_NAMESPACE|CREATE_DENIED|PROTECTED/,
+    );
+    const kids = readdirSync(evil).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    rmSync(evil, { recursive: true, force: true });
+  }
+});
+
+test('R3-F01-C same failing namespace unrelated entry preserved', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-same-ns-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  const unrelatedInside = join(ns, 'unrelated-inside.txt');
+  __testOnlyArmCreationStageFailureForDbFreeRegression('private-fsync-pre', ({ ns: nsPath }) => {
+    writeFileSync(join(nsPath, 'unrelated-inside.txt'), 'preserve-me\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:private-fsync-pre');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /NAMESPACE_SYNC_FAILED|NAMESPACE_CREATE_FAILED|INJECTED_CREATION_STAGE|RESIDUAL_NAMESPACE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), true);
+  assert.equal(existsSync(unrelatedInside), true);
+  assert.equal(readFileSync(unrelatedInside, 'utf8'), 'preserve-me\n');
+  assert.deepEqual(readdirSync(ns).sort(), ['unrelated-inside.txt']);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C namespace identity mismatch preserves residual', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-id-mismatch-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('private-fsync-pre', ({ ns: nsPath }) => {
+    rmSync(nsPath, { recursive: true, force: true });
+    mkdirSync(nsPath, { mode: 0o700 });
+    chmodSync(nsPath, 0o700);
+    writeFileSync(join(nsPath, 'replacement-marker.txt'), 'replaced\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:private-fsync-pre');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /RESIDUAL_NAMESPACE_RETAINED|ROLLBACK_IDENTITY_MISMATCH|NAMESPACE_/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), true);
+  assert.equal(readFileSync(join(ns, 'replacement-marker.txt'), 'utf8'), 'replaced\n');
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C marker write failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-marker-write-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'marker-write',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:marker-write',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /marker-write|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C marker fsync failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-marker-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'marker-fsync',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:marker-fsync',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /marker-fsync|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C ledger mkdir failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ledger-mkdir-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'ledger-mkdir',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:ledger-mkdir',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ledger-mkdir|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C workspace fsync failure rolls back workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ws-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'workspace-fsync',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:workspace-fsync',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /workspace-fsync|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C post-workspace-alloc failure rolls back empty workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ws-alloc-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression(
+    'post-workspace-alloc',
+    'TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:post-workspace-alloc',
+  );
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /post-workspace-alloc|RESIDUAL_WORKSPACE|INJECTED_CREATION_STAGE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-C parent fsync failure identity-bound empty namespace rollback', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-parent-fsync-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmDirectoryFsyncFailureForDbFreeRegression(isoHome, 'parent');
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_SYNC_FAILED|INJECTED_FSYNC/,
+    );
+  } finally {
+    __testOnlyClearDirectoryFsyncFailureForDbFreeRegression();
+  }
+  assert.equal(existsSync(ns), false);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R3-F01-A/B ordinary temp and persistent 0750 creation still succeed', () => {
+  const ordinary = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot();
+  assert.equal(ordinary.workspacePath.includes(LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME), false);
+  __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(ordinary);
+
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-ok0750-'));
+  chmodSync(isoHome, 0o750);
+  const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+    persistent: true,
+    testOnlyTrustedHome: {
+      ok: true,
+      home: isoHome,
+      uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+    },
+  });
+  try {
+    assert.equal(statSync(branded.workspacePath).mode & 0o777, 0o700);
+    assert.equal(
+      statSync(join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)).mode & 0o777,
+      0o700,
+    );
+  } finally {
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(isoHome, { recursive: true, force: true });
+  }
+});
+
+
+test('R3-F01-C final eligibility failure rolls back created workspace', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r3-final-elig-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('pre-final-eligibility', () => {
+    throw new Error('TEST_ONLY_CREATE_ELIGIBILITY_FAILED:INJECTED_FINAL_ELIGIBILITY');
+  });
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /ELIGIBILITY_FAILED|INJECTED_FINAL_ELIGIBILITY|RESIDUAL_WORKSPACE/,
+    );
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    assert.equal(kids.length, 0);
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+
+test('R4-F01 TEST_ONLY UID override cannot weaken genuine-live ancestor validation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 42424;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(home.home, foreignUid);
+  try {
+    // Genuine-live ancestor validation (testOnly=false) must ignore the UID override.
+    // resolveCanonical + protected-policy evaluation must still observe real ownership.
+    const canonical = resolveCanonicalLiveOwnerCapabilityReplayLedgerPath();
+    assert.match(canonical, /live-owner-jti-ledger-v1$/);
+    const real = lstatSync(home.home);
+    assert.equal(real.uid, process.getuid());
+    const pol = evaluateTestOnlyProtectedStoragePolicy(
+      join(home.home, 'arbitrary-r4-not-ns', 'ledger'),
+      home,
+      { forCleanup: false },
+    );
+    assert.equal(pol.ok, false);
+    assert.ok(pol.reasons.some((r) => String(r).includes('PROTECTED_OWNER_STORAGE')));
+    assert.equal(
+      pol.reasons.some((r) => /FOREIGN|UNEXPECTED_OWNERSHIP/.test(String(r))),
+      false,
+    );
+    // Fixture create while override is armed on genuine home must still succeed
+    // (override target is not the fixture parent).
+    const iso = mkdtempSync(join(tmpdir(), 'r4-uid-live-'));
+    chmodSync(iso, 0o750);
+    const branded = __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: iso,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    });
+    __testOnlyRemoveIsolatedLiveOwnerLedgerRoot(branded);
+    rmSync(iso, { recursive: true, force: true });
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+});
+
+test('R4-F01 UID override still applies to TEST_ONLY creation parent checks', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-uid-testonly-'));
+  chmodSync(isoHome, 0o750);
+  const before = new Set(readdirSync(isoHome));
+  const foreignUid = (typeof process.getuid === 'function' ? process.getuid() : 1000) + 52525;
+  __testOnlyArmLstatUidOverrideForDbFreeRegression(isoHome, foreignUid);
+  try {
+    assert.throws(
+      () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      }),
+      /PARENT_DENIED|UNEXPECTED_OWNERSHIP|UID_MISMATCH|FOREIGN_OWNERSHIP|ANCESTOR/,
+    );
+  } finally {
+    __testOnlyClearLstatUidOverrideForDbFreeRegression();
+  }
+  assert.deepEqual(new Set(readdirSync(isoHome)), before);
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R4-F02 genuine Owner-home protection denies fixture inside Owner home outside ns before mutation', () => {
+  const home = resolveTrustedOwnerOsHome();
+  assert.equal(home.ok, true);
+  const evil = mkdtempSync(join(home.home, 'r4-evil-fixture-'));
+  chmodSync(evil, 0o750);
+  const before = new Set(readdirSync(evil));
+  assert.throws(
+    () => __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+      persistent: true,
+      testOnlyTrustedHome: {
+        ok: true,
+        home: evil,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+      },
+    }),
+    /GENUINE_OWNER_HOME_PROTECTION|PROTECTED_OWNER_STORAGE|CREATE_DENIED_BEFORE_MUTATION/,
+  );
+  assert.deepEqual(new Set(readdirSync(evil)), before);
+  assert.equal(existsSync(join(evil, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME)), false);
+  rmSync(evil, { recursive: true, force: true });
+});
+
+test('R4-F03 workspace identity-capture failure preserves residual and reports unknown identity', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-idcap-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('pre-workspace-identity', ({ workspacePath }) => {
+    // Remove workspace before identity capture so lstat fails with ENOENT.
+    rmSync(workspacePath, { recursive: true, force: true });
+  });
+  let threw = null;
+  try {
+    try {
+      __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      });
+    } catch (err) {
+      threw = String(err.message || err);
+    }
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.ok(threw);
+  assert.match(threw, /IDENTITY_CAPTURE_FAILED|RESIDUAL_WORKSPACE_RETAINED|ROLLBACK_IDENTITY_UNKNOWN/);
+  // Namespace may exist from ensurePersistent; no tecp-owned workspace should remain if capture failed after delete.
+  if (existsSync(ns)) {
+    const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+    // If a residual empty name was recreated somehow, still require unknown-identity reporting above.
+    assert.ok(kids.length === 0 || threw.includes('RESIDUAL_WORKSPACE_RETAINED'));
+  }
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
+test('R4-F04 unknown workspace identity refuses path rollback deletion', () => {
+  const isoHome = mkdtempSync(join(tmpdir(), 'r4-unknown-rb-'));
+  chmodSync(isoHome, 0o750);
+  const ns = join(isoHome, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME);
+  __testOnlyArmCreationStageFailureForDbFreeRegression('post-workspace-identity', ({ workspacePath, created }) => {
+    // Clear captured identity after successful capture to force unknown-identity rollback branch
+    // on a subsequent injected failure... instead: plant and fail with cleared stat via hook throw
+    // after zeroing workspaceStat.
+    created.workspaceStat = null;
+    writeFileSync(join(workspacePath, 'residual-keep.txt'), 'keep-unknown\n', { mode: 0o600 });
+    throw new Error('TEST_ONLY_INJECTED_CREATION_STAGE_FAILURE:post-workspace-identity');
+  });
+  let threw = null;
+  try {
+    try {
+      __testOnlyPrepareIsolatedLiveOwnerLedgerRoot({
+        persistent: true,
+        testOnlyTrustedHome: {
+          ok: true,
+          home: isoHome,
+          uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        },
+      });
+    } catch (err) {
+      threw = String(err.message || err);
+    }
+  } finally {
+    __testOnlyClearCreationStageFailureForDbFreeRegression();
+  }
+  assert.ok(threw);
+  assert.match(threw, /RESIDUAL_WORKSPACE_RETAINED:ROLLBACK_IDENTITY_UNKNOWN/);
+  assert.equal(existsSync(ns), true);
+  const kids = readdirSync(ns).filter((n) => n.startsWith(LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
+  assert.equal(kids.length, 1);
+  const residualFile = join(ns, kids[0], 'residual-keep.txt');
+  assert.equal(existsSync(residualFile), true);
+  assert.equal(readFileSync(residualFile, 'utf8'), 'keep-unknown\n');
+  // Manual cleanup of residual fixture only.
+  rmSync(isoHome, { recursive: true, force: true });
+});
+
