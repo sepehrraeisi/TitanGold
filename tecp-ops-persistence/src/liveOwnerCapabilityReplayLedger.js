@@ -274,6 +274,28 @@ function validatePersistentTestOnlyNamespaceDirectory(namespaceAbs, home) {
   return { ok: true, namespacePath: ns };
 }
 
+function assertDirectoryOwnedPrivateMode(dirPath, label) {
+  let lst;
+  try {
+    lst = lstatSync(dirPath);
+  } catch (err) {
+    return { ok: false, reasons: Object.freeze([`${label}_LSTAT_FAILED`, String(err.message || err)]) };
+  }
+  if (lst.isSymbolicLink() || !lst.isDirectory()) {
+    return { ok: false, reasons: Object.freeze([`${label}_UNSAFE_TYPE`]) };
+  }
+  if (typeof process.getuid === 'function' && lst.uid !== process.getuid()) {
+    return { ok: false, reasons: Object.freeze([`${label}_UNEXPECTED_OWNERSHIP`, `UID=${lst.uid}`]) };
+  }
+  if (modeOf(lst) !== EXPECTED_DIR_MODE) {
+    return {
+      ok: false,
+      reasons: Object.freeze([`${label}_UNSAFE_PERMISSIONS`, `MODE=${modeOf(lst).toString(8)}`]),
+    };
+  }
+  return { ok: true, stat: lst };
+}
+
 function assertEligibleTestOnlyWorkspaceLedgerLocation(ledgerRootAbs) {
   const abs = resolve(ledgerRootAbs);
   const protectedCheck = assertPathOutsideProtectedOwnerStorage(abs, { forCleanup: false });
@@ -315,9 +337,38 @@ function assertEligibleTestOnlyWorkspaceLedgerLocation(ledgerRootAbs) {
   if (!symlinkCheck.ok) {
     return { ok: false, reasons: Object.freeze(symlinkCheck.reasons) };
   }
+  // Full storage boundary before access branding (ownership/mode/ancestors/provenance).
+  const wsDir = assertDirectoryOwnedPrivateMode(workspacePath, 'TEST_WORKSPACE');
+  if (!wsDir.ok) return wsDir;
+  const ledgerDir = assertDirectoryOwnedPrivateMode(abs, 'TEST_LEDGER');
+  if (!ledgerDir.ok) return ledgerDir;
+  const ancestor = assertTrustedAncestorChain(abs, {
+    testOnly: true,
+    workspacePath,
+  });
+  if (!ancestor.ok) {
+    return { ok: false, reasons: Object.freeze([...(ancestor.reasons || []), 'TRUSTED_ANCESTOR_VALIDATION_FAILED']) };
+  }
+  const provenance = readOwnedWorkspaceProvenance(abs);
+  if (!provenance.ok) {
+    return { ok: false, reasons: Object.freeze(provenance.reasons || ['TEST_WORKSPACE_PROVENANCE_INVALID']) };
+  }
+  // Descriptor/path identity for workspace + ledger directories.
+  try {
+    const wsFd = openValidatedDirectoryFd(workspacePath);
+    closeSync(wsFd);
+    const ledFd = openValidatedDirectoryFd(abs);
+    closeSync(ledFd);
+  } catch (err) {
+    return {
+      ok: false,
+      reasons: Object.freeze(['DESCRIPTOR_IDENTITY_VALIDATION_FAILED', String(err.message || err)]),
+    };
+  }
   return {
     ok: true,
     workspacePath,
+    workspaceId: provenance.workspaceId,
     inPersistentNamespace: protectedCheck.inPersistentNamespace === true,
     persistentNamespace: protectedCheck.persistentNamespace,
     ownerHome: home.home,
@@ -329,13 +380,43 @@ function ensurePersistentTestOnlyNamespace(home) {
     throw new Error(`TRUSTED_HOME_UNAVAILABLE:${((home && home.reasons) || []).join(',')}`);
   }
   const ns = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
+  const parent = dirname(ns);
+  // Trusted parent must exist, not be a symlink, and not be hard-protected storage.
+  const parentSymlink = assertNoSymlinkPathComponents(parent);
+  if (!parentSymlink.ok) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYMLINK:${(parentSymlink.reasons || []).join(',')}`);
+  }
+  const parentPolicy = evaluateTestOnlyProtectedStoragePolicy(
+    // Probe a child under prospective namespace so namespace root itself is not required to exist yet.
+    join(ns, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}ns-probe`, 'ledger'),
+    home,
+    { forCleanup: false },
+  );
+  // Parent policy may deny because namespace probe is under home; that is expected to PASS
+  // once inPersistentNamespace applies. If hard-protected overlap, deny before mkdir.
+  if (!parentPolicy.ok && (parentPolicy.reasons || []).some((r) =>
+    r === 'PROTECTED_TECP_OPS_PILOT_PATH'
+    || r === 'PROTECTED_OWNER_TRUST_PATH'
+    || r === 'PROTECTED_LIVE_OWNER_LEDGER_PATH_SEGMENT'
+    || String(r).includes('.tecp-ops-pilot')
+    || String(r).includes('s2-simin-owner-trust'))) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_PROTECTED_PARENT:${(parentPolicy.reasons || []).join(',')}`);
+  }
   if (!existsSync(ns)) {
     mkdirSync(ns, { recursive: false, mode: EXPECTED_DIR_MODE });
     chmodSync(ns, EXPECTED_DIR_MODE);
     try {
-      fsyncPathDirectory(dirname(ns));
-    } catch {
-      // best-effort parent sync; namespace mode/ownership still enforced below
+      fsyncPathDirectory(ns);
+    } catch (err) {
+      try { rmSync(ns, { recursive: true, force: false }); } catch { /* ignore */ }
+      throw new Error(`PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${String(err.message || err)}`);
+    }
+    try {
+      fsyncPathDirectory(parent);
+    } catch (err) {
+      // Parent sync failure is a durability limitation — do not claim durable provisioning success.
+      try { rmSync(ns, { recursive: true, force: false }); } catch { /* ignore */ }
+      throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${String(err.message || err)}`);
     }
   }
   const validated = validatePersistentTestOnlyNamespaceDirectory(ns, home);
@@ -421,6 +502,28 @@ function readOwnedWorkspaceProvenance(ledgerRootAbs) {
  * Access branding for an already-created owned TEST_ONLY ledger root.
  * Does NOT grant cleanup authority. Child processes may use this for claim access.
  */
+
+/**
+ * DB-free regression helper: validate a persistent namespace directory against a
+ * supplied trusted-home resolution. Does not alter genuine-live path resolution.
+ */
+export function __testOnlyValidatePersistentNamespaceForDbFreeRegression(namespaceAbs, homeResolution) {
+  return validatePersistentTestOnlyNamespaceDirectory(namespaceAbs, homeResolution);
+}
+
+/**
+ * DB-free regression helper: run creation precheck policy with a supplied home
+ * resolution without calling userInfo(). Does not mutate filesystem.
+ */
+export function __testOnlyEvaluateCreationPrecheckForDbFreeRegression(parentDir, homeResolution) {
+  const prospective = join(resolve(parentDir), `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
+  return evaluateTestOnlyProtectedStoragePolicy(
+    join(prospective, 'ledger'),
+    homeResolution,
+    { forCleanup: false },
+  );
+}
+
 export function brandTestOnlyLiveOwnerCapabilityReplayLedgerRoot(rootPath) {
   if (!isNonEmptyString(rootPath)) {
     throw new TypeError('TEST_ONLY_LEDGER_ROOT_REQUIRED');
@@ -1121,19 +1224,26 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
       parentDir = tempBase;
     }
   }
-  // Deny before mutation if the chosen parent would fail protected-storage policy
-  // for a prospective child workspace path.
+  // Deny before mutation for ANY failed protected-storage policy evaluation.
+  const parentSymlinks = assertNoSymlinkPathComponents(parentDir);
+  if (!parentSymlinks.ok) {
+    throw new Error(`TEST_ONLY_CREATE_PARENT_SYMLINK_DENIED:${(parentSymlinks.reasons || []).join(',')}`);
+  }
   const prospective = join(parentDir, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
+  const homeForPolicy = home.ok
+    ? home
+    : { ok: false, reasons: (home && home.reasons) || ['TRUSTED_HOME_UNAVAILABLE'] };
   const precheck = evaluateTestOnlyProtectedStoragePolicy(
     join(prospective, 'ledger'),
-    home.ok ? home : { ok: false, reasons: (home && home.reasons) || ['TRUSTED_HOME_UNAVAILABLE'] },
+    homeForPolicy,
     { forCleanup: false },
   );
-  if (!precheck.ok && wantPersistent) {
-    throw new Error(`TEST_ONLY_PERSISTENT_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
-  }
-  if (!precheck.ok && home.ok && pathIsWithin(parentDir, home.home)) {
+  if (!precheck.ok) {
     throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
+  }
+  if (!home.ok) {
+    // Ordinary temp paths still require trusted-home fail-closed for the shared contract.
+    throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED`);
   }
   const workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
   chmodSync(workspacePath, EXPECTED_DIR_MODE);
