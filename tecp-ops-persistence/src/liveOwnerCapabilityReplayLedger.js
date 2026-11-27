@@ -29,6 +29,8 @@ import {
   mkdtempSync,
   openSync,
   readSync,
+  readdirSync,
+  rmdirSync,
   rmSync,
   writeFileSync,
   writeSync,
@@ -375,47 +377,265 @@ function assertEligibleTestOnlyWorkspaceLedgerLocation(ledgerRootAbs) {
   };
 }
 
+
+function isGroupOrWorldWritable(modeBits) {
+  return (modeBits & 0o022) !== 0;
+}
+
+function hasStickyBit(modeBits) {
+  return (modeBits & 0o1000) !== 0;
+}
+
+/**
+ * Parent dirs for creation: exact owned private when under Owner home;
+ * outside home, reject group/world-writable parents lacking sticky bit.
+ */
+function assertEligibleCreationParentDirectory(parentDir, home) {
+  const abs = resolve(parentDir);
+  let lst;
+  try {
+    lst = lstatSync(abs);
+  } catch (err) {
+    return { ok: false, reasons: Object.freeze(['CREATE_PARENT_LSTAT_FAILED', String(err.message || err)]) };
+  }
+  if (lst.isSymbolicLink() || !lst.isDirectory()) {
+    return { ok: false, reasons: Object.freeze(['CREATE_PARENT_UNSAFE_TYPE']) };
+  }
+  const bits = modeOf(lst);
+  if (home && home.ok === true && pathIsWithin(abs, home.home)) {
+    if (typeof process.getuid === 'function' && lst.uid !== process.getuid()) {
+      return { ok: false, reasons: Object.freeze(['CREATE_PARENT_UNEXPECTED_OWNERSHIP', `UID=${lst.uid}`]) };
+    }
+    if (home.uid != null && lst.uid !== home.uid) {
+      return { ok: false, reasons: Object.freeze(['CREATE_PARENT_UID_MISMATCH']) };
+    }
+    if (isGroupOrWorldWritable(bits)) {
+      return {
+        ok: false,
+        reasons: Object.freeze(['CREATE_PARENT_GROUP_OR_WORLD_WRITABLE', `MODE=${bits.toString(8)}`]),
+      };
+    }
+  } else if (isGroupOrWorldWritable(bits) && !hasStickyBit(lst.mode)) {
+    return {
+      ok: false,
+      reasons: Object.freeze(['CREATE_PARENT_UNSAFE_WRITABLE_WITHOUT_STICKY', `MODE=${bits.toString(8)}`]),
+    };
+  }
+  return { ok: true, stat: lst, path: abs };
+}
+
+/**
+ * Parent/home synchronization: identity-validated directory fsync without
+ * requiring private 0700 (Owner home is commonly 0750).
+ */
+function fsyncTrustedParentDirectory(dirPath, home) {
+  const check = assertEligibleCreationParentDirectory(dirPath, home);
+  if (!check.ok) {
+    throw new Error(`TRUSTED_PARENT_SYNC_PRECHECK_FAILED:${(check.reasons || []).join(',')}`);
+  }
+  const abs = check.path;
+  const lst = check.stat;
+  const fd = openSync(abs, requireDirectoryNofollowFlags());
+  try {
+    const st = fstatSync(fd);
+    if (st.dev !== lst.dev || st.ino !== lst.ino) {
+      throw new Error('TRUSTED_PARENT_SYNC_IDENTITY_MISMATCH');
+    }
+    if (typeof st.isDirectory === 'function' ? !st.isDirectory() : (st.mode & 0o170000) !== 0o040000) {
+      throw new Error('TRUSTED_PARENT_SYNC_FD_NOT_DIRECTORY');
+    }
+    if (testOnlyDirectoryFsyncOverride) {
+      const fn = testOnlyDirectoryFsyncOverride;
+      testOnlyDirectoryFsyncOverride = null;
+      fn(abs, 'parent');
+    }
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function maybeInjectDirectoryFsyncFailure(abs, phase) {
+  if (!testOnlyDirectoryFsyncOverride) return;
+  const target = testOnlyDirectoryFsyncTarget;
+  if (target && resolve(abs) !== resolve(target)) return;
+  const fn = testOnlyDirectoryFsyncOverride;
+  testOnlyDirectoryFsyncOverride = null;
+  testOnlyDirectoryFsyncTarget = null;
+  fn(resolve(abs), phase);
+}
+
+let testOnlyDirectoryFsyncOverride = null;
+let testOnlyDirectoryFsyncTarget = null;
+
+/**
+ * TEST_ONLY one-shot fsync failure injector. Cannot grant genuine-live authority.
+ */
+export function __testOnlyArmDirectoryFsyncFailureForDbFreeRegression(targetAbs, kind = 'any') {
+  testOnlyDirectoryFsyncTarget = targetAbs ? resolve(targetAbs) : null;
+  testOnlyDirectoryFsyncOverride = (abs, phase) => {
+    if (kind !== 'any' && kind !== phase) {
+      // Re-arm for a later matching phase.
+      testOnlyDirectoryFsyncOverride = (abs2, phase2) => {
+        if (kind !== 'any' && kind !== phase2) return;
+        throw new Error(`TEST_ONLY_INJECTED_FSYNC_FAILURE:${phase2}:${abs2}`);
+      };
+      testOnlyDirectoryFsyncTarget = targetAbs ? resolve(targetAbs) : abs;
+      return;
+    }
+    throw new Error(`TEST_ONLY_INJECTED_FSYNC_FAILURE:${phase}:${abs}`);
+  };
+}
+
+export function __testOnlyClearDirectoryFsyncFailureForDbFreeRegression() {
+  testOnlyDirectoryFsyncOverride = null;
+  testOnlyDirectoryFsyncTarget = null;
+}
+
+/**
+ * Remove only an exact empty directory created by the current operation.
+ * Never recursive. Never follows symlinks. Never removes mismatched identity.
+ */
+function removeExactCreatedEmptyDirectory(dirPath, expected) {
+  const abs = resolve(dirPath);
+  let lst;
+  try {
+    lst = lstatSync(abs);
+  } catch (err) {
+    return { ok: false, residual: false, reasons: Object.freeze(['ROLLBACK_LSTAT_FAILED', String(err.message || err)]) };
+  }
+  if (lst.isSymbolicLink()) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_REFUSES_SYMLINK']) };
+  }
+  if (!lst.isDirectory()) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_NOT_DIRECTORY']) };
+  }
+  if (!expected || lst.dev !== expected.dev || lst.ino !== expected.ino) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_IDENTITY_MISMATCH']) };
+  }
+  let entries;
+  try {
+    entries = readdirSync(abs);
+  } catch (err) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_READDIR_FAILED', String(err.message || err)]) };
+  }
+  if (entries.length !== 0) {
+    return {
+      ok: false,
+      residual: true,
+      reasons: Object.freeze(['ROLLBACK_DIRECTORY_NOT_EMPTY', `ENTRIES=${entries.length}`]),
+    };
+  }
+  try {
+    rmdirSync(abs);
+  } catch (err) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_RMDIR_FAILED', String(err.message || err)]) };
+  }
+  return { ok: true, residual: false };
+}
+
+function removeExactCreatedRegularFile(filePath, expected) {
+  const abs = resolve(filePath);
+  let lst;
+  try {
+    lst = lstatSync(abs);
+  } catch {
+    return { ok: true, residual: false }; // already absent
+  }
+  if (lst.isSymbolicLink() || !lst.isFile()) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_FILE_UNSAFE_TYPE']) };
+  }
+  if (!expected || lst.dev !== expected.dev || lst.ino !== expected.ino) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_FILE_IDENTITY_MISMATCH']) };
+  }
+  try {
+    rmSync(abs, { force: false });
+  } catch (err) {
+    return { ok: false, residual: true, reasons: Object.freeze(['ROLLBACK_FILE_UNLINK_FAILED', String(err.message || err)]) };
+  }
+  return { ok: true, residual: false };
+}
+
+/**
+ * Best-effort identity-bound unwind of a just-created TEST workspace.
+ * Removes marker + empty ledger + empty workspace only. Never recursive namespace wipe.
+ */
+function rollbackJustCreatedTestWorkspace(workspacePath, identities) {
+  const residuals = [];
+  if (identities.markerPath && identities.markerStat) {
+    const r = removeExactCreatedRegularFile(identities.markerPath, identities.markerStat);
+    if (!r.ok) residuals.push(...(r.reasons || ['MARKER_RESIDUAL']));
+  }
+  if (identities.ledgerPath && identities.ledgerStat) {
+    const r = removeExactCreatedEmptyDirectory(identities.ledgerPath, identities.ledgerStat);
+    if (!r.ok) residuals.push(...(r.reasons || ['LEDGER_RESIDUAL']));
+  }
+  if (identities.workspaceStat) {
+    const r = removeExactCreatedEmptyDirectory(workspacePath, identities.workspaceStat);
+    if (!r.ok) residuals.push(...(r.reasons || ['WORKSPACE_RESIDUAL']));
+  }
+  if (residuals.length) {
+    return { ok: false, residual: true, reasons: Object.freeze(residuals) };
+  }
+  return { ok: true, residual: false };
+}
+
 function ensurePersistentTestOnlyNamespace(home) {
   if (!home || home.ok !== true) {
     throw new Error(`TRUSTED_HOME_UNAVAILABLE:${((home && home.reasons) || []).join(',')}`);
   }
   const ns = resolve(join(home.home, LIVE_OWNER_JTI_LEDGER_PERSISTENT_TEST_NAMESPACE_DIRNAME));
   const parent = dirname(ns);
-  // Trusted parent must exist, not be a symlink, and not be hard-protected storage.
   const parentSymlink = assertNoSymlinkPathComponents(parent);
   if (!parentSymlink.ok) {
     throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYMLINK:${(parentSymlink.reasons || []).join(',')}`);
   }
+  const parentEligible = assertEligibleCreationParentDirectory(parent, home);
+  if (!parentEligible.ok) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_DENIED:${(parentEligible.reasons || []).join(',')}`);
+  }
   const parentPolicy = evaluateTestOnlyProtectedStoragePolicy(
-    // Probe a child under prospective namespace so namespace root itself is not required to exist yet.
     join(ns, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}ns-probe`, 'ledger'),
     home,
     { forCleanup: false },
   );
-  // Parent policy may deny because namespace probe is under home; that is expected to PASS
-  // once inPersistentNamespace applies. If hard-protected overlap, deny before mkdir.
-  if (!parentPolicy.ok && (parentPolicy.reasons || []).some((r) =>
-    r === 'PROTECTED_TECP_OPS_PILOT_PATH'
-    || r === 'PROTECTED_OWNER_TRUST_PATH'
-    || r === 'PROTECTED_LIVE_OWNER_LEDGER_PATH_SEGMENT'
-    || String(r).includes('.tecp-ops-pilot')
-    || String(r).includes('s2-simin-owner-trust'))) {
-    throw new Error(`PERSISTENT_TEST_NAMESPACE_PROTECTED_PARENT:${(parentPolicy.reasons || []).join(',')}`);
+  // Unconditional denial of every failed applicable protected-storage policy before mkdir.
+  if (!parentPolicy.ok) {
+    throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_POLICY_DENIED:${(parentPolicy.reasons || []).join(',')}`);
   }
   if (!existsSync(ns)) {
     mkdirSync(ns, { recursive: false, mode: EXPECTED_DIR_MODE });
     chmodSync(ns, EXPECTED_DIR_MODE);
+    let nsStat;
     try {
+      nsStat = lstatSync(ns);
+    } catch (err) {
+      throw new Error(`PERSISTENT_TEST_NAMESPACE_LSTAT_FAILED:${String(err.message || err)}`);
+    }
+    try {
+      maybeInjectDirectoryFsyncFailure(ns, 'private');
       fsyncPathDirectory(ns);
     } catch (err) {
-      try { rmSync(ns, { recursive: true, force: false }); } catch { /* ignore */ }
+      const rolled = removeExactCreatedEmptyDirectory(ns, nsStat);
+      if (!rolled.ok) {
+        throw new Error(
+          `PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${String(err.message || err)}`
+          + `|RESIDUAL_NAMESPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
+        );
+      }
       throw new Error(`PERSISTENT_TEST_NAMESPACE_SYNC_FAILED:${String(err.message || err)}`);
     }
     try {
-      fsyncPathDirectory(parent);
+      maybeInjectDirectoryFsyncFailure(parent, 'parent');
+      fsyncTrustedParentDirectory(parent, home);
     } catch (err) {
-      // Parent sync failure is a durability limitation — do not claim durable provisioning success.
-      try { rmSync(ns, { recursive: true, force: false }); } catch { /* ignore */ }
+      const rolled = removeExactCreatedEmptyDirectory(ns, nsStat);
+      if (!rolled.ok) {
+        throw new Error(
+          `PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${String(err.message || err)}`
+          + `|RESIDUAL_NAMESPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
+        );
+      }
       throw new Error(`PERSISTENT_TEST_NAMESPACE_PARENT_SYNC_FAILED:${String(err.message || err)}`);
     }
   }
@@ -451,6 +671,15 @@ function readOwnedWorkspaceProvenance(ledgerRootAbs) {
   if (typeof process.getuid === 'function' && markerStat.uid !== process.getuid()) {
     return { ok: false, reasons: ['TEST_WORKSPACE_PROVENANCE_UNEXPECTED_OWNERSHIP'] };
   }
+  if (modeOf(markerStat) !== EXPECTED_FILE_MODE) {
+    return {
+      ok: false,
+      reasons: Object.freeze([
+        'TEST_WORKSPACE_PROVENANCE_UNSAFE_PERMISSIONS',
+        `MODE=${modeOf(markerStat).toString(8)}`,
+      ]),
+    };
+  }
   let raw;
   try {
     const fd = openSync(markerPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
@@ -458,6 +687,15 @@ function readOwnedWorkspaceProvenance(ledgerRootAbs) {
       const st = fstatSync(fd);
       if (!st.isFile() || st.dev !== markerStat.dev || st.ino !== markerStat.ino) {
         return { ok: false, reasons: ['TEST_WORKSPACE_PROVENANCE_FD_MISMATCH'] };
+      }
+      if (modeOf(st) !== EXPECTED_FILE_MODE) {
+        return {
+          ok: false,
+          reasons: Object.freeze([
+            'TEST_WORKSPACE_PROVENANCE_FD_UNSAFE_PERMISSIONS',
+            `MODE=${modeOf(st).toString(8)}`,
+          ]),
+        };
       }
       const buf = Buffer.alloc(4096);
       const n = readSync(fd, buf, 0, buf.length, 0);
@@ -1202,7 +1440,18 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   if (!isPlainObject(options) && options !== undefined) {
     void options;
   }
-  const home = resolveTrustedOwnerOsHome();
+  // Optional TEST_ONLY home fixture for isolated permission/parent regressions.
+  // Cannot authorize genuine-live storage; ignored unless plain object with ok===true and home path.
+  const injectedHome = isPlainObject(opts.testOnlyTrustedHome) ? opts.testOnlyTrustedHome : null;
+  const home = (injectedHome && injectedHome.ok === true && isNonEmptyString(injectedHome.home))
+    ? {
+        ok: true,
+        home: resolve(injectedHome.home),
+        uid: injectedHome.uid != null
+          ? injectedHome.uid
+          : (typeof process.getuid === 'function' ? process.getuid() : 0),
+      }
+    : resolveTrustedOwnerOsHome();
   const wantPersistent = opts.persistent === true;
   let parentDir;
   if (wantPersistent) {
@@ -1229,6 +1478,10 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   if (!parentSymlinks.ok) {
     throw new Error(`TEST_ONLY_CREATE_PARENT_SYMLINK_DENIED:${(parentSymlinks.reasons || []).join(',')}`);
   }
+  const parentEligible = assertEligibleCreationParentDirectory(parentDir, home.ok ? home : { ok: false });
+  if (!parentEligible.ok) {
+    throw new Error(`TEST_ONLY_CREATE_PARENT_DENIED:${(parentEligible.reasons || []).join(',')}`);
+  }
   const prospective = join(parentDir, `${LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX}probe`);
   const homeForPolicy = home.ok
     ? home
@@ -1242,11 +1495,11 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
     throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:${(precheck.reasons || []).join(',')}`);
   }
   if (!home.ok) {
-    // Ordinary temp paths still require trusted-home fail-closed for the shared contract.
     throw new Error(`TEST_ONLY_CREATE_DENIED_BEFORE_MUTATION:TRUSTED_HOME_UNAVAILABLE_PROTECTION_FAIL_CLOSED`);
   }
   const workspacePath = mkdtempSync(join(parentDir, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_PREFIX));
   chmodSync(workspacePath, EXPECTED_DIR_MODE);
+  const workspaceStat = lstatSync(workspacePath);
   const workspaceId = randomBytes(16).toString('hex');
   const markerPath = join(workspacePath, LIVE_OWNER_JTI_LEDGER_TEST_WORKSPACE_MARKER);
   const markerBody = `${JSON.stringify({
@@ -1264,16 +1517,28 @@ export function __testOnlyPrepareIsolatedLiveOwnerLedgerRoot(options = undefined
   } finally {
     closeSync(mfd);
   }
+  const markerStat = lstatSync(markerPath);
   const ledgerRoot = join(workspacePath, 'ledger');
   mkdirSync(ledgerRoot, { recursive: false, mode: EXPECTED_DIR_MODE });
   chmodSync(ledgerRoot, EXPECTED_DIR_MODE);
+  const ledgerStat = lstatSync(ledgerRoot);
   fsyncPathDirectory(workspacePath);
 
   const eligibility = assertEligibleTestOnlyWorkspaceLedgerLocation(resolve(ledgerRoot));
   if (!eligibility.ok) {
-    // Fail closed: remove the just-created workspace using direct rm only for this
-    // same-process creation failure (cleanup authority not yet published).
-    try { rmSync(workspacePath, { recursive: true, force: false }); } catch { /* ignore */ }
+    const rolled = rollbackJustCreatedTestWorkspace(workspacePath, {
+      workspaceStat,
+      markerPath,
+      markerStat,
+      ledgerPath: ledgerRoot,
+      ledgerStat,
+    });
+    if (!rolled.ok) {
+      throw new Error(
+        `TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`
+        + `|RESIDUAL_WORKSPACE_RETAINED:${(rolled.reasons || []).join(',')}`,
+      );
+    }
     throw new Error(`TEST_ONLY_CREATE_ELIGIBILITY_FAILED:${(eligibility.reasons || []).join(',')}`);
   }
 
